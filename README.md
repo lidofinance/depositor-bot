@@ -1,5 +1,5 @@
 ## Depositor bot
-Bot that will deposit 150 wei if Lido contract is active and has less than MIN_BUFFERED_ETHER in buffer.
+Bot that will deposit 150 wei while gas price is low.
 
 ## How to install
 
@@ -32,7 +32,7 @@ To run script type:  `brownie run depositor`
 | MAX_GAS_PRICE                 | 100 GWEI   | Bot will wait for a lower price |
 | CONTRACT_GAS_LIMIT            | 10 MWEI    | Default transaction gas limit |
 | DEPOSIT_AMOUNT                | 150 WEI    | Each deposit equals |
-| MIN_BUFFERED_ETHER            | 32 * 8 ETH | In contract should be less ether <br>buffered to be able to deposit |
+| MIN_BUFFERED_ETHER            | 32 * 8 ETH | This contract should contain at least 256 ETH <br>buffered to be able to deposit |
 
 
 ### Lido and stETH token
