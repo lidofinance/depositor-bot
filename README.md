@@ -16,14 +16,13 @@ cd depositor-bot
 pipenv install
 ```
 
-Other
-
-There is only one dependency, just make sure you are using this fork to install Brownie 
-`https://github.com/vshvsh/brownie.git`
-
 ## Run script
 
-To run script type:  `brownie run depositor`
+To run script type:
+```
+export ACCOUNT_FILENAME=path/to/account.json
+brownie run depositor
+```
 
 ## Defaults
 
