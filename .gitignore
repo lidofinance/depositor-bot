@@ -128,5 +128,9 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
+# IDE
 .vscode/
 .idea/
+
+# Debug files
+debug.log
