@@ -1,39 +1,51 @@
 ## Depositor bot
-Bot that will deposit 150 wei while gas price is low.
+Bot that will deposit ether to contract while gas price is low enough.
 
 ## How to install
 
-[Ganache CLI](https://github.com/trufflesuite/ganache-cli) is required to run [Brownie](https://github.com/eth-brownie/brownie)
+Only for development: [Ganache CLI](https://github.com/trufflesuite/ganache-cli) is required to run [Brownie](https://github.com/eth-brownie/brownie)
 
 ```bash 
 npm install -g ganache-cli
 ```
 
-Via pipenv
+Python packages
 ```bash
 git clone git@github.com:lidofinance/depositor-bot.git
 cd depositor-bot
-pipenv install
+pip install -r requirements.txt
 ```
 
 ## Run script
 
-To run script type:
+To run script:
 ```
-export ACCOUNT_FILENAME=path/to/account.json
-brownie run depositor
+brownie run depositor --network=mainnet-fork
 ```
 
-## Defaults
+To run in  production
+```
+docker build -t depositor-bot .
+docker run depositor-bot
+```
 
-| Constant                      | Amount     | Description |
-| -------------                 | :--------: | :-----|
-| MAX_GAS_PRICE                 | 100 GWEI   | Bot will wait for a lower price |
-| CONTRACT_GAS_LIMIT            | 10 MWEI    | Default transaction gas limit |
-| DEPOSIT_AMOUNT                | 150 WEI    | Each deposit equals |
-| MIN_BUFFERED_ETHER            | 32 * 8 ETH | This contract should contain at least 256 ETH <br>buffered to be able to deposit |
+## Variables 
+
+| Vars in env                   | Amount     | Default - Raw            | Description |
+| -------------                 | :--------: | :---------:    | :----- |
+| MAX_GAS_PRICE                 | 100 GWEI   | `100000000000` | Bot will wait for a lower price |
+| CONTRACT_GAS_LIMIT            | 10 MWEI    | `10000000`     | Default transaction gas limit |
+| DEPOSIT_AMOUNT                | 150        | `150`          | Look into contract to get more info |
 
 
-### Lido and stETH token
+| Constants                     | Amount     | Description |
+| -------------                 | :--------: | :----- |
+| MIN_BUFFERED_ETHER            | 256 ETH    | This contract should contain at least 256 ETH buffered to be able to deposit |
+| LIDO_CONTRACT_ADDRESS         | 0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84 | Lido contract address |
 
-Lido and stETH token address: `0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84`
+  
+## Production only
+| Variable | Description |
+| :---: | :---:|
+| ACCOUNT_FILENAME | Path to account file, e.g. `/home/account.json` |
+| ACCOUNT_PASSWORD | Password if private key is encrypted |
