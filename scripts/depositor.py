@@ -1,10 +1,9 @@
 import logging
 import os
+import time
 
 from brownie import accounts, chain, interface, Wei
 from brownie.network.account import LocalAccount
-
-from strategy.gas_strategy import get_scaling_in_time_gas_strategy
 
 
 logging.basicConfig(
@@ -21,8 +20,10 @@ ACCOUNT_PRIVATE_KEY = os.getenv('ACCOUNT_PRIVATE_KEY', None)
 
 # Transaction limits
 MAX_WAITING_TIME = os.getenv('MAX_WAITING_TIME', 25 * 60 * 60)  # One day in seconds
-MAX_GAS_PRICE = os.getenv('MAX_GAS_PRICE', Wei('100 gwei'))
-CONTRACT_GAS_LIMIT = os.getenv('CONTRACT_GAS_LIMIT', Wei('10 mwei'))
+MAX_GAS_PRICE = Wei(os.getenv('MAX_GAS_PRICE', '100 gwei'))
+CONTRACT_GAS_LIMIT = Wei(os.getenv('CONTRACT_GAS_LIMIT', '10 mwei'))
+
+EIP_1559_FEE_INCREASE_PERCENT = 1.125
 
 # Contract related vars
 DEPOSIT_AMOUNT = os.getenv('DEPOSIT_AMOUNT', 150)
@@ -54,8 +55,8 @@ def get_account() -> LocalAccount:
         logging.info(str('Test mode is on. Took the first account.'))
         return accounts[0]
 
-    logging.error('No account found fot selected network. Provide ACCOUNT_FILENAME env.')
-    raise ConfigurationException('Account was not found. Provide ACCOUNT_FILENAME and ACCOUNT_PASSWORD env.')
+    logging.error('Account was not found. Provide `ACCOUNT_PRIVATE_KEY` or use testnet.')
+    raise ConfigurationException('Account was not found. Provide `ACCOUNT_PRIVATE_KEY` or use testnet.')
 
 
 def get_lido_contract(owner: LocalAccount) -> interface:
@@ -77,17 +78,17 @@ def deposit_to_contract(lido: interface, account: LocalAccount):
             logging.warning(f'Lido has less buffered ether than expected: {buffered_ether}.')
             continue
 
-        gas_strategy = get_scaling_in_time_gas_strategy(
-            max_waiting_time=MAX_WAITING_TIME,
-            max_gas_price=MAX_GAS_PRICE,
-        )
+        if chain.base_fee * EIP_1559_FEE_INCREASE_PERCENT + chain.priority_fee > MAX_GAS_PRICE:
+            logging.warning(f'base_fee: [${chain.base_fee}] + priority_fee: [{chain.priority_fee}] are too high.')
+            continue
 
         try:
-            logging.info(f'Trying to deposit with Scaling In Time Gas Strategy.')
+            logging.info(f'Trying to deposit using EIP-1559.')
             lido.depositBufferedEther(DEPOSIT_AMOUNT, {
-                'gas_price': gas_strategy,
                 'from': account,
                 'gas_limit': CONTRACT_GAS_LIMIT,
+                'priority_fee': chain.priority_fee,
             })
         except Exception as exception:
             logging.error(str(exception))
+            time.sleep(10)
