@@ -18,13 +18,15 @@ pip install -r requirements.txt
 
 ## Run script
 
-To run script:
+To run (development): 
 ```
 export WEB3_INFURA_PROJECT_ID=b11919ed73094499a35d1b3fa338322a
 brownie run depositor --network=mainnet-fork
 ```
 
-To run in  production
+To run (production):
+1. Change `WEB3_INFURA_PROJECT_ID` and `ACCOUNT_PRIVATE_KEY` envs in Dockerfile
+2. Run
 ```
 docker build -t depositor-bot .
 docker run depositor-bot
@@ -37,8 +39,7 @@ docker run depositor-bot
 | MAX_GAS_PRICE                 | 100 GWEI   | `100000000000` | Bot will wait for a lower price |
 | CONTRACT_GAS_LIMIT            | 10 MWEI    | `10000000`     | Default transaction gas limit |
 | DEPOSIT_AMOUNT                | 150        | `150`          | Look into contract to get more info |
-| ACCOUNT_PATH_TO_FILE          | -          | `None`         | If no path was provided - will take first account that available |
-| ACCOUNT_PASSWORD              | -          | `None`         | Password if private key is encrypted in file |
+| ACCOUNT_PRIVATE_KEY           | -          | `None`         | If no key was provided - will take first account that available (required for prod) |
 | WEB3_INFURA_PROJECT_ID        | -          | `None`         | Project ID in infura |
 
 

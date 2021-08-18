@@ -2,7 +2,7 @@ import logging
 import math
 import os
 
-from brownie import accounts, chain, interface, web3
+from brownie import accounts, chain, interface, web3, Wei
 from brownie.network.account import LocalAccount
 from brownie.network.gas.strategies import GasNowScalingStrategy
 
@@ -17,33 +17,27 @@ logging.basicConfig(
 )
 
 
-# Sub-units of Ether
-ETHER = 10**18
-GWEI = 10**9
-MWEI = 10**6
+ACCOUNT_PRIVATE_KEY = os.getenv('ACCOUNT_PRIVATE_KEY', None)
 
 # Transaction limits
-MAX_GAS_PRICE = os.getenv('MAX_GAS_PRICE', 100 * GWEI)
-CONTRACT_GAS_LIMIT = os.getenv('CONTRACT_GAS_LIMIT', 10 * MWEI)
+MAX_WAITING_TIME = os.getenv('MAX_WAITING_TIME', 25 * 60 * 60)  # One day in seconds
+MAX_GAS_PRICE = os.getenv('MAX_GAS_PRICE', Wei('100 gwei'))
+CONTRACT_GAS_LIMIT = os.getenv('CONTRACT_GAS_LIMIT', Wei('10 mwei'))
 
-# Hardcoded prices
+# Contract related vars
 DEPOSIT_AMOUNT = os.getenv('DEPOSIT_AMOUNT', 150)
-MIN_BUFFERED_ETHER = 32 * 8 * ETHER
-
-# LIDODWQD SAD
+MIN_BUFFERED_ETHER = Wei('256 ether')
 LIDO_CONTRACT_ADDRESS = '0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84'
 
-ACCOUNT_PATH_TO_FILE = os.getenv('ACCOUNT_PATH_TO_FILE', None)
-ACCOUNT_PASSWORD = os.getenv('ACCOUNT_PASSWORD', None)
 
-
-class ConfigException(Exception):
+class ConfigurationException(Exception):
     pass
 
 
 def main():
     """Transfer tokens from account to LIDO contract while gas price is low"""
     logging.info('Start daemon.')
+
     account = get_account()
     contract = get_lido_contract(account)
 
@@ -52,16 +46,16 @@ def main():
 
 
 def get_account() -> LocalAccount:
-    if ACCOUNT_PATH_TO_FILE:
-        logging.info(str('Loading account from file.'))
-        return accounts.load(ACCOUNT_PATH_TO_FILE, ACCOUNT_PASSWORD)
+    if ACCOUNT_PRIVATE_KEY:
+        logging.info(str('Load account from private key.'))
+        return accounts.add(ACCOUNT_PRIVATE_KEY)
 
     if accounts:
         logging.info(str('Test mode is on. Took the first account.'))
         return accounts[0]
 
     logging.error('No account found fot selected network. Provide ACCOUNT_FILENAME env.')
-    raise ConfigException('Account was not found. Provide ACCOUNT_FILENAME and ACCOUNT_PASSWORD env.')
+    raise ConfigurationException('Account was not found. Provide ACCOUNT_FILENAME and ACCOUNT_PASSWORD env.')
 
 
 def get_lido_contract(owner: LocalAccount) -> interface:
@@ -71,6 +65,7 @@ def get_lido_contract(owner: LocalAccount) -> interface:
 
 def deposit_to_contract(lido: interface, account: LocalAccount):
     logging.info(f'Start depositing.')
+
     for _ in chain.new_blocks():
         logging.info(f'New deposit cycle.')
         if lido.isStopped():
@@ -83,13 +78,15 @@ def deposit_to_contract(lido: interface, account: LocalAccount):
             continue
 
         # This strategy will increase gas price to max in one day
-        sec_in_day = 24 * 60 * 60
         avg_block_time = 13
         increment = 1.1
         min_gas_price = web3.eth.generate_gas_price()
 
         # every `block_duration` block we will increase price `price *= 1.1`
-        block_duration = int(sec_in_day / avg_block_time / math.log(MAX_GAS_PRICE / min_gas_price, increment))
+        block_duration = int(MAX_WAITING_TIME / avg_block_time / math.log(MAX_GAS_PRICE / min_gas_price, increment))
+
+        import pdb
+        pdb.set_trace()
 
         gas_strategy = GasNowScalingStrategy(
             initial_speed='slow',
