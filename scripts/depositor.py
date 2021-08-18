@@ -1,10 +1,10 @@
 import logging
-import math
 import os
 
-from brownie import accounts, chain, interface, web3, Wei
+from brownie import accounts, chain, interface, Wei
 from brownie.network.account import LocalAccount
-from brownie.network.gas.strategies import GasNowScalingStrategy
+
+from strategy.gas_strategy import get_scaling_in_time_gas_strategy
 
 
 logging.basicConfig(
@@ -77,24 +77,13 @@ def deposit_to_contract(lido: interface, account: LocalAccount):
             logging.warning(f'Lido has less buffered ether than expected: {buffered_ether}.')
             continue
 
-        # This strategy will increase gas price to max in one day
-        avg_block_time = 13
-        increment = 1.1
-        min_gas_price = web3.eth.generate_gas_price()
-
-        # every `block_duration` block we will increase price `price *= 1.1`
-        block_duration = int(MAX_WAITING_TIME / avg_block_time / math.log(MAX_GAS_PRICE / min_gas_price, increment))
-
-        gas_strategy = GasNowScalingStrategy(
-            initial_speed='slow',
-            max_speed='rapid',
-            increment=increment,
-            block_duration=block_duration,
+        gas_strategy = get_scaling_in_time_gas_strategy(
+            max_waiting_time=MAX_WAITING_TIME,
             max_gas_price=MAX_GAS_PRICE,
         )
 
         try:
-            logging.info(f'Trying to deposit with Now Scaling Gas Strategy.')
+            logging.info(f'Trying to deposit with Scaling In Time Gas Strategy.')
             lido.depositBufferedEther(DEPOSIT_AMOUNT, {
                 'gas_price': gas_strategy,
                 'from': account,
