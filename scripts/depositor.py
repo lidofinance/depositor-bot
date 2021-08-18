@@ -23,6 +23,8 @@ MAX_WAITING_TIME = os.getenv('MAX_WAITING_TIME', 25 * 60 * 60)  # One day in sec
 MAX_GAS_PRICE = Wei(os.getenv('MAX_GAS_PRICE', '100 gwei'))
 CONTRACT_GAS_LIMIT = Wei(os.getenv('CONTRACT_GAS_LIMIT', '10 mwei'))
 
+EIP_1559_FEE_INCREASE_PERCENT = 1.125
+
 # Contract related vars
 DEPOSIT_AMOUNT = os.getenv('DEPOSIT_AMOUNT', 150)
 MIN_BUFFERED_ETHER = Wei('256 ether')
@@ -76,7 +78,7 @@ def deposit_to_contract(lido: interface, account: LocalAccount):
             logging.warning(f'Lido has less buffered ether than expected: {buffered_ether}.')
             continue
 
-        if chain.base_fee + chain.priority_fee > MAX_GAS_PRICE:
+        if chain.base_fee * EIP_1559_FEE_INCREASE_PERCENT + chain.priority_fee > MAX_GAS_PRICE:
             logging.warning(f'base_fee: [${chain.base_fee}] + priority_fee: [{chain.priority_fee}] are too high.')
             continue
 
