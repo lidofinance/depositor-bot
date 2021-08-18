@@ -34,10 +34,10 @@ docker run depositor-bot
 
 ## Variables 
 
-| Vars in env                   | Amount     | Default - Raw            | Description |
+| Vars in env                   | Amount     | Default - Raw  | Description |
 | -------------                 | :--------: | :---------:    | :----- |
-| MAX_GAS_PRICE                 | 100 GWEI   | `100000000000` | Bot will wait for a lower price |
-| CONTRACT_GAS_LIMIT            | 10 MWEI    | `10000000`     | Default transaction gas limit |
+| MAX_GAS_PRICE                 | 100 GWEI   | `100 gwei`     | Bot will wait for a lower price |
+| CONTRACT_GAS_LIMIT            | 10 MWEI    | `10 mwei`      | Default transaction gas limit |
 | MAX_WAITING_TIME              | 1 day      | `86400`        | Max waiting time before max gas will be reached in seconds |
 | DEPOSIT_AMOUNT                | 150        | `150`          | Look into contract to get more info |
 | ACCOUNT_PRIVATE_KEY           | -          | `None`         | If no key was provided - will take first account that available (required for prod) |
