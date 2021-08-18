@@ -85,9 +85,6 @@ def deposit_to_contract(lido: interface, account: LocalAccount):
         # every `block_duration` block we will increase price `price *= 1.1`
         block_duration = int(MAX_WAITING_TIME / avg_block_time / math.log(MAX_GAS_PRICE / min_gas_price, increment))
 
-        import pdb
-        pdb.set_trace()
-
         gas_strategy = GasNowScalingStrategy(
             initial_speed='slow',
             max_speed='rapid',
