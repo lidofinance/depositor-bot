@@ -1,3 +1,5 @@
+# <img src="https://docs.lido.fi/img/logo.svg" alt="Lido" width="46"/> Lido Depositor bot
+
 ## Depositor bot
 Bot that will deposit ether to contract while gas price is low enough.
 
@@ -42,6 +44,7 @@ docker run depositor-bot
 | DEPOSIT_AMOUNT                | 150        | `150`          | Look into contract to get more info |
 | ACCOUNT_PRIVATE_KEY           | -          | `None`         | If no key was provided - will take first account that available (required for prod) |
 | WEB3_INFURA_PROJECT_ID        | -          | `None`         | Project ID in infura |
+| GAS_PREDICTION_PERCENTILE     | 20         | `20`           | Recommended price calculates from the percentile in the week gas fee history |
 
 
 ## Contract details
