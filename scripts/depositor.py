@@ -60,7 +60,7 @@ def get_account() -> LocalAccount:
         return accounts.add(ACCOUNT_PRIVATE_KEY)
 
     if accounts:
-        logging.info(str('Test mode is on. Took the first account.'))
+        logging.info('[Test] Test mode is on. Took the first account.')
         return accounts[0]
 
     logging.warning('[Test] Running in test mode without account.')
