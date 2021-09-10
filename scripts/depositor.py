@@ -63,8 +63,7 @@ def get_account() -> LocalAccount:
         logging.info(str('Test mode is on. Took the first account.'))
         return accounts[0]
 
-    logging.error('Account was not found. Provide `ACCOUNT_PRIVATE_KEY` or use testnet.')
-    raise ConfigurationException('Account was not found. Provide `ACCOUNT_PRIVATE_KEY` or use testnet.')
+    logging.warning('[Test] Running in test mode without account.')
 
 
 def get_lido_contract(owner: LocalAccount) -> interface:
@@ -124,37 +123,40 @@ def deposit_to_contract(lido: interface, registry: interface, account: LocalAcco
     for _ in chain.new_blocks():
         logging.info(f'New deposit cycle.')
         if lido.isStopped():
-            logging.warning(f'Lido contract is stopped!')
+            logging.warning(f'[FAILED] Lido contract is stopped!')
             time.sleep(120)
             continue
 
         buffered_ether = lido.getBufferedEther()
         if buffered_ether < MIN_BUFFERED_ETHER:
-            logging.warning(f'Lido has less buffered ether than expected: {buffered_ether}.')
+            logging.warning(f'[FAILED] Lido has less buffered ether than expected: {buffered_ether}.')
             continue
 
         if chain.base_fee * EIP_1559_FEE_INCREASE_PERCENT + chain.priority_fee > MAX_GAS_PRICE:
-            logging.warning(f'base_fee: [${chain.base_fee}] + priority_fee: [{chain.priority_fee}] are too high.')
+            logging.warning(f'[FAILED] base_fee: [${chain.base_fee}] + priority_fee: [{chain.priority_fee}] are too high.')
             time.sleep(60)
             continue
 
         recommended_gas_price = get_recommended_gas_price()
         if chain.base_fee > recommended_gas_price:
-            logging.warning(f'Gas fee is to high: [{chain.base_fee}], recommended price: [{recommended_gas_price}].')
+            logging.warning(f'[FAILED] Gas fee is to high: [{chain.base_fee}], recommended price: [{recommended_gas_price}].')
             continue
 
         if not free_keys_to_deposit_exists(registry):
-            logging.info(f'No free keys to deposit.')
+            logging.info(f'[FAILED] No free keys to deposit.')
             time.sleep(120)
             continue
 
         try:
-            logging.info(f'Trying to deposit using EIP-1559.')
-            lido.depositBufferedEther(DEPOSIT_AMOUNT, {
-                'from': account,
-                'gas_limit': CONTRACT_GAS_LIMIT,
-                'priority_fee': chain.priority_fee,
-            })
+            if account:
+                logging.info(f'[SUCCESS] Trying to deposit using EIP-1559.')
+                lido.depositBufferedEther(DEPOSIT_AMOUNT, {
+                    'from': account,
+                    'gas_limit': CONTRACT_GAS_LIMIT,
+                    'priority_fee': chain.priority_fee,
+                })
+            else:
+                logging.info(f'[SUCCESS] [Test] Deposit buffered ether call with gas price [{chain.base_fee}].')
         except Exception as exception:
             logging.error(str(exception))
             time.sleep(120)
