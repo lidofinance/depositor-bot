@@ -21,11 +21,8 @@ logging.basicConfig(
 ACCOUNT_PRIVATE_KEY = os.getenv('ACCOUNT_PRIVATE_KEY', None)
 
 # Transaction limits
-MAX_WAITING_TIME = os.getenv('MAX_WAITING_TIME', 25 * 60 * 60)  # One day in seconds
 MAX_GAS_PRICE = Wei(os.getenv('MAX_GAS_PRICE', '100 gwei'))
 CONTRACT_GAS_LIMIT = Wei(os.getenv('CONTRACT_GAS_LIMIT', 10 ** 10 * 6))
-
-EIP_1559_FEE_INCREASE_PERCENT = 1.125
 
 # Contract related vars
 # 155 Keys is the optimal value
@@ -77,26 +74,23 @@ def get_operator_contract(owner: LocalAccount) -> interface:
 
 
 @cache()
-def get_price_stats() -> List[int]:
+def get_recommended_gas_fee() -> List[int]:
     logging.info('Fetch gas fee history.')
     # One week price stats
     last_block = 'latest'
     gas_prices = []
 
-    for i in range(45):
+    # Fetch one day history
+    for i in range(6):
         stats = web3.eth.fee_history(1024, last_block)
-        last_block = stats['oldestBlock'] - 1
+        last_block = stats['oldestBlock'] - 2
         gas_prices.extend(stats['baseFeePerGas'])
 
     gas_prices.sort()
 
-    return gas_prices
-
-
-def get_recommended_gas_price() -> int:
-    gas_price_stats = get_price_stats()
-    recommended_price = gas_price_stats[int(len(gas_price_stats) / 100 * 20)]
+    recommended_price = gas_prices[int(len(gas_prices) / 100 * GAS_PREDICTION_PERCENTILE)]
     logging.info(f'Recommended gas price: [{recommended_price}]')
+
     return recommended_price
 
 
@@ -132,19 +126,19 @@ def deposit_to_contract(lido: interface, registry: interface, account: LocalAcco
             logging.warning(f'[FAILED] Lido has less buffered ether than expected: {buffered_ether}.')
             continue
 
-        if chain.base_fee * EIP_1559_FEE_INCREASE_PERCENT + chain.priority_fee > MAX_GAS_PRICE:
+        if chain.base_fee + chain.priority_fee > MAX_GAS_PRICE:
             logging.warning(f'[FAILED] base_fee: [${chain.base_fee}] + priority_fee: [{chain.priority_fee}] are too high.')
             time.sleep(60)
             continue
 
-        recommended_gas_price = get_recommended_gas_price()
+        recommended_gas_price = get_recommended_gas_fee()
         if chain.base_fee > recommended_gas_price:
             logging.warning(f'[FAILED] Gas fee is to high: [{chain.base_fee}], recommended price: [{recommended_gas_price}].')
             continue
 
         if not free_keys_to_deposit_exists(registry):
             logging.info(f'[FAILED] No free keys to deposit.')
-            time.sleep(120)
+            time.sleep(600)
             continue
 
         try:
