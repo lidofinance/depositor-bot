@@ -3,6 +3,7 @@ import os
 import time
 from typing import List
 
+import numpy
 from brownie import accounts, chain, interface, Wei, web3
 from brownie.network.account import LocalAccount
 
@@ -74,21 +75,26 @@ def get_operator_contract(owner: LocalAccount) -> interface:
 
 
 @cache()
-def get_recommended_gas_fee() -> List[int]:
+def get_recommended_gas_fee() -> float:
     logging.info('Fetch gas fee history.')
     # One week price stats
     last_block = 'latest'
     gas_prices = []
 
     # Fetch one day history
-    for i in range(6):
+    for i in range(24):
         stats = web3.eth.fee_history(1024, last_block)
         last_block = stats['oldestBlock'] - 2
         gas_prices.extend(stats['baseFeePerGas'])
 
-    gas_prices.sort()
+    one_day_hist = gas_prices[:6600]
+    four_day_hist = gas_prices
 
-    recommended_price = gas_prices[int(len(gas_prices) / 100 * GAS_PREDICTION_PERCENTILE)]
+    recommended_price = min(
+        numpy.percentile(one_day_hist, GAS_PREDICTION_PERCENTILE),
+        numpy.percentile(four_day_hist, GAS_PREDICTION_PERCENTILE),
+    )
+
     logging.info(f'Recommended gas price: [{recommended_price}]')
 
     return recommended_price
