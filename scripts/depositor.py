@@ -1,11 +1,11 @@
 import logging
 import os
 import time
-from typing import List
 
 import numpy
 from brownie import accounts, chain, interface, Wei, web3
 from brownie.network.account import LocalAccount
+from web3.exceptions import BlockNotFound
 
 from scripts.utils import cache
 
@@ -49,7 +49,12 @@ def main():
     registry = get_operator_contract(account)
 
     # Transfer money
-    deposit_to_contract(lido, registry, account)
+    while True:
+        try:
+            deposit_to_contract(lido, registry, account)
+        except BlockNotFound:
+            logging.warning('BlockNotFound exception raised.')
+            time.sleep(20)
 
 
 def get_account() -> LocalAccount:
@@ -81,14 +86,14 @@ def get_recommended_gas_fee() -> float:
     last_block = 'latest'
     gas_prices = []
 
-    # Fetch one day history
+    # Fetch four day history
     for i in range(24):
         stats = web3.eth.fee_history(1024, last_block)
         last_block = stats['oldestBlock'] - 2
         gas_prices.extend(stats['baseFeePerGas'])
 
     one_day_hist = gas_prices[:6600]
-    four_day_hist = gas_prices
+    four_day_hist = gas_prices[:24576]
 
     recommended_price = min(
         numpy.percentile(one_day_hist, GAS_PREDICTION_PERCENTILE),
@@ -133,7 +138,7 @@ def deposit_to_contract(lido: interface, registry: interface, account: LocalAcco
             continue
 
         if chain.base_fee + chain.priority_fee > MAX_GAS_PRICE:
-            logging.warning(f'[FAILED] base_fee: [${chain.base_fee}] + priority_fee: [{chain.priority_fee}] are too high.')
+            logging.warning(f'[FAILED] base_fee: [{chain.base_fee}] + priority_fee: [{chain.priority_fee}] are too high.')
             time.sleep(60)
             continue
 

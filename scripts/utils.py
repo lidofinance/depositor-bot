@@ -2,7 +2,7 @@ import functools
 import datetime
 
 
-def cache(ttl=datetime.timedelta(hours=1)):
+def cache(ttl=datetime.timedelta(minutes=10)):
     def wrap(func):
         time, value = None, None
 
