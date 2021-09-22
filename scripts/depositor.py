@@ -1,167 +1,179 @@
-import logging
-import os
 import time
+from typing import Optional
 
 import numpy
-from brownie import accounts, chain, interface, Wei, web3
+from brownie import accounts, chain, interface, web3
 from brownie.network.account import LocalAccount
-from web3.exceptions import BlockNotFound
+from prometheus_client.exposition import start_http_server
 
-from scripts.utils import cache
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[
-        logging.FileHandler("debug.log"),
-        logging.StreamHandler()
-    ]
+from scripts.depositor_utils.constants import (
+    LIDO_CONTRACT_ADDRESS,
+    OPERATOR_CONTRACT_ADDRESS,
 )
+from scripts.depositor_utils.exceptions import (
+    LidoIsStoppedException,
+    NotEnoughBufferedEtherException,
+    NoFreeOperatorKeysException,
+    MaxGasPriceException,
+    RecommendedGasPriceException,
+)
+from scripts.depositor_utils.prometheus import (
+    GAS_FEE,
+    OPERATORS_FREE_KEYS,
+    BUFFERED_ETHER,
+    CHECK_FAILURE,
+    DEPOSIT_FAILURE,
+    EXCEPTION_INFO,
+    LIDO_STATUS,
+    SUCCESS_DEPOSIT, LOG_INFO,
+)
+from scripts.depositor_utils.variables import (
+    MIN_BUFFERED_ETHER,
+    MAX_GAS_FEE,
+    ACCOUNT_FILENAME,
+    ACCOUNT_PRIVATE_KEY,
+    DEPOSIT_AMOUNT,
+    CONTRACT_GAS_LIMIT,
+    GAS_PREDICTION_PERCENTILE,
+)
+from scripts.depositor_utils.utils import cache
 
 
-ACCOUNT_PRIVATE_KEY = os.getenv('ACCOUNT_PRIVATE_KEY', None)
+def get_account() -> Optional[LocalAccount]:
+    if ACCOUNT_FILENAME:
+        return accounts.load(ACCOUNT_FILENAME)
 
-# Transaction limits
-MAX_GAS_PRICE = Wei(os.getenv('MAX_GAS_PRICE', '100 gwei'))
-CONTRACT_GAS_LIMIT = Wei(os.getenv('CONTRACT_GAS_LIMIT', 10 ** 10 * 6))
-
-# Contract related vars
-# 155 Keys is the optimal value
-DEPOSIT_AMOUNT = os.getenv('DEPOSIT_AMOUNT', 155)
-MIN_BUFFERED_ETHER = Wei('256 ether')
-LIDO_CONTRACT_ADDRESS = '0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84'
-OPERATOR_CONTRACT_ADDRESS = '0x55032650b14df07b85bF18A3a3eC8E0Af2e028d5'
-
-# GAS STRATEGY SETTINGS
-GAS_PREDICTION_PERCENTILE = os.getenv('GAS_PREDICTION_PERCENTILE', 20)
-
-
-class ConfigurationException(Exception):
-    pass
-
-
-def main():
-    """Transfer tokens from account to LIDO contract while gas price is low"""
-    logging.info('Start daemon.')
-
-    account = get_account()
-    lido = get_lido_contract(account)
-    registry = get_operator_contract(account)
-
-    # Transfer money
-    while True:
-        try:
-            deposit_to_contract(lido, registry, account)
-        except BlockNotFound:
-            logging.warning('BlockNotFound exception raised.')
-            time.sleep(20)
-
-
-def get_account() -> LocalAccount:
     if ACCOUNT_PRIVATE_KEY:
-        logging.info(str('Load account from private key.'))
         return accounts.add(ACCOUNT_PRIVATE_KEY)
 
     if accounts:
-        logging.info('[Test] Test mode is on. Took the first account.')
         return accounts[0]
 
-    logging.warning('[Test] Running in test mode without account.')
+    # Only for testing propose
+    EXCEPTION_INFO.info({'exception': 'Account not provided'})
+    return None
 
 
-def get_lido_contract(owner: LocalAccount) -> interface:
-    logging.info(f'Load Lido contract interface.')
-    return interface.Lido(LIDO_CONTRACT_ADDRESS, owner=owner)
+def main():
+    # Prometheus
+    start_http_server(8080)
+
+    account = get_account()
+
+    lido = interface.Lido(LIDO_CONTRACT_ADDRESS, owner=account)
+    registry = interface.NodeOperators(OPERATOR_CONTRACT_ADDRESS, owner=account)
+
+    while True:
+        try:
+            pre_deposit_check(lido, registry)
+            deposit_buffered_ether(account, lido)
+        except (LidoIsStoppedException, NotEnoughBufferedEtherException, NoFreeOperatorKeysException) as error:
+            LOG_INFO.info({'exception': str(error)})
+            time.sleep(60 * 30)
+        except (MaxGasPriceException, RecommendedGasPriceException) as error:
+            LOG_INFO.info({'exception': str(error)})
+            time.sleep(20)
+        except Exception as error:
+            EXCEPTION_INFO.info({'exception': str(error)})
+            time.sleep(20)
 
 
-def get_operator_contract(owner: LocalAccount) -> interface:
-    logging.info(f'Load Operator contract interface.')
-    return interface.NodeOperators(OPERATOR_CONTRACT_ADDRESS, owner=owner)
+@CHECK_FAILURE.count_exceptions()
+def pre_deposit_check(lido: interface, registry: interface):
+    """
+    Check if everything is ok.
+    Throws exception if something is not ok.
+    """
+    if lido.isStopped():
+        LIDO_STATUS.state('stopped')
+        msg = '[FAILED] Lido contract is stopped!'
+        raise LidoIsStoppedException(msg)
+    else:
+        LIDO_STATUS.state('active')
+
+    buffered_ether = lido.getBufferedEther()
+    BUFFERED_ETHER.set(buffered_ether)
+    if buffered_ether < MIN_BUFFERED_ETHER:
+        msg = f'[FAILED] Lido has less buffered ether than expected: {buffered_ether}.'
+        raise NotEnoughBufferedEtherException(msg)
+
+    current_gas_fee = chain.base_fee
+    GAS_FEE.labels('max_fee').set(MAX_GAS_FEE)
+    GAS_FEE.labels('current_fee').set(chain.base_fee)
+
+    if chain.base_fee + chain.priority_fee > MAX_GAS_FEE:
+        msg = f'[FAILED] base_fee: [{chain.base_fee}] + priority_fee: [{chain.priority_fee}] are too high.'
+        raise MaxGasPriceException(msg)
+
+    recommended_gas_fee = get_recommended_gas_fee()
+    GAS_FEE.labels('recommended_fee').set(recommended_gas_fee)
+
+    if current_gas_fee > recommended_gas_fee:
+        msg = f'[FAILED] Gas fee is too high: [{current_gas_fee}], recommended price: [{recommended_gas_fee}].'
+        raise RecommendedGasPriceException(msg)
+
+    if not node_operators_has_free_keys(registry):
+        msg = f'[FAILED] No free keys to deposit.'
+        raise NoFreeOperatorKeysException(msg)
+
+
+@DEPOSIT_FAILURE.count_exceptions()
+def deposit_buffered_ether(account: LocalAccount, lido: interface):
+    lido.depositBufferedEther(DEPOSIT_AMOUNT, {
+        'from': account,
+        'gas_limit': CONTRACT_GAS_LIMIT,
+        'priority_fee': chain.priority_fee,
+    })
+    SUCCESS_DEPOSIT.inc()
 
 
 @cache()
 def get_recommended_gas_fee() -> float:
-    logging.info('Fetch gas fee history.')
+    blocks_in_one_day = 6600
+
     # One week price stats
-    last_block = 'latest'
-    gas_prices = []
+    gas_fees = get_gas_fee_history()
 
-    # Fetch four day history
-    for i in range(24):
-        stats = web3.eth.fee_history(1024, last_block)
-        last_block = stats['oldestBlock'] - 2
-        gas_prices.extend(stats['baseFeePerGas'])
-
-    one_day_hist = gas_prices[:6600]
-    four_day_hist = gas_prices[:24576]
+    # History goes from oldest block to newest
+    one_day_fee_hist = gas_fees[- blocks_in_one_day:]
+    four_day_fee_hist = gas_fees[- blocks_in_one_day * 4:]
 
     recommended_price = min(
-        numpy.percentile(one_day_hist, GAS_PREDICTION_PERCENTILE),
-        numpy.percentile(four_day_hist, GAS_PREDICTION_PERCENTILE),
+        numpy.percentile(one_day_fee_hist, GAS_PREDICTION_PERCENTILE),
+        numpy.percentile(four_day_fee_hist, GAS_PREDICTION_PERCENTILE),
     )
-
-    logging.info(f'Recommended gas price: [{recommended_price}]')
 
     return recommended_price
 
 
-def free_keys_to_deposit_exists(registry) -> bool:
+def get_gas_fee_history():
+    last_block = 'latest'
+    gas_fees = []
+
+    for i in range(26):
+        stats = web3.eth.fee_history(1024, last_block)
+        last_block = stats['oldestBlock'] - 2
+        gas_fees = stats['baseFeePerGas'] + gas_fees
+
+    return gas_fees
+
+
+def node_operators_has_free_keys(registry: interface) -> bool:
+    """Checking that at least one of the operators has keys"""
     operators_data = [{**registry.getNodeOperator(i, True), **{'index': i}} for i in range(registry.getNodeOperatorsCount())]
 
+    free_keys = 0
+
     for operator in operators_data:
-        if operator_has_free_keys(operator):
-            return True
+        free_keys += get_operator_free_keys_count(operator)
 
-    return False
+    OPERATORS_FREE_KEYS.set(free_keys)
+
+    return bool(free_keys)
 
 
-def operator_has_free_keys(operator) -> bool:
+def get_operator_free_keys_count(operator: dict) -> int:
+    """Check if operator has free keys"""
     free_space = operator['stakingLimit'] - operator['usedSigningKeys']
     keys_to_deposit = operator['totalSigningKeys'] - operator['usedSigningKeys']
-
-    return free_space and keys_to_deposit
-
-
-def deposit_to_contract(lido: interface, registry: interface, account: LocalAccount):
-    logging.info(f'Start depositing.')
-
-    for _ in chain.new_blocks():
-        logging.info(f'New deposit cycle.')
-        if lido.isStopped():
-            logging.warning(f'[FAILED] Lido contract is stopped!')
-            time.sleep(120)
-            continue
-
-        buffered_ether = lido.getBufferedEther()
-        if buffered_ether < MIN_BUFFERED_ETHER:
-            logging.warning(f'[FAILED] Lido has less buffered ether than expected: {buffered_ether}.')
-            continue
-
-        if chain.base_fee + chain.priority_fee > MAX_GAS_PRICE:
-            logging.warning(f'[FAILED] base_fee: [{chain.base_fee}] + priority_fee: [{chain.priority_fee}] are too high.')
-            time.sleep(60)
-            continue
-
-        recommended_gas_price = get_recommended_gas_fee()
-        if chain.base_fee > recommended_gas_price:
-            logging.warning(f'[FAILED] Gas fee is to high: [{chain.base_fee}], recommended price: [{recommended_gas_price}].')
-            continue
-
-        if not free_keys_to_deposit_exists(registry):
-            logging.info(f'[FAILED] No free keys to deposit.')
-            time.sleep(600)
-            continue
-
-        try:
-            if account:
-                logging.info(f'[SUCCESS] Trying to deposit using EIP-1559.')
-                lido.depositBufferedEther(DEPOSIT_AMOUNT, {
-                    'from': account,
-                    'gas_limit': CONTRACT_GAS_LIMIT,
-                    'priority_fee': chain.priority_fee,
-                })
-            else:
-                logging.info(f'[SUCCESS] [Test] Deposit buffered ether call with gas price [{chain.base_fee}].')
-        except Exception as exception:
-            logging.error(str(exception))
-            time.sleep(120)
+    return min(free_space, keys_to_deposit)

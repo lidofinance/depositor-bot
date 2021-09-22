@@ -9,3 +9,8 @@ services:
       - NETWORK=${NETWORK}
       - WEB3_INFURA_PROJECT_ID=${WEB3_INFURA_PROJECT_ID}
       - ACCOUNT_PRIVATE_KEY=${ACCOUNT_PRIVATE_KEY}
+
+  prometheus:
+    image: prom/prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
