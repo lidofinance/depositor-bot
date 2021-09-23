@@ -63,6 +63,9 @@ def main():
     lido = interface.Lido(LIDO_CONTRACT_ADDRESS, owner=account)
     registry = interface.NodeOperators(OPERATOR_CONTRACT_ADDRESS, owner=account)
 
+    # Just to push keys count to prometheus
+    node_operators_has_free_keys(registry)
+
     while True:
         try:
             pre_deposit_check(lido, registry)
