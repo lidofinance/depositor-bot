@@ -43,6 +43,7 @@ docker run depositor-bot
 | DEPOSIT_AMOUNT                | 155        | `155`          | Look into contract to get more info |
 | ACCOUNT_PRIVATE_KEY           | -          | `None`         | Account private key |
 | ACCOUNT_FILENAME              | -          | `None`         | File with account key (manual password entering required) |
+| NETWORK                       | -          | `None`         | Network (e.g. mainnet) |
 | WEB3_INFURA_PROJECT_ID        | -          | `None`         | Project ID in infura |
 | GAS_PREDICTION_PERCENTILE     | 20         | `20`           | Recommended price calculates from the percentile in the week gas fee history |
 
