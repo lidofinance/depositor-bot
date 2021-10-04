@@ -25,7 +25,8 @@ from scripts.depositor_utils.prometheus import (
     DEPOSIT_FAILURE,
     EXCEPTION_INFO,
     LIDO_STATUS,
-    SUCCESS_DEPOSIT, LOG_INFO,
+    SUCCESS_DEPOSIT,
+    LOG_INFO,
 )
 from scripts.depositor_utils.variables import (
     MIN_BUFFERED_ETHER,
