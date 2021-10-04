@@ -22,7 +22,7 @@ pip install -r requirements.txt
 
 To run (development): 
 ```
-export WEB3_INFURA_PROJECT_ID=c11919ed73094499a35d1b3fa338322a
+export WEB3_INFURA_PROJECT_ID=b11919ed73094499a35d1b3fa338322a
 brownie run depositor --network=mainnet-fork
 ```
 
