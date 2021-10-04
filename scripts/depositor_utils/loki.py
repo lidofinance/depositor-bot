@@ -12,7 +12,7 @@ logging.basicConfig(
 )
 
 
-logger = logging.getLogger("my-logger")
+logger = logging.getLogger("depositor-bot")
 
 
 handler = logging_loki.LokiHandler(
