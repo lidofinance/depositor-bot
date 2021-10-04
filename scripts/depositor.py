@@ -2,7 +2,7 @@ import time
 from typing import Optional
 
 import numpy
-from brownie import accounts, chain, interface, web3
+from brownie import accounts, chain, interface, web3, Wei
 from brownie.network.account import LocalAccount
 from prometheus_client.exposition import start_http_server
 
@@ -16,16 +16,18 @@ from scripts.depositor_utils.exceptions import (
     NoFreeOperatorKeysException,
     MaxGasPriceException,
     RecommendedGasPriceException,
+    NotEnoughBalance,
 )
+from scripts.depositor_utils.loki import logger
 from scripts.depositor_utils.prometheus import (
     GAS_FEE,
     OPERATORS_FREE_KEYS,
     BUFFERED_ETHER,
     CHECK_FAILURE,
     DEPOSIT_FAILURE,
-    EXCEPTION_INFO,
     LIDO_STATUS,
-    SUCCESS_DEPOSIT, LOG_INFO,
+    SUCCESS_DEPOSIT,
+    ACCOUNT_BALANCE,
 )
 from scripts.depositor_utils.variables import (
     MIN_BUFFERED_ETHER,
@@ -41,55 +43,58 @@ from scripts.depositor_utils.utils import cache
 
 def get_account() -> Optional[LocalAccount]:
     if ACCOUNT_FILENAME:
+        logger.info('Load account from filename.')
         return accounts.load(ACCOUNT_FILENAME)
 
     if ACCOUNT_PRIVATE_KEY:
+        logger.info('Load account from private key.')
         return accounts.add(ACCOUNT_PRIVATE_KEY)
 
     if accounts:
+        logger.info('Take first account available.')
         return accounts[0]
 
     # Only for testing propose
-    EXCEPTION_INFO.info({'exception': 'Account not provided'})
-    return None
+    logger.warning('Account not provided. Run in test mode.')
 
 
 def main():
     # Prometheus
+    logger.info('Start deposit bot.')
     start_http_server(8080)
 
+    logger.info('Load account.')
     account = get_account()
 
     lido = interface.Lido(LIDO_CONTRACT_ADDRESS, owner=account)
     registry = interface.NodeOperators(OPERATOR_CONTRACT_ADDRESS, owner=account)
 
-    # Just to push keys count to prometheus
-    node_operators_has_free_keys(registry)
-
     while True:
+        logger.info('New deposit cycle.')
         try:
-            pre_deposit_check(lido, registry)
+            logger.info('Do deposit pre-checks.')
+            pre_deposit_check(account, lido, registry)
+            logger.info('Do deposit.')
             deposit_buffered_ether(account, lido)
         except (LidoIsStoppedException, NotEnoughBufferedEtherException, NoFreeOperatorKeysException) as error:
-            LOG_INFO.info({'exception': str(error)})
             time.sleep(60 * 30)
         except (MaxGasPriceException, RecommendedGasPriceException) as error:
-            LOG_INFO.info({'exception': str(error)})
             time.sleep(20)
         except Exception as error:
-            EXCEPTION_INFO.info({'exception': str(error)})
+            logger.error(str(error))
             time.sleep(20)
 
 
 @CHECK_FAILURE.count_exceptions()
-def pre_deposit_check(lido: interface, registry: interface):
+def pre_deposit_check(account: LocalAccount, lido: interface, registry: interface):
     """
     Check if everything is ok.
     Throws exception if something is not ok.
     """
     if lido.isStopped():
         LIDO_STATUS.state('stopped')
-        msg = '[FAILED] Lido contract is stopped!'
+        msg = 'Lido contract is stopped!'
+        logger.warning(msg)
         raise LidoIsStoppedException(msg)
     else:
         LIDO_STATUS.state('active')
@@ -97,7 +102,8 @@ def pre_deposit_check(lido: interface, registry: interface):
     buffered_ether = lido.getBufferedEther()
     BUFFERED_ETHER.set(buffered_ether)
     if buffered_ether < MIN_BUFFERED_ETHER:
-        msg = f'[FAILED] Lido has less buffered ether than expected: {buffered_ether}.'
+        msg = f'Lido has less buffered ether than expected: {buffered_ether}.'
+        logger.warning(msg)
         raise NotEnoughBufferedEtherException(msg)
 
     current_gas_fee = chain.base_fee
@@ -105,19 +111,29 @@ def pre_deposit_check(lido: interface, registry: interface):
     GAS_FEE.labels('current_fee').set(chain.base_fee)
 
     if chain.base_fee + chain.priority_fee > MAX_GAS_FEE:
-        msg = f'[FAILED] base_fee: [{chain.base_fee}] + priority_fee: [{chain.priority_fee}] are too high.'
+        msg = f'base_fee: [{chain.base_fee}] + priority_fee: [{chain.priority_fee}] are too high.'
+        logger.warning(msg)
         raise MaxGasPriceException(msg)
 
     recommended_gas_fee = get_recommended_gas_fee()
     GAS_FEE.labels('recommended_fee').set(recommended_gas_fee)
 
     if current_gas_fee > recommended_gas_fee:
-        msg = f'[FAILED] Gas fee is too high: [{current_gas_fee}], recommended price: [{recommended_gas_fee}].'
+        msg = f'Gas fee is too high: [{current_gas_fee}], recommended price: [{recommended_gas_fee}].'
+        logger.warning(msg)
         raise RecommendedGasPriceException(msg)
 
     if not node_operators_has_free_keys(registry):
-        msg = f'[FAILED] No free keys to deposit.'
+        msg = f'No free keys to deposit.'
+        logger.warning(msg)
         raise NoFreeOperatorKeysException(msg)
+
+    balance = web3.eth.get_balance(account.address)
+    ACCOUNT_BALANCE.set(balance)
+    if balance < Wei('0.01 ether'):
+        msg = f'Account balance is too low'
+        logger.warning(msg)
+        raise NotEnoughBalance(msg)
 
 
 @DEPOSIT_FAILURE.count_exceptions()

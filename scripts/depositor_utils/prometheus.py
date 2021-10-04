@@ -1,5 +1,4 @@
-from prometheus_client import Info
-from prometheus_client.metrics import Histogram, Gauge, Enum, Counter
+from prometheus_client.metrics import Gauge, Enum, Counter
 
 GAS_FEE = Gauge('gas_fee', 'Gas fee', ['type'])
 
@@ -12,5 +11,4 @@ CHECK_FAILURE = Counter('check_failure', 'Deposit pre check failure')
 DEPOSIT_FAILURE = Counter('deposit_failure', 'Deposit failure')
 SUCCESS_DEPOSIT = Counter('deposit_success', 'Deposit done')
 
-LOG_INFO = Info('log', 'Logging')
-EXCEPTION_INFO = Info('unexpected_exception', 'Unexpected exception')
+ACCOUNT_BALANCE = Gauge('account_balance', 'Account balance')

@@ -16,3 +16,7 @@ class RecommendedGasPriceException(Exception):
 
 class NoFreeOperatorKeysException(Exception):
     pass
+
+
+class NotEnoughBalance(Exception):
+    pass
