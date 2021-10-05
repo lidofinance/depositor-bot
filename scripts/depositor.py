@@ -76,9 +76,9 @@ def main():
             pre_deposit_check(account, lido, registry)
             logger.info('Do deposit.')
             deposit_buffered_ether(account, lido)
-        except (LidoIsStoppedException, NotEnoughBufferedEtherException, NoFreeOperatorKeysException) as error:
+        except (LidoIsStoppedException, NotEnoughBufferedEtherException, NoFreeOperatorKeysException, NotEnoughBalance):
             time.sleep(60 * 30)
-        except (MaxGasPriceException, RecommendedGasPriceException) as error:
+        except (MaxGasPriceException, RecommendedGasPriceException):
             time.sleep(20)
         except Exception as error:
             logger.error(str(error))
@@ -91,6 +91,7 @@ def pre_deposit_check(account: LocalAccount, lido: interface, registry: interfac
     Check if everything is ok.
     Throws exception if something is not ok.
     """
+    # Lido contract status check
     if lido.isStopped():
         LIDO_STATUS.state('stopped')
         msg = 'Lido contract is stopped!'
@@ -99,6 +100,15 @@ def pre_deposit_check(account: LocalAccount, lido: interface, registry: interfac
     else:
         LIDO_STATUS.state('active')
 
+    # Account balance check
+    balance = web3.eth.get_balance(account.address)
+    ACCOUNT_BALANCE.set(balance)
+    if balance < Wei('0.01 ether'):
+        msg = f'Account balance is too low'
+        logger.warning(msg)
+        raise NotEnoughBalance(msg)
+
+    # Lido contract buffered ether
     buffered_ether = lido.getBufferedEther()
     BUFFERED_ETHER.set(buffered_ether)
     if buffered_ether < MIN_BUFFERED_ETHER:
@@ -106,34 +116,28 @@ def pre_deposit_check(account: LocalAccount, lido: interface, registry: interfac
         logger.warning(msg)
         raise NotEnoughBufferedEtherException(msg)
 
-    current_gas_fee = chain.base_fee
-    GAS_FEE.labels('max_fee').set(MAX_GAS_FEE)
-    GAS_FEE.labels('current_fee').set(chain.base_fee)
-
-    if chain.base_fee + chain.priority_fee > MAX_GAS_FEE:
-        msg = f'base_fee: [{chain.base_fee}] + priority_fee: [{chain.priority_fee}] are too high.'
-        logger.warning(msg)
-        raise MaxGasPriceException(msg)
-
-    recommended_gas_fee = get_recommended_gas_fee()
-    GAS_FEE.labels('recommended_fee').set(recommended_gas_fee)
-
-    if current_gas_fee > recommended_gas_fee:
-        msg = f'Gas fee is too high: [{current_gas_fee}], recommended price: [{recommended_gas_fee}].'
-        logger.warning(msg)
-        raise RecommendedGasPriceException(msg)
-
+    # Check that contract has unused operators keys
     if not node_operators_has_free_keys(registry):
         msg = f'No free keys to deposit.'
         logger.warning(msg)
         raise NoFreeOperatorKeysException(msg)
 
-    balance = web3.eth.get_balance(account.address)
-    ACCOUNT_BALANCE.set(balance)
-    if balance < Wei('0.01 ether'):
-        msg = f'Account balance is too low'
+    # We cant spent more than MAX_GAS_FEE
+    current_gas_fee = chain.base_fee
+    GAS_FEE.labels('max_fee').set(MAX_GAS_FEE)
+    GAS_FEE.labels('current_fee').set(chain.base_fee)
+    if chain.base_fee + chain.priority_fee > MAX_GAS_FEE:
+        msg = f'base_fee: [{chain.base_fee}] + priority_fee: [{chain.priority_fee}] are too high.'
         logger.warning(msg)
-        raise NotEnoughBalance(msg)
+        raise MaxGasPriceException(msg)
+
+    # Check that current gas fee is ok
+    recommended_gas_fee = get_recommended_gas_fee()
+    GAS_FEE.labels('recommended_fee').set(recommended_gas_fee)
+    if current_gas_fee > recommended_gas_fee:
+        msg = f'Gas fee is too high: [{current_gas_fee}], recommended price: [{recommended_gas_fee}].'
+        logger.warning(msg)
+        raise RecommendedGasPriceException(msg)
 
 
 @DEPOSIT_FAILURE.count_exceptions()
