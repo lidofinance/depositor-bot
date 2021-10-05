@@ -15,4 +15,6 @@ services:
     image: prom/prometheus:latest
 
     volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - type: bind
+        source: ./prometheus.yml
+        target: /etc/prometheus/prometheus.yml
