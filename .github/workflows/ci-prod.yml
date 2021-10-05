@@ -11,9 +11,6 @@ on:
       - '.github/**'
 
 jobs:
-# test:
-#   ...
-
   deploy:
     runs-on: ubuntu-latest
     # needs: test
