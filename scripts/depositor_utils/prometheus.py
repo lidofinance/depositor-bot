@@ -7,7 +7,6 @@ BUFFERED_ETHER = Gauge('buffered_ether', 'Get total buffered ether')
 
 LIDO_STATUS = Enum('lido_contract_status', 'Lido contract status', states=['stopped', 'active'])
 
-CHECK_FAILURE = Counter('check_failure', 'Deposit pre check failure')
 DEPOSIT_FAILURE = Counter('deposit_failure', 'Deposit failure')
 SUCCESS_DEPOSIT = Counter('deposit_success', 'Deposit done')
 
