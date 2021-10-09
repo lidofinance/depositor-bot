@@ -1,22 +1,21 @@
 import os
+import time
 
+#TODO: joblib.load is unsafe, don't use it
 import joblib
 
 from brownie import interface, web3
 from tqdm import trange
 
-from scripts.depositor_utils.constants import DEPOSIT_CONTRACT
+from scripts.depositor_utils.constants import DEPOSIT_CONTRACT, DEPOSIT_CONTRACT_DEPLOY_BLOCK, UNREORGABLE_DISTANCE, EVENT_QUERY_STEP
+                        
 
+#TODO read from config instead of constants
 cachedir = 'deposit_contract_cache'
 mem = joblib.Memory(cachedir)
 key_cache_path = os.path.join(cachedir, 'deposit_keys_pickle.dump')
 
 
-
-deposit_contract_deployment_block = 11052984  
-end_block = web3.eth.block_number
-query_step = 1000
-unreorgable_distance = 100
 dc = interface.DepositContract(DEPOSIT_CONTRACT[web3.eth.chain_id])
 
 
@@ -41,17 +40,6 @@ def peek_deposit_contract_events(from_block, to_block):
 
 
 peek_deposit_contract_historical_events = mem.cache(peek_deposit_contract_events)
-
-
-def collect_deposit_contract_historical_events(deposit_contract_deployment_block, current_block):
-    fresh_events = peek_deposit_contract_events(current_block - unreorgable_distance, current_block)
-    historical_end = current_block - unreorgable_distance - 1
-    historical_events = []
-    for start in trange(deposit_contract_deployment_block, historical_end, query_step):
-        end = min(start + query_step - 1, historical_end)
-        logs = peek_deposit_contract_historical_events(start, end)
-        historical_events += logs
-    return historical_events + fresh_events
 
 def deposit_events_to_pubkeys(deposit_events):
     used_pubkeys = set()
@@ -108,10 +96,10 @@ def build_used_pubkeys_map(from_block, to_block, unreorgable_distance, query_ste
 
 def main():
     tic = time.perf_counter()
-    used_pubkeys = build_used_pubkeys_map(deposit_contract_deployment_block, 
-                                end_block, 
-                                unreorgable_distance,
-                                query_step)
+    used_pubkeys = build_used_pubkeys_map(DEPOSIT_CONTRACT_DEPLOY_BLOCK[web3.eth.chain_id], 
+                                web3.eth.block_number, 
+                                UNREORGABLE_DISTANCE,
+                                EVENT_QUERY_STEP)
     toc = time.perf_counter()
     print(f"Got {len(used_pubkeys)} in {toc - tic:0.4f} seconds")
 

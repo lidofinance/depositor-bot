@@ -28,3 +28,11 @@ DEPOSIT_CONTRACT = {
     Network.Mainnet: "0x00000000219ab540356cBB839Cbe05303d7705Fa",
     Network.Görli: "0x07b39F4fDE4A38bACe212b546dAc87C58DfE3fDC",
 }
+
+
+DEPOSIT_CONTRACT_DEPLOY_BLOCK = {
+    Network.Mainnet: 11052984
+}
+                                              
+UNREORGABLE_DISTANCE = 100 #100 blocks is safe enough
+EVENT_QUERY_STEP = 1000 #reasonably high number (nb. if there is > 10000 deposit events infura will throw error)
