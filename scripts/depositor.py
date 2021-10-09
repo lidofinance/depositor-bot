@@ -6,6 +6,12 @@ from brownie import accounts, chain, interface, web3, Wei
 from brownie.network.account import LocalAccount
 from prometheus_client.exposition import start_http_server
 
+from scripts.collect_bc_deposits import (
+    get_deposit_contract_events,
+    deposit_contract_deployment_block,
+    end_block,
+    build_used_pubkeys_map,
+)
 from scripts.depositor_utils.constants import (
     LIDO_CONTRACT_ADDRESSES,
     NODE_OPS_ADDRESSES,
@@ -16,7 +22,7 @@ from scripts.depositor_utils.deposit_problems import (
     LIDO_CONTRACT_HAS_NOT_ENOUGH_BUFFERED_ETHER,
     LIDO_CONTRACT_HAS_NOT_ENOUGH_SUBMITTED_KEYS,
     GAS_FEE_HIGHER_THAN_TRESHOLD,
-    GAS_FEE_HIGHER_THAN_RECOMMENDED
+    GAS_FEE_HIGHER_THAN_RECOMMENDED, KEY_WAS_USED
 )
 from scripts.depositor_utils.logger import logger
 from scripts.depositor_utils.prometheus import (
@@ -150,6 +156,13 @@ def get_deposit_problems(
     signing_keys_list = []
     for i in range(len(keys)//48):
         signing_keys_list.append(keys[i * 48: (i + 1) * 48])
+
+    deposit_events = get_deposit_contract_events(deposit_contract_deployment_block, end_block)
+    used_pub_keys = build_used_pubkeys_map(deposit_events)
+
+    for key in signing_keys_list:
+        if key in used_pub_keys:
+            deposit_problems.append(KEY_WAS_USED)
 
     return deposit_problems, signing_keys_list
 

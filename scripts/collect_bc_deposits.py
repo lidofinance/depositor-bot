@@ -1,19 +1,9 @@
-import json
-import os
-from collections import Counter
-from fractions import Fraction
-from functools import wraps
-from itertools import zip_longest
-from pathlib import Path
-
-from brownie import Wei, accounts, chain, interface, web3
-from eth_abi.packed import encode_abi_packed
-from eth_utils import encode_hex
-from tqdm import trange, tqdm
-from hexbytes import HexBytes
+from brownie import interface, web3
+from tqdm import trange
 
 from joblib import Memory
 
+from scripts.depositor_utils.constants import DEPOSIT_CONTRACT
 
 cachedir = 'deposit_contract_cache'
 mem = Memory(cachedir)
@@ -22,29 +12,31 @@ deposit_contract_deployment_block = 11052984
 end_block = 11283984
 query_step = 1000
 unreorgable_distance = 100
-dc = interface.DepositContract("0x00000000219ab540356cBB839Cbe05303d7705Fa")
+dc = interface.DepositContract(DEPOSIT_CONTRACT[web3.eth.chain_id])
 
 
-def toDict(dictToParse):
+def to_dict(dict_to_parse):
     # convert any 'AttributeDict' type found to 'dict'
-    parsedDict = dict(dictToParse)
-    for key, val in parsedDict.items():
+    parsed_dict = dict(dict_to_parse)
+    for key, val in parsed_dict.items():
         # check for nested dict structures to iterate through
-        if  'dict' in str(type(val)).lower():
-            parsedDict[key] = toDict(val)
+        if 'dict' in str(type(val)).lower():
+            parsed_dict[key] = to_dict(val)
         # convert 'HexBytes' type to 'str'
         elif 'HexBytes' in str(type(val)):
-            parsedDict[key] = val.hex()
-    return parsedDict
+            parsed_dict[key] = val.hex()
+    return parsed_dict
 
 
 def peek_deposit_contract_events(from_block, to_block):
     contract = web3.eth.contract(str(dc), abi=dc.abi)
     logs = contract.events.DepositEvent().getLogs(fromBlock=from_block, toBlock=to_block)
-    result = [toDict(log) for log in logs]
+    result = [to_dict(log) for log in logs]
     return result   
 
+
 peek_deposit_contract_historical_events = mem.cache(peek_deposit_contract_events)
+
 
 def get_deposit_contract_events(deposit_contract_deployment_block, current_block):
     fresh_events = peek_deposit_contract_events(current_block - unreorgable_distance, current_block)
@@ -56,11 +48,13 @@ def get_deposit_contract_events(deposit_contract_deployment_block, current_block
         historical_events += logs
     return historical_events + fresh_events
 
+
 def build_used_pubkeys_map(deposit_events):
     used_pubkeys = set()
     for deposit_event in deposit_events:
         used_pubkeys.add(deposit_event['args']['pubkey'])
     return used_pubkeys
+
 
 def main():
     deposit_events = get_deposit_contract_events(deposit_contract_deployment_block, end_block)
