@@ -1,5 +1,5 @@
 import time
-from typing import Optional
+from typing import Optional, List
 
 import numpy
 from brownie import accounts, chain, interface, web3, Wei
@@ -10,20 +10,19 @@ from scripts.depositor_utils.constants import (
     LIDO_CONTRACT_ADDRESS,
     OPERATOR_CONTRACT_ADDRESS,
 )
-from scripts.depositor_utils.exceptions import (
-    LidoIsStoppedException,
-    NotEnoughBufferedEtherException,
-    NoFreeOperatorKeysException,
-    MaxGasPriceException,
-    RecommendedGasPriceException,
-    NotEnoughBalance,
+from scripts.depositor_utils.deposit_problems import (
+    LIDO_CONTRACT_IS_STOPPED,
+    NOT_ENOUGH_BALANCE_ON_ACCOUNT,
+    LIDO_CONTRACT_HAS_NOT_ENOUGH_BUFFERED_ETHER,
+    LIDO_CONTRACT_HAS_NOT_ENOUGH_SUBMITTED_KEYS,
+    GAS_FEE_HIGHER_THAN_TRESHOLD,
+    GAS_FEE_HIGHER_THAN_RECOMMENDED
 )
-from scripts.depositor_utils.loki import logger
+from scripts.depositor_utils.logger import logger
 from scripts.depositor_utils.prometheus import (
     GAS_FEE,
     OPERATORS_FREE_KEYS,
     BUFFERED_ETHER,
-    CHECK_FAILURE,
     DEPOSIT_FAILURE,
     LIDO_STATUS,
     SUCCESS_DEPOSIT,
@@ -71,69 +70,71 @@ def main():
 
     while True:
         logger.info('New deposit cycle.')
-        try:
-            logger.info('Do deposit pre-checks.')
-            pre_deposit_check(account, lido, registry)
-            logger.info('Do deposit.')
-            deposit_buffered_ether(account, lido)
-        except (LidoIsStoppedException, NotEnoughBufferedEtherException, NoFreeOperatorKeysException) as error:
-            time.sleep(60 * 30)
-        except (MaxGasPriceException, RecommendedGasPriceException) as error:
-            time.sleep(20)
-        except Exception as error:
-            logger.error(str(error))
-            time.sleep(20)
+        problems = get_deposit_problems(account, lido, registry)
+        if not problems:
+            try:
+                logger.info(f'Try to deposit.')
+                deposit_buffered_ether(account, lido)
+            except Exception as error:
+                logger.error(str(error))
+                time.sleep(15)
+        else:
+            logger.info(f'Deposit cancelled. Problems count: {len(problems)}')
+            time.sleep(15)
 
 
-@CHECK_FAILURE.count_exceptions()
-def pre_deposit_check(account: LocalAccount, lido: interface, registry: interface):
+def get_deposit_problems(account: LocalAccount, lido: interface, registry: interface) -> List[str]:
     """
-    Check if everything is ok.
-    Throws exception if something is not ok.
+    Check if all is ready for deposit buffered ether.
+    Returns list of problems that prevents deposit.
     """
+    deposit_problems = []
+
+    # Check contract status
     if lido.isStopped():
         LIDO_STATUS.state('stopped')
-        msg = 'Lido contract is stopped!'
-        logger.warning(msg)
-        raise LidoIsStoppedException(msg)
+        logger.warning(LIDO_CONTRACT_IS_STOPPED)
+        deposit_problems.append(LIDO_CONTRACT_IS_STOPPED)
     else:
         LIDO_STATUS.state('active')
 
+    # Lido contract buffered ether check
     buffered_ether = lido.getBufferedEther()
     BUFFERED_ETHER.set(buffered_ether)
     if buffered_ether < MIN_BUFFERED_ETHER:
-        msg = f'Lido has less buffered ether than expected: {buffered_ether}.'
-        logger.warning(msg)
-        raise NotEnoughBufferedEtherException(msg)
+        logger.warning(LIDO_CONTRACT_HAS_NOT_ENOUGH_BUFFERED_ETHER)
+        deposit_problems.append(LIDO_CONTRACT_HAS_NOT_ENOUGH_BUFFERED_ETHER)
 
+    # Check that contract has unused operators keys
+    if not node_operators_has_free_keys(registry):
+        logger.warning(LIDO_CONTRACT_HAS_NOT_ENOUGH_SUBMITTED_KEYS)
+        deposit_problems.append(LIDO_CONTRACT_HAS_NOT_ENOUGH_SUBMITTED_KEYS)
+
+    # Account balance check
+    if account:
+        balance = web3.eth.get_balance(account.address)
+        ACCOUNT_BALANCE.set(balance)
+        if balance < Wei('0.01 ether'):
+            logger.error(NOT_ENOUGH_BALANCE_ON_ACCOUNT)
+            deposit_problems.append(NOT_ENOUGH_BALANCE_ON_ACCOUNT)
+    else:
+        ACCOUNT_BALANCE.set(0)
+
+    # Check gas fee Treshold
     current_gas_fee = chain.base_fee
     GAS_FEE.labels('max_fee').set(MAX_GAS_FEE)
     GAS_FEE.labels('current_fee').set(chain.base_fee)
-
     if chain.base_fee + chain.priority_fee > MAX_GAS_FEE:
-        msg = f'base_fee: [{chain.base_fee}] + priority_fee: [{chain.priority_fee}] are too high.'
-        logger.warning(msg)
-        raise MaxGasPriceException(msg)
+        logger.warning(GAS_FEE_HIGHER_THAN_TRESHOLD)
+        deposit_problems.append(GAS_FEE_HIGHER_THAN_TRESHOLD)
 
+    # Check that current gas fee is ok
     recommended_gas_fee = get_recommended_gas_fee()
-    GAS_FEE.labels('recommended_fee').set(recommended_gas_fee)
-
     if current_gas_fee > recommended_gas_fee:
-        msg = f'Gas fee is too high: [{current_gas_fee}], recommended price: [{recommended_gas_fee}].'
-        logger.warning(msg)
-        raise RecommendedGasPriceException(msg)
+        logger.warning(GAS_FEE_HIGHER_THAN_RECOMMENDED)
+        deposit_problems.append(GAS_FEE_HIGHER_THAN_RECOMMENDED)
 
-    if not node_operators_has_free_keys(registry):
-        msg = f'No free keys to deposit.'
-        logger.warning(msg)
-        raise NoFreeOperatorKeysException(msg)
-
-    balance = web3.eth.get_balance(account.address)
-    ACCOUNT_BALANCE.set(balance)
-    if balance < Wei('0.01 ether'):
-        msg = f'Account balance is too low'
-        logger.warning(msg)
-        raise NotEnoughBalance(msg)
+    return deposit_problems
 
 
 @DEPOSIT_FAILURE.count_exceptions()
@@ -155,12 +156,14 @@ def get_recommended_gas_fee() -> float:
 
     # History goes from oldest block to newest
     one_day_fee_hist = gas_fees[- blocks_in_one_day:]
-    four_day_fee_hist = gas_fees[- blocks_in_one_day * 4:]
+    four_day_fee_hist = gas_fees[- blocks_in_one_day * 3:]
 
     recommended_price = min(
         numpy.percentile(one_day_fee_hist, GAS_PREDICTION_PERCENTILE),
         numpy.percentile(four_day_fee_hist, GAS_PREDICTION_PERCENTILE),
     )
+
+    GAS_FEE.labels('recommended_fee').set(recommended_price)
 
     return recommended_price
 
@@ -169,7 +172,7 @@ def get_gas_fee_history():
     last_block = 'latest'
     gas_fees = []
 
-    for i in range(26):
+    for i in range(20):
         stats = web3.eth.fee_history(1024, last_block)
         last_block = stats['oldestBlock'] - 2
         gas_fees = stats['baseFeePerGas'] + gas_fees

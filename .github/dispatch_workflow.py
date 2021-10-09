@@ -1,10 +1,10 @@
 #!/usr/bin/python3
 import jwt
-import time
 import requests
 import os
 import sys
 import time
+
 
 JOB_WAIT_TIMEOUT = 300  # timeout to wait for triggered job to be created (not finished)
 JOB_TIMEOUT = 6000  # timeout to wait fo job to finish
