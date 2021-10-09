@@ -5,7 +5,6 @@ import time
 import joblib
 
 from brownie import interface, web3
-from tqdm import trange
 
 from scripts.depositor_utils.constants import DEPOSIT_CONTRACT, DEPOSIT_CONTRACT_DEPLOY_BLOCK, UNREORGABLE_DISTANCE, EVENT_QUERY_STEP
                         
@@ -68,7 +67,7 @@ def collect_historical_pubkeys(from_block, to_block, query_step):
     collection_start = max(from_block, saved_pubkeys['last_block'] +1)
 
     historical_events = []
-    for start in trange(collection_start, to_block, query_step):
+    for start in range(collection_start, to_block, query_step):
         end = min(start + query_step - 1, to_block)
         collected_pubkeys = collect_cached_pubkeys(start, end)
         saved_pubkeys['pubkeys'] = saved_pubkeys['pubkeys'].union(collected_pubkeys)

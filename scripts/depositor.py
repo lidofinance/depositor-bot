@@ -7,9 +7,6 @@ from brownie.network.account import LocalAccount
 from prometheus_client.exposition import start_http_server
 
 from scripts.collect_bc_deposits import (
-    get_deposit_contract_events,
-    deposit_contract_deployment_block,
-    end_block,
     build_used_pubkeys_map,
 )
 from scripts.depositor_utils.constants import (
@@ -82,17 +79,48 @@ def main():
 
     while True:
         logger.info('New deposit cycle.')
+
+        current_block = web3.eth_block_number
+        self_index = get_self_index()
+        (dd_root, nos_index) = get_frontrun_protection_data()
+
         problems, signing_keys_list = get_deposit_problems(account, lido, registry, eth_chain_id)
         if not problems:
             try:
                 logger.info(f'Try to deposit.')
-                deposit_buffered_ether(account, lido, signing_keys_list)
+                fp_yay_data = sign_frontrun_protection_yay(self_index, dd_root, nos_index)
+                deposit_buffered_ether(account, lido, signing_keys_list, fp_yay_data)
             except Exception as error:
                 logger.error(str(error))
                 time.sleep(15)
+        elif keys_already_deposited in problems:
+            nay_data = sign_frontrun_protection_nay_data()
+
+
         else:
             logger.info(f'Deposit cancelled. Problems count: {len(problems)}')
             time.sleep(15)
+
+#TODO not implemented
+def get_self_index():
+    return 0
+
+def get_frontrun_protection_data():
+    #deposit contract root, nos_index
+    return (0, 0)
+
+def sign_data(data):
+    return 0
+
+def sign_frontrun_protection_yay_data(self_index, dd_root, nos_index):
+    return sign_data([yay_prefix, dd_root, nos_index]) + self_index
+
+
+def sign_frontrun_protection_nay_data(block_height)
+    return sign_data([nay_prefix, block_height]) + self_index
+
+def pause_deposits(nay_data):
+    pass
 
 
 def get_deposit_problems(
@@ -167,14 +195,14 @@ def get_deposit_problems(
                                 UNREORGABLE_DISTANCE,
                                 EVENT_QUERY_STEP)
 
-    for key in signing_keys_set.intersect(used_pub_keys):
+    for key in signing_keys_set.intersection(used_pub_keys):
         deposit_problems.append(KEY_WAS_USED)
 
-    return deposit_problems, signing_keys_list
+    return deposit_problems, list(signing_keys_set)
 
 
 @DEPOSIT_FAILURE.count_exceptions()
-def deposit_buffered_ether(account: LocalAccount, lido: interface, signing_keys_list: List[bytes]):
+def deposit_buffered_ether(account: LocalAccount, lido: interface, signing_keys_list: List[bytes], fp_yay_data):
     lido.depositBufferedEther(len(signing_keys_list), {
         'from': account,
         'gas_limit': CONTRACT_GAS_LIMIT,
