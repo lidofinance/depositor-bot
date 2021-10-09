@@ -15,6 +15,9 @@ from scripts.collect_bc_deposits import (
 from scripts.depositor_utils.constants import (
     LIDO_CONTRACT_ADDRESSES,
     NODE_OPS_ADDRESSES,
+    DEPOSIT_CONTRACT_DEPLOY_BLOCK, 
+    UNREORGABLE_DISTANCE,
+    EVENT_QUERY_STEP,
 )
 from scripts.depositor_utils.deposit_problems import (
     LIDO_CONTRACT_IS_STOPPED,
@@ -155,16 +158,17 @@ def get_deposit_problems(
     )
 
     # Check keys and so on
-    signing_keys_list = []
+    signing_keys_set = set()
     for i in range(len(keys)//48):
-        signing_keys_list.append(keys[i * 48: (i + 1) * 48])
+        signing_keys_list.add(keys[i * 48: (i + 1) * 48])
 
-    deposit_events = get_deposit_contract_events(deposit_contract_deployment_block, end_block)
-    used_pub_keys = build_used_pubkeys_map(deposit_events)
+    used_pub_keys = build_used_pubkeys_map(DEPOSIT_CONTRACT_DEPLOY_BLOCK[web3.eth.chain_id], 
+                                web3.eth.block_number, 
+                                UNREORGABLE_DISTANCE,
+                                EVENT_QUERY_STEP)
 
-    for key in signing_keys_list:
-        if key in used_pub_keys:
-            deposit_problems.append(KEY_WAS_USED)
+    for key in signing_keys_set.intersect(used_pub_keys):
+        deposit_problems.append(KEY_WAS_USED)
 
     return deposit_problems, signing_keys_list
 
