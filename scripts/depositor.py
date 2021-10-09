@@ -22,7 +22,8 @@ from scripts.depositor_utils.deposit_problems import (
     LIDO_CONTRACT_HAS_NOT_ENOUGH_BUFFERED_ETHER,
     LIDO_CONTRACT_HAS_NOT_ENOUGH_SUBMITTED_KEYS,
     GAS_FEE_HIGHER_THAN_TRESHOLD,
-    GAS_FEE_HIGHER_THAN_RECOMMENDED, KEY_WAS_USED
+    GAS_FEE_HIGHER_THAN_RECOMMENDED,
+    KEY_WAS_USED,
 )
 from scripts.depositor_utils.logger import logger
 from scripts.depositor_utils.prometheus import (
@@ -147,6 +148,7 @@ def get_deposit_problems(
         logger.warning(GAS_FEE_HIGHER_THAN_RECOMMENDED)
         deposit_problems.append(GAS_FEE_HIGHER_THAN_RECOMMENDED)
 
+    # Get all unused keys that should be deposited next
     keys, signatures = registry.assignNextSigningKeys.call(
         DEPOSIT_AMOUNT,
         {'from': LIDO_CONTRACT_ADDRESSES[eth_chain_id]},
