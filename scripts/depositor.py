@@ -18,7 +18,7 @@ from scripts.depositor_utils.deposit_problems import (
     GAS_FEE_HIGHER_THAN_TRESHOLD,
     GAS_FEE_HIGHER_THAN_RECOMMENDED
 )
-from scripts.depositor_utils.loki import logger
+from scripts.depositor_utils.logger import logger
 from scripts.depositor_utils.prometheus import (
     GAS_FEE,
     OPERATORS_FREE_KEYS,
@@ -156,7 +156,7 @@ def get_recommended_gas_fee() -> float:
 
     # History goes from oldest block to newest
     one_day_fee_hist = gas_fees[- blocks_in_one_day:]
-    four_day_fee_hist = gas_fees[- blocks_in_one_day * 4:]
+    four_day_fee_hist = gas_fees[- blocks_in_one_day * 3:]
 
     recommended_price = min(
         numpy.percentile(one_day_fee_hist, GAS_PREDICTION_PERCENTILE),
@@ -172,7 +172,7 @@ def get_gas_fee_history():
     last_block = 'latest'
     gas_fees = []
 
-    for i in range(26):
+    for i in range(20):
         stats = web3.eth.fee_history(1024, last_block)
         last_block = stats['oldestBlock'] - 2
         gas_fees = stats['baseFeePerGas'] + gas_fees
