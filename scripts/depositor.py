@@ -90,7 +90,7 @@ def get_deposit_problems(
     lido: interface,
     registry: interface,
     eth_chain_id: int,
-) -> Tuple[List[str], bytearray]:
+) -> Tuple[List[str], List[bytes]]:
     """
     Check if all is ready for deposit buffered ether.
     Returns list of problems that prevents deposit.
@@ -141,20 +141,22 @@ def get_deposit_problems(
         logger.warning(GAS_FEE_HIGHER_THAN_RECOMMENDED)
         deposit_problems.append(GAS_FEE_HIGHER_THAN_RECOMMENDED)
 
-    signing_keys_list = registry.assignNextSigningKeys.call(
+    keys, signatures = registry.assignNextSigningKeys.call(
         DEPOSIT_AMOUNT,
         {'from': LIDO_CONTRACT_ADDRESSES[eth_chain_id]},
     )
-    # Check keys and so on
 
-    return deposit_problems, signing_keys_list[0]
+    # Check keys and so on
+    signing_keys_list = []
+    for i in range(len(keys)//48):
+        signing_keys_list.append(keys[i * 48: (i + 1) * 48])
+
+    return deposit_problems, signing_keys_list
 
 
 @DEPOSIT_FAILURE.count_exceptions()
-def deposit_buffered_ether(account: LocalAccount, lido: interface, signing_keys_list: bytearray):
-    deposit_keys_count = len(signing_keys_list)/48
-
-    lido.depositBufferedEther(deposit_keys_count, {
+def deposit_buffered_ether(account: LocalAccount, lido: interface, signing_keys_list: List[bytes]):
+    lido.depositBufferedEther(len(signing_keys_list), {
         'from': account,
         'gas_limit': CONTRACT_GAS_LIMIT,
         'priority_fee': chain.priority_fee,
