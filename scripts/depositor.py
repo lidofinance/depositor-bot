@@ -1,14 +1,20 @@
 import time
-from typing import Optional, List
+from typing import Optional, List, Tuple
 
 import numpy
 from brownie import accounts, chain, interface, web3, Wei
 from brownie.network.account import LocalAccount
 from prometheus_client.exposition import start_http_server
 
+from scripts.collect_bc_deposits import (
+    get_deposit_contract_events,
+    deposit_contract_deployment_block,
+    end_block,
+    build_used_pubkeys_map,
+)
 from scripts.depositor_utils.constants import (
-    LIDO_CONTRACT_ADDRESS,
-    OPERATOR_CONTRACT_ADDRESS,
+    LIDO_CONTRACT_ADDRESSES,
+    NODE_OPS_ADDRESSES,
 )
 from scripts.depositor_utils.deposit_problems import (
     LIDO_CONTRACT_IS_STOPPED,
@@ -16,7 +22,8 @@ from scripts.depositor_utils.deposit_problems import (
     LIDO_CONTRACT_HAS_NOT_ENOUGH_BUFFERED_ETHER,
     LIDO_CONTRACT_HAS_NOT_ENOUGH_SUBMITTED_KEYS,
     GAS_FEE_HIGHER_THAN_TRESHOLD,
-    GAS_FEE_HIGHER_THAN_RECOMMENDED
+    GAS_FEE_HIGHER_THAN_RECOMMENDED,
+    KEY_WAS_USED,
 )
 from scripts.depositor_utils.logger import logger
 from scripts.depositor_utils.prometheus import (
@@ -28,6 +35,7 @@ from scripts.depositor_utils.prometheus import (
     SUCCESS_DEPOSIT,
     ACCOUNT_BALANCE,
 )
+from scripts.depositor_utils.utils import cache
 from scripts.depositor_utils.variables import (
     MIN_BUFFERED_ETHER,
     MAX_GAS_FEE,
@@ -37,7 +45,6 @@ from scripts.depositor_utils.variables import (
     CONTRACT_GAS_LIMIT,
     GAS_PREDICTION_PERCENTILE,
 )
-from scripts.depositor_utils.utils import cache
 
 
 def get_account() -> Optional[LocalAccount]:
@@ -65,16 +72,18 @@ def main():
     logger.info('Load account.')
     account = get_account()
 
-    lido = interface.Lido(LIDO_CONTRACT_ADDRESS, owner=account)
-    registry = interface.NodeOperators(OPERATOR_CONTRACT_ADDRESS, owner=account)
+    eth_chain_id = web3.eth.chain_id
+
+    lido = interface.Lido(LIDO_CONTRACT_ADDRESSES[eth_chain_id], owner=account)
+    registry = interface.NodeOperators(NODE_OPS_ADDRESSES[eth_chain_id], owner=account)
 
     while True:
         logger.info('New deposit cycle.')
-        problems = get_deposit_problems(account, lido, registry)
+        problems, signing_keys_list = get_deposit_problems(account, lido, registry, eth_chain_id)
         if not problems:
             try:
                 logger.info(f'Try to deposit.')
-                deposit_buffered_ether(account, lido)
+                deposit_buffered_ether(account, lido, signing_keys_list)
             except Exception as error:
                 logger.error(str(error))
                 time.sleep(15)
@@ -83,7 +92,12 @@ def main():
             time.sleep(15)
 
 
-def get_deposit_problems(account: LocalAccount, lido: interface, registry: interface) -> List[str]:
+def get_deposit_problems(
+    account: LocalAccount,
+    lido: interface,
+    registry: interface,
+    eth_chain_id: int,
+) -> Tuple[List[str], List[bytes]]:
     """
     Check if all is ready for deposit buffered ether.
     Returns list of problems that prevents deposit.
@@ -134,12 +148,30 @@ def get_deposit_problems(account: LocalAccount, lido: interface, registry: inter
         logger.warning(GAS_FEE_HIGHER_THAN_RECOMMENDED)
         deposit_problems.append(GAS_FEE_HIGHER_THAN_RECOMMENDED)
 
-    return deposit_problems
+    # Get all unused keys that should be deposited next
+    keys, signatures = registry.assignNextSigningKeys.call(
+        DEPOSIT_AMOUNT,
+        {'from': LIDO_CONTRACT_ADDRESSES[eth_chain_id]},
+    )
+
+    # Check keys and so on
+    signing_keys_list = []
+    for i in range(len(keys)//48):
+        signing_keys_list.append(keys[i * 48: (i + 1) * 48])
+
+    deposit_events = get_deposit_contract_events(deposit_contract_deployment_block, end_block)
+    used_pub_keys = build_used_pubkeys_map(deposit_events)
+
+    for key in signing_keys_list:
+        if key in used_pub_keys:
+            deposit_problems.append(KEY_WAS_USED)
+
+    return deposit_problems, signing_keys_list
 
 
 @DEPOSIT_FAILURE.count_exceptions()
-def deposit_buffered_ether(account: LocalAccount, lido: interface):
-    lido.depositBufferedEther(DEPOSIT_AMOUNT, {
+def deposit_buffered_ether(account: LocalAccount, lido: interface, signing_keys_list: List[bytes]):
+    lido.depositBufferedEther(len(signing_keys_list), {
         'from': account,
         'gas_limit': CONTRACT_GAS_LIMIT,
         'priority_fee': chain.priority_fee,
