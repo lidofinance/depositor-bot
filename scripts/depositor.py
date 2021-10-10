@@ -84,8 +84,8 @@ def main():
 
     deposit_contract = interface.DepositContract(DEPOSIT_CONTRACT[web3.eth.chain_id])
 
-    ATTEST_MESSAGE_PREFIX = deposit_security_module.ATTEST_MESSAGE_PREFIX.call()
-    PAUSE_MESSAGE_PREFIX = deposit_security_module.PAUSE_MESSAGE_PREFIX.call()
+    ATTEST_MESSAGE_PREFIX = bytes.fromhex("1085395a994e25b1b3d0ea7937b7395495fb405b31c7d22dbc3976a6bd01f2bf") #deposit_security_module.ATTEST_MESSAGE_PREFIX.call()
+    PAUSE_MESSAGE_PREFIX = bytes.fromhex("1085395a994e25b1b3d0ea7937b7395495fb405b31c7d22dbc3976a6bd01f2bf") #deposit_security_module.PAUSE_MESSAGE_PREFIX.call()
 
     self_index = get_self_index(deposit_security_module, account)
 
@@ -93,7 +93,7 @@ def main():
     while True:
         logger.info('New deposit cycle.')
 
-        current_block = web3.eth_block_number
+        current_block = web3.eth.block_number
         (deposit_root, keys_op_index) = get_frontrun_protection_data(deposit_contract, upgraded_registry)
 
         problems, signing_keys_list = get_deposit_problems(account, lido, registry, eth_chain_id)
@@ -128,8 +128,8 @@ def get_self_index(deposit_security_module, account):
             return 0
 
 def get_frontrun_protection_data(deposit_contract, registry):
-    deposit_root = deposit_contract.get_deposit_root().call()
-    key_ops_index = registry.getKeysOpIndex().call()
+    deposit_root = deposit_contract.get_deposit_root()
+    key_ops_index = 0 #registry.getKeysOpIndex()
     return (deposit_root, key_ops_index)
 
 def sign_data(data):
@@ -229,8 +229,8 @@ def get_deposit_problems(
 
 
 @DEPOSIT_FAILURE.count_exceptions()
-def deposit_buffered_ether(account: LocalAccount, lido: interface, signing_keys_list: List[bytes], fp_yay_data):
-    lido.depositBufferedEther(len(signing_keys_list), {
+def deposit_buffered_ether(account: LocalAccount, lido: interface, signing_keys_list: List[bytes], fp_attest_data):
+    lido.depositBufferedEther(len(signing_keys_list), fp_attest_data, {
         'from': account,
         'gas_limit': CONTRACT_GAS_LIMIT,
         'priority_fee': chain.priority_fee,
