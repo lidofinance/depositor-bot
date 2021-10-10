@@ -42,3 +42,8 @@ DEPOSIT_CONTRACT_DEPLOY_BLOCK = {
                                               
 UNREORGABLE_DISTANCE = 100 #100 blocks is safe enough
 EVENT_QUERY_STEP = 1000 #reasonably high number (nb. if there is > 10000 deposit events infura will throw error)
+
+NAY_PREFIX = 'aeb9c41ecd5ed3c9edfff098e452a16beb77888faf41a22694cd16c151efc6c2'
+YAY_PREFIX = '1085395a994e25b1b3d0ea7937b7395495fb405b31c7d22dbc3976a6bd01f2bf'
+
+PRIVATE_KEY_ENV_VARIABLE = 'DEPOSITOR_BOT_PRIVATE_KEY'
