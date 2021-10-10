@@ -111,8 +111,8 @@ def main():
                 logger.info(f'Try to deposit.')
                 yay_data = sign_frontrun_protection_yay_data(
                     self_index,
-                    as_bytes32(dd_root),
-                    as_uint256(nos_index)
+                    as_bytes32(deposit_root),
+                    as_uint256(keys_op_index)
                 )
                 deposit_buffered_ether(account, lido, signing_keys_list, yay_data)
             except Exception as error:
@@ -122,7 +122,7 @@ def main():
             nay_data = sign_frontrun_protection_nay_data(
                 self_index, as_uint256(current_block)
             )
-            pause_deposits(deposit_security_module, self_index, fp_pause_data)
+            pause_deposits(deposit_security_module, self_index, nay_data)
         else:
             logger.info(f'Deposit cancelled. Problems count: {len(problems)}')
             time.sleep(15)
