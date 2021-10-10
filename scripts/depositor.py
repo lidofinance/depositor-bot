@@ -15,6 +15,8 @@ from scripts.depositor_utils.constants import (
     DEPOSIT_CONTRACT_DEPLOY_BLOCK, 
     UNREORGABLE_DISTANCE,
     EVENT_QUERY_STEP,
+    DEPOSIT_SECURITY_MODULE,
+    DEPOSIT_CONTRACT,
 )
 from scripts.depositor_utils.deposit_problems import (
     LIDO_CONTRACT_IS_STOPPED,
@@ -76,38 +78,59 @@ def main():
 
     lido = interface.Lido(LIDO_CONTRACT_ADDRESSES[eth_chain_id], owner=account)
     registry = interface.NodeOperators(NODE_OPS_ADDRESSES[eth_chain_id], owner=account)
+    #todo merge into 1 nop registry
+    upgraded_registry = interface.NodeOperatorRegistry(NODE_OPS_ADDRESSES[eth_chain_id], owner=account)
+    deposit_security_module = interface.DepositSecurityModule(DEPOSIT_SECURITY_MODULE[eth_chain_id], owner=account)
+
+    deposit_contract = interface.DepositContract(DEPOSIT_CONTRACT[web3.eth.chain_id])
+
+    ATTEST_MESSAGE_PREFIX = deposit_security_module.ATTEST_MESSAGE_PREFIX.call()
+    PAUSE_MESSAGE_PREFIX = deposit_security_module.PAUSE_MESSAGE_PREFIX.call()
+
+    self_index = get_self_index(deposit_security_module, account)
+
 
     while True:
         logger.info('New deposit cycle.')
 
         current_block = web3.eth_block_number
-        self_index = get_self_index()
-        (dd_root, nos_index) = get_frontrun_protection_data()
+        (deposit_root, keys_op_index) = get_frontrun_protection_data(deposit_contract, upgraded_registry)
 
         problems, signing_keys_list = get_deposit_problems(account, lido, registry, eth_chain_id)
         if not problems:
             try:
                 logger.info(f'Try to deposit.')
-                fp_yay_data = sign_frontrun_protection_yay(self_index, dd_root, nos_index)
-                deposit_buffered_ether(account, lido, signing_keys_list, fp_yay_data)
+                fp_attest_data = frontrun_protection_attest_data(ATTEST_MESSAGE_PREFIX, deposit_root, keys_op_index, self_index)
+                deposit_buffered_ether(account, lido, signing_keys_list, fp_attest_data)
             except Exception as error:
                 logger.error(str(error))
                 time.sleep(15)
-        elif keys_already_deposited in problems:
-            nay_data = sign_frontrun_protection_nay_data()
-
-
+        elif KEY_WAS_USED in problems:
+            fp_pause_data = frontrun_protection_pause_data(PAUSE_MESSAGE_PREFIX, current_block)
+            pause_deposits(deposit_security_module, self_index, fp_pause_data)
         else:
             logger.info(f'Deposit cancelled. Problems count: {len(problems)}')
             time.sleep(15)
 
 #TODO not implemented
-def get_self_index():
-    return 0
+def get_self_index(deposit_security_module, account):
+    if not account:
+        logger.info('Account not provided, assuming self index is 0 for testing purpose.')
+        return 0
+    else:
+        #todo test
+        guardians = deposit_security_module.getGuardians().call()
+        if account in guardians:
+            return guardians.index(account)
+        else:
+            logger.warning('Account is not in the guardians list.')
+            #todo error handling
+            return 0
 
-def get_frontrun_protection_data():
-    #deposit contract root, nos_index
-    return (0, 0)
+def get_frontrun_protection_data(deposit_contract, registry):
+    deposit_root = deposit_contract.get_deposit_root().call()
+    key_ops_index = registry.getKeysOpIndex().call()
+    return (deposit_root, key_ops_index)
 
 def sign_data(data):
     return 0
@@ -116,11 +139,15 @@ def sign_frontrun_protection_yay_data(self_index, dd_root, nos_index):
     return sign_data([yay_prefix, dd_root, nos_index]) + self_index
 
 
-def sign_frontrun_protection_nay_data(block_height)
+def sign_frontrun_protection_nay_data(block_height):
     return sign_data([nay_prefix, block_height]) + self_index
 
-def pause_deposits(nay_data):
-    pass
+def pause_deposits(deposit_security_module, self_index):
+    deposit_security_module.Pause(self_index, pause_data, {
+        'from': account,
+        'gas_limit': CONTRACT_GAS_LIMIT, #todo change to less
+        'priority_fee': chain.priority_fee*2, #todo increase the max fee as well
+    })
 
 
 def get_deposit_problems(
@@ -195,7 +222,7 @@ def get_deposit_problems(
                                 UNREORGABLE_DISTANCE,
                                 EVENT_QUERY_STEP)
 
-    for key in signing_keys_set.intersection(used_pub_keys):
+    if len(signing_keys_set.intersection(used_pub_keys))>0:
         deposit_problems.append(KEY_WAS_USED)
 
     return deposit_problems, list(signing_keys_set)
