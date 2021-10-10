@@ -1,4 +1,5 @@
 import time
+from functools import partial
 from typing import Optional, List, Tuple
 
 import numpy
@@ -12,11 +13,13 @@ from scripts.collect_bc_deposits import (
 from scripts.depositor_utils.constants import (
     LIDO_CONTRACT_ADDRESSES,
     NODE_OPS_ADDRESSES,
-    DEPOSIT_CONTRACT_DEPLOY_BLOCK, 
+    DEPOSIT_CONTRACT_DEPLOY_BLOCK,
     UNREORGABLE_DISTANCE,
     EVENT_QUERY_STEP,
     DEPOSIT_SECURITY_MODULE,
     DEPOSIT_CONTRACT,
+    YAY_PREFIX,
+    NAY_PREFIX
 )
 from scripts.depositor_utils.deposit_problems import (
     LIDO_CONTRACT_IS_STOPPED,
@@ -37,7 +40,13 @@ from scripts.depositor_utils.prometheus import (
     SUCCESS_DEPOSIT,
     ACCOUNT_BALANCE,
 )
-from scripts.depositor_utils.utils import cache
+from scripts.depositor_utils.utils import (
+    cache,
+    keccak256_hash,
+    get_private_key,
+    as_bytes32, as_uint256,
+    ecdsa_sign, SignedData
+)
 from scripts.depositor_utils.variables import (
     MIN_BUFFERED_ETHER,
     MAX_GAS_FEE,
@@ -100,13 +109,19 @@ def main():
         if not problems:
             try:
                 logger.info(f'Try to deposit.')
-                fp_attest_data = frontrun_protection_attest_data(ATTEST_MESSAGE_PREFIX, deposit_root, keys_op_index, self_index)
-                deposit_buffered_ether(account, lido, signing_keys_list, fp_attest_data)
+                yay_data = sign_frontrun_protection_yay_data(
+                    self_index,
+                    as_bytes32(dd_root),
+                    as_uint256(nos_index)
+                )
+                deposit_buffered_ether(account, lido, signing_keys_list, yay_data)
             except Exception as error:
                 logger.error(str(error))
                 time.sleep(15)
         elif KEY_WAS_USED in problems:
-            fp_pause_data = frontrun_protection_pause_data(PAUSE_MESSAGE_PREFIX, current_block)
+            nay_data = sign_frontrun_protection_nay_data(
+                self_index, as_uint256(current_block)
+            )
             pause_deposits(deposit_security_module, self_index, fp_pause_data)
         else:
             logger.info(f'Deposit cancelled. Problems count: {len(problems)}')
@@ -132,15 +147,32 @@ def get_frontrun_protection_data(deposit_contract, registry):
     key_ops_index = 0 #registry.getKeysOpIndex()
     return (deposit_root, key_ops_index)
 
-def sign_data(data):
-    return 0
 
-def sign_frontrun_protection_yay_data(self_index, dd_root, nos_index):
-    return sign_data([yay_prefix, dd_root, nos_index]) + self_index
+def sign_data(data) -> Optional[SignedData]:
+    private_key = get_private_key()
+    if private_key is None:
+        return None
+    hashed = keccak256_hash(''.join(data))
+    signed = ecdsa_sign(hashed, private_key)
+    return signed
 
 
-def sign_frontrun_protection_nay_data(block_height):
-    return sign_data([nay_prefix, block_height]) + self_index
+def sign_frontrun_protection_data(
+        prefix, self_index, *data
+) -> Optional[Tuple[SignedData, int]]:
+    signed_data = sign_data([prefix, *data])
+    if signed_data is None:
+        return None
+    return signed_data, self_index
+
+
+sign_frontrun_protection_yay_data = partial(
+    sign_frontrun_protection_data, YAY_PREFIX
+)
+sign_frontrun_protection_nay_data = partial(
+    sign_frontrun_protection_data, NAY_PREFIX
+)
+
 
 def pause_deposits(deposit_security_module, self_index):
     deposit_security_module.Pause(self_index, pause_data, {
