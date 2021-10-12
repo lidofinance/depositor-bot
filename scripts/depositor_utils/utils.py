@@ -54,3 +54,8 @@ def as_bytes32(data: str) -> str:
 def as_uint256(n: int) -> str:
     """Convert int to the uint256 string representation."""
     return Web3.toBytes(n).rjust(32, b'\0').hex()
+
+
+def to_eip_2098(sign):
+    vs = (sign.v - 27) << 255 | int(sign.s, 16)
+    return sign.r, hex(vs)

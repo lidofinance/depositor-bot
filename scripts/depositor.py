@@ -37,12 +37,8 @@ from scripts.depositor_utils.prometheus import (
     ACCOUNT_BALANCE,
 )
 from scripts.depositor_utils.utils import (
-    keccak256_hash,
-    as_bytes32,
     as_uint256,
-    ecdsa_sign,
-    SignedData,
-    sign_data,
+    sign_data, to_eip_2098,
 )
 from scripts.depositor_utils.variables import (
     MIN_BUFFERED_ETHER,
@@ -73,7 +69,7 @@ class DepositorBot:
         self.gas_fee_strategy = GasFeeStrategy(w3, max_gas_fee=MAX_GAS_FEE)
 
         # Defaults
-        self.current_block = 0
+        self.current_block = None
         self.available_keys_to_deposit_count = 0
 
     def _load_account(self):
@@ -92,6 +88,7 @@ class DepositorBot:
 
         else:
             logger.warning('Account not provided. Run in test mode.')
+            self.account = None
 
     def _load_interfaces(self):
         """Load interfaces. 'from' is account by default"""
@@ -112,19 +109,23 @@ class DepositorBot:
             return 0
 
         logger.info('Load guardians and check account.')
-        guardians = self.deposit_security_module.getGuardians().call()
+        guardians = self.deposit_security_module.getGuardians()
         if self.account.address in guardians:
             return guardians.index(self.account.address)
 
         logger.warning('Account is not in the guardians list.')
         raise AssertionError('Account is not permitted to do deposits.')
 
+    def run_as_daemon(self):
+        while True:
+            self.run_deposit_cycle()
+
     def run_deposit_cycle(self):
         """
         Run all pre-deposit checks. If everything is ok create transaction and push it to mempool
         """
-        self.current_block = web3.eth.block_number
-        logger.info(f'Run deposit cycle. Block number: {self.current_block}')
+        self._update_current_block()
+        logger.info(f'Run deposit cycle. Block number: {self.current_block.number}')
 
         issues = self.get_deposit_issues()
         if issues:
@@ -140,7 +141,7 @@ class DepositorBot:
         # Check if lido contract was stopped
         logger.info('Deposit pre checks')
         logger.info('Lido is stopped check')
-        if self.lido.isStoppend():
+        if self.lido.isStopped():
             deposit_issues.append(LIDO_CONTRACT_IS_STOPPED)
             logger.warning(LIDO_CONTRACT_IS_STOPPED)
 
@@ -171,7 +172,7 @@ class DepositorBot:
         logger.info('Recommended gas fee check')
         # Gas price check
         recommended_gas_fee = self.gas_fee_strategy.get_gas_fee_percentile(1, 20)
-        current_gas_fee = self._w3.eth.get_block('latest').baseFeePerGas
+        current_gas_fee = self.current_block.baseFeePerGas
 
         GAS_FEE.labels('max_fee').set(MAX_GAS_FEE)
         GAS_FEE.labels('current_fee').set(current_gas_fee)
@@ -183,7 +184,7 @@ class DepositorBot:
 
         # ------- Deposit security module -------
         logger.info('Deposit security canDeposit check')
-        if self.deposit_security_module.canDeposit():
+        if not self.deposit_security_module.canDeposit():
             logger.warning(DEPOSIT_SECURITY_ISSUE)
             deposit_issues.append(DEPOSIT_SECURITY_ISSUE)
 
@@ -244,7 +245,7 @@ class DepositorBot:
         return build_used_pubkeys_map(
             # Eth2 Deposit contract block
             DEPOSIT_CONTRACT_DEPLOY_BLOCK[web3.eth.chain_id],
-            self.current_block,
+            self.current_block.number,
             UNREORGABLE_DISTANCE,
             EVENT_QUERY_STEP,
         )
@@ -257,62 +258,93 @@ class DepositorBot:
     @DEPOSIT_FAILURE.count_exceptions()
     def do_deposit(self):
         """Sign and Make deposit"""
+
+        logger.info('Start deposit')
         max_deposits = self.deposit_security_module.getMaxDeposits()
 
+        self._update_current_block()
+
         deposits_count = min(self.available_keys_to_deposit_count, max_deposits)
-        deposit_root = self.deposit_contract.get_deposit_root()
-
-        keys_op_index = self.registry.getKeysOpIndex()
-
-        deposit_sign = self._sign_deposit_message(deposit_root, keys_op_index)
 
         priority_fee = self._get_deposit_priority_fee()
 
-        self.deposit_security_module.depositBufferedEther(
-            deposits_count,
-            deposit_root,
-            keys_op_index,
-            [deposit_sign],
-            {
-                'gas_limit': CONTRACT_GAS_LIMIT,
-                'priority_fee': priority_fee,
-            },
-        )
+        keys_op_index = self.registry.getKeysOpIndex()
+
+        if self.account is not None:
+            logger.info('Signing deposit')
+
+            deposit_root = self.deposit_contract.get_deposit_root()
+            deposit_sign = self._sign_deposit_message(deposit_root, keys_op_index)
+
+            logger.info('Sending deposit')
+            result = self.deposit_security_module.depositBufferedEther(
+                1,  # deposits_count
+                deposit_root,
+                keys_op_index,
+                self.current_block.number,
+                self.current_block.hash,
+                [to_eip_2098(deposit_sign)],
+                {
+                    'gas_limit': CONTRACT_GAS_LIMIT,
+                    'priority_fee': priority_fee,
+                    'allow_revert': True,
+                },
+            )
+            logger.info(result)
+
+        logger.info('Deposit done')
         SUCCESS_DEPOSIT.inc()
+
+    def _update_current_block(self):
+        self.current_block = self._w3.eth.get_block('latest')
 
     def _sign_deposit_message(self, deposit_root, keys_op_index):
         deposit_prefix = self.deposit_security_module.ATTEST_MESSAGE_PREFIX()
 
         return sign_data(
-            [deposit_prefix, deposit_root, keys_op_index],
+            [deposit_prefix.hex(), deposit_root.hex(), as_uint256(keys_op_index)],
             self.account.private_key,
         )
 
     def _get_deposit_priority_fee(self):
-        transactions = self._w3.eth.get_block('pending').transactions
+        # TODO: fix this
+        # max_priority_fee = self._w3.eth.max_priority_fee * 1.25
+        # transactions = self._w3.eth.get_block('pending').transactions
+        # for transaction in transactions:
+        #     if transaction.to == DEPOSIT_CONTRACT[self._web3_chain_id]:
+        #         max_priority_fee = max(max_priority_fee, transaction.priority_fee)
+        # return max_priority_fee + 1
 
-        max_priority_fee = self._w3.eth.max_priority_fee + 1
-
-        for transaction in transactions:
-            if transaction.to == DEPOSIT_CONTRACT[self._web3_chain_id]:
-                max_priority_fee = max(max_priority_fee, transaction.priority_fee)
-
-        return max_priority_fee + 1
+        return self._w3.eth.fee_history(1, 'latest', reward_percentiles=[50])['reward'][0][0]
 
     def pause_deposits(self):
         """
         Pause all deposits. Use only in critical security issues.
         """
-        blocks_till_pause_is_valid = self.deposit_security_module.getPauseIntentValidityPeriodBlocks()
-        if self._w3.eth.block_number <= self.current_block + blocks_till_pause_is_valid:
-            logger.error('Pause is submitted')
-            pause_sign = self._sign_pause_message(self.current_block)
+        logger.info('Pause protocol')
 
-            self.deposit_security_module.Pause(
-                self.current_block,
-                pause_sign,
-                {'priority_fee': self._w3.eth.max_priority_fee * 2},
-            )
+        logger.info('Update last block info')
+        self._update_current_block()
+
+        blocks_till_pause_is_valid = self.deposit_security_module.getPauseIntentValidityPeriodBlocks()
+        if self._w3.eth.block_number <= self.current_block.number + blocks_till_pause_is_valid:
+            logger.error('Pause started')
+
+            if self.account is not None:
+                logger.error('Sign pause')
+                pause_sign = self._sign_pause_message(self.current_block.number)
+
+                pause_result = self.deposit_security_module.pauseDeposits(
+                    self.current_block.number,
+                    self.current_block.hash,
+                    to_eip_2098(pause_sign),
+                    {
+                        'priority_fee': self._w3.eth.max_priority_fee * 2,
+                    },
+                )
+                logger.info(pause_result)
+
+            logger.info('Protocol was paused')
         else:
             logger.error('Pause is not valid any more')
 
@@ -320,7 +352,7 @@ class DepositorBot:
         pause_prefix = self.deposit_security_module.PAUSE_MESSAGE_PREFIX()
 
         return sign_data(
-            [pause_prefix, as_uint256(block_num)],
+            [pause_prefix.hex(), as_uint256(block_num)],
             self.account.private_key,
         )
 
@@ -351,7 +383,7 @@ class GasFeeStrategy:
             return self._gas_fees
 
         total_blocks_to_fetch = self.BLOCKS_IN_ONE_DAY * days
-        requests_count = total_blocks_to_fetch // days + 1
+        requests_count = total_blocks_to_fetch // 1024 + 1
 
         gas_fees = []
         last_block = self.LATEST_BLOCK
@@ -370,4 +402,4 @@ class GasFeeStrategy:
         """Finds """
         # One week price stats
         gas_fee_history = self._fetch_gas_fee_history(days)
-        return numpy.percentile(gas_fee_history, percentile)
+        return numpy.percentile(gas_fee_history[:days * self.BLOCKS_IN_ONE_DAY], percentile)
