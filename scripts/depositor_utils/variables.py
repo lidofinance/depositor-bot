@@ -9,7 +9,7 @@ ACCOUNT_PRIVATE_KEY = os.getenv('ACCOUNT_PRIVATE_KEY', None)
 
 # Transaction limits
 MAX_GAS_FEE = Wei(os.getenv('MAX_GAS_FEE', '250 gwei'))
-CONTRACT_GAS_LIMIT = Wei(os.getenv('CONTRACT_GAS_LIMIT', 10 ** 10 * 6))
+CONTRACT_GAS_LIMIT = Wei(os.getenv('CONTRACT_GAS_LIMIT', 10 * 10**6))
 
 # Contract related vars
 # 155 Keys is the optimal value

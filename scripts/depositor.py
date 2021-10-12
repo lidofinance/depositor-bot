@@ -1,4 +1,4 @@
-from typing import Optional, List, Tuple
+from typing import List
 
 import numpy
 from brownie import interface, web3, Wei, accounts
@@ -38,7 +38,8 @@ from scripts.depositor_utils.prometheus import (
 )
 from scripts.depositor_utils.utils import (
     as_uint256,
-    sign_data, to_eip_2098,
+    sign_data,
+    to_eip_2098,
 )
 from scripts.depositor_utils.variables import (
     MIN_BUFFERED_ETHER,
@@ -53,7 +54,7 @@ def main():
     logger.info('Start up metrics service on port: 8080.')
     start_http_server(8080)
     depositor_bot = DepositorBot(web3)
-    depositor_bot.run_deposit_cycle()
+    depositor_bot.run_as_daemon()
 
 
 class DepositorBot:
@@ -130,6 +131,7 @@ class DepositorBot:
         issues = self.get_deposit_issues()
         if issues:
             self.report_issues(issues)
+            self.pause_deposits()
         else:
             self.do_deposit()
 
@@ -142,8 +144,11 @@ class DepositorBot:
         logger.info('Deposit pre checks')
         logger.info('Lido is stopped check')
         if self.lido.isStopped():
+            LIDO_STATUS.state('stopped')
             deposit_issues.append(LIDO_CONTRACT_IS_STOPPED)
             logger.warning(LIDO_CONTRACT_IS_STOPPED)
+        else:
+            LIDO_STATUS.state('active')
 
         logger.info('Buffered ether check')
         # Check there is enough ether to deposit
@@ -262,47 +267,52 @@ class DepositorBot:
         logger.info('Start deposit')
         max_deposits = self.deposit_security_module.getMaxDeposits()
 
-        self._update_current_block()
-
-        deposits_count = min(self.available_keys_to_deposit_count, max_deposits)
-
         priority_fee = self._get_deposit_priority_fee()
-
-        keys_op_index = self.registry.getKeysOpIndex()
+        deposits_count = min(self.available_keys_to_deposit_count, max_deposits)
 
         if self.account is not None:
             logger.info('Signing deposit')
 
-            deposit_root = self.deposit_contract.get_deposit_root()
-            deposit_sign = self._sign_deposit_message(deposit_root, keys_op_index)
+            deposit_sign = self._sign_deposit_message(self.deposit_root, self.keys_op_index)
 
             logger.info('Sending deposit')
-            result = self.deposit_security_module.depositBufferedEther(
-                1,  # deposits_count
-                deposit_root,
-                keys_op_index,
-                self.current_block.number,
-                self.current_block.hash,
-                [to_eip_2098(deposit_sign)],
-                {
-                    'gas_limit': CONTRACT_GAS_LIMIT,
-                    'priority_fee': priority_fee,
-                    'allow_revert': True,
-                },
-            )
-            logger.info(result)
+            try:
+                result = self.deposit_security_module.depositBufferedEther(
+                    deposits_count,
+                    self.deposit_root,
+                    self.keys_op_index,
+                    self.current_block.number,
+                    self.current_block.hash,
+                    [to_eip_2098(deposit_sign)],
+                    {
+                        'gas_limit': CONTRACT_GAS_LIMIT,
+                        'priority_fee': priority_fee,
+                    },
+                )
+            except BaseException as error:
+                logger.error(f'Deposit failed: {error}')
+            else:
+                logger.info(result)
 
         logger.info('Deposit done')
         SUCCESS_DEPOSIT.inc()
 
     def _update_current_block(self):
         self.current_block = self._w3.eth.get_block('latest')
+        self.deposit_root = self.deposit_contract.get_deposit_root()
+        self.keys_op_index = self.registry.getKeysOpIndex()
 
     def _sign_deposit_message(self, deposit_root, keys_op_index):
         deposit_prefix = self.deposit_security_module.ATTEST_MESSAGE_PREFIX()
 
         return sign_data(
-            [deposit_prefix.hex(), deposit_root.hex(), as_uint256(keys_op_index)],
+            [
+                deposit_prefix.hex(),
+                deposit_root.hex(),
+                as_uint256(keys_op_index),
+                as_uint256(self.current_block.number),
+                self.current_block.hash.hex()[2:],
+            ],
             self.account.private_key,
         )
 
@@ -324,7 +334,6 @@ class DepositorBot:
         logger.info('Pause protocol')
 
         logger.info('Update last block info')
-        self._update_current_block()
 
         blocks_till_pause_is_valid = self.deposit_security_module.getPauseIntentValidityPeriodBlocks()
         if self._w3.eth.block_number <= self.current_block.number + blocks_till_pause_is_valid:
@@ -334,17 +343,20 @@ class DepositorBot:
                 logger.error('Sign pause')
                 pause_sign = self._sign_pause_message(self.current_block.number)
 
-                pause_result = self.deposit_security_module.pauseDeposits(
-                    self.current_block.number,
-                    self.current_block.hash,
-                    to_eip_2098(pause_sign),
-                    {
-                        'priority_fee': self._w3.eth.max_priority_fee * 2,
-                    },
-                )
-                logger.info(pause_result)
-
-            logger.info('Protocol was paused')
+                try:
+                    pause_result = self.deposit_security_module.pauseDeposits(
+                        self.current_block.number,
+                        self.current_block.hash,
+                        to_eip_2098(pause_sign),
+                        {
+                            'priority_fee': self._w3.eth.max_priority_fee * 2,
+                        },
+                    )
+                except BaseException as error:
+                    logger.error(f'Pause error: {error}')
+                else:
+                    logger.info('Protocol was paused')
+                    logger.info(pause_result)
         else:
             logger.error('Pause is not valid any more')
 

@@ -46,11 +46,6 @@ def as_bytes32_left_padded(val: int) -> str:
     return Web3.toHex(Web3.toBytes(val).rjust(32, b'\0'))
 
 
-def as_bytes32(data: str) -> str:
-    """Convert string to the bytes32 string representation."""
-    return data.rjust(32, '0')
-
-
 def as_uint256(n: int) -> str:
     """Convert int to the uint256 string representation."""
     return Web3.toBytes(n).rjust(32, b'\0').hex()
