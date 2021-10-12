@@ -1,7 +1,7 @@
 from typing import Optional, List, Tuple
 
 import numpy
-from brownie import accounts, chain, interface, web3, Wei
+from brownie import accounts9, interface, web3, Wei, accounts
 from brownie.network.account import LocalAccount
 from brownie.network.web3 import Web3
 from prometheus_client.exposition import start_http_server
@@ -17,8 +17,6 @@ from scripts.depositor_utils.constants import (
     EVENT_QUERY_STEP,
     DEPOSIT_SECURITY_MODULE,
     DEPOSIT_CONTRACT,
-    YAY_PREFIX,
-    NAY_PREFIX
 )
 from scripts.depositor_utils.deposit_problems import (
     LIDO_CONTRACT_IS_STOPPED,
@@ -45,6 +43,7 @@ from scripts.depositor_utils.utils import (
     as_uint256,
     ecdsa_sign,
     SignedData,
+    sign_data,
 )
 from scripts.depositor_utils.variables import (
     MIN_BUFFERED_ETHER,
@@ -58,53 +57,8 @@ from scripts.depositor_utils.variables import (
 def main():
     logger.info('Start up metrics service on port: 8080.')
     start_http_server(8080)
-
-    # sign_frontrun_protection_yay_data = partial(
-    #     sign_frontrun_protection_data, YAY_PREFIX
-    # )
-    # sign_frontrun_protection_nay_data = partial(
-    #     sign_frontrun_protection_data, NAY_PREFIX
-    # )
-
-    # PAUSE_MESSAGE_PREFIX = deposit_security_module.ATTEST_MESSAGE_PREFIX.call()
-    # PAUSE_MESSAGE_PREFIX = deposit_security_module.PAUSE_MESSAGE_PREFIX.call()
-
-    # deposit_root, keys_op_index = get_frontrun_protection_data(deposit_contract, registry)
-    #
-    # yay_data = sign_frontrun_protection_yay_data(
-    #     self_index,
-    #     as_bytes32(deposit_root),
-    #     as_uint256(keys_op_index)
-    # )
-    # deposit_buffered_ether(account, lido, signing_keys_list, yay_data)
-    #
-    # nay_data = sign_frontrun_protection_nay_data(
-    #     self_index,
-    #     as_uint256(current_block),
-    # )
-    #
-    # def get_frontrun_protection_data(deposit_contract, registry):
-    #     deposit_root = deposit_contract.get_deposit_root()
-    #     key_ops_index = 0  # registry.getKeysOpIndex()
-    #     return deposit_root, key_ops_index
-    #
-    #
-    # def sign_frontrun_protection_data(
-    #         prefix, self_index, *data
-    # ) -> Optional[Tuple[SignedData, int]]:
-    #     signed_data = sign_data([prefix, *data])
-    #     if signed_data is None:
-    #         return None
-    #     return signed_data, self_index
-    #
-    #
-    # def sign_data(data) -> Optional[SignedData]:
-    #     private_key = get_private_key()
-    #     if private_key is None:
-    #         return None
-    #     hashed = keccak256_hash(''.join(data))
-    #     signed = ecdsa_sign(hashed, private_key)
-    #     return signed
+    depositor_bot = DepositorBot(web3)
+    depositor_bot.run_deposit_cycle()
 
 
 class DepositorBot:
@@ -240,7 +194,6 @@ class DepositorBot:
             deposit_issues.append(KEY_WAS_USED)
 
         # TODO:
-        # getPauseIntentValidityPeriodBlocks - till this block. What is it?
         # getGuardianCourm - check that signs count is ok to deposit. No need now because there will be only one.
         return deposit_issues
 
@@ -301,23 +254,68 @@ class DepositorBot:
         max_deposits = self.deposit_security_module.getMaxDeposits()
 
         deposits_count = min(self.available_keys_to_deposit_count, max_deposits)
+        deposit_root = self.deposit_contract.get_deposit_root()
+
+        keys_op_index = self.registry.getKeysOpIndex()
+
+        deposit_sign = self._sign_deposit_message(deposit_root, keys_op_index)
+
+        priority_fee = self._get_deposit_priority_fee()
 
         self.deposit_security_module.depositBufferedEther(
             deposits_count,
-            # TODO: DEPOSIT ROOT
-            ['signature'],
-            {'gas_limit': CONTRACT_GAS_LIMIT},
+            deposit_root,
+            keys_op_index,
+            [deposit_sign],
+            {
+                'gas_limit': CONTRACT_GAS_LIMIT,
+                'priority_fee': priority_fee,
+            },
         )
         SUCCESS_DEPOSIT.inc()
 
-    def pause_deposits(self):
-        """Pause all deposits. Use only in critical security issues"""
-        priority_fee = self._w3.eth.max_priority_fee * 2
+    def _sign_deposit_message(self, deposit_root, keys_op_index):
+        deposit_prefix = self.deposit_security_module.ATTEST_MESSAGE_PREFIX()
 
-        self.deposit_security_module.Pause(
-            self.current_block,
-            'signature',  # TODO: SIG
-            {'priority_fee': priority_fee},
+        return sign_data(
+            [deposit_prefix, deposit_root, keys_op_index],
+            self.account.private_key,
+        )
+
+    def _get_deposit_priority_fee(self):
+        transactions = self._w3.eth.get_block('pending').transactions
+
+        max_priority_fee = self._w3.eth.max_priority_fee + 1
+
+        for transaction in transactions:
+            if transaction.to == DEPOSIT_CONTRACT[self._web3_chain_id]:
+                max_priority_fee = max(max_priority_fee, transaction.priority_fee)
+
+        return max_priority_fee + 1
+
+    def pause_deposits(self):
+        """
+        Pause all deposits. Use only in critical security issues.
+        """
+        blocks_till_pause_is_valid = self.deposit_security_module.getPauseIntentValidityPeriodBlocks()
+        if self._w3.eth.block_number <= self.current_block + blocks_till_pause_is_valid:
+            logger.error('Pause is submitted')
+            pause_sign = self._sign_pause_message(self.current_block)
+
+            self.deposit_security_module.Pause(
+                self.current_block,
+                pause_sign,
+                {'priority_fee': self._w3.eth.max_priority_fee * 2},
+            )
+        else:
+            logger.error('Pause is not valid any more')
+
+    def _sign_pause_message(self, block_num):
+        pause_prefix = self.deposit_security_module.PAUSE_MESSAGE_PREFIX()
+
+        return sign_data(
+            [pause_prefix, as_uint256(block_num)],
+            self.account.private_key,
         )
 
 

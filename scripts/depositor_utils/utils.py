@@ -4,6 +4,12 @@ from web3 import Web3
 from web3.auto import w3
 
 
+def sign_data(data, private_key):
+    hashed = keccak256_hash(''.join(data))
+    signed = ecdsa_sign(hashed, private_key)
+    return signed
+
+
 def keccak256_hash(data: str) -> str:
     """Get keccak256 hash for data."""
     return Web3.keccak(hexstr=data)
