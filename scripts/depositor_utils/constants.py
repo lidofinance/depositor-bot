@@ -29,21 +29,21 @@ DEPOSIT_CONTRACT = {
     Network.Görli: "0x07b39F4fDE4A38bACe212b546dAc87C58DfE3fDC",
 }
 
-
 DEPOSIT_SECURITY_MODULE = {
-    Network.Mainnet: "0x00000000219ab540356cBB839Cbe05303d7705Fa",
-    Network.Görli:   "0x0000000000000000000000000000000000000000",
+    Network.Mainnet: "0x00000000219ab540356cBB839Cbe05303d7705Fa",  # TODO: wrong mainnet address
+    Network.Görli: "0xab292f743261abc64ff67eb6c19c453744b55c24",
 }
-
 
 DEPOSIT_CONTRACT_DEPLOY_BLOCK = {
-    Network.Mainnet: 11052984
+    Network.Mainnet: 11052984,
+    Network.Görli: 3085928,
 }
-                                              
-UNREORGABLE_DISTANCE = 100 #100 blocks is safe enough
-EVENT_QUERY_STEP = 1000 #reasonably high number (nb. if there is > 10000 deposit events infura will throw error)
 
+# 100 blocks is safe enough
+UNREORGABLE_DISTANCE = 100
+# reasonably high number (nb. if there is > 10000 deposit events infura will throw error)
+EVENT_QUERY_STEP = 1000
+
+# What is this?
 NAY_PREFIX = 'aeb9c41ecd5ed3c9edfff098e452a16beb77888faf41a22694cd16c151efc6c2'
 YAY_PREFIX = '1085395a994e25b1b3d0ea7937b7395495fb405b31c7d22dbc3976a6bd01f2bf'
-
-PRIVATE_KEY_ENV_VARIABLE = 'DEPOSITOR_BOT_PRIVATE_KEY'

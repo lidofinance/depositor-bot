@@ -1,50 +1,12 @@
-import datetime
-import functools
-import os
 from collections import namedtuple
-from typing import Optional
 
 from web3 import Web3
 from web3.auto import w3
-
-from .constants import PRIVATE_KEY_ENV_VARIABLE
-
-
-def cache(ttl=datetime.timedelta(minutes=10)):
-    def wrap(func):
-        time, value = None, None
-
-        @functools.wraps(func)
-        def wrapped(*args, **kw):
-            nonlocal time
-            nonlocal value
-
-            now = datetime.datetime.now()
-            if not time or now - time > ttl:
-                value = func(*args, **kw)
-                time = now
-            return value
-
-        return wrapped
-
-    return wrap
 
 
 def keccak256_hash(data: str) -> str:
     """Get keccak256 hash for data."""
     return Web3.keccak(hexstr=data)
-
-
-def get_private_key() -> Optional[int]:
-    """Return depositor bot private key."""
-    key = os.getenv(PRIVATE_KEY_ENV_VARIABLE, None)
-    if key is None:
-        return
-
-    if not key.isdigit():
-        raise TypeError('private key should be a number.')
-
-    return int(key)
 
 
 SignedData = namedtuple(

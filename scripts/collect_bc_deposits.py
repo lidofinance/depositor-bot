@@ -1,7 +1,7 @@
 import os
 import time
 
-#TODO: joblib.load is unsafe, don't use it
+# TODO: joblib.load is unsafe, don't use it
 import joblib
 
 from brownie import interface, web3
@@ -9,7 +9,7 @@ from brownie import interface, web3
 from scripts.depositor_utils.constants import DEPOSIT_CONTRACT, DEPOSIT_CONTRACT_DEPLOY_BLOCK, UNREORGABLE_DISTANCE, EVENT_QUERY_STEP
                         
 
-#TODO read from config instead of constants
+# TODO read from config instead of constants
 cachedir = 'deposit_contract_cache'
 mem = joblib.Memory(cachedir)
 key_cache_path = os.path.join(cachedir, 'deposit_keys_pickle.dump')
@@ -40,15 +40,18 @@ def peek_deposit_contract_events(from_block, to_block):
 
 peek_deposit_contract_historical_events = mem.cache(peek_deposit_contract_events)
 
+
 def deposit_events_to_pubkeys(deposit_events):
     used_pubkeys = set()
     for deposit_event in deposit_events:
         used_pubkeys.add(deposit_event['args']['pubkey'])
     return used_pubkeys
 
+
 def collect_fresh_pubkeys(from_block, to_block):
     fresh_events = peek_deposit_contract_events(from_block, to_block)
     return deposit_events_to_pubkeys(fresh_events)
+
 
 def collect_cached_pubkeys(from_block, to_block):
     fresh_events = peek_deposit_contract_historical_events(from_block, to_block)
@@ -76,8 +79,6 @@ def collect_historical_pubkeys(from_block, to_block, query_step):
     joblib.dump(saved_pubkeys, key_cache_path)
 
     return saved_pubkeys['pubkeys']
-
-
 
 
 def build_used_pubkeys_map(from_block, to_block, unreorgable_distance, query_step):
