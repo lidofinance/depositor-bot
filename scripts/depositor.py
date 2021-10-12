@@ -1,8 +1,7 @@
 from typing import Optional, List, Tuple
 
 import numpy
-from brownie import accounts9, interface, web3, Wei, accounts
-from brownie.network.account import LocalAccount
+from brownie import interface, web3, Wei, accounts
 from brownie.network.web3 import Web3
 from prometheus_client.exposition import start_http_server
 
@@ -140,10 +139,12 @@ class DepositorBot:
         # ------- Lido contract checks -------
         # Check if lido contract was stopped
         logger.info('Deposit pre checks')
+        logger.info('Lido is stopped check')
         if self.lido.isStoppend():
             deposit_issues.append(LIDO_CONTRACT_IS_STOPPED)
             logger.warning(LIDO_CONTRACT_IS_STOPPED)
 
+        logger.info('Buffered ether check')
         # Check there is enough ether to deposit
         buffered_ether = self.lido.getBufferedEther()
         BUFFERED_ETHER.set(buffered_ether)
@@ -151,11 +152,13 @@ class DepositorBot:
             logger.warning(LIDO_CONTRACT_HAS_NOT_ENOUGH_BUFFERED_ETHER)
             deposit_issues.append(LIDO_CONTRACT_HAS_NOT_ENOUGH_BUFFERED_ETHER)
 
+        logger.info('Free keys to deposit check')
         if not self._has_free_keys_to_deposit():
             logger.warning(LIDO_CONTRACT_HAS_NOT_ENOUGH_SUBMITTED_KEYS)
             deposit_issues.append(LIDO_CONTRACT_HAS_NOT_ENOUGH_SUBMITTED_KEYS)
 
         # ------- Other checks -------
+        logger.info('Account balance check')
         if self.account:
             balance = web3.eth.get_balance(self.account.address)
             ACCOUNT_BALANCE.set(balance)
@@ -165,6 +168,7 @@ class DepositorBot:
         else:
             ACCOUNT_BALANCE.set(0)
 
+        logger.info('Recommended gas fee check')
         # Gas price check
         recommended_gas_fee = self.gas_fee_strategy.get_gas_fee_percentile(1, 20)
         current_gas_fee = self._w3.eth.get_block('latest').baseFeePerGas
@@ -178,10 +182,12 @@ class DepositorBot:
             deposit_issues.append(GAS_FEE_HIGHER_THAN_RECOMMENDED)
 
         # ------- Deposit security module -------
+        logger.info('Deposit security canDeposit check')
         if self.deposit_security_module.canDeposit():
             logger.warning(DEPOSIT_SECURITY_ISSUE)
             deposit_issues.append(DEPOSIT_SECURITY_ISSUE)
 
+        logger.info('Operators keys security check')
         operators_keys_list = self._get_unused_operators_keys()
         self.available_keys_to_deposit_count = len(operators_keys_list)
 
