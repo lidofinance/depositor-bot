@@ -131,7 +131,6 @@ class DepositorBot:
         issues = self.get_deposit_issues()
         if issues:
             self.report_issues(issues)
-            self.pause_deposits()
         else:
             self.do_deposit()
 
