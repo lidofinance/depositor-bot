@@ -4,10 +4,18 @@ services:
     image: lidofinance/depositor-bot
     build: .
     container_name: lido-depositor-bot
-    restart: always
+    restart: unless-stopped
     ports:
       - 127.0.0.1:9000:8080
     environment:
       - NETWORK=${NETWORK}
       - WEB3_INFURA_PROJECT_ID=${WEB3_INFURA_PROJECT_ID}
       - ACCOUNT_PRIVATE_KEY=${ACCOUNT_PRIVATE_KEY}
+
+  prometheus:
+    image: prom/prometheus:latest
+
+    volumes:
+      - type: bind
+        source: ./prometheus.yml
+        target: /etc/prometheus/prometheus.yml

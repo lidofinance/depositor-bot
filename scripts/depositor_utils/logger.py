@@ -1,4 +1,5 @@
 import logging
+
 import logging_loki
 
 
@@ -11,10 +12,6 @@ logging.basicConfig(
     ]
 )
 
-
-logger = logging.getLogger("my-logger")
-
-
 handler = logging_loki.LokiHandler(
     url="https://logs-prod-us-central1.grafana.net/loki/api/v1/push",
     tags={"application": "deposit-bot"},
@@ -22,4 +19,5 @@ handler = logging_loki.LokiHandler(
     version="1",
 )
 
+logger = logging.getLogger("depositor-bot")
 logger.addHandler(handler)

@@ -13,8 +13,8 @@ npm install -g ganache-cli
 
 Python packages
 ```bash
-git clone git@github.com:lidofinance/depositor_utils-bot.git
-cd depositor_utils-bot
+git clone git@github.com:lidofinance/depositor-bot.git
+cd depositor-bot
 pip install -r requirements.txt
 ```
 
@@ -22,30 +22,30 @@ pip install -r requirements.txt
 
 To run (development): 
 ```
-export WEB3_INFURA_PROJECT_ID=b11919ed73094499a35d1b3fa338322a
-brownie run depositor --network=mainnet-fork
+export WEB3_INFURA_PROJECT_ID=...
+brownie run depositor --network=mainnet
 ```
 
-To run (production):
-1. Change `WEB3_INFURA_PROJECT_ID` and `ACCOUNT_PRIVATE_KEY` envs in Dockerfile
+##  Deploy
+
+To run bot in dry mode in docker:
+1. Required envs:`NETWORK` (e.g. mainnet) and `WEB3_INFURA_PROJECT_ID`.
 2. Run
 ```
-docker build -t depositor-bot .
-docker run depositor-bot
+docker-compose up
 ```
+*Optional*: provide `ACCOUNT_PRIVATE_KEY` env to run bot in production mode.
 
 ## Variables 
 
-| Vars in env                   | Amount     | Default - Raw  | Description |
-| -------------                 | :--------: | :---------:    | :----- |
-| MAX_GAS_FEE                   | 100 GWEI   | `100 gwei`     | Bot will wait for a lower price |
-| CONTRACT_GAS_LIMIT            | 10 MWEI    | `10 mwei`      | Default transaction gas limit |
-| DEPOSIT_AMOUNT                | 155        | `155`          | Look into contract to get more info |
-| ACCOUNT_PRIVATE_KEY           | -          | `None`         | Account private key |
-| ACCOUNT_FILENAME              | -          | `None`         | File with account key (manual password entering required) |
-| NETWORK                       | -          | `None`         | Network (e.g. mainnet) |
-| WEB3_INFURA_PROJECT_ID        | -          | `None`         | Project ID in infura |
-| GAS_PREDICTION_PERCENTILE     | 20         | `20`           | Recommended price calculates from the percentile in the week gas fee history |
+| Vars in env                       | Amount     | Default - Raw  | Description |
+| -------------                     | :--------: | :---------:    | :----- |
+| NETWORK (required)                | -          | `None`         | Network (e.g. mainnet) |
+| WEB3_INFURA_PROJECT_ID (required) | -          | `None`         | Project ID in infura |
+| MAX_GAS_FEE                       | 100 GWEI   | `100 gwei`     | Bot will wait for a lower price |
+| CONTRACT_GAS_LIMIT                | 10 MWEI    | `10 mwei`      | Default transaction gas limit |
+| ACCOUNT_PRIVATE_KEY               | -          | `None`         | Account private key |
+| ACCOUNT_FILENAME                  | -          | `None`         | File with account key (manual password entering required) |
 
 
 ## Contract details
