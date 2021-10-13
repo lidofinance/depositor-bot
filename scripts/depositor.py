@@ -319,6 +319,10 @@ class DepositorBot:
 
             if self.account is not None:
                 logger.error('Sign pause')
+
+                # Latest block are failing on goerly !!!
+                self.current_block = self._w3.eth.get_block(self.current_block.number - 1)
+
                 pause_sign = self._sign_pause_message()
 
                 try:
