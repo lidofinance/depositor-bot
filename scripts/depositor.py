@@ -157,11 +157,6 @@ class DepositorBot:
             logger.warning(LIDO_CONTRACT_HAS_NOT_ENOUGH_BUFFERED_ETHER)
             deposit_issues.append(LIDO_CONTRACT_HAS_NOT_ENOUGH_BUFFERED_ETHER)
 
-        logger.info('Free keys to deposit check')
-        if not self._has_free_keys_to_deposit():
-            logger.warning(LIDO_CONTRACT_HAS_NOT_ENOUGH_SUBMITTED_KEYS)
-            deposit_issues.append(LIDO_CONTRACT_HAS_NOT_ENOUGH_SUBMITTED_KEYS)
-
         # ------- Other checks -------
         logger.info('Account balance check')
         if self.account:
@@ -194,6 +189,13 @@ class DepositorBot:
 
         logger.info('Operators keys security check')
         operators_keys_list = self._get_unused_operators_keys()
+
+        logger.info('Free keys to deposit check')
+        if not operators_keys_list:
+            logger.warning(LIDO_CONTRACT_HAS_NOT_ENOUGH_SUBMITTED_KEYS)
+            deposit_issues.append(LIDO_CONTRACT_HAS_NOT_ENOUGH_SUBMITTED_KEYS)
+        OPERATORS_FREE_KEYS.set(len(operators_keys_list))
+
         self.available_keys_to_deposit_count = len(operators_keys_list)
 
         used_keys_list = self._get_deposited_keys()
@@ -207,29 +209,6 @@ class DepositorBot:
         # TODO:
         # getGuardianCourm - check that signs count is ok to deposit. No need now because there will be only one.
         return deposit_issues
-
-    def _has_free_keys_to_deposit(self):
-        """Return free keys count that could be deposited"""
-        operators_data = [{
-            **self.registry.getNodeOperator(i, True),
-            **{'index': i}
-        } for i in range(self.registry.getNodeOperatorsCount())]
-
-        free_keys = 0
-
-        for operator in operators_data:
-            free_keys += self._get_operator_free_keys_count(operator)
-
-        OPERATORS_FREE_KEYS.set(free_keys)
-
-        return bool(free_keys)
-
-    @staticmethod
-    def _get_operator_free_keys_count(operator: dict) -> int:
-        """Check if operator has free keys"""
-        free_space = operator['stakingLimit'] - operator['usedSigningKeys']
-        keys_to_deposit = operator['totalSigningKeys'] - operator['usedSigningKeys']
-        return min(free_space, keys_to_deposit)
 
     def _get_unused_operators_keys(self):
         max_deposits = self.deposit_security_module.getMaxDeposits()
