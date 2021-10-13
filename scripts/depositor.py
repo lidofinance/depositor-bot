@@ -319,7 +319,7 @@ class DepositorBot:
 
             if self.account is not None:
                 logger.error('Sign pause')
-                pause_sign = self._sign_pause_message(self.current_block.number)
+                pause_sign = self._sign_pause_message()
 
                 try:
                     pause_result = self.deposit_security_module.pauseDeposits(
@@ -338,11 +338,15 @@ class DepositorBot:
         else:
             logger.error('Pause is not valid any more')
 
-    def _sign_pause_message(self, block_num):
+    def _sign_pause_message(self):
         pause_prefix = self.deposit_security_module.PAUSE_MESSAGE_PREFIX()
 
         return sign_data(
-            [pause_prefix.hex(), as_uint256(block_num)],
+            [
+                pause_prefix.hex(),
+                as_uint256(self.current_block.number),
+                self.current_block.hash.hex()[2:],
+            ],
             self.account.private_key,
         )
 
