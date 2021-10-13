@@ -44,10 +44,8 @@ docker-compose up
 | WEB3_INFURA_PROJECT_ID (required) | -          | `None`         | Project ID in infura |
 | MAX_GAS_FEE                       | 100 GWEI   | `100 gwei`     | Bot will wait for a lower price |
 | CONTRACT_GAS_LIMIT                | 10 MWEI    | `10 mwei`      | Default transaction gas limit |
-| DEPOSIT_AMOUNT                    | 155        | `155`          | Look into contract to get more info |
 | ACCOUNT_PRIVATE_KEY               | -          | `None`         | Account private key |
 | ACCOUNT_FILENAME                  | -          | `None`         | File with account key (manual password entering required) |
-| GAS_PREDICTION_PERCENTILE         | 20         | `20`           | Recommended price calculates from the percentile in the week gas fee history |
 
 
 ## Contract details

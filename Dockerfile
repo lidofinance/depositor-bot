@@ -9,4 +9,3 @@ COPY . .
 EXPOSE 8080
 
 CMD ["brownie", "run", "depositor.py"]
-  
