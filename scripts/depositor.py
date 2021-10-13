@@ -25,6 +25,7 @@ from scripts.depositor_utils.deposit_problems import (
     GAS_FEE_HIGHER_THAN_RECOMMENDED,
     KEY_WAS_USED,
     DEPOSIT_SECURITY_ISSUE,
+    DEPOSIT_PAUSED,
 )
 from scripts.depositor_utils.logger import logger
 from scripts.depositor_utils.prometheus import (
@@ -190,6 +191,11 @@ class DepositorBot:
         logger.info('Operators keys security check')
         operators_keys_list = self._get_unused_operators_keys()
 
+        logger.info('Deposits not paused check')
+        if self.deposit_security_module.isPaused():
+            deposit_issues.append(DEPOSIT_PAUSED)
+            logger.warning('Deposit contract has been paused')
+
         logger.info('Free keys to deposit check')
         if not operators_keys_list:
             logger.warning(LIDO_CONTRACT_HAS_NOT_ENOUGH_SUBMITTED_KEYS)
@@ -235,7 +241,7 @@ class DepositorBot:
 
     def report_issues(self, issues: List[str]):
         """Send statistic and send alerts for unexpected critical issues"""
-        if KEY_WAS_USED in issues:
+        if KEY_WAS_USED in issues and DEPOSIT_PAUSED not in issues:
             self.pause_deposits()
 
     @DEPOSIT_FAILURE.count_exceptions()
