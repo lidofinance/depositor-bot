@@ -1,5 +1,6 @@
-eth-brownie==1.16.4
+eth-brownie==1.17.0
 numpy==1.21.2
 prometheus-client==0.11.0
 joblib==1.1.0
 python-logging-loki==0.3.1
+kafka-python==2.0.2

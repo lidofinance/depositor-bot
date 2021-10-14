@@ -1,8 +1,8 @@
 from typing import List
 
-import numpy
 from brownie import interface, web3, Wei, accounts
 from brownie.network.web3 import Web3
+from kafka import KafkaConsumer, KafkaProducer
 from prometheus_client.exposition import start_http_server
 
 from scripts.collect_bc_deposits import (
@@ -49,13 +49,19 @@ from scripts.depositor_utils.variables import (
     ACCOUNT_PRIVATE_KEY,
     CONTRACT_GAS_LIMIT,
 )
+from scripts.depositor_utils.gas_strategy import GasFeeStrategy
 
 
 def main():
     logger.info('Start up metrics service on port: 8080.')
     start_http_server(8080)
     depositor_bot = DepositorBot(web3)
-    depositor_bot.run_as_daemon()
+    # depositor_bot.run_as_daemon()
+
+    # Just for tests
+    depositor_bot._update_current_block()
+    depositor_bot.do_deposit()
+
 
 
 class DepositorBot:
@@ -212,8 +218,6 @@ class DepositorBot:
             logger.error(KEY_WAS_USED)
             deposit_issues.append(KEY_WAS_USED)
 
-        # TODO:
-        # getGuardianCourm - check that signs count is ok to deposit. No need now because there will be only one.
         return deposit_issues
 
     def _get_unused_operators_keys(self):
@@ -257,7 +261,7 @@ class DepositorBot:
         if self.account is not None:
             logger.info('Signing deposit')
 
-            deposit_sign = self._sign_deposit_message(self.deposit_root, self.keys_op_index)
+            deposit_signs = self._get_deposit_signs(self.deposit_root, self.keys_op_index)
 
             logger.info('Sending deposit')
             try:
@@ -267,7 +271,7 @@ class DepositorBot:
                     self.keys_op_index,
                     self.current_block.number,
                     self.current_block.hash,
-                    [to_eip_2098(deposit_sign)],
+                    deposit_signs,
                     {
                         'gas_limit': CONTRACT_GAS_LIMIT,
                         'priority_fee': priority_fee,
@@ -299,6 +303,31 @@ class DepositorBot:
             ],
             self.account.private_key,
         )
+
+    def _get_deposit_signs(self, deposit_root, keys_op_index):
+        """
+        Get all signs from kafka.
+        Make sure they are from one block_num.
+        Check sign count is enough for deposit.
+        Generate own sign.
+        Return signs.
+        """
+        signs = []
+        # With kafka add messages
+        consumer = KafkaConsumer(
+            'goerli-defender',
+            client_id='random',
+            group_id='goerli-defender-group',
+            security_protocol='SSL',
+            bootstrap_servers='pkc-l7q2j.europe-north1.gcp.confluent.cloud:9092',
+            sasl_mechanism='PLAIN',
+            sasl_plain_username='RIHLD36EHYTHQG5W',
+            sasl_plain_password='qv4EBFsbl1aKT4VTiczxvGxhb4AO1pH5ne6PdW2HqvHJTZVz/BfJlqEKw1Ft7ZDM',
+        )
+        for msg in consumer:
+            print(msg.value)
+
+        return signs
 
     def _get_deposit_priority_fee(self):
         # TODO: fix this
@@ -359,51 +388,3 @@ class DepositorBot:
             ],
             self.account.private_key,
         )
-
-
-class GasFeeStrategy:
-    BLOCKS_IN_ONE_DAY = 6600
-    LATEST_BLOCK = 'latest'
-
-    def __init__(self, w3: Web3, blocks_count_cache: int = 7800, max_gas_fee: int = None):
-        """
-        gas_history_block_cache - blocks count that gas his
-        """
-        self._w3 = w3
-        self._blocks_count_cache: int = blocks_count_cache
-        self._latest_fetched_block: int = 0
-        self._gas_fees: list = []
-        self.max_gas_fee = max_gas_fee
-
-    def _fetch_gas_fee_history(self, days):
-        """
-        Returns gas fee history for N days.
-        Cache updates every {_blocks_count_cache} block.
-        """
-        latest_block_num = self._w3.eth.get_block('latest')['number']
-
-        # If _blocks_count_cache didn't passed return cache
-        if self._latest_fetched_block and self._latest_fetched_block + self._blocks_count_cache > latest_block_num:
-            return self._gas_fees
-
-        total_blocks_to_fetch = self.BLOCKS_IN_ONE_DAY * days
-        requests_count = total_blocks_to_fetch // 1024 + 1
-
-        gas_fees = []
-        last_block = self.LATEST_BLOCK
-
-        for i in range(requests_count):
-            stats = self._w3.eth.fee_history(1024, last_block)
-            last_block = stats['oldestBlock'] - 2
-            gas_fees = stats['baseFeePerGas'] + gas_fees
-
-        self._gas_fees = gas_fees
-        self._last_gas_fee_block = self._w3.eth.get_block('latest')['number']
-
-        return self._gas_fees
-
-    def get_gas_fee_percentile(self, days: int, percentile: int):
-        """Finds """
-        # One week price stats
-        gas_fee_history = self._fetch_gas_fee_history(days)
-        return numpy.percentile(gas_fee_history[:days * self.BLOCKS_IN_ONE_DAY], percentile)
