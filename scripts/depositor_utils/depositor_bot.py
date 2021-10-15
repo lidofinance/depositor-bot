@@ -1,7 +1,9 @@
-from typing import List, Optional, Tuple
+from collections import defaultdict
+from typing import List, Optional, Tuple, Dict, Any
 
-from brownie import interface, web3, Wei, accounts
+from brownie import interface, web3, Wei, accounts, chain
 from brownie.network.web3 import Web3
+from hexbytes import HexBytes
 
 from scripts.collect_bc_deposits import (
     build_used_pubkeys_map,
@@ -106,8 +108,6 @@ class DepositorBot:
 
     def _get_guardian_index(self) -> Optional[int]:
         """Load account`s guardian index"""
-        self.is_guardian = None
-
         if not self.account:
             return None
 
@@ -115,8 +115,9 @@ class DepositorBot:
         guardians = self.deposit_security_module.getGuardians()
         if self.account.address in guardians:
             self.is_guardian = guardians.index(self.account.address)
-
-        logger.warning('Account is not in the guardians list.')
+        else:
+            self.is_guardian = None
+            logger.warning('Account is not in the guardians list.')
 
     def _load_constants(self):
         self.blocks_till_pause_is_valid = self.deposit_security_module.getPauseIntentValidityPeriodBlocks()
@@ -129,7 +130,7 @@ class DepositorBot:
     # ------------ CYCLE STAFF -------------------
     def run_as_daemon(self):
         """Super-Mega infinity cycle!"""
-        while True:
+        for _ in chain.new_blocks():
             self.run_deposit_cycle()
 
     def run_deposit_cycle(self):
@@ -276,7 +277,7 @@ class DepositorBot:
 
         if self.account is not None:
             logger.info('Signing deposit')
-            deposit_signs = self._get_deposit_signs(self.deposit_root, self.keys_op_index)
+            deposit_signs, block_number, block_hash = self._get_deposit_signs(self.deposit_root, self.keys_op_index)
 
             if len(deposit_signs) < self.min_signs_to_deposit:
                 logger.warning('Not enough signs to deposit')
@@ -288,8 +289,8 @@ class DepositorBot:
                     deposits_count,
                     self.deposit_root,
                     self.keys_op_index,
-                    self.current_block.number,
-                    self.current_block.hash,
+                    block_number,
+                    HexBytes(block_hash),
                     deposit_signs,
                     {
                         'gas_limit': CONTRACT_GAS_LIMIT,
@@ -304,19 +305,7 @@ class DepositorBot:
         logger.info('Deposit done')
         SUCCESS_DEPOSIT.inc()
 
-    def _sign_deposit_message(self, deposit_root, keys_op_index) -> SignedData:
-        return sign_data(
-            [
-                self.deposit_prefix.hex(),
-                deposit_root.hex(),
-                as_uint256(keys_op_index),
-                as_uint256(self.current_block.number),
-                self.current_block.hash.hex()[2:],
-            ],
-            self.account.private_key,
-        )
-
-    def _get_deposit_signs(self, deposit_root, keys_op_index) -> List[Tuple[int, int]]:
+    def _get_deposit_signs(self, deposit_root, keys_op_index) -> Tuple[list, int, str]:
         """
         Get all signs from kafka.
         Make sure they are from one block_num.
@@ -334,21 +323,79 @@ class DepositorBot:
             keys_op_index=keys_op_index,
         )
 
+        # If bot is guardian sign message also
+        if self.is_guardian is not None:
+            self_message = self._self_sign_to_message(
+                self._sign_deposit_message(deposit_root, keys_op_index)
+            )
+            sign_messages.append(self_message)
+
+        return self._get_quorum_signs_from_messages(sign_messages)
+
+    def _sign_deposit_message(self, deposit_root, keys_op_index) -> SignedData:
+        """Sign deposit message"""
+        return sign_data(
+            [
+                self.deposit_prefix.hex(),
+                deposit_root.hex(),
+                as_uint256(keys_op_index),
+                as_uint256(self.current_block.number),
+                self.current_block.hash.hex()[2:],
+            ],
+            self.account.private_key,
+        )
+
+    def _self_sign_to_message(self, self_sign: SignedData) -> dict:
+        """
+        Convert self sign to dict like from kafka deposit message
+        """
+        _, vs = to_eip_2098(self_sign)
+
+        return {
+            "blockHash": self.current_block.hash.hex(),
+            "blockNumber": self.current_block.number,
+            "depositRoot": self.deposit_root,
+            "guardianAddress": self.account.address,
+            "guardianIndex": self.is_guardian,
+            "keysOpIndex": self.keys_op_index,
+            "signature": {
+                "_vs": vs,
+                "r": self_sign.r,
+                "recoveryParam": 1,
+                "s": self_sign.s,
+                "v": self_sign.v,
+            },
+            "type": "deposit"
+        }
+
+    def _get_quorum_signs_from_messages(self, messages) -> Tuple[List[Tuple[int, int]], int, str]:
+        """
+        Return list of signs + block_num and block_hash that was used to sign.
+        """
+        sorted_messages_by_block_num = sorted(messages, key=lambda msg: msg['blockNumber'])
+
+        dict_for_sort = defaultdict(lambda: defaultdict(list))
+
+        for message in sorted_messages_by_block_num:
+            dict_for_sort[message['blockNumber']][message['blockHash']].append(message)
+
+        for block_num, blocks_by_number in dict_for_sort.items():
+            for block_hash, block_messages in blocks_by_number.items():
+                if len(block_messages) >= self.min_signs_to_deposit:
+                    # Take the oldest messages to prevent reorganizations
+                    return self._from_messages_to_signs(block_messages), block_num, block_hash
+
+        # No messages are ok to deposit
+        return [], 0, ''
+
+    def _from_messages_to_signs(self, messages) -> List[Tuple[int, int]]:
         signs_dict = [
             {
                 'address': msg['guardianAddress'],
                 'sign': (msg['signature']['r'], msg['signature']['_vs']),
             }
-            for msg in sign_messages
+            for msg in messages
         ]
-
-        if self.is_guardian is not None:
-            self_sign = self._sign_deposit_message(deposit_root, keys_op_index)
-
-            signs_dict.append({
-                'address': self.account.address,
-                'sign': to_eip_2098(self_sign)
-            })
 
         sorted_signs = sorted(signs_dict, key=lambda msg: msg['address'])
         sorted_signs = [sign['sign'] for sign in sorted_signs]

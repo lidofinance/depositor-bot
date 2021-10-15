@@ -1,5 +1,5 @@
 import json
-from collections import defaultdict, namedtuple
+from collections import defaultdict
 from typing import List
 
 from confluent_kafka import Consumer
@@ -76,12 +76,14 @@ class DepositBotMsgRecipient(KafkaMsgRecipient):
             if msg.get('depositRoot', None) != deposit_root or msg.get('keysOpIndex') != keys_op_index:
                 if msg.get('blockNumber', 0) < block_number:
                     return False
+            elif msg.get('blockNumber', 0) < block_number - 200:
+                return False
 
             return True
 
         self.messages['deposit'] = list(filter(_deposit_message_filter, self.messages['deposit']))
 
-        return self.messages['deposit']
+        return self.messages['deposit'][:]
 
     def get_pause_messages(self, block_number: int, blocks_till_pause_is_valid: int) -> List[dict]:
         """
