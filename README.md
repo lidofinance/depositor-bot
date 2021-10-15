@@ -46,6 +46,7 @@ docker-compose up
 | KAFKA_SASL_USERNAME (required)    | -          | `None`         | Kafka username |
 | KAFKA_SASL_PASSWORD (required)    | -          | `None`         | Kafka password |
 | MAX_GAS_FEE                       | 100 GWEI   | `100 gwei`     | Bot will wait for a lower price |
+| MAX_KEYS_TO_DEPOSIT               | 155        | `155`          | Max keys to deposit at once |
 | CONTRACT_GAS_LIMIT                | 10 MWEI    | `10 mwei`      | Default transaction gas limit |
 | ACCOUNT_PRIVATE_KEY               | -          | `None`         | Account private key |
 | ACCOUNT_FILENAME                  | -          | `None`         | File with account key (manual password entering required) |
