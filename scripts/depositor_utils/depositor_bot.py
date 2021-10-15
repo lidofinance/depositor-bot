@@ -47,6 +47,7 @@ from scripts.depositor_utils.variables import (
     ACCOUNT_FILENAME,
     ACCOUNT_PRIVATE_KEY,
     CONTRACT_GAS_LIMIT,
+    MAX_KEYS_TO_DEPOSIT,
 )
 from scripts.depositor_utils.gas_strategy import GasFeeStrategy
 
@@ -271,7 +272,7 @@ class DepositorBot:
         logger.info('Start deposit')
 
         priority_fee = self._get_deposit_priority_fee()
-        deposits_count = min(self.available_keys_to_deposit_count, self.max_deposits)
+        deposits_count = min(self.available_keys_to_deposit_count, self.max_deposits, MAX_KEYS_TO_DEPOSIT)
 
         if self.account is not None:
             logger.info('Signing deposit')
