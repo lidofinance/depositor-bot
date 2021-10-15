@@ -128,7 +128,7 @@ class DepositorBot:
 
     # ------------ CYCLE STAFF -------------------
     def run_as_daemon(self):
-        """Supermega infinity cycle!"""
+        """Super-Mega infinity cycle!"""
         while True:
             self.run_deposit_cycle()
 
@@ -136,9 +136,9 @@ class DepositorBot:
         """
         Run all pre-deposit checks. If everything is ok create transaction and push it to mempool
         """
+        self._update_current_block()
         logger.info(f'Run deposit cycle. Block number: {self.current_block.number}')
         logger.info('Get actual chain state')
-        self._update_current_block()
 
         # Pause message instantly if we receive pause message
         pause_messages = self.kafka.get_pause_messages(self.current_block.number, self.blocks_till_pause_is_valid)
@@ -342,7 +342,7 @@ class DepositorBot:
             for msg in sign_messages
         ]
 
-        if self.is_guardian:
+        if self.is_guardian is not None:
             self_sign = self._sign_deposit_message(deposit_root, keys_op_index)
 
             signs_dict.append({
@@ -397,7 +397,7 @@ class DepositorBot:
         logger.warning('Self pause protocol initiate')
 
         if self.account is not None and self.is_guardian is not None:
-            logger.error('Sign pause')
+            logger.warning('Sign pause')
 
             # Latest block are failing on goerly !!!
             self.current_block = self._w3.eth.get_block(self.current_block.number - 1)
