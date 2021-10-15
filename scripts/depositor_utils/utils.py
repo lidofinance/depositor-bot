@@ -1,10 +1,17 @@
 from collections import namedtuple
+from typing import List, Tuple
 
 from web3 import Web3
 from web3.auto import w3
 
 
-def sign_data(data, private_key):
+SignedData = namedtuple(
+    'SignedData',
+    ['msg_hash', 'v', 'r', 's', 'signature'],
+)
+
+
+def sign_data(data: List[str], private_key: str) -> SignedData:
     hashed = keccak256_hash(''.join(data))
     signed = ecdsa_sign(hashed, private_key)
     return signed
@@ -13,12 +20,6 @@ def sign_data(data, private_key):
 def keccak256_hash(data: str) -> str:
     """Get keccak256 hash for data."""
     return Web3.keccak(hexstr=data)
-
-
-SignedData = namedtuple(
-    'SignedData',
-    ['msg_hash', 'v', 'r', 's', 'signature']
-)
 
 
 def ecdsa_sign(hashed_data: str, private_key: int) -> SignedData:
@@ -51,6 +52,6 @@ def as_uint256(n: int) -> str:
     return Web3.toBytes(n).rjust(32, b'\0').hex()
 
 
-def to_eip_2098(sign):
+def to_eip_2098(sign: SignedData) -> Tuple[str, str]:
     vs = (sign.v - 27) << 255 | int(sign.s, 16)
     return sign.r, hex(vs)

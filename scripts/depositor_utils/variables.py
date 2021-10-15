@@ -14,3 +14,8 @@ CONTRACT_GAS_LIMIT = Wei(os.getenv('CONTRACT_GAS_LIMIT', 10 * 10**6))
 # Contract related vars
 # 155 Keys is the optimal value
 MIN_BUFFERED_ETHER = Wei(os.getenv('MIN_BUFFERED_ETHER', '1024 ether'))
+
+# Kafka secrets
+KAFKA_BOOTSTRAP_SERVERS = os.getenv('KAFKA_BOOTSTRAP_SERVERS')
+KAFKA_SASL_USERNAME = os.getenv('KAFKA_SASL_USERNAME')
+KAFKA_SASL_PASSWORD = os.getenv('KAFKA_SASL_PASSWORD')
