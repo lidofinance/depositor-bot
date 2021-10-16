@@ -397,7 +397,7 @@ class DepositorBot:
             for msg in messages
         ]
 
-        sorted_signs = sorted(signs_dict, key=lambda msg: msg['address'])
+        sorted_signs = sorted(signs_dict, key=lambda msg: int(msg['address'], 16))
         sorted_signs = [sign['sign'] for sign in sorted_signs]
 
         return sorted_signs
