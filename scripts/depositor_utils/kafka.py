@@ -14,7 +14,7 @@ class KafkaMsgRecipient:
         self.messages = defaultdict(list)
 
         self.kafka = Consumer({
-            'client.id': 'depostor-bot',
+            'client.id': 'depositor-bot',
             'group.id': 'goerli-defender-group',
             'bootstrap.servers': KAFKA_BOOTSTRAP_SERVERS,
             'auto.offset.reset': 'earliest',
