@@ -163,7 +163,7 @@ class DepositorBot:
         if self.account is not None and deposit_params:
             logger.info('Sending deposit transaction')
             try:
-                self.deposit_security_module.depositBufferedEther.call(
+                self.deposit_security_module.depositBufferedEther(
                     self.deposit_root,
                     self.keys_op_index,
                     deposit_params['block_num'],
