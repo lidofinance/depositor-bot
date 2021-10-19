@@ -1,9 +1,11 @@
 import json
+import logging
 from collections import defaultdict
 from typing import List
 
 from confluent_kafka import Consumer
 
+from scripts.depositor_utils.prometheus import KAFKA_DEPOSIT_MESSAGES, KAFKA_PAUSE_MESSAGES
 from scripts.depositor_utils.variables import KAFKA_BOOTSTRAP_SERVERS, KAFKA_SASL_USERNAME, KAFKA_SASL_PASSWORD
 
 
@@ -40,10 +42,16 @@ class KafkaMsgRecipient:
                 break
             elif not msg.error():
                 value = json.loads(msg.value())
+                value = self._process_value(value)
                 msg_type = value.get('type', None)
 
                 if msg_type is not None:
                     self.messages[msg_type].append(value)
+            else:
+                logging.error(f'Kafka error: {msg.error()}')
+
+    def _process_value(self, value):
+        return value
 
 
 class DepositBotMsgRecipient(KafkaMsgRecipient):
@@ -115,3 +123,15 @@ class DepositBotMsgRecipient(KafkaMsgRecipient):
 
     def clear_pause_messages(self):
         self.messages['pause'] = []
+
+    def _process_value(self, value):
+        # Just logging
+        logging.info('Send guardian statistic')
+        guardian_address = value.get('guardianAddress', -1)
+        if value.get('type', None) == 'deposit':
+            KAFKA_DEPOSIT_MESSAGES.labels(guardian_address).inc()
+        elif value.get('type', None) == 'pause':
+            logging.warning(f'Received pause msg from: {guardian_address}')
+            KAFKA_PAUSE_MESSAGES.labels(guardian_address).inc()
+
+        return super()._process_value(value)

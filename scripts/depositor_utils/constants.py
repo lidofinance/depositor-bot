@@ -27,7 +27,7 @@ DEPOSIT_CONTRACT = {
 
 DEPOSIT_SECURITY_MODULE = {
     Network.Mainnet: "0x00000000219ab540356cBB839Cbe05303d7705Fa",  # TODO: wrong mainnet address
-    Network.Görli: "0x3E4Fa99107aD166380A9F5523BbacAcD1e24909C",
+    Network.Görli: "0xed23ad3ea5fb9d10e7371caef1b141ad1c23a80c",
 }
 
 DEPOSIT_CONTRACT_DEPLOY_BLOCK = {
