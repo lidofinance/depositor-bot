@@ -1,11 +1,13 @@
 from prometheus_client.metrics import Gauge, Enum, Counter
 
-GAS_FEE = Gauge('gas_fee', 'Gas fee', ['type'])
+DEPOSITOR_PREFIX = 'depositor_bot_'
 
-DEPOSIT_FAILURE = Counter('deposit_failure', 'Deposit failure')
-SUCCESS_DEPOSIT = Counter('deposit_success', 'Deposit done')
+GAS_FEE = Gauge(f'{DEPOSITOR_PREFIX}gas_fee', 'Gas fee', ['type'])
 
-ACCOUNT_BALANCE = Gauge('account_balance', 'Account balance')
+DEPOSIT_FAILURE = Counter(f'{DEPOSITOR_PREFIX}deposit_failure', 'Deposit failure')
+SUCCESS_DEPOSIT = Counter(f'{DEPOSITOR_PREFIX}deposit_success', 'Deposit done')
 
-KAFKA_DEPOSIT_MESSAGES = Gauge('kafka_deposit_messages', 'Guardians deposit messages', ['address'])
-KAFKA_PAUSE_MESSAGES = Gauge('kafka_pause_messages', 'Guardians pause messages', ['address'])
+ACCOUNT_BALANCE = Gauge(f'{DEPOSITOR_PREFIX}account_balance', 'Account balance')
+
+KAFKA_DEPOSIT_MESSAGES = Gauge(f'{DEPOSITOR_PREFIX}kafka_deposit_messages', 'Guardians deposit messages', ['address'])
+KAFKA_PAUSE_MESSAGES = Gauge(f'{DEPOSITOR_PREFIX}kafka_pause_messages', 'Guardians pause messages', ['address'])
