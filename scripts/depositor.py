@@ -6,7 +6,7 @@ from scripts.depositor_utils.logger import logger
 
 
 def main():
-    logger.info('Start up metrics service on port: 8080.')
+    logger.info({"msg": 'Start up metrics service on port: 8080.'})
     start_http_server(8080)
     depositor_bot = DepositorBot(web3)
     depositor_bot.run_as_daemon()
