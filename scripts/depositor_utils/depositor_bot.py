@@ -168,6 +168,8 @@ class DepositorBot:
 
         if self.account is not None and deposit_params:
             logger.info({"msg": 'Sending deposit transaction'})
+
+            priority = self._get_deposit_priority_fee()
             try:
                 self.deposit_security_module.depositBufferedEther(
                     self.deposit_root,
@@ -177,8 +179,9 @@ class DepositorBot:
                     deposit_params['signs'],
                     {
                         'gas_limit': CONTRACT_GAS_LIMIT,
-                        'priority_fee': self._get_deposit_priority_fee(),
-                        'max_fee': self.gas_fee_strategy.get_gas_fee_percentile(15, 50),
+                        'priority_fee': priority,
+                        # Max fee is 50 percentile + 2 (because of goerly cases) * priority
+                        'max_fee': self.gas_fee_strategy.get_gas_fee_percentile(15, 50) + 2 * priority,
                     },
                 )
             except BaseException as error:
