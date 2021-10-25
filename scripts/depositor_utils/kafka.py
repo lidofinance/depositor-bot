@@ -126,7 +126,7 @@ class DepositBotMsgRecipient(KafkaMsgRecipient):
 
     def _process_value(self, value):
         # Just logging
-        logging.info('Send guardian statistic')
+        logging.info({'msg': 'Send guardian statistic'})
         guardian_address = value.get('guardianAddress', -1)
         if value.get('type', None) == 'deposit':
             KAFKA_DEPOSIT_MESSAGES.labels(guardian_address).inc()
