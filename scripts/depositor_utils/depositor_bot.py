@@ -14,6 +14,7 @@ from scripts.depositor_utils.constants import (
 from scripts.depositor_utils.deposit_problems import (
     NOT_ENOUGH_BALANCE_ON_ACCOUNT,
     GAS_FEE_HIGHER_THAN_RECOMMENDED,
+    DEPOSIT_SECURITY_ISSUE,
 )
 from scripts.depositor_utils.kafka import DepositBotMsgRecipient
 from scripts.depositor_utils.logger import logger
@@ -148,8 +149,13 @@ class DepositorBot:
         GAS_FEE.labels('recommended_fee').set(recommended_gas_fee)
 
         if recommended_gas_fee > current_gas_fee and MAX_GAS_FEE > current_gas_fee:
-            logger.warning({"msg": GAS_FEE_HIGHER_THAN_RECOMMENDED})
+            logger.warning({'msg': GAS_FEE_HIGHER_THAN_RECOMMENDED})
             deposit_issues.append(GAS_FEE_HIGHER_THAN_RECOMMENDED)
+
+        logger.info({'msg': 'Check deposit security status'})
+        if not self.deposit_security_module.canDeposit():
+            logger.warning('Deposit security module prohibits deposits.')
+            deposit_issues.append(DEPOSIT_SECURITY_ISSUE)
 
         return deposit_issues
 
