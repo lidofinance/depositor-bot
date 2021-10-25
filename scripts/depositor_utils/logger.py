@@ -7,10 +7,7 @@ from scripts.depositor_utils.variables import LOKI_URL, LOKI_AUTH_USERNAME, LOKI
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[
-        logging.FileHandler("debug.log"),
-        logging.StreamHandler()
-    ]
+    handlers=[logging.StreamHandler()]
 )
 
 handler = logging_loki.LokiHandler(
