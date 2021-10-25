@@ -1,3 +1,4 @@
+import time
 from collections import defaultdict
 from typing import List, Tuple
 
@@ -113,8 +114,12 @@ class DepositorBot:
                 self.pause_deposits_with_messages(pause_messages)
             elif not self.get_deposit_issues():
                 self.do_deposit()
+            else:
+                logger.info({'msg': 'Deposit issues found'})
+                time.sleep(300)
         else:
             logger.warning({'msg': 'Protocol paused'})
+            time.sleep(600)
 
     def _update_current_block(self):
         self.current_block = self._w3.eth.get_block('latest')
@@ -248,7 +253,7 @@ class DepositorBot:
         #     if transaction.to == DEPOSIT_CONTRACT[self._web3_chain_id]:
         #         max_priority_fee = max(max_priority_fee, transaction.priority_fee)
         # return max_priority_fee + 1
-        return self._w3.eth.fee_history(1, 'latest', reward_percentiles=[50])['reward'][0][0]
+        return self._w3.eth.fee_history(1, 'latest', reward_percentiles=[55])['reward'][0][0]
 
     # ----------- DO PAUSE ----------------
     def pause_deposits_with_messages(self, messages: List[dict]):
