@@ -140,7 +140,7 @@ class DepositorBot:
 
         logger.info('Recommended gas fee check')
         # Gas price check
-        recommended_gas_fee = self.gas_fee_strategy.get_gas_fee_percentile(1, 20)
+        recommended_gas_fee = self.gas_fee_strategy.get_gas_fee_percentile(15, 30)
         current_gas_fee = self.current_block.baseFeePerGas
 
         GAS_FEE.labels('max_fee').set(MAX_GAS_FEE)
@@ -172,6 +172,7 @@ class DepositorBot:
                     {
                         'gas_limit': CONTRACT_GAS_LIMIT,
                         'priority_fee': self._get_deposit_priority_fee(),
+                        'max_fee': self.gas_fee_strategy.get_gas_fee_percentile(15, 50),
                     },
                 )
             except BaseException as error:
