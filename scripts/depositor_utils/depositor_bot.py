@@ -34,7 +34,7 @@ from scripts.depositor_utils.gas_strategy import GasFeeStrategy
 
 class DepositorBot:
     def __init__(self, w3: Web3):
-        logger.info('Init depositor bot.')
+        logger.info({"msg": 'Init depositor bot.'})
         self._w3 = w3
         self._web3_chain_id = self._w3.eth.chain_id
 
@@ -53,33 +53,33 @@ class DepositorBot:
     def _load_account(self):
         """Load account, that will sign and deposit"""
         if ACCOUNT_FILENAME:
-            logger.info('Load account from filename.')
+            logger.info({"msg": 'Load account from filename.'})
             self.account = accounts.load(ACCOUNT_FILENAME)
 
         elif ACCOUNT_PRIVATE_KEY:
-            logger.info('Load account from private key.')
+            logger.info({"msg": 'Load account from private key.'})
             self.account = accounts.add(ACCOUNT_PRIVATE_KEY)
 
         elif accounts:
-            logger.info('Take first account available.')
+            logger.info({"msg": 'Take first account available.'})
             self.account = accounts[0]
 
         else:
-            logger.warning('Account not provided. Run in test mode.')
+            logger.warning({"msg": 'Account not provided. Run in test mode.'})
             self.account = None
 
     def _load_interfaces(self):
         """Load interfaces. 'from' is account by default"""
-        logger.info('Get Lido contract.')
+        logger.info({"msg": 'Get Lido contract.'})
         self.lido = interface.Lido(LIDO_CONTRACT_ADDRESSES[self._web3_chain_id], owner=self.account)
 
-        logger.info('Get Node Operator Registry contract.')
+        logger.info({"msg": 'Get Node Operator Registry contract.'})
         self.registry = interface.NodeOperatorRegistry(NODE_OPS_ADDRESSES[self._web3_chain_id], owner=self.account)
 
-        logger.info('Get Deposit Security module contract.')
+        logger.info({"msg": 'Get Deposit Security module contract.'})
         self.deposit_security_module = interface.DepositSecurityModule(DEPOSIT_SECURITY_MODULE[self._web3_chain_id], owner=self.account)
 
-        logger.info('Get Deposit contract.')
+        logger.info({"msg": 'Get Deposit contract.'})
         self.deposit_contract = interface.DepositContract(DEPOSIT_CONTRACT[self._web3_chain_id], owner=self.account)
 
     def _load_constants(self):
@@ -101,8 +101,8 @@ class DepositorBot:
         Fetch latest signs from
         """
         self._update_current_block()
-        logger.info(f'Run deposit cycle. Block number: {self.current_block.number}')
-        logger.info('Get actual chain state')
+        logger.info({"msg": f'Run deposit cycle. Block number: {self.current_block.number}'})
+        logger.info({"msg": 'Get actual chain state'})
 
         # Pause message instantly if we receive pause message
         pause_messages = self.kafka.get_pause_messages(self.current_block.number, self.blocks_till_pause_is_valid)
@@ -113,7 +113,7 @@ class DepositorBot:
             elif not self.get_deposit_issues():
                 self.do_deposit()
         else:
-            logger.warning('Protocol paused')
+            logger.warning({"msg": 'Protocol paused'})
 
     def _update_current_block(self):
         self.current_block = self._w3.eth.get_block('latest')
@@ -128,17 +128,17 @@ class DepositorBot:
         deposit_issues = []
 
         # ------- Other checks -------
-        logger.info('Account balance check')
+        logger.info({"msg": 'Account balance check'})
         if self.account:
             balance = web3.eth.get_balance(self.account.address)
             ACCOUNT_BALANCE.set(balance)
             if balance < Wei('0.01 ether'):
-                logger.error(NOT_ENOUGH_BALANCE_ON_ACCOUNT)
+                logger.error({"msg": NOT_ENOUGH_BALANCE_ON_ACCOUNT})
                 deposit_issues.append(NOT_ENOUGH_BALANCE_ON_ACCOUNT)
         else:
             ACCOUNT_BALANCE.set(0)
 
-        logger.info('Recommended gas fee check')
+        logger.info({"msg": 'Recommended gas fee check'})
         # Gas price check
         recommended_gas_fee = self.gas_fee_strategy.get_gas_fee_percentile(15, 30)
         current_gas_fee = self.current_block.baseFeePerGas
@@ -148,7 +148,7 @@ class DepositorBot:
         GAS_FEE.labels('recommended_fee').set(recommended_gas_fee)
 
         if recommended_gas_fee > current_gas_fee and MAX_GAS_FEE > current_gas_fee:
-            logger.warning(GAS_FEE_HIGHER_THAN_RECOMMENDED)
+            logger.warning({"msg": GAS_FEE_HIGHER_THAN_RECOMMENDED})
             deposit_issues.append(GAS_FEE_HIGHER_THAN_RECOMMENDED)
 
         return deposit_issues
@@ -156,12 +156,12 @@ class DepositorBot:
     # ------------ DO DEPOSIT ------------------
     def do_deposit(self):
         """Sign and Make deposit"""
-        logger.info('Start deposit')
-        logger.info('Get deposit params')
+        logger.info({"msg": 'Start deposit'})
+        logger.info({"msg": 'Get deposit params'})
         deposit_params = self._get_deposit_params(self.deposit_root, self.keys_op_index)
 
         if self.account is not None and deposit_params:
-            logger.info('Sending deposit transaction')
+            logger.info({"msg": 'Sending deposit transaction'})
             try:
                 self.deposit_security_module.depositBufferedEther(
                     self.deposit_root,
@@ -176,12 +176,12 @@ class DepositorBot:
                     },
                 )
             except BaseException as error:
-                logger.error(f'Deposit failed: {error}')
+                logger.error({"msg": f'Deposit failed: {error}'})
                 DEPOSIT_FAILURE.inc()
             else:
-                logger.info(f'Success deposit')
+                logger.info({"msg": f'Success deposit'})
 
-        logger.info('Deposit done')
+        logger.info({"msg": 'Deposit done'})
         SUCCESS_DEPOSIT.inc()
 
     def _get_deposit_params(self, deposit_root, keys_op_index):
@@ -243,7 +243,7 @@ class DepositorBot:
 
     # ----------- DO PAUSE ----------------
     def pause_deposits_with_messages(self, messages: List[dict]):
-        logger.warning('Message pause protocol initiate')
+        logger.warning({"msg": 'Message pause protocol initiate'})
         for message in messages:
             try:
                 self.deposit_security_module.pauseDeposits(
@@ -254,10 +254,10 @@ class DepositorBot:
                     },
                 )
             except BaseException as error:
-                logger.error(f'Pause error: {error}')
-                logger.error(f'Message: {message}')
+                logger.error({"msg": f'Pause error: {error}'})
+                logger.error({"msg": f'Message: {message}'})
             else:
-                logger.info('Protocol was paused')
+                logger.info({"msg": 'Protocol was paused'})
 
                 # Cleanup kafka, no need to deposit for now
                 self.kafka.clear_pause_messages()
