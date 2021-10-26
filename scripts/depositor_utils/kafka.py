@@ -64,20 +64,24 @@ class DepositBotMsgRecipient(KafkaMsgRecipient):
 
         Deposit msg example
         {
-            "blockHash": "0x1e35a82702964431eb9f7028ec8e0a226c95f98a2bdff7da10381a364c2c8ebd",
-            "blockNumber": 5669490,
-            "depositRoot": "0x939424bfa2af911f12bfa95cae4850ca5e5d9343f9cfea855902a4ad89983c37",
-            "guardianAddress": "0x3dc4cF780F2599B528F37dedB34449Fb65Ef7d4A",
-            "guardianIndex": 0,
-            "keysOpIndex": 12,
-            "signature": {
-                "_vs": "0xffe6ca7d86118389c773ac647c6458324cae40c02e36c2982b1803d2db94195b",
-                "r": "0xbf53de3c8f002a77c03114312e118798ee16ecc0293ea5cd80de59d08907514c",
-                "recoveryParam": 1,
-                "s": "0x7fe6ca7d86118389c773ac647c6458324cae40c02e36c2982b1803d2db94195b",
-                "v": 28
-            },
-            "type": "deposit"
+          "type": "deposit",
+          "depositRoot": "0xbc034415ccde0596f39095fd2d99c2fa1e335de3f70b34dcd78e2ab21fa0c5e8",
+          "keysOpIndex": 16,
+          "blockNumber": 5737984,
+          "blockHash": "0x432e218931e9b94f0702ecb1b0d084c467a86b384767ce38c4fe164463070532",
+          "guardianAddress": "0x43464Fe06c18848a2E2e913194D64c1970f4326a",
+          "guardianIndex": 8,
+          "signature": {
+            "r": "0xc2235eb6983f80d19158f807d5d90d93abec52034ea7184bbf164ba211f00116",
+            "s": "0x75354ffc9fb6e7a4b4c01c622661a1d0382ace8c4ff8024626e39ac1a6a613d0",
+            "_vs": "0x75354ffc9fb6e7a4b4c01c622661a1d0382ace8c4ff8024626e39ac1a6a613d0",
+            "recoveryParam": 0,
+            "v": 27
+          },
+          "app": {
+            "version": "1.0.3",
+            "name": "lido-council-daemon"
+          }
         }
         """
         _guardian_addresses = []
@@ -138,10 +142,12 @@ class DepositBotMsgRecipient(KafkaMsgRecipient):
         # Just logging
         logging.info({'msg': 'Send guardian statistic'})
         guardian_address = value.get('guardianAddress', -1)
+        daemon_version = value.get('app', {}).get('version', 'unavailable')
+
         if value.get('type', None) == 'deposit':
-            KAFKA_DEPOSIT_MESSAGES.labels(guardian_address).inc()
+            KAFKA_DEPOSIT_MESSAGES.labels(guardian_address, daemon_version).inc()
         elif value.get('type', None) == 'pause':
             logging.warning(f'Received pause msg from: {guardian_address}')
-            KAFKA_PAUSE_MESSAGES.labels(guardian_address).inc()
+            KAFKA_PAUSE_MESSAGES.labels(guardian_address, daemon_version).inc()
 
         return super()._process_value(value)

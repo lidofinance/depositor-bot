@@ -9,5 +9,5 @@ SUCCESS_DEPOSIT = Counter(f'{DEPOSITOR_PREFIX}deposit_success', 'Deposit done')
 
 ACCOUNT_BALANCE = Gauge(f'{DEPOSITOR_PREFIX}account_balance', 'Account balance')
 
-KAFKA_DEPOSIT_MESSAGES = Gauge(f'{DEPOSITOR_PREFIX}kafka_deposit_messages', 'Guardians deposit messages', ['address'])
-KAFKA_PAUSE_MESSAGES = Gauge(f'{DEPOSITOR_PREFIX}kafka_pause_messages', 'Guardians pause messages', ['address'])
+KAFKA_DEPOSIT_MESSAGES = Gauge(f'{DEPOSITOR_PREFIX}kafka_deposit_messages', 'Guardians deposit messages', ['address', 'version'])
+KAFKA_PAUSE_MESSAGES = Gauge(f'{DEPOSITOR_PREFIX}kafka_pause_messages', 'Guardians pause messages', ['address', 'version'])
