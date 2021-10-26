@@ -16,7 +16,7 @@ LIDO_CONTRACT_ADDRESSES = {
 }
 
 NODE_OPS_ADDRESSES = {
-    Network.Mainnet: "0x55032650b14df07b85bF18A3a3eC8E0Af2e028d5",
+    Network.Mainnet: "0xec3567ae258639a0FF5A02F7eAF4E4aE4416C5fe",
     Network.Görli: "0x9D4AF1Ee19Dad8857db3a45B0374c81c8A1C6320",
 }
 
@@ -26,7 +26,7 @@ DEPOSIT_CONTRACT = {
 }
 
 DEPOSIT_SECURITY_MODULE = {
-    Network.Mainnet: "0x00000000219ab540356cBB839Cbe05303d7705Fa",  # TODO: wrong mainnet address
+    Network.Mainnet: "0xDb149235B6F40dC08810AA69869783Be101790e7",
     Network.Görli: "0xed23ad3ea5fb9d10e7371caef1b141ad1c23a80c",
 }
 
