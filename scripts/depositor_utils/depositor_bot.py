@@ -194,9 +194,9 @@ class DepositorBot:
                 DEPOSIT_FAILURE.inc()
             else:
                 logger.info({'msg': f'Success deposit'})
-
-        logger.info({'msg': 'Deposit done'})
-        SUCCESS_DEPOSIT.inc()
+                SUCCESS_DEPOSIT.inc()
+        elif not self.account:
+            logger.info({'msg': '[DRY] Deposit done'})
 
     def _get_deposit_params(self, deposit_root, keys_op_index):
         """
