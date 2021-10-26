@@ -80,14 +80,24 @@ class DepositBotMsgRecipient(KafkaMsgRecipient):
             "type": "deposit"
         }
         """
+        _guardian_addresses = []
+
         def _deposit_message_filter(msg):
             if msg.get('depositRoot', None) != deposit_root or msg.get('keysOpIndex') != keys_op_index:
                 if msg.get('blockNumber', 0) < block_number:
                     return False
+            # Every 50 block we waiting for new signatures even deposit_root wasn't changed
+            # So we don't need signs older than 200
             elif msg.get('blockNumber', 0) < block_number - 200:
                 return False
 
-            return True
+            # Filter duplicate messages from one guardian address
+            guardian = msg.get('guardianAddress', None)
+            if guardian not in _guardian_addresses:
+                _guardian_addresses.append(guardian)
+                return True
+
+            return False
 
         self.messages['deposit'] = list(filter(_deposit_message_filter, self.messages['deposit']))
 
