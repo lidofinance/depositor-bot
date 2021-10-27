@@ -11,7 +11,7 @@ from scripts.depositor_utils.variables import (
     KAFKA_SASL_USERNAME,
     KAFKA_SASL_PASSWORD,
     NETWORK,
-    KAFKA_TOPIC_NAME
+    KAFKA_TOPIC
 )
 
 
@@ -33,7 +33,7 @@ class KafkaMsgRecipient:
             'sasl.password': KAFKA_SASL_PASSWORD,
         })
 
-        self.kafka.subscribe([f'{NETWORK}-{KAFKA_TOPIC_NAME}'])
+        self.kafka.subscribe([f'{NETWORK}-{KAFKA_TOPIC}'])
 
     def __del__(self):
         self.kafka.close()
