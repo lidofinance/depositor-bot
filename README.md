@@ -40,11 +40,12 @@ docker-compose up
 
 | Vars in env                       | Amount     | Default - Raw  | Description |
 | -------------                     | :--------: | :---------:    | :----- |
-| NETWORK (required)                | -          | `None`         | Network (e.g. mainnet) |
+| NETWORK (required)                | -          | `None`         | Network (e.g. mainnet, goerli) |
 | WEB3_INFURA_PROJECT_ID (required) | -          | `None`         | Project ID in infura |
 | KAFKA_BOOTSTRAP_SERVERS (required) | -         | `None`         | Kafka servers url and port |
 | KAFKA_SASL_USERNAME (required)    | -          | `None`         | Kafka username |
 | KAFKA_SASL_PASSWORD (required)    | -          | `None`         | Kafka password |
+| KAFKA_TOPIC_NAME (required)       | -          | `None`         | Kafka topic name (for msg receiving) |
 | MAX_GAS_FEE                       | 100 GWEI   | `100 gwei`     | Bot will wait for a lower price |
 | MAX_KEYS_TO_DEPOSIT               | 155        | `155`          | Max keys to deposit at once |
 | CONTRACT_GAS_LIMIT                | 10 MWEI    | `10 mwei`      | Default transaction gas limit |

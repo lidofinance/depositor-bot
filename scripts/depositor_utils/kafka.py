@@ -6,7 +6,13 @@ from typing import List
 from confluent_kafka import Consumer
 
 from scripts.depositor_utils.prometheus import KAFKA_DEPOSIT_MESSAGES, KAFKA_PAUSE_MESSAGES
-from scripts.depositor_utils.variables import KAFKA_BOOTSTRAP_SERVERS, KAFKA_SASL_USERNAME, KAFKA_SASL_PASSWORD
+from scripts.depositor_utils.variables import (
+    KAFKA_BOOTSTRAP_SERVERS,
+    KAFKA_SASL_USERNAME,
+    KAFKA_SASL_PASSWORD,
+    NETWORK,
+    KAFKA_TOPIC_NAME
+)
 
 
 class KafkaMsgRecipient:
@@ -17,7 +23,7 @@ class KafkaMsgRecipient:
 
         self.kafka = Consumer({
             'client.id': 'depositor-bot',
-            'group.id': 'goerli-defender-group',
+            'group.id': 'depositor-bot-group',
             'bootstrap.servers': KAFKA_BOOTSTRAP_SERVERS,
             'auto.offset.reset': 'earliest',
             'security.protocol': 'SASL_SSL',
@@ -27,7 +33,7 @@ class KafkaMsgRecipient:
             'sasl.password': KAFKA_SASL_PASSWORD,
         })
 
-        self.kafka.subscribe(['goerli-defender'])
+        self.kafka.subscribe([f'{NETWORK}-{KAFKA_TOPIC_NAME}'])
 
     def __del__(self):
         self.kafka.close()
