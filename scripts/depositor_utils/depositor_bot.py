@@ -153,7 +153,7 @@ class DepositorBot:
         GAS_FEE.labels('current_fee').set(current_gas_fee)
         GAS_FEE.labels('recommended_fee').set(recommended_gas_fee)
 
-        if MAX_GAS_FEE > current_gas_fee:  # recommended_gas_fee > current_gas_fee and
+        if MAX_GAS_FEE < current_gas_fee:  # recommended_gas_fee > current_gas_fee and
             logger.warning({'msg': GAS_FEE_HIGHER_THAN_RECOMMENDED})
             deposit_issues.append(GAS_FEE_HIGHER_THAN_RECOMMENDED)
 
