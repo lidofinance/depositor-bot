@@ -126,11 +126,7 @@ class DepositorBot:
         self.deposit_root = self.deposit_contract.get_deposit_root()
         self.kafka.update_messages()
         self.protocol_is_paused = self.deposit_security_module.isPaused()
-
-        try:
-            self.keys_op_index = self.registry.getKeysOpIndex()
-        except ValueError:
-            self.keys_op_index = 0
+        self.keys_op_index = self.registry.getKeysOpIndex()
 
     # ------------- FIND ISSUES -------------------
     def get_deposit_issues(self) -> List[str]:
