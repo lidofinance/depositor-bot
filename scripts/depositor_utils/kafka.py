@@ -1,10 +1,10 @@
 import json
-import logging
 from collections import defaultdict
 from typing import List
 
 from confluent_kafka import Consumer
 
+from scripts.depositor_utils.logger import logger
 from scripts.depositor_utils.prometheus import KAFKA_DEPOSIT_MESSAGES, KAFKA_PAUSE_MESSAGES
 from scripts.depositor_utils.variables import (
     KAFKA_BOOTSTRAP_SERVERS,
@@ -21,8 +21,10 @@ class KafkaMsgRecipient:
     def __init__(self):
         self.messages = defaultdict(list)
 
+        kafka_topic = f'{NETWORK}-{KAFKA_TOPIC}'
+
         self.kafka = Consumer({
-            'client.id': 'depositor-bot',
+            'client.id': f'{kafka_topic}-bot',
             'group.id': 'depositor-bot-group',
             'bootstrap.servers': KAFKA_BOOTSTRAP_SERVERS,
             'auto.offset.reset': 'earliest',
@@ -33,7 +35,8 @@ class KafkaMsgRecipient:
             'sasl.password': KAFKA_SASL_PASSWORD,
         })
 
-        self.kafka.subscribe([f'{NETWORK}-{KAFKA_TOPIC}'])
+        logger.info({'msg': f'Subscribe to "{kafka_topic}"'})
+        self.kafka.subscribe([kafka_topic])
 
     def __del__(self):
         self.kafka.close()
@@ -54,7 +57,7 @@ class KafkaMsgRecipient:
                 if msg_type is not None:
                     self.messages[msg_type].append(value)
             else:
-                logging.error(f'Kafka error: {msg.error()}')
+                logger.error({'msg': f'Kafka error: {msg.error()}'})
 
     def _process_value(self, value):
         return value
@@ -146,14 +149,14 @@ class DepositBotMsgRecipient(KafkaMsgRecipient):
 
     def _process_value(self, value):
         # Just logging
-        logging.info({'msg': 'Send guardian statistic'})
+        logger.info({'msg': 'Send guardian statistic'})
         guardian_address = value.get('guardianAddress', -1)
         daemon_version = value.get('app', {}).get('version', 'unavailable')
 
         if value.get('type', None) == 'deposit':
             KAFKA_DEPOSIT_MESSAGES.labels(guardian_address, daemon_version).inc()
         elif value.get('type', None) == 'pause':
-            logging.warning(f'Received pause msg from: {guardian_address}')
+            logger.warning(f'Received pause msg from: {guardian_address}')
             KAFKA_PAUSE_MESSAGES.labels(guardian_address, daemon_version).inc()
 
         return super()._process_value(value)
