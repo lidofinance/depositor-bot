@@ -153,7 +153,7 @@ class DepositorBot:
         GAS_FEE.labels('current_fee').set(current_gas_fee)
         GAS_FEE.labels('recommended_fee').set(recommended_gas_fee)
 
-        if recommended_gas_fee > current_gas_fee and MAX_GAS_FEE > current_gas_fee:
+        if MAX_GAS_FEE > current_gas_fee:  # recommended_gas_fee > current_gas_fee and
             logger.warning({'msg': GAS_FEE_HIGHER_THAN_RECOMMENDED})
             deposit_issues.append(GAS_FEE_HIGHER_THAN_RECOMMENDED)
 
@@ -186,7 +186,7 @@ class DepositorBot:
                         'gas_limit': CONTRACT_GAS_LIMIT,
                         'priority_fee': priority,
                         # Max fee is 50 percentile + 2 (because of goerly cases) * priority
-                        'max_fee': self.gas_fee_strategy.get_gas_fee_percentile(15, 50) + 2 * priority,
+                        # 'max_fee': self.gas_fee_strategy.get_gas_fee_percentile(15, 50) + 2 * priority,
                     },
                 )
             except BaseException as error:
@@ -196,7 +196,9 @@ class DepositorBot:
                 logger.info({'msg': f'Success deposit'})
                 SUCCESS_DEPOSIT.inc()
         elif not self.account:
-            logger.info({'msg': '[DRY] Deposit done'})
+            logger.info({'msg': '[DRY] No account provided'})
+        else:
+            logger.info({'msg': 'Failed to deposit. Not enough params to deposit (messages).'})
 
     def _get_deposit_params(self, deposit_root, keys_op_index):
         """
@@ -231,6 +233,8 @@ class DepositorBot:
                         'block_hash': HexBytes(block_hash),
                     }
 
+        logger.warning({'msg': 'Not enough signs for quorum quorum.'})
+
     def _from_messages_to_signs(self, messages) -> List[Tuple[int, int]]:
         signs_dict = [
             {
@@ -253,7 +257,7 @@ class DepositorBot:
         #     if transaction.to == DEPOSIT_CONTRACT[self._web3_chain_id]:
         #         max_priority_fee = max(max_priority_fee, transaction.priority_fee)
         # return max_priority_fee + 1
-        return self._w3.eth.fee_history(1, 'latest', reward_percentiles=[55])['reward'][0][0]
+        return self._w3.eth.fee_history(1, 'latest', reward_percentiles=[95])['reward'][0][0]
 
     # ----------- DO PAUSE ----------------
     def pause_deposits_with_messages(self, messages: List[dict]):
