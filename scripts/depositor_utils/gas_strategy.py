@@ -3,6 +3,8 @@ from typing import List
 import numpy
 from brownie.network.web3 import Web3
 
+from scripts.depositor_utils.logger import logger
+
 
 class GasFeeStrategy:
     BLOCKS_IN_ONE_DAY = 6600
@@ -35,7 +37,10 @@ class GasFeeStrategy:
             and self._latest_fetched_block + self._blocks_count_cache > latest_block_num
             and self._days_param != days
         ):
+            logger.info('Use cached gas history')
             return self._gas_fees
+
+        logger.info('Init or refetch gas history')
 
         self._last_gas_fee_block = self._w3.eth.get_block('latest')['number']
         self._days_param = days

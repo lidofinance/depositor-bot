@@ -50,6 +50,7 @@ class DepositorBot:
         self.current_block = None
 
         # Some rarely change things
+        logger.info({'msg': 'Load depositor contracts'})
         self._load_constants()
 
     def _load_account(self):
@@ -86,9 +87,12 @@ class DepositorBot:
 
     def _load_constants(self):
         self.blocks_till_pause_is_valid = self.deposit_security_module.getPauseIntentValidityPeriodBlocks()
-        self.max_deposits = self.deposit_security_module.getMaxDeposits()
-        self.min_signs_to_deposit = self.deposit_security_module.getGuardianQuorum()
+        logger.info({'msg': f'blocks_till_pause_is_valid is {self.blocks_till_pause_is_valid}.'})
 
+        self.min_signs_to_deposit = self.deposit_security_module.getGuardianQuorum()
+        logger.info({'msg': f'Minimum quorum is {self.min_signs_to_deposit}.'})
+
+        logger.info({'msg': 'Get deposit and pause prefix.'})
         self.deposit_prefix = self.deposit_security_module.ATTEST_MESSAGE_PREFIX()
         self.pause_prefix = self.deposit_security_module.PAUSE_MESSAGE_PREFIX()
 
@@ -102,9 +106,9 @@ class DepositorBot:
         """
         Fetch latest signs from
         """
+        logger.info({'msg': 'Get actual chain state'})
         self._update_current_block()
         logger.info({'msg': f'Run deposit cycle. Block number: {self.current_block.number}'})
-        logger.info({'msg': 'Get actual chain state'})
 
         # Pause message instantly if we receive pause message
         pause_messages = self.kafka.get_pause_messages(self.current_block.number, self.blocks_till_pause_is_valid)
@@ -112,21 +116,39 @@ class DepositorBot:
         if not self.protocol_is_paused:
             if pause_messages:
                 self.pause_deposits_with_messages(pause_messages)
-            elif not self.get_deposit_issues():
-                self.do_deposit()
             else:
-                logger.info({'msg': 'Deposit issues found'})
-                time.sleep(300)
+                deposit_issues = self.get_deposit_issues()
+
+                if not deposit_issues:
+                    logger.info({'msg': 'No issues found.'})
+                    self.do_deposit()
+
+                elif DEPOSIT_SECURITY_ISSUE in deposit_issues:
+                    logger.info({'msg': 'Security module prohibits deposits.'})
+                    time.sleep(600)
+
+                else:
+                    logger.info({'msg': 'Deposit issues found'})
+                    time.sleep(60)
         else:
-            logger.warning({'msg': 'Protocol paused'})
-            time.sleep(600)
+            logger.warning({'msg': 'Protocol was paused'})
+            # Wait for 1 hour
+            time.sleep(3600)
 
     def _update_current_block(self):
-        self.current_block = self._w3.eth.get_block('latest')
-        self.deposit_root = self.deposit_contract.get_deposit_root()
         self.kafka.update_messages()
+
         self.protocol_is_paused = self.deposit_security_module.isPaused()
+        logger.debug(f'Protocol is paused: {self.protocol_is_paused}')
+
+        self.current_block = self._w3.eth.get_block('latest')
+        logger.debug(f'Latest block is [{self.current_block.number}]')
+
+        self.deposit_root = self.deposit_contract.get_deposit_root()
+        logger.debug(f'Deposit root is [{self.deposit_root}]')
+
         self.keys_op_index = self.registry.getKeysOpIndex()
+        logger.debug(f'Keys of index root is [{self.keys_op_index}]')
 
     # ------------- FIND ISSUES -------------------
     def get_deposit_issues(self) -> List[str]:
@@ -146,14 +168,14 @@ class DepositorBot:
 
         logger.info({'msg': 'Recommended gas fee check'})
         # Gas price check
-        recommended_gas_fee = self.gas_fee_strategy.get_gas_fee_percentile(15, 30)
+        recommended_gas_fee = self.gas_fee_strategy.get_gas_fee_percentile(1, 30)
         current_gas_fee = self.current_block.baseFeePerGas
 
         GAS_FEE.labels('max_fee').set(MAX_GAS_FEE)
         GAS_FEE.labels('current_fee').set(current_gas_fee)
         GAS_FEE.labels('recommended_fee').set(recommended_gas_fee)
 
-        if MAX_GAS_FEE < current_gas_fee:  # recommended_gas_fee > current_gas_fee and
+        if current_gas_fee > MAX_GAS_FEE or current_gas_fee > recommended_gas_fee:
             logger.warning({'msg': GAS_FEE_HIGHER_THAN_RECOMMENDED})
             deposit_issues.append(GAS_FEE_HIGHER_THAN_RECOMMENDED)
 

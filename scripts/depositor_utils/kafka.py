@@ -19,6 +19,7 @@ class KafkaMsgRecipient:
     """Simple kafka msg recipient"""
 
     def __init__(self):
+        logger.info({'msg': 'Kafka initialize.'})
         self.messages = defaultdict(list)
 
         kafka_topic = f'{NETWORK}-{KAFKA_TOPIC}'
@@ -35,7 +36,7 @@ class KafkaMsgRecipient:
             'sasl.password': KAFKA_SASL_PASSWORD,
         })
 
-        logger.info({'msg': f'Subscribe to "{kafka_topic}"'})
+        logger.info({'msg': f'Subscribe to "{kafka_topic}".'})
         self.kafka.subscribe([kafka_topic])
 
     def __del__(self):
@@ -43,6 +44,7 @@ class KafkaMsgRecipient:
 
     def update_messages(self):
         """Fetch new messages from kafka"""
+        logger.info({'msg': 'Receive all messages from kafka.'})
         while True:
             msg = self.kafka.poll(timeout=1.0)
 
@@ -53,11 +55,11 @@ class KafkaMsgRecipient:
                 value = json.loads(msg.value())
                 value = self._process_value(value)
                 msg_type = value.get('type', None)
-
-                if msg_type is not None:
-                    self.messages[msg_type].append(value)
+                self.messages[msg_type].append(value)
             else:
                 logger.error({'msg': f'Kafka error: {msg.error()}'})
+
+        logger.info({'msg': 'All messages received.'})
 
     def _process_value(self, value):
         return value
@@ -99,6 +101,7 @@ class DepositBotMsgRecipient(KafkaMsgRecipient):
             if msg.get('depositRoot', None) != deposit_root or msg.get('keysOpIndex') != keys_op_index:
                 if msg.get('blockNumber', 0) < block_number:
                     return False
+
             # Every 50 block we waiting for new signatures even deposit_root wasn't changed
             # So we don't need signs older than 200
             elif msg.get('blockNumber', 0) < block_number - 200:
@@ -149,10 +152,11 @@ class DepositBotMsgRecipient(KafkaMsgRecipient):
 
     def _process_value(self, value):
         # Just logging
-        logger.info({'msg': 'Send guardian statistic'})
+        logger.info({'msg': 'Send guardian statistic.'})
         guardian_address = value.get('guardianAddress', -1)
         daemon_version = value.get('app', {}).get('version', 'unavailable')
 
+        logger.info({'msg': 'Guardian message received.', 'data': value})
         if value.get('type', None) == 'deposit':
             KAFKA_DEPOSIT_MESSAGES.labels(guardian_address, daemon_version).inc()
         elif value.get('type', None) == 'pause':
