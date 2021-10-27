@@ -25,7 +25,7 @@ class KafkaMsgRecipient:
 
         self.kafka = Consumer({
             'client.id': f'{kafka_topic}-bot',
-            'group.id': 'depositor-bot-group',
+            'group.id': f'{kafka_topic}-group',
             'bootstrap.servers': KAFKA_BOOTSTRAP_SERVERS,
             'auto.offset.reset': 'earliest',
             'security.protocol': 'SASL_SSL',
