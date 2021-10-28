@@ -1,3 +1,5 @@
 NOT_ENOUGH_BALANCE_ON_ACCOUNT = 'Account balance is too low.'
 GAS_FEE_HIGHER_THAN_RECOMMENDED = 'Gas fee is higher than recommended fee.'
 DEPOSIT_SECURITY_ISSUE = 'Deposit security module prohibits the deposit.'
+LIDO_CONTRACT_HAS_NOT_ENOUGH_BUFFERED_ETHER = 'Lido contract has not enough buffered ether.'
+LIDO_CONTRACT_HAS_NOT_ENOUGH_SUBMITTED_KEYS = 'Lido contract has not enough submitted keys.'

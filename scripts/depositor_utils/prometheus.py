@@ -11,3 +11,7 @@ ACCOUNT_BALANCE = Gauge(f'{DEPOSITOR_PREFIX}account_balance', 'Account balance')
 
 KAFKA_DEPOSIT_MESSAGES = Gauge(f'{DEPOSITOR_PREFIX}kafka_deposit_messages', 'Guardians deposit messages', ['address', 'version'])
 KAFKA_PAUSE_MESSAGES = Gauge(f'{DEPOSITOR_PREFIX}kafka_pause_messages', 'Guardians pause messages', ['address', 'version'])
+
+CURRENT_QUORUM_SIZE = Gauge(f'{DEPOSITOR_PREFIX}quorum_size', 'Current quorum size')
+BUFFERED_ETHER = Gauge(f'{DEPOSITOR_PREFIX}buffered_ether', 'Buffered ether')
+OPERATORS_FREE_KEYS = Gauge(f'{DEPOSITOR_PREFIX}operator_free_keys', 'Operator free keys')

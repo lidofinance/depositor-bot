@@ -42,7 +42,7 @@ class GasFeeStrategy:
 
         logger.info({'msg': 'Init or refetch gas history'})
 
-        self._last_gas_fee_block = self._w3.eth.get_block('latest')['number']
+        self._latest_fetched_block = self._w3.eth.get_block('latest')['number']
         self._days_param = days
 
         total_blocks_to_fetch = self.BLOCKS_IN_ONE_DAY * days
