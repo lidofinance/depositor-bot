@@ -156,11 +156,11 @@ class DepositBotMsgRecipient(KafkaMsgRecipient):
         guardian_address = value.get('guardianAddress', -1)
         daemon_version = value.get('app', {}).get('version', 'unavailable')
 
-        logger.info({'msg': 'Guardian message received.', 'data': value})
+        logger.debug({'msg': 'Guardian message received.', 'data': value})
         if value.get('type', None) == 'deposit':
             KAFKA_DEPOSIT_MESSAGES.labels(guardian_address, daemon_version).inc()
         elif value.get('type', None) == 'pause':
-            logger.warning(f'Received pause msg from: {guardian_address}')
+            logger.warning({'msg': f'Received pause msg from: {guardian_address}'})
             KAFKA_PAUSE_MESSAGES.labels(guardian_address, daemon_version).inc()
 
         return super()._process_value(value)
