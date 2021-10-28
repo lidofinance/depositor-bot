@@ -47,8 +47,11 @@ docker-compose up
 | KAFKA_SASL_PASSWORD (required)    | -          | `None`         | Kafka password |
 | KAFKA_TOPIC (required)            | -          | `None`         | Kafka topic name (for msg receiving) |
 | MAX_GAS_FEE                       | 100 GWEI   | `100 gwei`     | Bot will wait for a lower price |
-| MAX_KEYS_TO_DEPOSIT               | 155        | `155`          | Max keys to deposit at once |
+| GAS_FEE_PERCENTILE                | 30         | `30`           | Deposit when gas fee is lower that 30 percentile |
+| GAS_FEE_PERCENTILE_DAYS_HISTORY   | 2          | `2`            | Percentile calculates from N days of fee history |
+| GAS_PRIORITY_FEE_PERCENTILE       | 55         | `55`           | Priority transaction will be N percentile from priority fees in last block |
 | CONTRACT_GAS_LIMIT                | 10 MWEI    | `10 mwei`      | Default transaction gas limit |
+| MIN_BUFFERED_ETHER                | 1024 ETH   | `1025 ether`   | Default transaction gas limit |
 | ACCOUNT_PRIVATE_KEY               | -          | `None`         | Account private key |
 | ACCOUNT_FILENAME                  | -          | `None`         | File with account key (manual password entering required) |
 
