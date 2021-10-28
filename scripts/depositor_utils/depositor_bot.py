@@ -138,16 +138,16 @@ class DepositorBot:
         self.kafka.update_messages()
 
         self.protocol_is_paused = self.deposit_security_module.isPaused()
-        logger.debug(f'Protocol is paused: {self.protocol_is_paused}')
+        logger.debug({'msg': f'Protocol is paused: {self.protocol_is_paused}'})
 
         self.current_block = self._w3.eth.get_block('latest')
-        logger.debug(f'Latest block is [{self.current_block.number}]')
+        logger.debug({'msg': f'Latest block is [{self.current_block.number}]'})
 
         self.deposit_root = self.deposit_contract.get_deposit_root()
-        logger.debug(f'Deposit root is [{self.deposit_root}]')
+        logger.debug({'msg': f'Deposit root is [{self.deposit_root}]'})
 
         self.keys_op_index = self.registry.getKeysOpIndex()
-        logger.debug(f'Keys of index root is [{self.keys_op_index}]')
+        logger.debug({'msg': f'Keys of index root is [{self.keys_op_index}]'})
 
     # ------------- FIND ISSUES -------------------
     def get_deposit_issues(self) -> List[str]:
@@ -180,7 +180,7 @@ class DepositorBot:
 
         logger.info({'msg': 'Check deposit security status'})
         if not self.deposit_security_module.canDeposit():
-            logger.warning('Deposit security module prohibits deposits.')
+            logger.warning({'msg': 'Deposit security module prohibits deposits.'})
             deposit_issues.append(DEPOSIT_SECURITY_ISSUE)
 
         return deposit_issues
