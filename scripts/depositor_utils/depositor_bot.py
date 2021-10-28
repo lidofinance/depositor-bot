@@ -123,12 +123,10 @@ class DepositorBot:
                 self.do_deposit()
 
             elif DEPOSIT_SECURITY_ISSUE in deposit_issues:
-                logger.info({'msg': 'Security module prohibits deposits.'})
                 time.sleep(600)
 
-            else:
-                logger.info({'msg': 'Deposit issues found'})
-                time.sleep(60)
+            elif NOT_ENOUGH_BALANCE_ON_ACCOUNT in deposit_issues:
+                time.sleep(300)
         else:
             logger.warning({'msg': 'Protocol was paused'})
             # Wait for 1 hour
