@@ -112,24 +112,23 @@ class DepositorBot:
 
         # Pause message instantly if we receive pause message
         pause_messages = self.kafka.get_pause_messages(self.current_block.number, self.blocks_till_pause_is_valid)
+        deposit_issues = self.get_deposit_issues()
 
         if not self.protocol_is_paused:
             if pause_messages:
                 self.pause_deposits_with_messages(pause_messages)
+
+            elif not deposit_issues:
+                logger.info({'msg': 'No issues found.'})
+                self.do_deposit()
+
+            elif DEPOSIT_SECURITY_ISSUE in deposit_issues:
+                logger.info({'msg': 'Security module prohibits deposits.'})
+                time.sleep(600)
+
             else:
-                deposit_issues = self.get_deposit_issues()
-
-                if not deposit_issues:
-                    logger.info({'msg': 'No issues found.'})
-                    self.do_deposit()
-
-                elif DEPOSIT_SECURITY_ISSUE in deposit_issues:
-                    logger.info({'msg': 'Security module prohibits deposits.'})
-                    time.sleep(600)
-
-                else:
-                    logger.info({'msg': 'Deposit issues found'})
-                    time.sleep(60)
+                logger.info({'msg': 'Deposit issues found'})
+                time.sleep(60)
         else:
             logger.warning({'msg': 'Protocol was paused'})
             # Wait for 1 hour
