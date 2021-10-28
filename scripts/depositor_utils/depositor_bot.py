@@ -167,7 +167,7 @@ class DepositorBot:
 
         logger.info({'msg': 'Recommended gas fee check'})
         # Gas price check
-        recommended_gas_fee = self.gas_fee_strategy.get_gas_fee_percentile(1, 30)
+        recommended_gas_fee = self.gas_fee_strategy.get_gas_fee_percentile(2, 30)
         current_gas_fee = self.current_block.baseFeePerGas
 
         GAS_FEE.labels('max_fee').set(MAX_GAS_FEE)
@@ -188,12 +188,12 @@ class DepositorBot:
     # ------------ DO DEPOSIT ------------------
     def do_deposit(self):
         """Sign and Make deposit"""
-        logger.info({'msg': 'Start deposit'})
-        logger.info({'msg': 'Get deposit params'})
+        logger.info({'msg': 'Start deposit.'})
+        logger.info({'msg': 'Get deposit params.'})
         deposit_params = self._get_deposit_params(self.deposit_root, self.keys_op_index)
 
         if self.account is not None and deposit_params:
-            logger.info({'msg': 'Sending deposit transaction'})
+            logger.info({'msg': 'Sending deposit transaction.'})
 
             priority = self._get_deposit_priority_fee()
             try:
@@ -206,18 +206,16 @@ class DepositorBot:
                     {
                         'gas_limit': CONTRACT_GAS_LIMIT,
                         'priority_fee': priority,
-                        # Max fee is 50 percentile + 2 (because of goerly cases) * priority
-                        # 'max_fee': self.gas_fee_strategy.get_gas_fee_percentile(15, 50) + 2 * priority,
                     },
                 )
             except BaseException as error:
-                logger.error({'msg': f'Deposit failed: {error}'})
+                logger.error({'msg': f'Deposit failed: {error}.'})
                 DEPOSIT_FAILURE.inc()
             else:
-                logger.info({'msg': f'Success deposit'})
+                logger.info({'msg': f'Deposited successfully.'})
                 SUCCESS_DEPOSIT.inc()
-        elif not self.account:
-            logger.info({'msg': '[DRY] No account provided'})
+        elif self.account is None and deposit_params:
+            logger.info({'msg': '[DRY] No account provided.'})
         else:
             logger.info({'msg': 'Failed to deposit. Not enough params to deposit (messages).'})
 
@@ -248,11 +246,14 @@ class DepositorBot:
             for block_hash, block_messages in blocks_by_number.items():
                 if len(block_messages) >= self.min_signs_to_deposit:
                     # Take the oldest messages to prevent reorganizations
+                    logger.info({'msg': f'Quorum ready for block: {block_num}'})
                     return {
                         'signs': self._from_messages_to_signs(block_messages),
                         'block_num': block_num,
                         'block_hash': HexBytes(block_hash),
                     }
+                else:
+                    logger.debug({'msg': f'Not enough quorum for block: {block_num}'})
 
         logger.warning({'msg': 'Not enough signs for quorum quorum.'})
 

@@ -35,7 +35,7 @@ class GasFeeStrategy:
         if (
             self._latest_fetched_block
             and self._latest_fetched_block + self._blocks_count_cache > latest_block_num
-            and self._days_param != days
+            and self._days_param >= days
         ):
             logger.info({'msg': 'Use cached gas history'})
             return self._gas_fees
@@ -64,4 +64,6 @@ class GasFeeStrategy:
         """Calculates provided percentile for N days"""
         # One week price stats
         gas_fee_history = self._fetch_gas_fee_history(days)
-        return numpy.percentile(gas_fee_history[:days * self.BLOCKS_IN_ONE_DAY], percentile)
+        blocks_to_count_percentile = gas_fee_history[:days * self.BLOCKS_IN_ONE_DAY]
+        percentile = numpy.percentile(blocks_to_count_percentile, percentile)
+        return int(percentile)
