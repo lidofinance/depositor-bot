@@ -52,10 +52,15 @@ class KafkaMsgRecipient:
                 # No messages in line
                 break
             elif not msg.error():
-                value = json.loads(msg.value())
-                value = self._process_value(value)
-                msg_type = value.get('type', None)
-                self.messages[msg_type].append(value)
+                try:
+                    value = json.loads(msg.value())
+                except:
+                    # ignore not json msg
+                    pass
+                else:
+                    value = self._process_value(value)
+                    msg_type = value.get('type', None)
+                    self.messages[msg_type].insert(0, value)
             else:
                 logger.error({'msg': f'Kafka error: {msg.error()}'})
 
@@ -109,11 +114,11 @@ class DepositBotMsgRecipient(KafkaMsgRecipient):
 
             # Filter duplicate messages from one guardian address
             guardian = msg.get('guardianAddress', None)
-            if guardian not in _guardian_addresses:
-                _guardian_addresses.append(guardian)
-                return True
+            if guardian in _guardian_addresses:
+                return False
 
-            return False
+            _guardian_addresses.append(guardian)
+            return True
 
         self.messages['deposit'] = list(filter(_deposit_message_filter, self.messages['deposit']))
 

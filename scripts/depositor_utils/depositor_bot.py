@@ -114,7 +114,7 @@ class DepositorBot:
                 for _ in chain.new_blocks():
                     self.run_deposit_cycle()
             except BlockNotFound as error:
-                logger.warning({'msg': 'Fetch block exception (BlockNotFound)', 'error': error})
+                logger.warning({'msg': 'Fetch block exception (BlockNotFound)', 'error': str(error)})
 
     def run_deposit_cycle(self):
         """
@@ -329,6 +329,13 @@ class DepositorBot:
                         'block_num': block_num,
                         'block_hash': HexBytes(block_hash),
                     }
+                else:
+                    logger.info({
+                        'msg': f'Too small quorum',
+                        'value': block_messages,
+                        'block_number': block_num,
+                        'block_hash': block_hash,
+                    })
 
         CURRENT_QUORUM_SIZE.set(max_quorum)
         logger.warning({'msg': 'Not enough signs for quorum.', 'value': max_quorum})
