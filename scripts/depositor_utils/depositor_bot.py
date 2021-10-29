@@ -19,6 +19,7 @@ from scripts.depositor_utils.deposit_problems import (
     DEPOSIT_SECURITY_ISSUE,
     LIDO_CONTRACT_HAS_NOT_ENOUGH_BUFFERED_ETHER,
     LIDO_CONTRACT_HAS_NOT_ENOUGH_SUBMITTED_KEYS,
+    QUORUM_IS_NOT_READY,
 )
 from scripts.depositor_utils.kafka import DepositBotMsgRecipient
 from scripts.depositor_utils.logger import logger
@@ -216,6 +217,7 @@ class DepositorBot:
 
         # Lido contract buffered ether check
         buffered_ether = self.lido.getBufferedEther()
+        logger.info({'msg': 'Call `getBufferedEther()`.', 'value': buffered_ether})
         BUFFERED_ETHER.set(buffered_ether)
         if buffered_ether < MIN_BUFFERED_ETHER:
             logger.warning({'msg': LIDO_CONTRACT_HAS_NOT_ENOUGH_BUFFERED_ETHER, 'value': buffered_ether})
@@ -224,9 +226,18 @@ class DepositorBot:
         # Check that contract has unused operators keys
         free_keys = self._get_operators_free_keys_count()
         OPERATORS_FREE_KEYS.set(free_keys)
+        logger.info({'msg': 'Call `getNodeOperator()` and `getNodeOperatorsCount()`. Value is free keys', 'value': free_keys})
+
         if not free_keys:
             logger.warning({'msg': LIDO_CONTRACT_HAS_NOT_ENOUGH_SUBMITTED_KEYS, 'value': free_keys})
             deposit_issues.append(LIDO_CONTRACT_HAS_NOT_ENOUGH_SUBMITTED_KEYS)
+
+        # Check all signs
+        # self._get_deposit_params()
+        signs = self._get_deposit_params(self.deposit_root, self.keys_op_index)
+        if signs is None:
+            logger.warning({'msg': QUORUM_IS_NOT_READY})
+            deposit_issues.append(QUORUM_IS_NOT_READY)
 
         return deposit_issues
 
@@ -286,7 +297,7 @@ class DepositorBot:
                 logger.info({'msg': f'Deposited successfully.', 'value': str(result.logs)})
                 SUCCESS_DEPOSIT.inc()
         elif self.account is None and deposit_params:
-            logger.info({'msg': '[DRY] No account provided.'})
+            logger.info({'msg': '[DRY] No account provided. Deposit done.'})
         else:
             logger.info({'msg': 'Failed to deposit. Too small quorum to deposit.'})
 
