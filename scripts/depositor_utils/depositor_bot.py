@@ -280,7 +280,7 @@ class DepositorBot:
                     },
                 )
             except BaseException as error:
-                logger.error({'msg': f'Deposit failed.', 'error': error})
+                logger.error({'msg': f'Deposit failed.', 'error': str(error)})
                 DEPOSIT_FAILURE.inc()
             else:
                 logger.info({'msg': f'Deposited successfully.', 'value': str(result.logs)})
@@ -381,7 +381,7 @@ class DepositorBot:
                     },
                 )
             except BaseException as error:
-                logger.error({'msg': f'Pause error.', 'error': error, 'value': message})
+                logger.error({'msg': f'Pause error.', 'error': str(error), 'value': message})
             else:
                 logger.warning({'msg': 'Protocol was paused', 'value': str(result.logs)})
 
