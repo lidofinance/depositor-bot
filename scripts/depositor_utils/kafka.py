@@ -145,7 +145,7 @@ class DepositBotMsgRecipient(KafkaMsgRecipient):
 
         self.messages['pause'] = list(filter(_pause_message_filter, self.messages['pause']))
 
-        return self.messages['pause']
+        return self.messages['pause'][::-1]
 
     def clear_pause_messages(self):
         self.messages['pause'] = []
