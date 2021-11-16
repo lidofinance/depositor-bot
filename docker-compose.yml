@@ -8,6 +8,7 @@ services:
     ports:
       - 127.0.0.1:9000:8080
     environment:
+      - SCRIPT_NAME=depositor
       - NETWORK=${NETWORK}
       - WEB3_INFURA_PROJECT_ID=${WEB3_INFURA_PROJECT_ID}
       - WALLET_PRIVATE_KEY=${WALLET_PRIVATE_KEY}
@@ -15,7 +16,12 @@ services:
       - KAFKA_USERNAME=${KAFKA_USERNAME}
       - KAFKA_PASSWORD=${KAFKA_PASSWORD}
       - KAFKA_TOPIC=${KAFKA_TOPIC}
-      - SCRIPT_NAME=depositor
+      - MAX_GAS_FEE=${MAX_GAS_FEE}
+      - GAS_FEE_PERCENTILE=${GAS_FEE_PERCENTILE}
+      - GAS_FEE_PERCENTILE_DAYS_HISTORY=${GAS_FEE_PERCENTILE_DAYS_HISTORY}
+      - GAS_PRIORITY_FEE_PERCENTILE=${GAS_PRIORITY_FEE_PERCENTILE}
+      - CONTRACT_GAS_LIMIT=${CONTRACT_GAS_LIMIT}
+      - MIN_BUFFERED_ETHER=${MIN_BUFFERED_ETHER}
 
   lido-pause-bot:
     image: lidofinance/depositor-bot
@@ -25,6 +31,7 @@ services:
     ports:
       - 127.0.0.1:9001:8080
     environment:
+      - SCRIPT_NAME=pauser
       - NETWORK=${NETWORK}
       - WEB3_INFURA_PROJECT_ID=${WEB3_INFURA_PROJECT_ID}
       - WALLET_PRIVATE_KEY=${WALLET_PRIVATE_KEY}
@@ -32,4 +39,3 @@ services:
       - KAFKA_USERNAME=${KAFKA_USERNAME}
       - KAFKA_PASSWORD=${KAFKA_PASSWORD}
       - KAFKA_TOPIC=${KAFKA_TOPIC}
-      - SCRIPT_NAME=pause

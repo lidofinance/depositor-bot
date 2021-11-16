@@ -11,7 +11,7 @@ from scripts.depositor_utils.kafka import DepositBotMsgRecipient
 from scripts.utils.interfaces import DepositSecurityModuleInterface, DepositContractInterface, \
     NodeOperatorsRegistryInterface, LidoInterface
 from scripts.utils.metrics import ACCOUNT_BALANCE, GAS_FEE, BUFFERED_ETHER, OPERATORS_FREE_KEYS, DEPOSIT_FAILURE, \
-    SUCCESS_DEPOSIT, CURRENT_QUORUM_SIZE
+    SUCCESS_DEPOSIT, CURRENT_QUORUM_SIZE, CREATING_TRANSACTIONS
 from scripts.utils.variables import (
     MAX_GAS_FEE,
     CONTRACT_GAS_LIMIT,
@@ -51,6 +51,11 @@ class DepositorBot:
 
         self.deposit_prefix = DepositSecurityModuleInterface.ATTEST_MESSAGE_PREFIX()
         logger.info({'msg': 'Call `ATTEST_MESSAGE_PREFIX()`.', 'value': str(self.deposit_prefix)})
+
+        if CREATE_TRANSACTIONS:
+            CREATING_TRANSACTIONS.labels('deposit').set(1)
+        else:
+            CREATING_TRANSACTIONS.labels('deposit').set(0)
 
     # ------------ CYCLE STAFF -------------------
     def run_as_daemon(self):

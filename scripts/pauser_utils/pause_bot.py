@@ -7,6 +7,7 @@ from web3.exceptions import BlockNotFound
 
 from scripts.pauser_utils.kafka import PauseBotMsgRecipient
 from scripts.utils.interfaces import DepositSecurityModuleInterface
+from scripts.utils.metrics import CREATING_TRANSACTIONS
 from scripts.utils.variables import CREATE_TRANSACTIONS
 
 logger = logging.getLogger(__name__)
@@ -28,6 +29,11 @@ class DepositPauseBot:
             'msg': f'Call `getPauseIntentValidityPeriodBlocks()`.',
             'value': self.blocks_till_pause_is_valid
         })
+
+        if CREATE_TRANSACTIONS:
+            CREATING_TRANSACTIONS.labels('pause').set(1)
+        else:
+            CREATING_TRANSACTIONS.labels('pause').set(0)
 
     # ------------ CYCLE STAFF -------------------
     def run_as_daemon(self):

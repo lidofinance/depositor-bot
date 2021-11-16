@@ -23,7 +23,11 @@ pip install -r requirements.txt
 To run (development): 
 ```
 export WEB3_INFURA_PROJECT_ID=...
+# For depositor bot
 brownie run depositor --network=mainnet
+
+# For pause bot
+brownie run pause --network=mainnet
 ```
 
 ##  Deploy
@@ -34,7 +38,7 @@ To run bot in dry mode in docker:
 ```
 docker-compose up
 ```
-*Optional*: provide `WALLET_PRIVATE_KEY` env to run bot in production mode.
+*Optional*: provide `WALLET_PRIVATE_KEY` env to run with account.
 
 ## Variables 
 
@@ -51,8 +55,9 @@ docker-compose up
 | GAS_FEE_PERCENTILE_DAYS_HISTORY   | 2          | `2`            | Percentile calculates from N days of fee history |
 | GAS_PRIORITY_FEE_PERCENTILE       | 55         | `55`           | Priority transaction will be N percentile from priority fees in last block |
 | CONTRACT_GAS_LIMIT                | 10 MWEI    | `10 mwei`      | Default transaction gas limit |
-| MIN_BUFFERED_ETHER                | 1024 ETH   | `1025 ether`   | Default transaction gas limit |
+| MIN_BUFFERED_ETHER                | 1024 ETH   | `1025 ether`   | Minimum ETH in buffer to deposit |
 | WALLET_PRIVATE_KEY               | -          | `None`         | Account private key |
+| CREATE_TRANSACTIONS               | false          | `false`         | If `true` then tx should be created in blockchain |
 
 
 ## Contract details
