@@ -1,16 +1,18 @@
+import logging
 from typing import List
 
 import numpy
 from brownie.network.web3 import Web3
 
-from scripts.depositor_utils.logger import logger
+
+logger = logging.getLogger(__name__)
 
 
 class GasFeeStrategy:
     BLOCKS_IN_ONE_DAY = 6600
     LATEST_BLOCK = 'latest'
 
-    def __init__(self, w3: Web3, blocks_count_cache: int = 7800, max_gas_fee: int = None):
+    def __init__(self, w3: Web3, blocks_count_cache: int = 7800, max_gas_fee: int = 200):
         """
         gas_history_block_cache - blocks count that gas his
         """
@@ -65,5 +67,5 @@ class GasFeeStrategy:
         # One week price stats
         gas_fee_history = self._fetch_gas_fee_history(days)
         blocks_to_count_percentile = gas_fee_history[:days * self.BLOCKS_IN_ONE_DAY]
-        percentile = numpy.percentile(blocks_to_count_percentile, percentile)
-        return int(percentile)
+        recommended_gas_fee = int(numpy.percentile(blocks_to_count_percentile, percentile))
+        return min(self.max_gas_fee, recommended_gas_fee)

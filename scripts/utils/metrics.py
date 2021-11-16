@@ -1,4 +1,5 @@
-from prometheus_client.metrics import Gauge, Enum, Counter
+from prometheus_client.metrics import Gauge, Counter
+
 
 DEPOSITOR_PREFIX = 'depositor_bot_'
 
@@ -16,3 +17,4 @@ KAFKA_PING_MESSAGES = Gauge(f'{DEPOSITOR_PREFIX}kafka_ping_messages', 'Guardians
 CURRENT_QUORUM_SIZE = Gauge(f'{DEPOSITOR_PREFIX}quorum_size', 'Current quorum size')
 BUFFERED_ETHER = Gauge(f'{DEPOSITOR_PREFIX}buffered_ether', 'Buffered ether')
 OPERATORS_FREE_KEYS = Gauge(f'{DEPOSITOR_PREFIX}operator_free_keys', 'Operator free keys')
+CREATING_TRANSACTIONS = Gauge(f'{DEPOSITOR_PREFIX}creating_transactions', 'Creating transactions', ['bot'])
