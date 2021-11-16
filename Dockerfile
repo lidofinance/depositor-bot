@@ -7,15 +7,18 @@ FROM python:3.9
 
 WORKDIR /app
 
-COPY --from=builder /root/.local /root/.local
+RUN groupadd -r user && useradd -r -g user user
+RUN mkdir /home/user
+RUN chown -R user:user /home/user
 
-COPY . .
+COPY --from=builder --chown=user:user /root/.local/ /usr/local
+COPY --chown=user:user . .
+
+USER user
 
 EXPOSE 8080
 
-ENV PATH=/root/.local/bin:$PATH
+ENV PATH=$PATH:/usr/local/bin
+ENV PYTHONPATH="/usr/local/lib/python3.9/site-packages/"
 
-HEALTHCHECK --interval=5m --timeout=3s \
-  CMD curl -f http://localhost:8080/ || exit 1
-
-CMD ["sh", "-c", "brownie run $SCRIPT_NAME"]
+HEALTHCHECK --interval=5m --timeout=3s CMD curl -f http://localhost:8080/ || exit 1
