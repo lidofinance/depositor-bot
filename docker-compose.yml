@@ -10,7 +10,26 @@ services:
     environment:
       - NETWORK=${NETWORK}
       - WEB3_INFURA_PROJECT_ID=${WEB3_INFURA_PROJECT_ID}
-      - ACCOUNT_PRIVATE_KEY=${ACCOUNT_PRIVATE_KEY}
-      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS}
-      - KAFKA_SASL_USERNAME=${KAFKA_SASL_USERNAME}
-      - KAFKA_SASL_PASSWORD=${KAFKA_SASL_PASSWORD}
+      - WALLET_PRIVATE_KEY=${WALLET_PRIVATE_KEY}
+      - KAFKA_BROKER_ADDRESS_1=${KAFKA_BROKER_ADDRESS_1}
+      - KAFKA_USERNAME=${KAFKA_USERNAME}
+      - KAFKA_PASSWORD=${KAFKA_PASSWORD}
+      - KAFKA_TOPIC=${KAFKA_TOPIC}
+      - SCRIPT_NAME=depositor
+
+  lido-pause-bot:
+    image: lidofinance/depositor-bot
+    build: .
+    container_name: lido-pause-bot
+    restart: unless-stopped
+    ports:
+      - 127.0.0.1:9001:8080
+    environment:
+      - NETWORK=${NETWORK}
+      - WEB3_INFURA_PROJECT_ID=${WEB3_INFURA_PROJECT_ID}
+      - WALLET_PRIVATE_KEY=${WALLET_PRIVATE_KEY}
+      - KAFKA_BROKER_ADDRESS_1=${KAFKA_BROKER_ADDRESS_1}
+      - KAFKA_USERNAME=${KAFKA_USERNAME}
+      - KAFKA_PASSWORD=${KAFKA_PASSWORD}
+      - KAFKA_TOPIC=${KAFKA_TOPIC}
+      - SCRIPT_NAME=pause

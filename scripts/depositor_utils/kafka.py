@@ -1,85 +1,17 @@
-import json
-from collections import defaultdict
+import logging
 from typing import List
 
-from confluent_kafka import Consumer
+from scripts.utils.kafka import KafkaMsgRecipient
+from scripts.utils.metrics import KAFKA_DEPOSIT_MESSAGES, KAFKA_PING_MESSAGES
 
-from scripts.depositor_utils.logger import logger
-from scripts.depositor_utils.prometheus import KAFKA_DEPOSIT_MESSAGES, KAFKA_PAUSE_MESSAGES, KAFKA_PING_MESSAGES
-from scripts.depositor_utils.variables import (
-    KAFKA_BOOTSTRAP_SERVERS,
-    KAFKA_SASL_USERNAME,
-    KAFKA_SASL_PASSWORD,
-    NETWORK,
-    KAFKA_TOPIC
-)
-
-
-class KafkaMsgRecipient:
-    """Simple kafka msg recipient"""
-    # Will store only next types of messages
-    # If empty will store all types
-    msg_types_to_receive: list = []
-
-    def __init__(self):
-        logger.info({'msg': 'Kafka initialize.'})
-        self.messages = defaultdict(list)
-
-        kafka_topic = f'{NETWORK}-{KAFKA_TOPIC}'
-
-        self.kafka = Consumer({
-            'client.id': f'{kafka_topic}-bot',
-            'group.id': f'{kafka_topic}-group',
-            'bootstrap.servers': KAFKA_BOOTSTRAP_SERVERS,
-            'auto.offset.reset': 'earliest',
-            'security.protocol': 'SASL_SSL',
-            'session.timeout.ms': 6000,
-            'sasl.mechanisms': "PLAIN",
-            'sasl.username': KAFKA_SASL_USERNAME,
-            'sasl.password': KAFKA_SASL_PASSWORD,
-        })
-
-        logger.info({'msg': f'Subscribe to "{kafka_topic}".'})
-        self.kafka.subscribe([kafka_topic])
-
-    def __del__(self):
-        self.kafka.close()
-
-    def update_messages(self):
-        """Fetch new messages from kafka"""
-        logger.info({'msg': 'Receive all messages from kafka.'})
-        while True:
-            msg = self.kafka.poll(timeout=1.0)
-
-            if msg is None:
-                # No messages in line
-                break
-            elif not msg.error():
-                try:
-                    value = json.loads(msg.value())
-                except ValueError as error:
-                    # ignore not json msg
-                    logger.warning({'msg': 'Broken message in Kafka', 'value': msg.value(), 'error': str(error)})
-                else:
-                    value = self._process_value(value)
-                    msg_type = value.get('type', None)
-
-                    if not self.msg_types_to_receive or msg_type in self.msg_types_to_receive:
-                        self.messages[msg_type].insert(0, value)
-            else:
-                logger.error({'msg': f'Kafka error', 'error': msg.error()})
-
-        logger.info({'msg': 'All messages received.'})
-
-    def _process_value(self, value):
-        return value
+logger = logging.getLogger(__name__)
 
 
 class DepositBotMsgRecipient(KafkaMsgRecipient):
     """
     Kafka msg recipient adapted for depositor bot.
     """
-    msg_types_to_receive = ['deposit', 'pause']
+    msg_types_to_receive = ['deposit']
 
     def get_deposit_messages(self, block_number, deposit_root, keys_op_index) -> List[dict]:
         """
@@ -131,37 +63,6 @@ class DepositBotMsgRecipient(KafkaMsgRecipient):
 
         return self.messages['deposit'][:]
 
-    def get_pause_messages(self, block_number: int, blocks_till_pause_is_valid: int) -> List[dict]:
-        """
-        Actualize pause messages and return valid ones
-
-        Pause msg example:
-        {
-            "blockHash": "0xe41c0212516a899c455203e833903c802338daa3048bc637b623f6fba0a1685c",
-            "blockNumber": 5669490,
-            "guardianAddress": "0x3dc4cF780F2599B528F37dedB34449Fb65Ef7d4A",
-            "guardianIndex": 0,
-            "signature": {
-                "_vs": "0xd4933925f5f97a9632b4b1bc621a1c2771d58eaf6eee27dcf915eac8af010537",
-                "r": "0xbaa668505cd496caaf7117dd074338197200175057909ab73a04463656bdb0fa",
-                "recoveryParam": 1,
-                "s": "0x54933925f5f97a9632b4b1bc621a1c2771d58eaf6eee27dcf915eac8af010537",
-                "v": 28
-            },
-            "type": "pause"
-        }
-        """
-        def _pause_message_filter(msg):
-            if msg.get('blockNumber', 0) + blocks_till_pause_is_valid > block_number:
-                return True
-
-        self.messages['pause'] = list(filter(_pause_message_filter, self.messages['pause']))
-
-        return self.messages['pause'][::-1]
-
-    def clear_pause_messages(self):
-        self.messages['pause'] = []
-
     def _process_value(self, value):
         # Just logging
         guardian_address = value.get('guardianAddress', -1)
@@ -171,9 +72,6 @@ class DepositBotMsgRecipient(KafkaMsgRecipient):
         logger.info({'msg': 'Guardian message received.', 'value': value, 'type': msg_type})
         if msg_type == 'deposit':
             KAFKA_DEPOSIT_MESSAGES.labels(guardian_address, daemon_version).inc()
-        elif msg_type == 'pause':
-            logger.warning({'msg': f'Received pause msg.', 'value': value, 'address': guardian_address})
-            KAFKA_PAUSE_MESSAGES.labels(guardian_address, daemon_version).inc()
         elif msg_type == 'ping':
             KAFKA_PING_MESSAGES.labels(guardian_address, daemon_version).inc()
 

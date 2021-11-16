@@ -1,4 +1,5 @@
-from prometheus_client.metrics import Gauge, Enum, Counter
+from prometheus_client.metrics import Gauge, Counter
+
 
 DEPOSITOR_PREFIX = 'depositor_bot_'
 
