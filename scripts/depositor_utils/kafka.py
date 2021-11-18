@@ -46,7 +46,7 @@ class DepositBotMsgRecipient(KafkaMsgRecipient):
                 if msg.get('blockNumber', 0) < block_number:
                     return False
 
-            # Every 50 block we waiting for new signatures even deposit_root wasn't changed
+            # Every 10 block we waiting for new signatures even deposit_root wasn't changed
             # So we don't need signs older than 200
             elif msg.get('blockNumber', 0) < block_number - 200:
                 return False
@@ -56,6 +56,7 @@ class DepositBotMsgRecipient(KafkaMsgRecipient):
             if guardian in _guardian_addresses:
                 return False
 
+            # TODO verify signatures and guardian addresses
             _guardian_addresses.append(guardian)
             return True
 
