@@ -3,7 +3,21 @@ from prometheus_client.metrics import Gauge, Counter
 
 DEPOSITOR_PREFIX = 'depositor_bot_'
 
-BUILD_INFO = Gauge(f'{DEPOSITOR_PREFIX}build_info', ['', '', ''])
+BUILD_INFO = Gauge(f'{DEPOSITOR_PREFIX}build_info', 'Build info', [
+    'name',
+    'network',
+    'max_gas_fee',
+    'contract_gas_limit',
+    'min_buffered_ether',
+    'gas_fee_percentile',
+    'gas_fee_percentile_days_history',
+    'gas_priority_fee_percentile',
+    'min_priority_fee',
+    'max_priority_fee',
+    'kafka_topic',
+    'account_address',
+    'create_transactions',
+])
 
 GAS_FEE = Gauge(f'{DEPOSITOR_PREFIX}gas_fee', 'Gas fee', ['type'])
 

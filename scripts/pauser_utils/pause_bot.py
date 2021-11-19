@@ -7,8 +7,8 @@ from web3.exceptions import BlockNotFound
 
 from scripts.pauser_utils.kafka import PauseBotMsgRecipient
 from scripts.utils.interfaces import DepositSecurityModuleInterface
-from scripts.utils.metrics import CREATING_TRANSACTIONS
-from scripts.utils.variables import CREATE_TRANSACTIONS, ACCOUNT
+from scripts.utils.metrics import CREATING_TRANSACTIONS, BUILD_INFO
+from scripts.utils.variables import CREATE_TRANSACTIONS, ACCOUNT, NETWORK, KAFKA_TOPIC
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +22,22 @@ class DepositPauseBot:
         # Some rarely change things
         self._load_constants()
         logger.info({'msg': 'DepositPauseBot bot initialize done.'})
+
+        BUILD_INFO.labels(
+            'Pauser bot',
+            NETWORK,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            KAFKA_TOPIC,
+            ACCOUNT.address if ACCOUNT else '0x0',
+            CREATE_TRANSACTIONS,
+        )
 
     def _load_constants(self):
         self.blocks_till_pause_is_valid = DepositSecurityModuleInterface.getPauseIntentValidityPeriodBlocks()

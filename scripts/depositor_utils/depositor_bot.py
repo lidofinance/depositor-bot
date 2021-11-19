@@ -22,7 +22,7 @@ from scripts.utils.metrics import (
     DEPOSIT_FAILURE,
     SUCCESS_DEPOSIT,
     CURRENT_QUORUM_SIZE,
-    CREATING_TRANSACTIONS,
+    CREATING_TRANSACTIONS, BUILD_INFO,
 )
 from scripts.utils.variables import (
     MAX_GAS_FEE,
@@ -32,7 +32,7 @@ from scripts.utils.variables import (
     GAS_FEE_PERCENTILE,
     GAS_FEE_PERCENTILE_DAYS_HISTORY,
     CREATE_TRANSACTIONS,
-    ACCOUNT,
+    ACCOUNT, MIN_PRIORITY_FEE, MAX_PRIORITY_FEE, NETWORK, KAFKA_TOPIC,
 )
 from scripts.utils.gas_strategy import GasFeeStrategy
 
@@ -58,6 +58,22 @@ class DepositorBot:
         # Some rarely change things
         self._load_constants()
         logger.info({'msg': 'Depositor bot initialize done'})
+
+        BUILD_INFO.labels(
+            'Depositor bot',
+            NETWORK,
+            MAX_GAS_FEE,
+            CONTRACT_GAS_LIMIT,
+            MIN_BUFFERED_ETHER,
+            GAS_FEE_PERCENTILE,
+            GAS_FEE_PERCENTILE_DAYS_HISTORY,
+            GAS_PRIORITY_FEE_PERCENTILE,
+            MIN_PRIORITY_FEE,
+            MAX_PRIORITY_FEE,
+            KAFKA_TOPIC,
+            ACCOUNT.address if ACCOUNT else '0x0',
+            CREATE_TRANSACTIONS,
+        )
 
     def _load_constants(self):
         self.min_signs_to_deposit = DepositSecurityModuleInterface.getGuardianQuorum()
@@ -148,8 +164,8 @@ class DepositorBot:
             GAS_FEE_PERCENTILE_DAYS_HISTORY,
             GAS_FEE_PERCENTILE,
         )
-        # TODO check pending block on baseFeePerGas
-        current_gas_fee = self._current_block.baseFeePerGas
+
+        current_gas_fee = web3.eth.getBlock('pending').baseFeePerGas
 
         GAS_FEE.labels('max_fee').set(MAX_GAS_FEE)
         GAS_FEE.labels('current_fee').set(current_gas_fee)
@@ -324,7 +340,7 @@ class DepositorBot:
         return min(
             max(
                 web3.eth.fee_history(1, 'latest', reward_percentiles=[GAS_PRIORITY_FEE_PERCENTILE])['reward'][0][0],
-                Wei('2 gwei'),
+                MIN_PRIORITY_FEE,
             ),
-            Wei('10 gwei'),
+            MAX_PRIORITY_FEE,
         )
