@@ -21,7 +21,7 @@ ENV PATH=$PATH:/usr/local/bin
 ENV PYTHONPATH="/usr/local/lib/python3.9/site-packages/"
 
 EXPOSE 8080
-USER user
+USER www-data
 
 HEALTHCHECK --interval=10s --timeout=3s CMD curl -f http://localhost:8080/healthcheck || exit 1
 
