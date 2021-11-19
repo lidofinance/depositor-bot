@@ -34,4 +34,4 @@ services:
       - KAFKA_PASSWORD=${KAFKA_PASSWORD}
       - KAFKA_TOPIC=${KAFKA_TOPIC}
     entrypoint: brownie
-    command: run depositor
+    command: run pauser

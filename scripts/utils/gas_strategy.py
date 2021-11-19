@@ -2,6 +2,7 @@ import logging
 from typing import List
 
 import numpy
+from brownie import Wei
 from brownie.network.web3 import Web3
 
 
@@ -12,7 +13,7 @@ class GasFeeStrategy:
     BLOCKS_IN_ONE_DAY = 6600
     LATEST_BLOCK = 'latest'
 
-    def __init__(self, w3: Web3, blocks_count_cache: int = 7800, max_gas_fee: int = 200):
+    def __init__(self, w3: Web3, blocks_count_cache: int = 300, max_gas_fee: int = Wei('100 gwei')):
         """
         gas_history_block_cache - blocks count that gas his
         """
@@ -42,9 +43,9 @@ class GasFeeStrategy:
             logger.info({'msg': 'Use cached gas history'})
             return self._gas_fees
 
-        logger.info({'msg': 'Init or refetch gas history'})
+        logger.info({'msg': 'Init or refresh gas history.', 'value': {'block_number': latest_block_num}})
 
-        self._latest_fetched_block = self._w3.eth.get_block('latest')['number']
+        self._latest_fetched_block = latest_block_num
         self._days_param = days
 
         total_blocks_to_fetch = self.BLOCKS_IN_ONE_DAY * days
@@ -66,6 +67,6 @@ class GasFeeStrategy:
         """Calculates provided percentile for N days"""
         # One week price stats
         gas_fee_history = self._fetch_gas_fee_history(days)
-        blocks_to_count_percentile = gas_fee_history[:days * self.BLOCKS_IN_ONE_DAY]
+        blocks_to_count_percentile = gas_fee_history[-days * self.BLOCKS_IN_ONE_DAY:]
         recommended_gas_fee = int(numpy.percentile(blocks_to_count_percentile, percentile))
         return min(self.max_gas_fee, recommended_gas_fee)

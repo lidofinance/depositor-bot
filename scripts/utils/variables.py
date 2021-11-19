@@ -3,6 +3,7 @@ import os
 
 from brownie import Wei, web3, accounts
 
+
 logger = logging.getLogger(__name__)
 
 
@@ -20,6 +21,9 @@ MIN_BUFFERED_ETHER = Wei(os.getenv('MIN_BUFFERED_ETHER', '1024 ether'))
 GAS_FEE_PERCENTILE = int(os.getenv('GAS_FEE_PERCENTILE', 30))
 GAS_FEE_PERCENTILE_DAYS_HISTORY = int(os.getenv('GAS_FEE_PERCENTILE_DAYS_HISTORY', 2))
 GAS_PRIORITY_FEE_PERCENTILE = int(os.getenv('GAS_PRIORITY_FEE_PERCENTILE', 55))
+
+MIN_PRIORITY_FEE = Wei(os.getenv('MIN_PRIORITY_FEE', '2 gwei'))
+MAX_PRIORITY_FEE = Wei(os.getenv('MAX_PRIORITY_FEE', '10 gwei'))
 
 # Kafka secrets
 KAFKA_BROKER_ADDRESS_1 = os.getenv('KAFKA_BROKER_ADDRESS_1')
