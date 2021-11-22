@@ -8,7 +8,6 @@ services:
     ports:
       - 127.0.0.1:9000:8080
     environment:
-      - SCRIPT_NAME=depositor
       - NETWORK=${NETWORK}
       - WEB3_INFURA_PROJECT_ID=${WEB3_INFURA_PROJECT_ID}
       - WALLET_PRIVATE_KEY=${WALLET_PRIVATE_KEY}
@@ -16,6 +15,8 @@ services:
       - KAFKA_USERNAME=${KAFKA_USERNAME}
       - KAFKA_PASSWORD=${KAFKA_PASSWORD}
       - KAFKA_TOPIC=${KAFKA_TOPIC}
+    entrypoint: brownie
+    command: run depositor
 
   lido-pause-bot:
     image: lidofinance/depositor-bot
@@ -25,7 +26,6 @@ services:
     ports:
       - 127.0.0.1:9001:8080
     environment:
-      - SCRIPT_NAME=pauser
       - NETWORK=${NETWORK}
       - WEB3_INFURA_PROJECT_ID=${WEB3_INFURA_PROJECT_ID}
       - WALLET_PRIVATE_KEY=${WALLET_PRIVATE_KEY}
@@ -33,3 +33,5 @@ services:
       - KAFKA_USERNAME=${KAFKA_USERNAME}
       - KAFKA_PASSWORD=${KAFKA_PASSWORD}
       - KAFKA_TOPIC=${KAFKA_TOPIC}
+    entrypoint: brownie
+    command: run pauser

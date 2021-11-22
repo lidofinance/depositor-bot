@@ -29,11 +29,11 @@ class KafkaMsgRecipient:
         logger.info({'msg': 'Kafka initialize.'})
         self.messages = defaultdict(list)
 
-        kafka_topic = f'{NETWORK}-{KAFKA_TOPIC}-{client}-group'
+        kafka_topic = f'{NETWORK}-{KAFKA_TOPIC}'
 
         self.kafka = Consumer({
-            'client.id': kafka_topic,
-            'group.id': kafka_topic,
+            'client.id': kafka_topic + f'-{client}-client',
+            'group.id': kafka_topic + f'-{client}-group',
             'bootstrap.servers': KAFKA_BROKER_ADDRESS_1,
             'auto.offset.reset': 'earliest',
             'security.protocol': 'SASL_SSL',
