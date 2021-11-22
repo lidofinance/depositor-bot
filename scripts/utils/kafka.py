@@ -59,7 +59,7 @@ class KafkaMsgRecipient:
                 # No messages in line
                 break
             elif not msg.error():
-                message = msg.value(None)
+                message = msg.value()
 
                 try:
                     value = json.loads(message)
