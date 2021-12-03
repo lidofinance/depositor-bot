@@ -37,8 +37,9 @@ class KafkaMsgRecipient:
             'bootstrap.servers': KAFKA_BROKER_ADDRESS_1,
             'auto.offset.reset': 'earliest',
             'security.protocol': 'SASL_SSL',
-            'session.timeout.ms': 6000,
-            'sasl.mechanisms': "PLAIN",
+            'session.timeout.ms': 5000,
+            'max.poll.interval.ms': 360000,
+            'sasl.mechanisms': 'PLAIN',
             'sasl.username': KAFKA_USERNAME,
             'sasl.password': KAFKA_PASSWORD,
         })
@@ -53,7 +54,7 @@ class KafkaMsgRecipient:
         """Fetch new messages from kafka"""
         logger.info({'msg': 'Receive all messages from kafka.'})
         while True:
-            msg = self.kafka.poll(timeout=1.0)
+            msg = self.kafka.poll(timeout=1)
 
             if msg is None:
                 # No messages in line
