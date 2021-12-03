@@ -123,8 +123,8 @@ class DepositorBot:
 
         for long_issue in long_issues:
             if long_issue in deposit_issues:
-                logger.info({'msg': f'Long issue found. Sleep for 5 minutes.', 'value': long_issue})
-                time.sleep(300)
+                logger.info({'msg': f'Long issue found. Sleep for 1 minute.', 'value': long_issue})
+                time.sleep(60)
                 break
 
     def _update_state(self):
