@@ -9,9 +9,6 @@ logger = logging.getLogger(__name__)
 
 NETWORK = os.getenv('NETWORK')
 
-# Account private key
-WALLET_PRIVATE_KEY = os.getenv('WALLET_PRIVATE_KEY', None)
-
 # Transaction limits
 MAX_GAS_FEE = Wei(os.getenv('MAX_GAS_FEE', '100 gwei'))
 CONTRACT_GAS_LIMIT = Wei(os.getenv('CONTRACT_GAS_LIMIT', 10 * 10**6))
@@ -32,6 +29,9 @@ KAFKA_PASSWORD = os.getenv('KAFKA_PASSWORD')
 KAFKA_TOPIC = os.getenv('KAFKA_TOPIC')
 
 WEB3_CHAIN_ID = web3.eth.chain_id
+
+# Account private key
+WALLET_PRIVATE_KEY = os.getenv('WALLET_PRIVATE_KEY', None)
 
 if WALLET_PRIVATE_KEY:
     ACCOUNT = accounts.add(WALLET_PRIVATE_KEY)
