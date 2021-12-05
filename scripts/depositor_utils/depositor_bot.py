@@ -156,7 +156,7 @@ class DepositorBot:
             variables.GAS_FEE_PERCENTILE,
         )
 
-        current_gas_fee = web3.eth.getBlock('pending').baseFeePerGas
+        current_gas_fee = web3.eth.get_block('pending').baseFeePerGas
 
         GAS_FEE.labels('max_fee').set(variables.MAX_GAS_FEE)
         GAS_FEE.labels('current_fee').set(current_gas_fee)
