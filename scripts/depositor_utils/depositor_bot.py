@@ -85,10 +85,13 @@ class DepositorBot:
             try:
                 for _ in chain.new_blocks():
                     self.run_cycle()
-            except BlockNotFound as error:
-                logger.warning({'msg': 'Fetch block exception (BlockNotFound)', 'error': str(error)})
+            except (BlockNotFound, ValueError) as error:
+                logger.warning({'msg': 'Fetch block exception.', 'error': str(error)})
                 # Waiting for new block
-                time.sleep(10)
+                time.sleep(13)
+            except Exception as error:
+                logger.warning({'msg': 'Unexpected exception.', 'error': str(error)})
+                time.sleep(13)
 
     def run_cycle(self):
         """
