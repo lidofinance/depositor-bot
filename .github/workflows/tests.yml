@@ -20,3 +20,6 @@ jobs:
     - name: Test with pytest
       run: |
         pytest
+      env:
+        NETWORK: ${{ secrets.NETWORK }}
+        WEB3_INFURA_PROJECT_ID: ${{ secrets.WEB3_INFURA_PROJECT_ID }}
