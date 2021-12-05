@@ -23,7 +23,7 @@ jobs:
       env:
         NETWORK: ${{ secrets.NETWORK }}
         WEB3_INFURA_PROJECT_ID: ${{ secrets.WEB3_INFURA_PROJECT_ID }}
-        KAFKA_TOPIC: ${{ KAFKA_TOPIC }}
-        KAFKA_BROKER_ADDRESS_1: ${{ KAFKA_BROKER_ADDRESS_1 }}
-        KAFKA_USERNAME: ${{ KAFKA_USERNAME }}
-        KAFKA_PASSWORD: ${{ KAFKA_PASSWORD }}
+        KAFKA_TOPIC: ${{ secrets.KAFKA_TOPIC }}
+        KAFKA_BROKER_ADDRESS_1: ${{ secrets.KAFKA_BROKER_ADDRESS_1 }}
+        KAFKA_USERNAME: ${{ secrets.KAFKA_USERNAME }}
+        KAFKA_PASSWORD: ${{ secrets.KAFKA_PASSWORD }}
