@@ -24,16 +24,7 @@ from scripts.utils.metrics import (
     CURRENT_QUORUM_SIZE,
     CREATING_TRANSACTIONS, BUILD_INFO,
 )
-from scripts.utils.variables import (
-    MAX_GAS_FEE,
-    CONTRACT_GAS_LIMIT,
-    MIN_BUFFERED_ETHER,
-    GAS_PRIORITY_FEE_PERCENTILE,
-    GAS_FEE_PERCENTILE,
-    GAS_FEE_PERCENTILE_DAYS_HISTORY,
-    CREATE_TRANSACTIONS,
-    ACCOUNT, MIN_PRIORITY_FEE, MAX_PRIORITY_FEE, NETWORK, KAFKA_TOPIC,
-)
+from scripts.utils import variables
 from scripts.utils.gas_strategy import GasFeeStrategy
 
 
@@ -52,7 +43,7 @@ class DepositorBot:
 
     def __init__(self):
         logger.info({'msg': 'Initialize DepositorBot.'})
-        self.gas_fee_strategy = GasFeeStrategy(web3, max_gas_fee=MAX_GAS_FEE)
+        self.gas_fee_strategy = GasFeeStrategy(web3, max_gas_fee=variables.MAX_GAS_FEE)
         self.kafka = DepositBotMsgRecipient(client='deposit')
 
         # Some rarely change things
@@ -61,18 +52,18 @@ class DepositorBot:
 
         BUILD_INFO.labels(
             'Depositor bot',
-            NETWORK,
-            MAX_GAS_FEE,
-            CONTRACT_GAS_LIMIT,
-            MIN_BUFFERED_ETHER,
-            GAS_FEE_PERCENTILE,
-            GAS_FEE_PERCENTILE_DAYS_HISTORY,
-            GAS_PRIORITY_FEE_PERCENTILE,
-            MIN_PRIORITY_FEE,
-            MAX_PRIORITY_FEE,
-            KAFKA_TOPIC,
-            ACCOUNT.address if ACCOUNT else '0x0',
-            CREATE_TRANSACTIONS,
+            variables.NETWORK,
+            variables.MAX_GAS_FEE,
+            variables.CONTRACT_GAS_LIMIT,
+            variables.MIN_BUFFERED_ETHER,
+            variables.GAS_FEE_PERCENTILE,
+            variables.GAS_FEE_PERCENTILE_DAYS_HISTORY,
+            variables.GAS_PRIORITY_FEE_PERCENTILE,
+            variables.MIN_PRIORITY_FEE,
+            variables.MAX_PRIORITY_FEE,
+            variables.KAFKA_TOPIC,
+            variables.ACCOUNT.address if variables.ACCOUNT else '0x0',
+            variables.CREATE_TRANSACTIONS,
         )
 
     def _load_constants(self):
@@ -82,7 +73,7 @@ class DepositorBot:
         self.deposit_prefix = DepositSecurityModuleInterface.ATTEST_MESSAGE_PREFIX()
         logger.info({'msg': 'Call `ATTEST_MESSAGE_PREFIX()`.', 'value': str(self.deposit_prefix)})
 
-        if CREATE_TRANSACTIONS:
+        if variables.CREATE_TRANSACTIONS:
             CREATING_TRANSACTIONS.labels('deposit').set(1)
         else:
             CREATING_TRANSACTIONS.labels('deposit').set(0)
@@ -94,10 +85,13 @@ class DepositorBot:
             try:
                 for _ in chain.new_blocks():
                     self.run_cycle()
-            except BlockNotFound as error:
-                logger.warning({'msg': 'Fetch block exception (BlockNotFound)', 'error': str(error)})
+            except (BlockNotFound, ValueError) as error:
+                logger.warning({'msg': 'Fetch block exception.', 'error': str(error)})
                 # Waiting for new block
-                time.sleep(10)
+                time.sleep(13)
+            except Exception as error:
+                logger.warning({'msg': 'Unexpected exception.', 'error': str(error)})
+                time.sleep(13)
 
     def run_cycle(self):
         """
@@ -145,11 +139,11 @@ class DepositorBot:
         deposit_issues = []
 
         # ------- Other checks -------
-        if ACCOUNT:
-            balance = web3.eth.get_balance(ACCOUNT.address)
+        if variables.ACCOUNT:
+            balance = web3.eth.get_balance(variables.ACCOUNT.address)
             ACCOUNT_BALANCE.set(balance)
             if balance < Wei('0.05 ether'):
-                logger.warning({'msg': 'Account balance is low.', 'value': balance})
+                logger.warning({'msg': self.NOT_ENOUGH_BALANCE_ON_ACCOUNT, 'value': balance})
                 deposit_issues.append(self.NOT_ENOUGH_BALANCE_ON_ACCOUNT)
 
             else:
@@ -161,18 +155,18 @@ class DepositorBot:
 
         # Gas price check
         recommended_gas_fee = self.gas_fee_strategy.get_gas_fee_percentile(
-            GAS_FEE_PERCENTILE_DAYS_HISTORY,
-            GAS_FEE_PERCENTILE,
+            variables.GAS_FEE_PERCENTILE_DAYS_HISTORY,
+            variables.GAS_FEE_PERCENTILE,
         )
 
-        current_gas_fee = web3.eth.getBlock('pending').baseFeePerGas
+        current_gas_fee = web3.eth.get_block('pending').baseFeePerGas
 
-        GAS_FEE.labels('max_fee').set(MAX_GAS_FEE)
+        GAS_FEE.labels('max_fee').set(variables.MAX_GAS_FEE)
         GAS_FEE.labels('current_fee').set(current_gas_fee)
         GAS_FEE.labels('recommended_fee').set(recommended_gas_fee)
 
         logger.info({'msg': 'Fetch gas fees.', 'values': {
-            'max_fee': MAX_GAS_FEE,
+            'max_fee': variables.MAX_GAS_FEE,
             'current_fee': current_gas_fee,
             'recommended_fee': recommended_gas_fee,
         }})
@@ -181,7 +175,7 @@ class DepositorBot:
             logger.warning({
                 'msg': self.GAS_FEE_HIGHER_THAN_RECOMMENDED,
                 'values': {
-                    'max_fee': MAX_GAS_FEE,
+                    'max_fee': variables.MAX_GAS_FEE,
                     'current_fee': current_gas_fee,
                     'recommended_fee': recommended_gas_fee,
                 }
@@ -191,14 +185,14 @@ class DepositorBot:
         can_deposit = DepositSecurityModuleInterface.canDeposit(block_identifier=self._current_block.hash.hex())
         logger.info({'msg': 'Call `canDeposit()`.', 'value': can_deposit})
         if not can_deposit:
-            logger.warning({'msg': 'Deposit security module prohibits deposits.', 'value': can_deposit})
+            logger.warning({'msg': self.DEPOSIT_SECURITY_ISSUE, 'value': can_deposit})
             deposit_issues.append(self.DEPOSIT_SECURITY_ISSUE)
 
         # Lido contract buffered ether check
         buffered_ether = LidoInterface.getBufferedEther(block_identifier=self._current_block.hash.hex())
         logger.info({'msg': 'Call `getBufferedEther()`.', 'value': buffered_ether})
         BUFFERED_ETHER.set(buffered_ether)
-        if buffered_ether < MIN_BUFFERED_ETHER:
+        if buffered_ether < variables.MIN_BUFFERED_ETHER:
             logger.warning({'msg': self.LIDO_CONTRACT_HAS_NOT_ENOUGH_BUFFERED_ETHER, 'value': buffered_ether})
             deposit_issues.append(self.LIDO_CONTRACT_HAS_NOT_ENOUGH_BUFFERED_ETHER)
 
@@ -231,7 +225,7 @@ class DepositorBot:
             logger.info({'msg': 'Failed to deposit. Too small quorum to deposit.'})
             return
 
-        priority = self._get_deposit_priority_fee()
+        priority = self._get_deposit_priority_fee(variables.GAS_PRIORITY_FEE_PERCENTILE)
 
         logger.info({'msg': 'Sending deposit transaction.', 'values': {
             'deposit_root': str(self.deposit_root),
@@ -239,18 +233,19 @@ class DepositorBot:
             'block_number': deposit_params['block_num'],
             'block_hash': deposit_params['block_hash'].hex(),
             'signs': deposit_params['signs'],
-            'gas_limit': CONTRACT_GAS_LIMIT,
+            'gas_limit': variables.CONTRACT_GAS_LIMIT,
             'priority_fee': priority,
         }})
 
-        if not ACCOUNT:
+        if not variables.ACCOUNT:
             logger.info({'msg': 'Account was not provided.'})
             return
 
-        if not CREATE_TRANSACTIONS:
-            logger.info({'msg': 'Run in dry mode'})
+        if not variables.CREATE_TRANSACTIONS:
+            logger.info({'msg': 'Run in dry mode.'})
             return
 
+        logger.info({'msg': 'Creating tx in blockchain.'})
         try:
             result = DepositSecurityModuleInterface.depositBufferedEther(
                 self.deposit_root,
@@ -259,7 +254,7 @@ class DepositorBot:
                 deposit_params['block_hash'],
                 deposit_params['signs'],
                 {
-                    'gas_limit': CONTRACT_GAS_LIMIT,
+                    'gas_limit': variables.CONTRACT_GAS_LIMIT,
                     'priority_fee': priority,
                 },
             )
@@ -336,11 +331,11 @@ class DepositorBot:
         return sorted_signs
 
     @staticmethod
-    def _get_deposit_priority_fee():
+    def _get_deposit_priority_fee(percentile):
         return min(
             max(
-                web3.eth.fee_history(1, 'latest', reward_percentiles=[GAS_PRIORITY_FEE_PERCENTILE])['reward'][0][0],
-                MIN_PRIORITY_FEE,
+                web3.eth.fee_history(1, 'latest', reward_percentiles=[percentile])['reward'][0][0],
+                variables.MIN_PRIORITY_FEE,
             ),
-            MAX_PRIORITY_FEE,
+            variables.MAX_PRIORITY_FEE,
         )
