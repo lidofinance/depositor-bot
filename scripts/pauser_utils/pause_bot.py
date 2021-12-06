@@ -8,7 +8,8 @@ from web3.exceptions import BlockNotFound
 from scripts.pauser_utils.kafka import PauseBotMsgRecipient
 from scripts.utils.interfaces import DepositSecurityModuleInterface
 from scripts.utils.metrics import CREATING_TRANSACTIONS, BUILD_INFO
-from scripts.utils.variables import CREATE_TRANSACTIONS, ACCOUNT, NETWORK, KAFKA_TOPIC
+from scripts.utils import variables
+
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +26,7 @@ class DepositPauseBot:
 
         BUILD_INFO.labels(
             'Pauser bot',
-            NETWORK,
+            variables.NETWORK,
             None,
             None,
             None,
@@ -34,10 +35,13 @@ class DepositPauseBot:
             None,
             None,
             None,
-            KAFKA_TOPIC,
-            ACCOUNT.address if ACCOUNT else '0x0',
-            CREATE_TRANSACTIONS,
+            variables.KAFKA_TOPIC,
+            variables.ACCOUNT.address if variables.ACCOUNT else '0x0',
+            variables.CREATE_TRANSACTIONS,
         )
+
+    def __del__(self):
+        del self.kafka
 
     def _load_constants(self):
         self.blocks_till_pause_is_valid = DepositSecurityModuleInterface.getPauseIntentValidityPeriodBlocks()
@@ -46,7 +50,7 @@ class DepositPauseBot:
             'value': self.blocks_till_pause_is_valid
         })
 
-        if CREATE_TRANSACTIONS:
+        if variables.CREATE_TRANSACTIONS:
             CREATING_TRANSACTIONS.labels('pause').set(1)
         else:
             CREATING_TRANSACTIONS.labels('pause').set(0)
@@ -100,14 +104,15 @@ class DepositPauseBot:
                 },
             })
 
-            if not ACCOUNT:
+            if not variables.ACCOUNT:
                 logger.warning({'msg': 'No account provided. Skip creating tx.'})
                 return
 
-            if not CREATE_TRANSACTIONS:
+            if not variables.CREATE_TRANSACTIONS:
                 logger.warning({'msg': 'Running in DRY mode.'})
                 return
 
+            logger.info({'msg': 'Creating tx in blockchain.'})
             try:
                 result = DepositSecurityModuleInterface.pauseDeposits(
                     message['blockNumber'],
@@ -120,7 +125,7 @@ class DepositPauseBot:
                 logger.error({'msg': f'Pause error.', 'error': str(error), 'value': message})
             else:
                 logger.warning({'msg': 'Protocol was paused', 'value': str(result.logs)})
-
-                # Cleanup kafka, no need to deposit for now
-                self.kafka.clear_pause_messages()
                 break
+
+        # Cleanup kafka, no need to deposit for now
+        self.kafka.clear_pause_messages()

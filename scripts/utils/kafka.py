@@ -2,18 +2,23 @@ import json
 import logging
 from collections import defaultdict
 
-from confluent_kafka import Consumer
+from confluent_kafka import Consumer as BaseConsumer
 
 from scripts.utils.variables import (
     KAFKA_BROKER_ADDRESS_1,
     KAFKA_USERNAME,
     KAFKA_PASSWORD,
-    NETWORK,
     KAFKA_TOPIC,
+    NETWORK,
 )
 
-
 logger = logging.getLogger(__name__)
+
+
+class Consumer(BaseConsumer):
+    """Lifehack for tests. We can't monkey patch side binaries"""
+    def poll(self, timeout=None):
+        return super().poll(timeout)
 
 
 class KafkaMsgRecipient:
