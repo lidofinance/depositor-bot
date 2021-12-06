@@ -125,8 +125,7 @@ class DepositPauseBot:
                 logger.error({'msg': f'Pause error.', 'error': str(error), 'value': message})
             else:
                 logger.warning({'msg': 'Protocol was paused', 'value': str(result.logs)})
-
-                # Cleanup kafka, no need to deposit for now
                 break
 
+        # Cleanup kafka, no need to deposit for now
         self.kafka.clear_pause_messages()
