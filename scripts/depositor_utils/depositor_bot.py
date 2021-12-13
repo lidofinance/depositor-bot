@@ -265,6 +265,9 @@ class DepositorBot:
             logger.info({'msg': f'Deposited successfully.', 'value': str(result.logs)})
             SUCCESS_DEPOSIT.inc()
 
+        logger.info({'msg': f'Deposit method end. Sleep for 1 minute.'})
+        time.sleep(60)
+
     def _get_deposit_params(self, deposit_root, keys_op_index):
         """
         Get all signs from kafka.
