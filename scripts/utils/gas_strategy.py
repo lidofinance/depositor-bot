@@ -1,5 +1,5 @@
 import logging
-from typing import List
+from typing import List, Tuple, Iterable
 
 import numpy
 from brownie import Wei
@@ -69,4 +69,13 @@ class GasFeeStrategy:
         gas_fee_history = self._fetch_gas_fee_history(days)
         blocks_to_count_percentile = gas_fee_history[-days * self.BLOCKS_IN_ONE_DAY:]
         recommended_gas_fee = int(numpy.percentile(blocks_to_count_percentile, percentile))
-        return min(self.max_gas_fee, recommended_gas_fee)
+        return recommended_gas_fee
+
+    def get_recommended_gas_fee(self, percentiles: Iterable[Tuple[int, int]]) -> float:
+        """Returns the recommended gas fee"""
+        min_recommended_fee = self.max_gas_fee
+
+        for days, percentile in percentiles:
+            min_recommended_fee = min(min_recommended_fee, self.get_gas_fee_percentile(days, percentile))
+
+        return min_recommended_fee
