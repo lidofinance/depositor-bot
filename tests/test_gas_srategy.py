@@ -28,3 +28,16 @@ def test_percentile_calculate(caplog, setup_web3_gas_fee_fixtures):
     percentile = gas_fee_strategy.get_gas_fee_percentile(1, 50)
 
     assert percentile == 100000000000
+
+
+def test_recommended_buffered_ether():
+    gas_fee_strategy = GasFeeStrategy(web3)
+
+    buffered_ether = gas_fee_strategy.get_recommended_buffered_ether_to_deposit(10**9)
+    assert 1 < buffered_ether / 10**18 < 100
+
+    buffered_ether = gas_fee_strategy.get_recommended_buffered_ether_to_deposit(50 * 10**9)
+    assert 400 < buffered_ether / 10**18 < 700
+
+    buffered_ether = gas_fee_strategy.get_recommended_buffered_ether_to_deposit(70 * 10**9)
+    assert 500 < buffered_ether / 10**18 < 1000
