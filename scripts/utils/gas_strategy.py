@@ -1,6 +1,6 @@
 import logging
 from math import sqrt
-from typing import List
+from typing import List, Tuple, Iterable
 
 import numpy
 from brownie import Wei
@@ -70,12 +70,4 @@ class GasFeeStrategy:
         gas_fee_history = self._fetch_gas_fee_history(days)
         blocks_to_count_percentile = gas_fee_history[-days * self.BLOCKS_IN_ONE_DAY:]
         recommended_gas_fee = int(numpy.percentile(blocks_to_count_percentile, percentile))
-        return min(self.max_gas_fee, recommended_gas_fee)
-
-    def get_recommended_buffered_ether_to_deposit(self, gas_fee):
-        """Returns suggested minimum buffered ether to deposit"""
-        apr = 0.049  # Protocol APR
-        a = 128  # ~ ether/hour
-        p = 32 * 10**18 * apr / 365 / 24  # ~ Profit in hour
-        c = 378300  # wei is constant for every deposit tx that should be paid
-        return sqrt(c * gas_fee * a / 32 / p) * 32 * 10**18
+        return recommended_gas_fee

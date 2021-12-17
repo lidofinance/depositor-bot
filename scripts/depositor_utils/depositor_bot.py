@@ -43,7 +43,7 @@ class DepositorBot:
 
     def __init__(self):
         logger.info({'msg': 'Initialize DepositorBot.'})
-        self.gas_fee_strategy = GasFeeStrategy(web3, max_gas_fee=variables.MAX_GAS_FEE)
+        self.gas_fee_strategy = GasFeeStrategy(web3, blocks_count_cache=150, max_gas_fee=variables.MAX_GAS_FEE)
         self.kafka = DepositBotMsgRecipient(client='deposit')
 
         # Some rarely change things
@@ -55,8 +55,10 @@ class DepositorBot:
             variables.NETWORK,
             variables.MAX_GAS_FEE,
             variables.CONTRACT_GAS_LIMIT,
-            variables.GAS_FEE_PERCENTILE,
-            variables.GAS_FEE_PERCENTILE_DAYS_HISTORY,
+            variables.GAS_FEE_PERCENTILE_1,
+            variables.GAS_FEE_PERCENTILE_DAYS_HISTORY_1,
+            variables.GAS_FEE_PERCENTILE_2,
+            variables.GAS_FEE_PERCENTILE_DAYS_HISTORY_2,
             variables.GAS_PRIORITY_FEE_PERCENTILE,
             variables.MIN_PRIORITY_FEE,
             variables.MAX_PRIORITY_FEE,
@@ -153,10 +155,10 @@ class DepositorBot:
             logger.info({'msg': 'Check account balance. No account provided.'})
 
         # Gas price check
-        recommended_gas_fee = self.gas_fee_strategy.get_gas_fee_percentile(
-            variables.GAS_FEE_PERCENTILE_DAYS_HISTORY,
-            variables.GAS_FEE_PERCENTILE,
-        )
+        recommended_gas_fee = self.gas_fee_strategy.get_recommended_gas_fee((
+            (variables.GAS_FEE_PERCENTILE_DAYS_HISTORY_1, variables.GAS_FEE_PERCENTILE_1),
+            (variables.GAS_FEE_PERCENTILE_DAYS_HISTORY_2, variables.GAS_FEE_PERCENTILE_2),
+        ))
 
         current_gas_fee = web3.eth.get_block('pending').baseFeePerGas
 
