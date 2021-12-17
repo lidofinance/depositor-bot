@@ -53,21 +53,23 @@ docker-compose up
 
 ## Available variables 
 
-| Vars in env                       | Amount     | Default - Raw  | Description |
-| -------------                     | :--------: | :---------:    | :----- |
-| NETWORK (required)                | -          | `None`         | Network (e.g. mainnet, goerli) |
-| WEB3_INFURA_PROJECT_ID (required) | -          | `None`         | Project ID in infura |
-| KAFKA_BROKER_ADDRESS_1 (required) | -          | `None`         | Kafka servers url and port |
-| KAFKA_USERNAME (required)         | -          | `None`         | Kafka username |
-| KAFKA_PASSWORD (required)         | -          | `None`         | Kafka password |
-| KAFKA_TOPIC (required)            | -          | `None`         | Kafka topic name (for msg receiving) |
-| MAX_GAS_FEE                       | 100 GWEI   | `100 gwei`     | Bot will wait for a lower price. Treshold for gas_fee |
-| GAS_FEE_PERCENTILE                | 30         | `30`           | Percentile to calculate recommended gas fee |
-| GAS_FEE_PERCENTILE_DAYS_HISTORY   | 2          | `2`            | Percentile calculates from N days of the fee history |
-| GAS_PRIORITY_FEE_PERCENTILE       | 55         | `55`           | Priority transaction will be N percentile from priority fees in last block (min 2 gwei - max 10 gwei) |
-| CONTRACT_GAS_LIMIT                | 10 * 10**6 | `10000000`     | Default transaction gas limit |
-| MIN_BUFFERED_ETHER                | 1024 ETH   | `1025 ether`   | Minimum ETH in buffer to deposit |
-| WALLET_PRIVATE_KEY                | -          | `None`         | Account private key |
-| CREATE_TRANSACTIONS               | -          | `None`         | If `true` then tx will be send to blockchain |
-| MIN_PRIORITY_FEE                  | 2 GWEI     | `2 gwei`         | If `true` then tx will be send to blockchain |
-| MAX_PRIORITY_FEE                  | 10 GWEI    | `10 gwei`         | If `true` then tx will be send to blockchain |
+| Vars in env                       |   Amount   | Default - Raw | Description                                                                                           |
+|-----------------------------------|:----------:|:-------------:|:------------------------------------------------------------------------------------------------------|
+| NETWORK (required)                |     -      |    `None`     | Network (e.g. mainnet, goerli)                                                                        |
+| WEB3_INFURA_PROJECT_ID (required) |     -      |    `None`     | Project ID in infura                                                                                  |
+| KAFKA_BROKER_ADDRESS_1 (required) |     -      |    `None`     | Kafka servers url and port                                                                            |
+| KAFKA_USERNAME (required)         |     -      |    `None`     | Kafka username                                                                                        |
+| KAFKA_PASSWORD (required)         |     -      |    `None`     | Kafka password                                                                                        |
+| KAFKA_TOPIC (required)            |     -      |    `None`     | Kafka topic name (for msg receiving)                                                                  |
+| MAX_GAS_FEE                       |  100 GWEI  |  `100 gwei`   | Bot will wait for a lower price. Treshold for gas_fee                                                 |
+| GAS_FEE_PERCENTILE_1              |     20     |     `20`      | Percentile for first recommended fee calculation                                                      |
+| GAS_FEE_PERCENTILE_DAYS_HISTORY_1 |     1      |      `1`      | Percentile for first recommended calculates from N days of the fee history                            |
+| GAS_FEE_PERCENTILE_2              |     20     |     `20`      | Percentile for second recommended fee calculation                                                     |
+| GAS_FEE_PERCENTILE_DAYS_HISTORY_2 |     2      |      `2`      | Percentile calculates from N days of the fee history                                                  |
+| GAS_PRIORITY_FEE_PERCENTILE       |     55     |     `55`      | Priority transaction will be N percentile from priority fees in last block (min 2 gwei - max 10 gwei) |
+| CONTRACT_GAS_LIMIT                | 10 * 10**6 |  `10000000`   | Default transaction gas limit                                                                         |
+| MIN_BUFFERED_ETHER                |  1024 ETH  | `1025 ether`  | Minimum ETH in buffer to deposit                                                                      |
+| WALLET_PRIVATE_KEY                |     -      |    `None`     | Account private key                                                                                   |
+| CREATE_TRANSACTIONS               |     -      |    `None`     | If `true` then tx will be send to blockchain                                                          |
+| MIN_PRIORITY_FEE                  |   2 GWEI   |   `2 gwei`    | If `true` then tx will be send to blockchain                                                          |
+| MAX_PRIORITY_FEE                  |  10 GWEI   |   `10 gwei`   | If `true` then tx will be send to blockchain                                                          |
