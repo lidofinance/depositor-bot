@@ -84,7 +84,10 @@ class GasFeeStrategy:
     def get_recommended_buffered_ether_to_deposit(self, gas_fee):
         """Returns suggested minimum buffered ether to deposit"""
         apr = 0.049  # Protocol APR
-        a = 128  # ~ ether/hour
+        # ether/14 days : select sum(tr.value)/1e18 from ethereum."transactions" as tr
+        # where tr.to = '\xae7ab96520DE3A18E5e111B5EaAb095312D7fE84'
+        # and tr.block_time >= '2021-12-01' and tr.block_time < '2021-12-15' and tr.value < 600*1e18;
+        a = 60  # ~ ether/hour
         p = 32 * 10**18 * apr / 365 / 24  # ~ Profit in hour
         c = 378300  # wei is constant for every deposit tx that should be paid
         return sqrt(c * gas_fee * a / 32 / p) * 32 * 10**18
