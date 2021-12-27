@@ -55,7 +55,6 @@ class DepositorBot:
             variables.NETWORK,
             variables.MAX_GAS_FEE,
             variables.CONTRACT_GAS_LIMIT,
-            variables.MIN_BUFFERED_ETHER,
             variables.GAS_FEE_PERCENTILE_1,
             variables.GAS_FEE_PERCENTILE_DAYS_HISTORY_1,
             variables.GAS_FEE_PERCENTILE_2,
@@ -194,7 +193,10 @@ class DepositorBot:
         buffered_ether = LidoInterface.getBufferedEther(block_identifier=self._current_block.hash.hex())
         logger.info({'msg': 'Call `getBufferedEther()`.', 'value': buffered_ether})
         BUFFERED_ETHER.set(buffered_ether)
-        if buffered_ether < variables.MIN_BUFFERED_ETHER:
+
+        recommended_buffered_ether = self.gas_fee_strategy.get_recommended_buffered_ether_to_deposit(current_gas_fee)
+        logger.info({'msg': 'Recommended min buffered ether to deposit.', 'value': recommended_buffered_ether})
+        if buffered_ether < recommended_buffered_ether:
             logger.warning({'msg': self.LIDO_CONTRACT_HAS_NOT_ENOUGH_BUFFERED_ETHER, 'value': buffered_ether})
             deposit_issues.append(self.LIDO_CONTRACT_HAS_NOT_ENOUGH_BUFFERED_ETHER)
 

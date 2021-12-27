@@ -40,3 +40,16 @@ def test_get_recommended_gas_fee(setup_web3_gas_fee_fixtures):
     fee = gas_fee_strategy.get_recommended_gas_fee([(1, 99), (2, 99)])
 
     assert fee == gas_fee_strategy.max_gas_fee
+
+
+def test_recommended_buffered_ether():
+    gas_fee_strategy = GasFeeStrategy(web3)
+
+    buffered_ether = gas_fee_strategy.get_recommended_buffered_ether_to_deposit(10**9)
+    assert 1 < buffered_ether / 10**18 < 100
+
+    buffered_ether = gas_fee_strategy.get_recommended_buffered_ether_to_deposit(50 * 10**9)
+    assert 400 < buffered_ether / 10**18 < 700
+
+    buffered_ether = gas_fee_strategy.get_recommended_buffered_ether_to_deposit(70 * 10**9)
+    assert 500 < buffered_ether / 10**18 < 1000
