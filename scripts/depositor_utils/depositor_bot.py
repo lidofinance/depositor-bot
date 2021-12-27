@@ -107,7 +107,6 @@ class DepositorBot:
 
         if not deposit_issues:
             return self.do_deposit()
-        return self.do_deposit()
 
         logger.info({'msg': f'Issues found.', 'value': deposit_issues})
 
