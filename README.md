@@ -68,7 +68,6 @@ docker-compose up
 | GAS_FEE_PERCENTILE_DAYS_HISTORY_2 |     2      |      `2`      | Percentile calculates from N days of the fee history                                                  |
 | GAS_PRIORITY_FEE_PERCENTILE       |     55     |     `55`      | Priority transaction will be N percentile from priority fees in last block (min 2 gwei - max 10 gwei) |
 | CONTRACT_GAS_LIMIT                | 10 * 10**6 |  `10000000`   | Default transaction gas limit                                                                         |
-| MIN_BUFFERED_ETHER                |  1024 ETH  | `1025 ether`  | Minimum ETH in buffer to deposit                                                                      |
 | WALLET_PRIVATE_KEY                |     -      |    `None`     | Account private key                                                                                   |
 | CREATE_TRANSACTIONS               |     -      |    `None`     | If `true` then tx will be send to blockchain                                                          |
 | MIN_PRIORITY_FEE                  |   2 GWEI   |   `2 gwei`    | If `true` then tx will be send to blockchain                                                          |
