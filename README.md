@@ -72,4 +72,3 @@ docker-compose up
 | CREATE_TRANSACTIONS               |     -      |    `None`     | If `true` then tx will be send to blockchain                                                          |
 | MIN_PRIORITY_FEE                  |   2 GWEI   |   `2 gwei`    | If `true` then tx will be send to blockchain                                                          |
 | MAX_PRIORITY_FEE                  |  10 GWEI   |   `10 gwei`   | If `true` then tx will be send to blockchain                                                          |
-| FLASHBOTS_SIGNATURE               | Random pk  |       -       | Signature for flashbots to identify us                                                                |

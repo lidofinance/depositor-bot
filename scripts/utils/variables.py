@@ -47,5 +47,3 @@ else:
     logger.warning({'msg': 'Account not provided. Run in dry mode.'})
 
 CREATE_TRANSACTIONS = os.getenv('CREATE_TRANSACTIONS') == 'true'
-
-FLASHBOTS_SIGNATURE = os.getenv('FLASHBOTS_SIGNATURE', ''.join(random.choices(string.ascii_uppercase + string.digits, k=256)))
