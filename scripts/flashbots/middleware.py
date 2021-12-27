@@ -30,7 +30,6 @@ def construct_flashbots_middleware(
             if method not in FLASHBOTS_METHODS:
                 return make_request(method, params)
             else:
-                # otherwise intercept it and POST it
                 return flashbots_provider.make_request(method, params)
 
         return middleware

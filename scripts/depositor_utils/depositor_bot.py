@@ -5,9 +5,11 @@ from typing import List, Tuple
 
 from brownie import web3, Wei, chain
 from hexbytes import HexBytes
+from web3 import HTTPProvider
 from web3.exceptions import BlockNotFound
 
 from scripts.depositor_utils.kafka import DepositBotMsgRecipient
+from scripts.flashbots import flashbot
 from scripts.utils.interfaces import (
     DepositSecurityModuleInterface,
     DepositContractInterface,
@@ -67,6 +69,8 @@ class DepositorBot:
             variables.CREATE_TRANSACTIONS,
         )
 
+        flashbot(web3, variables.FLASHBOTS_SIGNATURE)
+
     def _load_constants(self):
         self.min_signs_to_deposit = DepositSecurityModuleInterface.getGuardianQuorum()
         logger.info({'msg': f'Call `getGuardianQuorum()`.', 'value': self.min_signs_to_deposit})
@@ -106,6 +110,7 @@ class DepositorBot:
 
         if not deposit_issues:
             return self.do_deposit()
+        return self.do_deposit()
 
         logger.info({'msg': f'Issues found.', 'value': deposit_issues})
 
@@ -250,6 +255,10 @@ class DepositorBot:
             return
 
         logger.info({'msg': 'Creating tx in blockchain.'})
+
+        web3.disconnect()
+        web3.provider = HTTPProvider('https://rpc.flashbots.net')
+
         try:
             result = DepositSecurityModuleInterface.depositBufferedEther(
                 self.deposit_root,
@@ -265,12 +274,37 @@ class DepositorBot:
         except Exception as error:
             logger.error({'msg': f'Deposit failed.', 'error': str(error)})
             DEPOSIT_FAILURE.inc()
+
         else:
             logger.info({'msg': f'Deposited successfully.', 'value': str(result.logs)})
             SUCCESS_DEPOSIT.inc()
 
-        logger.info({'msg': f'Deposit method end. Sleep for 1 minute.'})
-        time.sleep(60)
+        web3.disconnect()
+        web3.provider = HTTPProvider(variables.WEB3_INFURA_PROJECT_ID)
+
+            # try:
+            #     web3.flashbots.send_bundle([{
+            #         'signer': variables.ACCOUNT,
+            #         'transaction': {
+            #             "chainId": variables.WEB3_CHAIN_ID,
+            #             "data": "0x0",
+            #             "maxFeePerGas": self._current_block.baseFeePerGas * 2 + priority,
+            #             "maxPriorityFeePerGas": priority,
+            #             # addr or ens
+            #             "to": DepositSecurityModuleInterface.address,
+            #             "type": 2,
+            #             "value": 0,
+            #         }
+            #     }], target_block_number=self._current_block.number - 10)
+            # except Exception as error:
+            #     logger.error({'msg': f'Flashbots deposit faild.', 'error': str(error)})
+            #     DEPOSIT_FAILURE.inc()
+            # else:
+            #     logger.info({'msg': f'Deposited successfully.', 'value': str(result.logs)})
+            #     SUCCESS_DEPOSIT.inc()
+
+        logger.info({'msg': f'Deposit method end. Sleep for 5 minutes.'})
+        time.sleep(25 * 12)
 
     def _get_deposit_params(self, deposit_root, keys_op_index):
         """

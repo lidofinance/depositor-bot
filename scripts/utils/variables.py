@@ -1,5 +1,7 @@
 import logging
 import os
+import random
+import string
 
 from brownie import Wei, web3, accounts
 
@@ -8,6 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 NETWORK = os.getenv('NETWORK')
+WEB3_INFURA_PROJECT_ID = os.getenv('WEB3_INFURA_PROJECT_ID')
 
 # Transaction limits
 MAX_GAS_FEE = Wei(os.getenv('MAX_GAS_FEE', '100 gwei'))
@@ -44,3 +47,5 @@ else:
     logger.warning({'msg': 'Account not provided. Run in dry mode.'})
 
 CREATE_TRANSACTIONS = os.getenv('CREATE_TRANSACTIONS') == 'true'
+
+FLASHBOTS_SIGNATURE = os.getenv('FLASHBOTS_SIGNATURE', ''.join(random.choices(string.ascii_uppercase + string.digits, k=256)))
