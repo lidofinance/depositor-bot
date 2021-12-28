@@ -9,6 +9,7 @@ from web3 import HTTPProvider
 from web3.exceptions import BlockNotFound
 
 from scripts.depositor_utils.kafka import DepositBotMsgRecipient
+from scripts.utils.constants import FLASHBOTS_RPC, INFURA_URL
 from scripts.utils.interfaces import (
     DepositSecurityModuleInterface,
     DepositContractInterface,
@@ -253,7 +254,7 @@ class DepositorBot:
         logger.info({'msg': 'Creating tx in blockchain.'})
 
         web3.disconnect()
-        web3.provider = HTTPProvider('https://rpc.flashbots.net')
+        web3.provider = HTTPProvider(FLASHBOTS_RPC[variables.WEB3_CHAIN_ID])
 
         try:
             result = DepositSecurityModuleInterface.depositBufferedEther(
@@ -276,7 +277,7 @@ class DepositorBot:
             SUCCESS_DEPOSIT.inc()
 
         web3.disconnect()
-        web3.provider = HTTPProvider(variables.WEB3_INFURA_PROJECT_ID)
+        web3.provider = HTTPProvider(INFURA_URL[variables.WEB3_CHAIN_ID])
 
         logger.info({'msg': f'Deposit method end. Sleep for 5 minutes.'})
         time.sleep(25 * 12)

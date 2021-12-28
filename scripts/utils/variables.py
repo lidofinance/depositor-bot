@@ -1,7 +1,5 @@
 import logging
 import os
-import random
-import string
 
 from brownie import Wei, web3, accounts
 

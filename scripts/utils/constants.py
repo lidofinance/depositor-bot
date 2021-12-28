@@ -1,5 +1,8 @@
 from enum import IntEnum
 
+from web3.auto.infura import build_infura_url
+from web3.auto.infura.endpoints import INFURA_GOERLI_DOMAIN, INFURA_MAINNET_DOMAIN
+
 
 class Network(IntEnum):
     Mainnet = 1
@@ -28,6 +31,16 @@ DEPOSIT_CONTRACT = {
 DEPOSIT_SECURITY_MODULE = {
     Network.Mainnet: "0xDb149235B6F40dC08810AA69869783Be101790e7",
     Network.Görli: "0xed23ad3ea5fb9d10e7371caef1b141ad1c23a80c",
+}
+
+FLASHBOTS_RPC = {
+    Network.Mainnet: "https://rpc.flashbots.net",
+    Network.Görli: "https://relay-goerli.flashbots.net",
+}
+
+INFURA_URL = {
+    Network.Mainnet: build_infura_url(INFURA_MAINNET_DOMAIN),
+    Network.Görli: build_infura_url(INFURA_GOERLI_DOMAIN),
 }
 
 DEPOSIT_CONTRACT_DEPLOY_BLOCK = {
