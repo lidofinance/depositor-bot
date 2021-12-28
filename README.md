@@ -61,7 +61,6 @@ docker-compose up
 | KAFKA_USERNAME (required)         |     -      |    `None`     | Kafka username                                                                                        |
 | KAFKA_PASSWORD (required)         |     -      |    `None`     | Kafka password                                                                                        |
 | KAFKA_TOPIC (required)            |     -      |    `None`     | Kafka topic name (for msg receiving)                                                                  |
-| KAFKA_GROUP_ID                    |     -      |    `None`     | By default is generated for kafka topic and client name                                               |
 | MAX_GAS_FEE                       |  100 GWEI  |  `100 gwei`   | Bot will wait for a lower price. Treshold for gas_fee                                                 |
 | GAS_FEE_PERCENTILE_1              |     20     |     `20`      | Percentile for first recommended fee calculation                                                      |
 | GAS_FEE_PERCENTILE_DAYS_HISTORY_1 |     1      |      `1`      | Percentile for first recommended calculates from N days of the fee history                            |
