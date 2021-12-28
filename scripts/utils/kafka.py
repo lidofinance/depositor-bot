@@ -4,13 +4,8 @@ from collections import defaultdict
 
 from confluent_kafka import Consumer as BaseConsumer
 
-from scripts.utils.variables import (
-    KAFKA_BROKER_ADDRESS_1,
-    KAFKA_USERNAME,
-    KAFKA_PASSWORD,
-    KAFKA_TOPIC,
-    NETWORK,
-)
+from scripts.utils import variables
+from scripts.utils.variables import KAFKA_GROUP_ID
 
 logger = logging.getLogger(__name__)
 
@@ -34,18 +29,20 @@ class KafkaMsgRecipient:
         logger.info({'msg': 'Kafka initialize.'})
         self.messages = defaultdict(list)
 
-        kafka_topic = f'{NETWORK}-{KAFKA_TOPIC}'
+        kafka_topic = f'{variables.NETWORK}-{variables.KAFKA_TOPIC}'
+
+        group_id = KAFKA_GROUP_ID if KAFKA_GROUP_ID else kafka_topic + f'-{client}-group'
 
         self.kafka = Consumer({
             'client.id': kafka_topic + f'-{client}-client',
-            'group.id': kafka_topic + f'-{client}-group',
-            'bootstrap.servers': KAFKA_BROKER_ADDRESS_1,
+            'group.id': group_id,
+            'bootstrap.servers': variables.KAFKA_BROKER_ADDRESS_1,
             'auto.offset.reset': 'earliest',
             'security.protocol': 'SASL_SSL',
             'session.timeout.ms': 240000,
             'sasl.mechanisms': 'PLAIN',
-            'sasl.username': KAFKA_USERNAME,
-            'sasl.password': KAFKA_PASSWORD,
+            'sasl.username': variables.KAFKA_USERNAME,
+            'sasl.password': variables.KAFKA_PASSWORD,
         })
 
         logger.info({'msg': f'Subscribe to "{kafka_topic}".'})
