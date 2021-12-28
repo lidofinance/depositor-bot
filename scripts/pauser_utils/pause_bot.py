@@ -18,7 +18,7 @@ class DepositPauseBot:
     def __init__(self):
         logger.info({'msg': 'Initialize DepositPauseBot.'})
 
-        self.kafka = PauseBotMsgRecipient(client='pause')
+        self.kafka = PauseBotMsgRecipient(client=f'{variables.KAFKA_GROUP_PREFIX}pause')
 
         # Some rarely change things
         self._load_constants()
