@@ -279,8 +279,8 @@ class DepositorBot:
         web3.disconnect()
         web3.provider = HTTPProvider(INFURA_URL[variables.WEB3_CHAIN_ID])
 
-        logger.info({'msg': f'Deposit method end. Sleep for 5 minutes.'})
-        time.sleep(25 * 12)
+        logger.info({'msg': f'Deposit method end. Sleep for 1 minute.'})
+        time.sleep(60)
 
     def _get_deposit_params(self, deposit_root, keys_op_index):
         """
