@@ -44,7 +44,8 @@ class DepositorBot:
     def __init__(self):
         logger.info({'msg': 'Initialize DepositorBot.'})
         self.gas_fee_strategy = GasFeeStrategy(web3, blocks_count_cache=150, max_gas_fee=variables.MAX_GAS_FEE)
-        self.kafka = DepositBotMsgRecipient(client='deposit')
+
+        self.kafka = DepositBotMsgRecipient(client=f'{variables.KAFKA_GROUP_PREFIX}deposit')
 
         # Some rarely change things
         self._load_constants()
