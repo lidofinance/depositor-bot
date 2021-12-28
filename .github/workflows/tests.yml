@@ -27,3 +27,5 @@ jobs:
         KAFKA_BROKER_ADDRESS_1: ${{ secrets.KAFKA_BROKER_ADDRESS_1 }}
         KAFKA_USERNAME: ${{ secrets.KAFKA_USERNAME }}
         KAFKA_PASSWORD: ${{ secrets.KAFKA_PASSWORD }}
+    - name: Super-Linter
+      uses: github/super-linter@v4.8.5
