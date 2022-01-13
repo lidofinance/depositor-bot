@@ -5,9 +5,11 @@ from typing import List, Tuple
 
 from brownie import web3, Wei, chain
 from hexbytes import HexBytes
+from web3 import HTTPProvider
 from web3.exceptions import BlockNotFound
 
 from scripts.depositor_utils.kafka import DepositBotMsgRecipient
+from scripts.utils.constants import FLASHBOTS_RPC, INFURA_URL
 from scripts.utils.interfaces import (
     DepositSecurityModuleInterface,
     DepositContractInterface,
@@ -251,6 +253,10 @@ class DepositorBot:
             return
 
         logger.info({'msg': 'Creating tx in blockchain.'})
+
+        web3.disconnect()
+        web3.provider = HTTPProvider(FLASHBOTS_RPC[variables.WEB3_CHAIN_ID])
+
         try:
             result = DepositSecurityModuleInterface.depositBufferedEther(
                 self.deposit_root,
@@ -266,9 +272,13 @@ class DepositorBot:
         except Exception as error:
             logger.error({'msg': f'Deposit failed.', 'error': str(error)})
             DEPOSIT_FAILURE.inc()
+
         else:
             logger.info({'msg': f'Deposited successfully.', 'value': str(result.logs)})
             SUCCESS_DEPOSIT.inc()
+
+        web3.disconnect()
+        web3.provider = HTTPProvider(INFURA_URL[variables.WEB3_CHAIN_ID])
 
         logger.info({'msg': f'Deposit method end. Sleep for 1 minute.'})
         time.sleep(60)
