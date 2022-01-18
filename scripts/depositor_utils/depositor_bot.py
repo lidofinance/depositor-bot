@@ -254,6 +254,7 @@ class DepositorBot:
 
         logger.info({'msg': 'Creating tx in blockchain.'})
 
+        provider = web3.provider
         web3.disconnect()
         web3.provider = HTTPProvider(FLASHBOTS_RPC[variables.WEB3_CHAIN_ID])
 
@@ -278,7 +279,7 @@ class DepositorBot:
             SUCCESS_DEPOSIT.inc()
 
         web3.disconnect()
-        web3.provider = WebsocketProvider(INFURA_URL[variables.WEB3_CHAIN_ID])
+        web3.provider = provider
 
         logger.info({'msg': f'Deposit method end. Sleep for 1 minute.'})
         time.sleep(60)
