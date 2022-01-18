@@ -5,7 +5,7 @@ from typing import List, Tuple
 
 from brownie import web3, Wei, chain
 from hexbytes import HexBytes
-from web3 import HTTPProvider
+from web3 import HTTPProvider, WebsocketProvider
 from web3.exceptions import BlockNotFound
 
 from scripts.depositor_utils.kafka import DepositBotMsgRecipient
@@ -278,7 +278,7 @@ class DepositorBot:
             SUCCESS_DEPOSIT.inc()
 
         web3.disconnect()
-        web3.provider = HTTPProvider(INFURA_URL[variables.WEB3_CHAIN_ID])
+        web3.provider = WebsocketProvider(INFURA_URL[variables.WEB3_CHAIN_ID])
 
         logger.info({'msg': f'Deposit method end. Sleep for 1 minute.'})
         time.sleep(60)
