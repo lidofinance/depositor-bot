@@ -305,7 +305,7 @@ class DepositorBot:
             SUCCESS_DEPOSIT.inc()
 
         logger.info({'msg': f'Deposit method end. Sleep for 1 minute.'})
-        # time.sleep(60)
+        time.sleep(60)
 
     def _get_deposit_params(self, deposit_root, keys_op_index):
         """
