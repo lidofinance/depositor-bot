@@ -5,11 +5,10 @@ from typing import List, Tuple
 
 from brownie import web3, Wei, chain
 from hexbytes import HexBytes
-from web3 import HTTPProvider, WebsocketProvider
 from web3.exceptions import BlockNotFound
+from web3.types import TxParams
 
 from scripts.depositor_utils.kafka import DepositBotMsgRecipient
-from scripts.utils.constants import FLASHBOTS_RPC, INFURA_URL
 from scripts.utils.interfaces import (
     DepositSecurityModuleInterface,
     DepositContractInterface,
@@ -254,35 +253,59 @@ class DepositorBot:
 
         logger.info({'msg': 'Creating tx in blockchain.'})
 
-        provider = web3.provider
-        web3.disconnect()
-        web3.provider = HTTPProvider(FLASHBOTS_RPC[variables.WEB3_CHAIN_ID])
-
         try:
-            result = DepositSecurityModuleInterface.depositBufferedEther(
+            contract = web3.eth.contract(
+                address=DepositSecurityModuleInterface.address,
+                abi=DepositSecurityModuleInterface.abi,
+            )
+            func = contract.functions.depositBufferedEther(
                 self.deposit_root,
                 self.keys_op_index,
                 deposit_params['block_num'],
                 deposit_params['block_hash'],
                 deposit_params['signs'],
-                {
-                    'gas_limit': variables.CONTRACT_GAS_LIMIT,
-                    'priority_fee': priority,
-                },
             )
+
+            # Make sure it works locally
+            func.call()
+            logger.info({'msg': 'Transaction call is success.'})
+
+            tx: TxParams = {
+                "from": variables.ACCOUNT.address,
+                "to": DepositSecurityModuleInterface.address,
+                "gas": variables.CONTRACT_GAS_LIMIT,
+                "maxFeePerGas": web3.eth.get_block('pending').baseFeePerGas * 2 + priority,
+                "maxPriorityFeePerGas": priority,
+                "nonce": web3.eth.get_transaction_count(variables.ACCOUNT.address),
+                "chainId": variables.WEB3_CHAIN_ID,
+                "data": func._encode_transaction_data()
+            }
+
+            from eth_account.account import Account
+            signer = Account.from_key(variables.ACCOUNT.private_key)
+
+            for i in range(10):
+                # Try to get in next 10 blocks
+                result = web3.flashbots.send_bundle(
+                    [{"signer": signer, "transaction": tx}],
+                    self._current_block.number + i
+                )
+
+            result.wait()
+            rec = result.receipts()
+            if not rec:
+                raise Exception('No reception provided')
+            else:
+                logger.info({'msg': 'Reception received', 'value': rec})
         except Exception as error:
             logger.error({'msg': f'Deposit failed.', 'error': str(error)})
             DEPOSIT_FAILURE.inc()
-
         else:
             logger.info({'msg': f'Deposited successfully.', 'value': str(result.logs)})
             SUCCESS_DEPOSIT.inc()
 
-        web3.disconnect()
-        web3.provider = provider
-
         logger.info({'msg': f'Deposit method end. Sleep for 1 minute.'})
-        time.sleep(60)
+        # time.sleep(60)
 
     def _get_deposit_params(self, deposit_root, keys_op_index):
         """
