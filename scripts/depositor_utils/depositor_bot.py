@@ -295,18 +295,16 @@ class DepositorBot:
             rec = result.receipts()
             if not rec:
                 raise Exception('No reception provided')
-            else:
-                logger.info({'msg': 'Transaction executed.', 'value': {
-                    'blockHash': rec[-1]['blockHash'].hex(),
-                    'blockNumber': rec[-1]['blockNumber'],
-                    'gasUsed': rec[-1]['gasUsed'],
-                    'transactionHash': rec[-1]['transactionHash'].hex(),
-                }})
         except Exception as error:
             logger.error({'msg': f'Deposit failed.', 'error': str(error)})
             DEPOSIT_FAILURE.inc()
         else:
-            logger.info({'msg': f'Deposited successfully.', 'value': str(result.logs)})
+            logger.info({'msg': 'Transaction executed.', 'value': {
+                'blockHash': rec[-1]['blockHash'].hex(),
+                'blockNumber': rec[-1]['blockNumber'],
+                'gasUsed': rec[-1]['gasUsed'],
+                'transactionHash': rec[-1]['transactionHash'].hex(),
+            }})
             SUCCESS_DEPOSIT.inc()
 
         logger.info({'msg': f'Deposit method end. Sleep for 1 minute.'})
