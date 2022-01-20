@@ -71,5 +71,6 @@ docker-compose up
 | CONTRACT_GAS_LIMIT                | 10 * 10**6 |  `10000000`   | Default transaction gas limit                                                                         |
 | WALLET_PRIVATE_KEY                |     -      |    `None`     | Account private key                                                                                   |
 | CREATE_TRANSACTIONS               |     -      |    `None`     | If `true` then tx will be send to blockchain                                                          |
-| MIN_PRIORITY_FEE                  |   2 GWEI   |   `2 gwei`    | If `true` then tx will be send to blockchain                                                          |
-| MAX_PRIORITY_FEE                  |  10 GWEI   |   `10 gwei`   | If `true` then tx will be send to blockchain                                                          |
+| MIN_PRIORITY_FEE                  |   2 GWEI   |   `2 gwei`    | Min priority fee that will be used in tx                                                              |
+| MAX_PRIORITY_FEE                  |  10 GWEI   |   `10 gwei`   | Max priority fee that will be used in tx (4 gwei recommended)                                         |
+| FLASHBOT_SIGNATURE                |     -      |    `None`     | Private key - Used to identify account in flashbot`s rpc (should NOT be equal to WALLET private key)  |

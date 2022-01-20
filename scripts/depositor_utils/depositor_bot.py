@@ -296,7 +296,12 @@ class DepositorBot:
             if not rec:
                 raise Exception('No reception provided')
             else:
-                logger.info({'msg': 'Reception received', 'value': dict(rec)})
+                logger.info({'msg': 'Transaction executed.', 'value': {
+                    'blockHash': rec[-1]['blockHash'].hex(),
+                    'blockNumber': rec[-1]['blockNumber'],
+                    'gasUsed': rec[-1]['gasUsed'],
+                    'transactionHash': rec[-1]['transactionHash'].hex(),
+                }})
         except Exception as error:
             logger.error({'msg': f'Deposit failed.', 'error': str(error)})
             DEPOSIT_FAILURE.inc()
