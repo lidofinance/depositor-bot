@@ -35,3 +35,5 @@ CURRENT_QUORUM_SIZE = Gauge(f'{DEPOSITOR_PREFIX}quorum_size', 'Current quorum si
 BUFFERED_ETHER = Gauge(f'{DEPOSITOR_PREFIX}buffered_ether', 'Buffered ether')
 OPERATORS_FREE_KEYS = Gauge(f'{DEPOSITOR_PREFIX}operator_free_keys', 'Has free keys')
 CREATING_TRANSACTIONS = Gauge(f'{DEPOSITOR_PREFIX}creating_transactions', 'Creating transactions', ['bot'])
+
+REQUIRED_BUFFERED_ETHER = Gauge(f'{DEPOSITOR_PREFIX}required_buffered_ether', 'Buffered ether amount required for deposit')
