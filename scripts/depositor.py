@@ -1,8 +1,8 @@
 from brownie import web3
 from prometheus_client import start_http_server
+from flashbots import flashbot
 
 from scripts.depositor_utils.depositor_bot import DepositorBot
-from scripts.flashbots import flashbot
 from scripts.utils import variables
 from scripts.utils.constants import FLASHBOTS_RPC
 from scripts.utils.logging import logging
