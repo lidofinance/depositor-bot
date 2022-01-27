@@ -31,7 +31,7 @@ DEPOSIT_SECURITY_MODULE = {
 }
 
 FLASHBOTS_RPC = {
-    Network.Mainnet: "https://rpc.flashbots.net",
+    Network.Mainnet: "https://relay.flashbots.net",
     Network.Görli: "https://relay-goerli.flashbots.net",
 }
 
