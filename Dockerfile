@@ -1,7 +1,7 @@
 FROM python:3.9-slim as builder
 
 RUN apt-get update && \
-    apt-get install -y curl python3-dev gcc g++ libc-dev
+    apt-get install -y curl python3-dev gcc g++ libc-dev git
 
 COPY requirements.txt .
 RUN pip install -r requirements.txt

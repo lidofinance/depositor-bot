@@ -294,6 +294,7 @@ class DepositorBot:
                     self._current_block.number + i
                 )
 
+            # We are waiting for `self._current_block.number + i` block number and get receipt by tx hash
             result.wait()
             rec = result.receipts()
             if not rec:
