@@ -38,7 +38,7 @@ WEB3_CHAIN_ID = web3.eth.chain_id
 
 # Account private key
 WALLET_PRIVATE_KEY = os.getenv('WALLET_PRIVATE_KEY', None)
-FLASHBOT_SIGNATURE = os.getenv('FLASHBOT_SIGNATURE', ''.join(random.choices(string.ascii_uppercase + string.digits, k=256)))
+FLASHBOT_SIGNATURE = os.getenv('FLASHBOT_SIGNATURE', web3.eth.account.create().privateKey.hex())
 
 if WALLET_PRIVATE_KEY:
     ACCOUNT = accounts.add(WALLET_PRIVATE_KEY)
