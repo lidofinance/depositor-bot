@@ -61,6 +61,7 @@ docker-compose up
 | KAFKA_USERNAME (required)         |     -      |    `None`     | Kafka username                                                                                        |
 | KAFKA_PASSWORD (required)         |     -      |    `None`     | Kafka password                                                                                        |
 | KAFKA_TOPIC (required)            |     -      |    `None`     | Kafka topic name (for msg receiving)                                                                  |
+| FLASHBOT_SIGNATURE (required)     |     -      |    `None`     | Private key - Used to identify account in flashbot`s rpc (should NOT be equal to WALLET private key)  |
 | KAFKA_GROUP_PREFIX                |     -      |    `None`     | Just for staging (staging-)                                                                           |
 | MAX_GAS_FEE                       |  100 GWEI  |  `100 gwei`   | Bot will wait for a lower price. Treshold for gas_fee                                                 |
 | GAS_FEE_PERCENTILE_1              |     20     |     `20`      | Percentile for first recommended fee calculation                                                      |
@@ -71,5 +72,5 @@ docker-compose up
 | CONTRACT_GAS_LIMIT                | 10 * 10**6 |  `10000000`   | Default transaction gas limit                                                                         |
 | WALLET_PRIVATE_KEY                |     -      |    `None`     | Account private key                                                                                   |
 | CREATE_TRANSACTIONS               |     -      |    `None`     | If `true` then tx will be send to blockchain                                                          |
-| MIN_PRIORITY_FEE                  |   2 GWEI   |   `2 gwei`    | If `true` then tx will be send to blockchain                                                          |
-| MAX_PRIORITY_FEE                  |  10 GWEI   |   `10 gwei`   | If `true` then tx will be send to blockchain                                                          |
+| MIN_PRIORITY_FEE                  |   2 GWEI   |   `2 gwei`    | Min priority fee that will be used in tx                                                              |
+| MAX_PRIORITY_FEE                  |  10 GWEI   |   `10 gwei`   | Max priority fee that will be used in tx (4 gwei recommended)                                         |

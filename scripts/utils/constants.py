@@ -30,6 +30,11 @@ DEPOSIT_SECURITY_MODULE = {
     Network.Görli: "0xed23ad3ea5fb9d10e7371caef1b141ad1c23a80c",
 }
 
+FLASHBOTS_RPC = {
+    Network.Mainnet: "https://relay.flashbots.net",
+    Network.Görli: "https://relay-goerli.flashbots.net",
+}
+
 DEPOSIT_CONTRACT_DEPLOY_BLOCK = {
     Network.Mainnet: 11052984,
     Network.Görli: 3085928,

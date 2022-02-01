@@ -6,6 +6,7 @@ from typing import List, Tuple
 from brownie import web3, Wei, chain
 from hexbytes import HexBytes
 from web3.exceptions import BlockNotFound
+from web3.types import TxParams
 
 from scripts.depositor_utils.kafka import DepositBotMsgRecipient
 from scripts.utils.interfaces import (
@@ -22,7 +23,9 @@ from scripts.utils.metrics import (
     DEPOSIT_FAILURE,
     SUCCESS_DEPOSIT,
     CURRENT_QUORUM_SIZE,
-    CREATING_TRANSACTIONS, BUILD_INFO,
+    CREATING_TRANSACTIONS,
+    BUILD_INFO,
+    REQUIRED_BUFFERED_ETHER,
 )
 from scripts.utils import variables
 from scripts.utils.gas_strategy import GasFeeStrategy
@@ -197,6 +200,7 @@ class DepositorBot:
 
         recommended_buffered_ether = self.gas_fee_strategy.get_recommended_buffered_ether_to_deposit(current_gas_fee)
         logger.info({'msg': 'Recommended min buffered ether to deposit.', 'value': recommended_buffered_ether})
+        REQUIRED_BUFFERED_ETHER.set(recommended_buffered_ether)
         if buffered_ether < recommended_buffered_ether:
             logger.warning({'msg': self.LIDO_CONTRACT_HAS_NOT_ENOUGH_BUFFERED_ETHER, 'value': buffered_ether})
             deposit_issues.append(self.LIDO_CONTRACT_HAS_NOT_ENOUGH_BUFFERED_ETHER)
@@ -251,23 +255,60 @@ class DepositorBot:
             return
 
         logger.info({'msg': 'Creating tx in blockchain.'})
+
         try:
-            result = DepositSecurityModuleInterface.depositBufferedEther(
+            contract = web3.eth.contract(
+                address=DepositSecurityModuleInterface.address,
+                abi=DepositSecurityModuleInterface.abi,
+            )
+            func = contract.functions.depositBufferedEther(
                 self.deposit_root,
                 self.keys_op_index,
                 deposit_params['block_num'],
                 deposit_params['block_hash'],
                 deposit_params['signs'],
-                {
-                    'gas_limit': variables.CONTRACT_GAS_LIMIT,
-                    'priority_fee': priority,
-                },
             )
+
+            # Make sure it works locally
+            func.call()
+            logger.info({'msg': 'Transaction call is success.'})
+
+            tx: TxParams = {
+                "from": variables.ACCOUNT.address,
+                "to": DepositSecurityModuleInterface.address,
+                "gas": variables.CONTRACT_GAS_LIMIT,
+                "maxFeePerGas": web3.eth.get_block('pending').baseFeePerGas * 2 + priority,
+                "maxPriorityFeePerGas": priority,
+                "nonce": web3.eth.get_transaction_count(variables.ACCOUNT.address),
+                "chainId": variables.WEB3_CHAIN_ID,
+                "data": func._encode_transaction_data()
+            }
+
+            from eth_account.account import Account
+            signer = Account.from_key(variables.ACCOUNT.private_key)
+
+            for i in range(10):
+                # Try to get in next 10 blocks
+                result = web3.flashbots.send_bundle(
+                    [{"signer": signer, "transaction": tx}],
+                    self._current_block.number + i
+                )
+
+            # We are waiting for `self._current_block.number + i` block number and get receipt by tx hash
+            result.wait()
+            rec = result.receipts()
+            if not rec:
+                raise Exception('No reception provided')
         except Exception as error:
             logger.error({'msg': f'Deposit failed.', 'error': str(error)})
             DEPOSIT_FAILURE.inc()
         else:
-            logger.info({'msg': f'Deposited successfully.', 'value': str(result.logs)})
+            logger.info({'msg': 'Transaction executed.', 'value': {
+                'blockHash': rec[-1]['blockHash'].hex(),
+                'blockNumber': rec[-1]['blockNumber'],
+                'gasUsed': rec[-1]['gasUsed'],
+                'transactionHash': rec[-1]['transactionHash'].hex(),
+            }})
             SUCCESS_DEPOSIT.inc()
 
         logger.info({'msg': f'Deposit method end. Sleep for 1 minute.'})
