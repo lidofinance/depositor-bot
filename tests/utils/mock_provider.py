@@ -22,18 +22,4 @@ class MockProvider(JSONBaseProvider):
             if result is not None:
                 return result[1]
 
-        infura_project_id = os.getenv('WEB3_INFURA_PROJECT_ID')
-        network = os.getenv('NETWORK')
-        prov = HTTPProvider(f'https://{network}.infura.io/v3/{infura_project_id}')
-        request_data = prov.encode_rpc_request(method, params)
-        raw_response = make_post_request(
-            prov.endpoint_uri,
-            request_data,
-            **prov.get_request_kwargs()
-        )
-        response = prov.decode_rpc_response(raw_response)
-
-        # print(method)
-        # print(f'({params}, {response}),')
-
-        return response
+        raise Exception('There is no mock for response')
