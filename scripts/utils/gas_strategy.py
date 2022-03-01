@@ -72,8 +72,11 @@ class GasFeeStrategy:
         gas_percentile = int(numpy.percentile(blocks_to_count_percentile, percentile))
         return gas_percentile
 
-    def get_recommended_gas_fee(self, percentiles: Iterable[Tuple[int, int]]) -> float:
+    def get_recommended_gas_fee(self, percentiles: Iterable[Tuple[int, int]], force = False) -> float:
         """Returns the recommended gas fee"""
+        if force:
+            return self.max_gas_fee
+
         min_recommended_fee = self.max_gas_fee
 
         for days, percentile in percentiles:
