@@ -59,6 +59,7 @@ class DepositorBot:
             'Depositor bot',
             variables.NETWORK,
             variables.MAX_GAS_FEE,
+            variables.MAX_BUFFERED_ETHERS,
             variables.CONTRACT_GAS_LIMIT,
             variables.GAS_FEE_PERCENTILE_1,
             variables.GAS_FEE_PERCENTILE_DAYS_HISTORY_1,
@@ -159,13 +160,27 @@ class DepositorBot:
             ACCOUNT_BALANCE.set(0)
             logger.info({'msg': 'Check account balance. No account provided.'})
 
+        current_gas_fee = web3.eth.get_block('pending').baseFeePerGas
+        
+        # Lido contract buffered ether check
+        buffered_ether = LidoInterface.getBufferedEther(block_identifier=self._current_block.hash.hex())
+        logger.info({'msg': 'Call `getBufferedEther()`.', 'value': buffered_ether})
+        BUFFERED_ETHER.set(buffered_ether)
+
+        recommended_buffered_ether = self.gas_fee_strategy.get_recommended_buffered_ether_to_deposit(current_gas_fee)
+        logger.info({'msg': 'Recommended min buffered ether to deposit.', 'value': recommended_buffered_ether})
+        REQUIRED_BUFFERED_ETHER.set(recommended_buffered_ether)
+        if buffered_ether < recommended_buffered_ether:
+            logger.warning({'msg': self.LIDO_CONTRACT_HAS_NOT_ENOUGH_BUFFERED_ETHER, 'value': buffered_ether})
+            deposit_issues.append(self.LIDO_CONTRACT_HAS_NOT_ENOUGH_BUFFERED_ETHER)
+
+        is_high_buffer = buffered_ether >= variables.MAX_BUFFERED_ETHERS
+
         # Gas price check
         recommended_gas_fee = self.gas_fee_strategy.get_recommended_gas_fee((
             (variables.GAS_FEE_PERCENTILE_DAYS_HISTORY_1, variables.GAS_FEE_PERCENTILE_1),
             (variables.GAS_FEE_PERCENTILE_DAYS_HISTORY_2, variables.GAS_FEE_PERCENTILE_2),
-        ))
-
-        current_gas_fee = web3.eth.get_block('pending').baseFeePerGas
+        ), force = is_high_buffer)
 
         GAS_FEE.labels('max_fee').set(variables.MAX_GAS_FEE)
         GAS_FEE.labels('current_fee').set(current_gas_fee)
@@ -184,27 +199,17 @@ class DepositorBot:
                     'max_fee': variables.MAX_GAS_FEE,
                     'current_fee': current_gas_fee,
                     'recommended_fee': recommended_gas_fee,
+                    'buffered_ether': buffered_ether,
                 }
             })
             deposit_issues.append(self.GAS_FEE_HIGHER_THAN_RECOMMENDED)
 
+        # Security module check
         can_deposit = DepositSecurityModuleInterface.canDeposit(block_identifier=self._current_block.hash.hex())
         logger.info({'msg': 'Call `canDeposit()`.', 'value': can_deposit})
         if not can_deposit:
             logger.warning({'msg': self.DEPOSIT_SECURITY_ISSUE, 'value': can_deposit})
             deposit_issues.append(self.DEPOSIT_SECURITY_ISSUE)
-
-        # Lido contract buffered ether check
-        buffered_ether = LidoInterface.getBufferedEther(block_identifier=self._current_block.hash.hex())
-        logger.info({'msg': 'Call `getBufferedEther()`.', 'value': buffered_ether})
-        BUFFERED_ETHER.set(buffered_ether)
-
-        recommended_buffered_ether = self.gas_fee_strategy.get_recommended_buffered_ether_to_deposit(current_gas_fee)
-        logger.info({'msg': 'Recommended min buffered ether to deposit.', 'value': recommended_buffered_ether})
-        REQUIRED_BUFFERED_ETHER.set(recommended_buffered_ether)
-        if buffered_ether < recommended_buffered_ether:
-            logger.warning({'msg': self.LIDO_CONTRACT_HAS_NOT_ENOUGH_BUFFERED_ETHER, 'value': buffered_ether})
-            deposit_issues.append(self.LIDO_CONTRACT_HAS_NOT_ENOUGH_BUFFERED_ETHER)
 
         # Check that contract has unused operators keys
         avail_keys = NodeOperatorsRegistryInterface.assignNextSigningKeys.call(1, {'from': LidoInterface.address})[0]
