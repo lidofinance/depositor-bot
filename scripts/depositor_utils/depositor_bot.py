@@ -4,6 +4,7 @@ from collections import defaultdict
 from typing import List, Tuple
 
 from brownie import web3, Wei, chain
+from eth_account import Account
 from hexbytes import HexBytes
 from web3.exceptions import BlockNotFound
 from web3.types import TxParams
@@ -58,6 +59,7 @@ class DepositorBot:
             'Depositor bot',
             variables.NETWORK,
             variables.MAX_GAS_FEE,
+            variables.MAX_BUFFERED_ETHERS,
             variables.CONTRACT_GAS_LIMIT,
             variables.GAS_FEE_PERCENTILE_1,
             variables.GAS_FEE_PERCENTILE_DAYS_HISTORY_1,
@@ -158,13 +160,27 @@ class DepositorBot:
             ACCOUNT_BALANCE.set(0)
             logger.info({'msg': 'Check account balance. No account provided.'})
 
+        current_gas_fee = web3.eth.get_block('pending').baseFeePerGas
+        
+        # Lido contract buffered ether check
+        buffered_ether = LidoInterface.getBufferedEther(block_identifier=self._current_block.hash.hex())
+        logger.info({'msg': 'Call `getBufferedEther()`.', 'value': buffered_ether})
+        BUFFERED_ETHER.set(buffered_ether)
+
+        recommended_buffered_ether = self.gas_fee_strategy.get_recommended_buffered_ether_to_deposit(current_gas_fee)
+        logger.info({'msg': 'Recommended min buffered ether to deposit.', 'value': recommended_buffered_ether})
+        REQUIRED_BUFFERED_ETHER.set(recommended_buffered_ether)
+        if buffered_ether < recommended_buffered_ether:
+            logger.warning({'msg': self.LIDO_CONTRACT_HAS_NOT_ENOUGH_BUFFERED_ETHER, 'value': buffered_ether})
+            deposit_issues.append(self.LIDO_CONTRACT_HAS_NOT_ENOUGH_BUFFERED_ETHER)
+
+        is_high_buffer = buffered_ether >= variables.MAX_BUFFERED_ETHERS
+
         # Gas price check
         recommended_gas_fee = self.gas_fee_strategy.get_recommended_gas_fee((
             (variables.GAS_FEE_PERCENTILE_DAYS_HISTORY_1, variables.GAS_FEE_PERCENTILE_1),
             (variables.GAS_FEE_PERCENTILE_DAYS_HISTORY_2, variables.GAS_FEE_PERCENTILE_2),
-        ))
-
-        current_gas_fee = web3.eth.get_block('pending').baseFeePerGas
+        ), force = is_high_buffer)
 
         GAS_FEE.labels('max_fee').set(variables.MAX_GAS_FEE)
         GAS_FEE.labels('current_fee').set(current_gas_fee)
@@ -183,27 +199,17 @@ class DepositorBot:
                     'max_fee': variables.MAX_GAS_FEE,
                     'current_fee': current_gas_fee,
                     'recommended_fee': recommended_gas_fee,
+                    'buffered_ether': buffered_ether,
                 }
             })
             deposit_issues.append(self.GAS_FEE_HIGHER_THAN_RECOMMENDED)
 
+        # Security module check
         can_deposit = DepositSecurityModuleInterface.canDeposit(block_identifier=self._current_block.hash.hex())
         logger.info({'msg': 'Call `canDeposit()`.', 'value': can_deposit})
         if not can_deposit:
             logger.warning({'msg': self.DEPOSIT_SECURITY_ISSUE, 'value': can_deposit})
             deposit_issues.append(self.DEPOSIT_SECURITY_ISSUE)
-
-        # Lido contract buffered ether check
-        buffered_ether = LidoInterface.getBufferedEther(block_identifier=self._current_block.hash.hex())
-        logger.info({'msg': 'Call `getBufferedEther()`.', 'value': buffered_ether})
-        BUFFERED_ETHER.set(buffered_ether)
-
-        recommended_buffered_ether = self.gas_fee_strategy.get_recommended_buffered_ether_to_deposit(current_gas_fee)
-        logger.info({'msg': 'Recommended min buffered ether to deposit.', 'value': recommended_buffered_ether})
-        REQUIRED_BUFFERED_ETHER.set(recommended_buffered_ether)
-        if buffered_ether < recommended_buffered_ether:
-            logger.warning({'msg': self.LIDO_CONTRACT_HAS_NOT_ENOUGH_BUFFERED_ETHER, 'value': buffered_ether})
-            deposit_issues.append(self.LIDO_CONTRACT_HAS_NOT_ENOUGH_BUFFERED_ETHER)
 
         # Check that contract has unused operators keys
         avail_keys = NodeOperatorsRegistryInterface.assignNextSigningKeys.call(1, {'from': LidoInterface.address})[0]
@@ -256,11 +262,12 @@ class DepositorBot:
 
         logger.info({'msg': 'Creating tx in blockchain.'})
 
+        contract = web3.eth.contract(
+            address=DepositSecurityModuleInterface.address,
+            abi=DepositSecurityModuleInterface.abi,
+        )
+
         try:
-            contract = web3.eth.contract(
-                address=DepositSecurityModuleInterface.address,
-                abi=DepositSecurityModuleInterface.abi,
-            )
             func = contract.functions.depositBufferedEther(
                 self.deposit_root,
                 self.keys_op_index,
@@ -284,31 +291,29 @@ class DepositorBot:
                 "data": func._encode_transaction_data()
             }
 
-            from eth_account.account import Account
-            signer = Account.from_key(variables.ACCOUNT.private_key)
+            signer = Account.from_key(private_key=variables.ACCOUNT.private_key)
 
             for i in range(10):
                 # Try to get in next 10 blocks
                 result = web3.flashbots.send_bundle(
-                    [{"signer": signer, "transaction": tx}],
+                    [{"signed_transaction": signer.sign_transaction(tx).rawTransaction}],
                     self._current_block.number + i
                 )
 
             # We are waiting for `self._current_block.number + i` block number and get receipt by tx hash
             result.wait()
             rec = result.receipts()
-            if not rec:
-                raise Exception('No reception provided')
-        except Exception as error:
-            logger.error({'msg': f'Deposit failed.', 'error': str(error)})
-            DEPOSIT_FAILURE.inc()
-        else:
+
             logger.info({'msg': 'Transaction executed.', 'value': {
                 'blockHash': rec[-1]['blockHash'].hex(),
                 'blockNumber': rec[-1]['blockNumber'],
                 'gasUsed': rec[-1]['gasUsed'],
                 'transactionHash': rec[-1]['transactionHash'].hex(),
             }})
+        except Exception as error:
+            logger.error({'msg': f'Deposit failed.', 'error': str(error)})
+            DEPOSIT_FAILURE.inc()
+        else:
             SUCCESS_DEPOSIT.inc()
 
         logger.info({'msg': f'Deposit method end. Sleep for 1 minute.'})

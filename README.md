@@ -63,6 +63,7 @@ docker-compose up
 | KAFKA_TOPIC (required)            |     -      |    `None`     | Kafka topic name (for msg receiving)                                                                  |
 | FLASHBOT_SIGNATURE (required)     |     -      |    `None`     | Private key - Used to identify account in flashbot`s rpc (should NOT be equal to WALLET private key)  |
 | KAFKA_GROUP_PREFIX                |     -      |    `None`     | Just for staging (staging-)                                                                           |
+| MAX_BUFFERED_ETHERS               |  5000 ETH  | `5000 ether`  | Maximum amount of ETH in the buffer, after which the bot deposits at any gas                          |
 | MAX_GAS_FEE                       |  100 GWEI  |  `100 gwei`   | Bot will wait for a lower price. Treshold for gas_fee                                                 |
 | GAS_FEE_PERCENTILE_1              |     20     |     `20`      | Percentile for first recommended fee calculation                                                      |
 | GAS_FEE_PERCENTILE_DAYS_HISTORY_1 |     1      |      `1`      | Percentile for first recommended calculates from N days of the fee history                            |
