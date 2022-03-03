@@ -27,4 +27,4 @@ USER www-data
 HEALTHCHECK --interval=10s --timeout=3s CMD curl -f http://localhost:8080/healthcheck || exit 1
 
 ENTRYPOINT ["/usr/local/bin/brownie"]
-CMD ["run", "depositor"]
+CMD ["run", "delegator"]

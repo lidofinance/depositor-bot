@@ -11,27 +11,7 @@ services:
       - NETWORK=${NETWORK}
       - WEB3_INFURA_PROJECT_ID=${WEB3_INFURA_PROJECT_ID}
       - WALLET_PRIVATE_KEY=${WALLET_PRIVATE_KEY}
-      - KAFKA_BROKER_ADDRESS_1=${KAFKA_BROKER_ADDRESS_1}
-      - KAFKA_USERNAME=${KAFKA_USERNAME}
-      - KAFKA_PASSWORD=${KAFKA_PASSWORD}
-      - KAFKA_TOPIC=${KAFKA_TOPIC}
+      - CYCLE=${CYCLE}
+      - CREATE_TRANSACTIONS=true
     entrypoint: brownie
     command: run depositor
-
-  lido-pause-bot:
-    image: lidofinance/depositor-bot
-    build: .
-    container_name: lido-pause-bot
-    restart: unless-stopped
-    ports:
-      - 127.0.0.1:9001:8080
-    environment:
-      - NETWORK=${NETWORK}
-      - WEB3_INFURA_PROJECT_ID=${WEB3_INFURA_PROJECT_ID}
-      - WALLET_PRIVATE_KEY=${WALLET_PRIVATE_KEY}
-      - KAFKA_BROKER_ADDRESS_1=${KAFKA_BROKER_ADDRESS_1}
-      - KAFKA_USERNAME=${KAFKA_USERNAME}
-      - KAFKA_PASSWORD=${KAFKA_PASSWORD}
-      - KAFKA_TOPIC=${KAFKA_TOPIC}
-    entrypoint: brownie
-    command: run pauser

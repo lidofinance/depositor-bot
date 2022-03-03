@@ -7,7 +7,7 @@ BUILD_INFO = Gauge(f'{DEPOSITOR_PREFIX}build_info', 'Build info', [
     'name',
     'network',
     'max_gas_fee',
-    'max_buffered_ethers',
+    'max_buffered_matics',
     'contract_gas_limit',
     'gas_fee_percentile_1',
     'gas_fee_percentile_days_history_1',
@@ -16,25 +16,23 @@ BUILD_INFO = Gauge(f'{DEPOSITOR_PREFIX}build_info', 'Build info', [
     'gas_priority_fee_percentile',
     'min_priority_fee',
     'max_priority_fee',
-    'kafka_topic',
     'account_address',
-    'create_transactions',
+    'create_transactions'
 ])
 
 GAS_FEE = Gauge(f'{DEPOSITOR_PREFIX}gas_fee', 'Gas fee', ['type'])
 
-DEPOSIT_FAILURE = Counter(f'{DEPOSITOR_PREFIX}deposit_failure', 'Deposit failure')
-SUCCESS_DEPOSIT = Counter(f'{DEPOSITOR_PREFIX}deposit_success', 'Deposit done')
+DELEGATE_FAILURE = Counter(f'{DEPOSITOR_PREFIX}delegate_failure', 'Delegate failure')
+SUCCESS_DELEGATE = Counter(f'{DEPOSITOR_PREFIX}delegate_success', 'Delegate done')
+
+DISTIBUTE_REWARDS_FAILURE = Counter(f'{DEPOSITOR_PREFIX}distribute_rewards_failure', 'Distribute rewards failure')
+SUCCESS_DISTIBUTE_REWARDS = Counter(f'{DEPOSITOR_PREFIX}distribute_rewards_success', 'Distribute rewards done')
 
 ACCOUNT_BALANCE = Gauge(f'{DEPOSITOR_PREFIX}account_balance', 'Account balance')
 
-KAFKA_DEPOSIT_MESSAGES = Gauge(f'{DEPOSITOR_PREFIX}kafka_deposit_messages', 'Guardians deposit messages', ['address', 'version'])
-KAFKA_PAUSE_MESSAGES = Gauge(f'{DEPOSITOR_PREFIX}kafka_pause_messages', 'Guardians pause messages', ['address', 'version'])
-KAFKA_PING_MESSAGES = Gauge(f'{DEPOSITOR_PREFIX}kafka_ping_messages', 'Guardians ping messages', ['address', 'version'])
-
-CURRENT_QUORUM_SIZE = Gauge(f'{DEPOSITOR_PREFIX}quorum_size', 'Current quorum size')
-BUFFERED_ETHER = Gauge(f'{DEPOSITOR_PREFIX}buffered_ether', 'Buffered ether')
-OPERATORS_FREE_KEYS = Gauge(f'{DEPOSITOR_PREFIX}operator_free_keys', 'Has free keys')
+BUFFERED_MATIC = Gauge(f'{DEPOSITOR_PREFIX}buffered_matic', 'Buffered MATIC')
+REQUIRED_BUFFERED_MATIC = Gauge(f'{DEPOSITOR_PREFIX}required_buffered_matic', 'Min buffered MATIC amount required for delegate')
 CREATING_TRANSACTIONS = Gauge(f'{DEPOSITOR_PREFIX}creating_transactions', 'Creating transactions', ['bot'])
 
-REQUIRED_BUFFERED_ETHER = Gauge(f'{DEPOSITOR_PREFIX}required_buffered_ether', 'Buffered ether amount required for deposit')
+REWARDS_MATIC = Gauge(f'{DEPOSITOR_PREFIX}rewards_matic', 'Rewards MATIC')
+REQUIRED_REWARDS_MATIC = Gauge(f'{DEPOSITOR_PREFIX}required_rewards_matic', 'Min rewards MATIC amount required for distribute')

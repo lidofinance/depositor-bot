@@ -84,8 +84,8 @@ class GasFeeStrategy:
 
         return min_recommended_fee
 
-    def get_recommended_buffered_ether_to_deposit(self, gas_fee):
-        """Returns suggested minimum buffered ether to deposit"""
+    def get_recommended_buffered_matic_to_delegate(self, gas_fee):
+        """Returns suggested minimum buffered MATIC to delegate"""
         apr = 0.044  # Protocol APR
         # ether/14 days : select sum(tr.value)/1e18 from ethereum."transactions" as tr
         # where tr.to = '\xae7ab96520DE3A18E5e111B5EaAb095312D7fE84'
