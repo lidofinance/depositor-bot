@@ -1,9 +1,9 @@
 version: "3.7"
 services:
-  lido-depositor-bot:
+  polygon-lido-depositor-bot:
     image: lidofinance/depositor-bot
     build: .
-    container_name: lido-depositor-bot
+    container_name: polygon-lido-depositor-bot
     restart: unless-stopped
     ports:
       - 127.0.0.1:9000:8080
