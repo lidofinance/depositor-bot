@@ -77,6 +77,9 @@ class DepositorBot:
         """Super-Mega infinity cycle!"""
         while True:
             self.run_cycle()
+            logger.info({'msg': f'Sleep for {variables.CYCLE} seconds.'})
+            time.sleep(variables.CYCLE)
+
 
     def run_cycle(self):
         self.run_distribute_rewards_cycle()
@@ -85,8 +88,6 @@ class DepositorBot:
         self.run_delegate_cycle()
         logger.info({'msg': f'Delegate method end.'})
 
-        logger.info({'msg': f'Sleep for {variables.CYCLE} seconds.'})
-        time.sleep(variables.CYCLE)
 
     def run_delegate_cycle(self):
         """
@@ -245,13 +246,15 @@ class DepositorBot:
             delegate_issues.append(
                 self.StMATIC_CONTRACT_HAS_NOT_ENOUGH_BUFFERED_MATIC)
 
+        is_high_buffer = total_buffered >= variables.MAX_BUFFERED_MATICS
+
         # Gas price check
         recommended_gas_fee = self.gas_fee_strategy.get_recommended_gas_fee((
             (variables.GAS_FEE_PERCENTILE_DAYS_HISTORY_1,
              variables.GAS_FEE_PERCENTILE_1),
             (variables.GAS_FEE_PERCENTILE_DAYS_HISTORY_2,
              variables.GAS_FEE_PERCENTILE_2),
-        ), force=False)
+        ), force=is_high_buffer)
 
         GAS_FEE.labels('max_fee').set(variables.MAX_GAS_FEE)
         GAS_FEE.labels('current_fee').set(current_gas_fee)
@@ -263,7 +266,7 @@ class DepositorBot:
             'recommended_fee': recommended_gas_fee,
         }})
 
-        if current_gas_fee < recommended_gas_fee:
+        if current_gas_fee > recommended_gas_fee:
             logger.warning({
                 'msg': self.GAS_FEE_HIGHER_THAN_RECOMMENDED,
                 'values': {
@@ -336,7 +339,7 @@ class DepositorBot:
             'recommended_fee': recommended_gas_fee,
         }})
 
-        if current_gas_fee < recommended_gas_fee:
+        if current_gas_fee > recommended_gas_fee:
             logger.warning({
                 'msg': self.GAS_FEE_HIGHER_THAN_RECOMMENDED,
                 'values': {

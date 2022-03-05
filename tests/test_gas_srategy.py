@@ -42,17 +42,21 @@ def test_get_recommended_gas_fee(setup_web3_gas_fee_fixtures):
     assert fee == gas_fee_strategy.max_gas_fee
 
 
-def test_recommended_buffered_ether():
+def test_recommended_buffered_matic():
     gas_fee_strategy = GasFeeStrategy(web3)
 
-    buffered_ether = gas_fee_strategy.get_recommended_buffered_ether_to_deposit(10**9)
+    buffered_ether = gas_fee_strategy.get_recommended_buffered_matic_to_delegate(
+        10**9)
     assert 1 < buffered_ether / 10**18 < 100
 
-    buffered_ether = gas_fee_strategy.get_recommended_buffered_ether_to_deposit(50 * 10**9)
+    buffered_ether = gas_fee_strategy.get_recommended_buffered_matic_to_delegate(
+        50 * 10**9)
     assert 350 < buffered_ether / 10**18 < 400
 
-    buffered_ether = gas_fee_strategy.get_recommended_buffered_ether_to_deposit(70 * 10**9)
+    buffered_ether = gas_fee_strategy.get_recommended_buffered_matic_to_delegate(
+        70 * 10**9)
     assert 400 < buffered_ether / 10**18 < 600
 
-    buffered_ether = gas_fee_strategy.get_recommended_buffered_ether_to_deposit(150 * 10**9)
+    buffered_ether = gas_fee_strategy.get_recommended_buffered_matic_to_delegate(
+        150 * 10**9)
     assert 600 < buffered_ether / 10**18 < 700
