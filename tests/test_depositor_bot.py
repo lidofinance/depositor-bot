@@ -178,3 +178,16 @@ def test_distribute_rewards__sucess(
     assert not find_log_message(caplog, ISSUES_FOUND_LOG)
     assert find_log_message(caplog, ISSUES_NOT_FOUND_DISTRIBUTE_REWARDS_LOG)
     assert find_log_message(caplog, 'Creating tx in blockchain.')
+
+def test_depositor_bot_priority_fee(
+    setup_web3_deposit_fixtures,
+    depositor_bot,
+):
+    priority_fee = depositor_bot._get_deposit_priority_fee(0)
+    assert 10 * 10**9 >= priority_fee >= 2 * 10**9
+
+    priority_fee = depositor_bot._get_deposit_priority_fee(55)
+    assert 10 * 10**9 >= priority_fee >= 2 * 10**9
+
+    priority_fee = depositor_bot._get_deposit_priority_fee(100)
+    assert 10 * 10**9 >= priority_fee >= 2 * 10**9

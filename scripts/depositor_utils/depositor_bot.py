@@ -39,6 +39,9 @@ class DepositorBot:
     GAS_FEE_HIGHER_THAN_RECOMMENDED = 'Gas fee is higher than recommended fee.'
     StMATIC_CONTRACT_HAS_NOT_ENOUGH_BUFFERED_MATIC = 'StMATIC contract has not enough buffered MATIC.'
     StMATIC_CONTRACT_HAS_NOT_ENOUGH_REWARDS = 'StMATIC contract has not enough rewards to distribute.'
+    DELEGATED = False
+    DISTRIBUTED = False
+    RETRY_TIMES = 0
 
     def __init__(self):
         logger.info({'msg': 'Initialize DepositorBot.'})
@@ -76,20 +79,37 @@ class DepositorBot:
     def run_as_daemon(self):
         """Super-Mega infinity cycle!"""
         while True:
-            self.run_cycle()
-            logger.info({'msg': f'Sleep for {variables.CYCLE} seconds.'})
-            time.sleep(variables.CYCLE)
+            try:
+                self.run_cycle()
+                if self.DELEGATED and self.DISTRIBUTED or self.RETRY_TIMES == variables.RETRY_GAS_FEE_TIMES:
+                    self.DELEGATED = False
+                    self.DISTRIBUTED = False
+                    self.RETRY_TIMES = 0
+                    logger.info(
+                        {'msg': f'Cycle finished. Sleep for {variables.CYCLE} seconds.'})
+                    time.sleep(variables.CYCLE)
+                else:
+                    logger.info(
+                        {'msg': f'Fees are high. Retry in {variables.RETRY_GAS_FEE} seconds. Tries: {self.RETRY_TIMES}/{variables.RETRY_GAS_FEE_TIMES}'})
+                    time.sleep(variables.RETRY_GAS_FEE)
 
+            except Exception as error:
+                logger.warning(
+                    {'msg': 'Unexpected exception.', 'error': str(error)})
+                time.sleep(60)
 
     def run_cycle(self):
-        self.run_distribute_rewards_cycle()
-        logger.info({'msg': f'Distribute rewards method end.'})
+        if not self.DISTRIBUTED:
+            self.run_distribute_rewards_cycle()
+            logger.info({'msg': f'Distribute rewards method end.'})
 
-        time.sleep(60)
+        time.sleep(10)
 
-        self.run_delegate_cycle()
-        logger.info({'msg': f'Delegate method end.'})
+        if not self.DELEGATED:
+            self.run_delegate_cycle()
+            logger.info({'msg': f'Delegate method end.'})
 
+        self.RETRY_TIMES += 1
 
     def run_delegate_cycle(self):
         """
@@ -98,8 +118,9 @@ class DepositorBot:
         logger.info({'msg': 'New delegate cycle.'})
         self._update_state()
 
-        # Pause message instantly if we receive pause message
         delegate_issues = self.get_delegate_issues()
+        if self.GAS_FEE_HIGHER_THAN_RECOMMENDED not in delegate_issues:
+            self.DELEGATED = True
 
         if not delegate_issues:
             logger.info({'msg': 'Start delegate.'})
@@ -130,8 +151,9 @@ class DepositorBot:
         logger.info({'msg': 'New distribute rewards cycle.'})
         self._update_state()
 
-        # Pause message instantly if we receive pause message
         distribute_rewards_issues = self.get_distribute_rewards_issues()
+        if self.GAS_FEE_HIGHER_THAN_RECOMMENDED not in distribute_rewards_issues:
+            self.DISTRIBUTED = True
 
         if not distribute_rewards_issues:
             logger.info({'msg': 'Distribute Rewards.'})
@@ -149,8 +171,7 @@ class DepositorBot:
         for long_issue in long_issues:
             if long_issue in distribute_rewards_issues:
                 logger.info(
-                    {'msg': f'Long issue found. Sleep for 1 minute.', 'value': long_issue})
-                time.sleep(60)
+                    {'msg': f'Long issue found.', 'value': long_issue})
                 break
 
     def do_distribution(self):
@@ -167,12 +188,17 @@ class DepositorBot:
 
         logger.info({'msg': 'Creating tx in blockchain.'})
 
+        priority = self._get_deposit_priority_fee(
+            variables.GAS_PRIORITY_FEE_PERCENTILE)
         try:
             # Distribute Rewards
-            StMATICInterface.distributeRewards()
+            StMATICInterface.distributeRewards({
+                'priority_fee': priority,
+                'gas_limit': variables.CONTRACT_GAS_LIMIT
+            })
 
-            # Make sure it works locally
-            logger.info({'msg': 'Transaction call is success.'})
+            logger.info({'msg': 'Transaction success.'})
+            self.DISTRIBUTED = True
 
         except Exception as error:
             logger.error(
@@ -195,18 +221,23 @@ class DepositorBot:
 
         logger.info({'msg': 'Creating tx in blockchain.'})
 
+        priority = self._get_deposit_priority_fee(
+            variables.GAS_PRIORITY_FEE_PERCENTILE)
+
         try:
             # Delegate
-            StMATICInterface.delegate()
+            StMATICInterface.delegate({
+                'priority_fee': priority,
+                'gas_limit': variables.CONTRACT_GAS_LIMIT
+            })
 
-            # Make sure it works locally
-            logger.info({'msg': 'Transaction call is success.'})
+            logger.info({'msg': 'Transaction success.'})
+            self.DELEGATED = True
 
         except Exception as error:
             logger.error({'msg': f'Delegate failed.', 'error': str(error)})
             DELEGATE_FAILURE.inc()
         else:
-            pass
             SUCCESS_DELEGATE.inc()
 
     def get_delegate_issues(self):
@@ -376,3 +407,14 @@ class DepositorBot:
             'total_rewards': total_rewards
         }})
         return total_rewards, reward_distribution_lower_bound
+
+    @staticmethod
+    def _get_deposit_priority_fee(percentile):
+        return min(
+            max(
+                web3.eth.fee_history(1, 'latest', reward_percentiles=[
+                                     percentile])['reward'][0][0],
+                variables.MIN_PRIORITY_FEE,
+            ),
+            variables.MAX_PRIORITY_FEE,
+        )

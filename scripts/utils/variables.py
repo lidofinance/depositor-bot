@@ -31,6 +31,8 @@ MAX_BUFFERED_MATICS = Wei(os.getenv('MAX_BUFFERED_MATICS', '1000000 ether'))
 WEB3_CHAIN_ID = web3.eth.chain_id
 CREATE_TRANSACTIONS = os.getenv('CREATE_TRANSACTIONS') == 'true'
 CYCLE = int(os.getenv('CYCLE', 86400))
+RETRY_GAS_FEE = int(os.getenv('RETRY_GAS_FEE', 60))
+RETRY_GAS_FEE_TIMES = int(os.getenv('RETRY_GAS_FEE_TIMES', 60))
 
 # Account private key
 WALLET_PRIVATE_KEY = os.getenv('WALLET_PRIVATE_KEY', None)
