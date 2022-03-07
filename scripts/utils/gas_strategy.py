@@ -28,6 +28,18 @@ class GasFeeStrategy:
         self._latest_fetched_block: int = 0
         self._days_param = None
 
+        # INIT CONSTANTS
+        self.apr = 0.044  # Protocol APR
+        # ether/14 days : select sum(tr.value)/1e18 from ethereum."transactions" as tr
+        # where tr.to = '\xae7ab96520DE3A18E5e111B5EaAb095312D7fE84'
+        # and tr.block_time >= '2021-12-01' and tr.block_time < '2021-12-15' and tr.value < 600*1e18;
+        self.a = 24  # ~ ether/hour
+        self.keys_hour = self.a / 32
+        self.p = 32 * 10**18 * self.apr / 365 / 24  # ~ Profit in hour
+        self.cc = 378300  # gas constant for every deposit tx that should be paid
+        self.ck = 63000  # gas for each key should be paid on deposit
+        self.multiply_constant = 1.5  # we will get profit with constant from 1 to 2, but the most profitable will be 1.5
+
     def _fetch_gas_fee_history(self, days: int) -> List[int]:
         """
         Returns gas fee history for N days.
@@ -84,15 +96,16 @@ class GasFeeStrategy:
 
         return min_recommended_fee
 
+    def is_waiting_beneficial(self, buffered_ether: int, percentile: int, days: int, current_fee, current_recommended_gas_fee):
+        gas_fee_history = self._fetch_gas_fee_history(days)
+        current_percentile = len([x for x in gas_fee_history[-6600*days:] if x < current_fee])/len(gas_fee_history[-6600*days:]) * 100
+
+        time_between = (current_percentile - percentile) / 100 * days
+
+        time_between_max = (int(buffered_ether / 32) * self.ck + self.cc) * (current_recommended_gas_fee - current_fee) / (int(buffered_ether / 32) * self.p)
+
+        return time_between < time_between_max
+
     def get_recommended_buffered_ether_to_deposit(self, gas_fee):
         """Returns suggested minimum buffered ether to deposit"""
-        apr = 0.044  # Protocol APR
-        # ether/14 days : select sum(tr.value)/1e18 from ethereum."transactions" as tr
-        # where tr.to = '\xae7ab96520DE3A18E5e111B5EaAb095312D7fE84'
-        # and tr.block_time >= '2021-12-01' and tr.block_time < '2021-12-15' and tr.value < 600*1e18;
-        a = 24  # ~ ether/hour
-        keys_hour = a / 32
-        p = 32 * 10**18 * apr / 365 / 24  # ~ Profit in hour
-        c = 378300  # wei is constant for every deposit tx that should be paid
-        multiply_constant = 1.5  # we will get profit with constant from 1 to 2, but the most profitable will be 1.5
-        return sqrt(multiply_constant * c * gas_fee * keys_hour / p) * 32 * 10**18
+        return sqrt(self.multiply_constant * self.cc * gas_fee * self.keys_hour / self.p) * 32 * 10**18

@@ -44,6 +44,7 @@ class DepositorBot:
     QUORUM_IS_NOT_READY = 'Quorum is not ready'
 
     _current_block = None
+    last_fb_deposit_failed = False
 
     def __init__(self):
         logger.info({'msg': 'Initialize DepositorBot.'})
@@ -202,7 +203,18 @@ class DepositorBot:
                     'buffered_ether': buffered_ether,
                 }
             })
-            deposit_issues.append(self.GAS_FEE_HIGHER_THAN_RECOMMENDED)
+
+            if self.gas_fee_strategy.is_waiting_beneficial(
+                buffered_ether,
+                variables.GAS_FEE_PERCENTILE_1,
+                variables.GAS_FEE_PERCENTILE_DAYS_HISTORY_1,
+                current_gas_fee,
+                recommended_gas_fee,
+            ):
+                logger.info({'msg': 'Waiting is more proficient than depositing.'})
+                deposit_issues.append(self.GAS_FEE_HIGHER_THAN_RECOMMENDED)
+            else:
+                logger.info({'msg': 'Depositing is more proficient than waiting.'})
 
         # Security module check
         can_deposit = DepositSecurityModuleInterface.canDeposit(block_identifier=self._current_block.hash.hex())
@@ -232,8 +244,8 @@ class DepositorBot:
 
     # ------------ DO DEPOSIT ------------------
     def do_deposit(self):
-        """Sign and Make deposit"""
-        logger.info({'msg': 'No issues found. Try to deposit.'})
+        logger.info({'msg': 'No issues found.'})
+
         deposit_params = self._get_deposit_params(self.deposit_root, self.keys_op_index)
 
         if not deposit_params:
@@ -262,6 +274,17 @@ class DepositorBot:
 
         logger.info({'msg': 'Creating tx in blockchain.'})
 
+        if self.last_fb_deposit_failed:
+            logger.info({'msg': 'Try to deposit. Classic mode'})
+
+            self.last_fb_deposit_failed = False
+            self.do_classic_deposit(deposit_params, priority)
+        else:
+            logger.info({'msg': 'Try to deposit. Flashbots mode.'})
+            self.do_deposit_with_fb(deposit_params, priority)
+
+    def do_deposit_with_fb(self, deposit_params, priority):
+        """Sign and Make deposit"""
         contract = web3.eth.contract(
             address=DepositSecurityModuleInterface.address,
             abi=DepositSecurityModuleInterface.abi,
@@ -293,8 +316,8 @@ class DepositorBot:
 
             signer = Account.from_key(private_key=variables.ACCOUNT.private_key)
 
-            for i in range(10):
-                # Try to get in next 10 blocks
+            for i in range(5):
+                # Try to get in next 5 blocks
                 result = web3.flashbots.send_bundle(
                     [{"signed_transaction": signer.sign_transaction(tx).rawTransaction}],
                     self._current_block.number + i
@@ -313,11 +336,31 @@ class DepositorBot:
         except Exception as error:
             logger.error({'msg': f'Deposit failed.', 'error': str(error)})
             DEPOSIT_FAILURE.inc()
+            self.last_fb_deposit_failed = True
         else:
             SUCCESS_DEPOSIT.inc()
+            logger.info({'msg': f'Deposit method end. Sleep for 1 minute.'})
+            time.sleep(60)
 
-        logger.info({'msg': f'Deposit method end. Sleep for 1 minute.'})
-        time.sleep(60)
+    def do_classic_deposit(self, deposit_params, priority):
+        try:
+            result = DepositSecurityModuleInterface.depositBufferedEther(
+                self.deposit_root,
+                self.keys_op_index,
+                deposit_params['block_num'],
+                deposit_params['block_hash'],
+                deposit_params['signs'],
+                {
+                    'gas_limit': variables.CONTRACT_GAS_LIMIT,
+                    'priority_fee': priority,
+                },
+            )
+        except BaseException as error:
+            logger.error({'msg': f'Deposit failed.', 'error': error})
+            DEPOSIT_FAILURE.inc()
+        else:
+            logger.info({'msg': f'Deposited successfully.', 'value': str(result.logs)})
+            SUCCESS_DEPOSIT.inc()
 
     def _get_deposit_params(self, deposit_root, keys_op_index):
         """
