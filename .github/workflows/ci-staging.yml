@@ -16,11 +16,3 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v2.4.0
-
-      - name: Staging deploying
-        run: .github/dispatch_workflow.py
-        env:
-          APP_ID: ${{ secrets.APP_ID }}
-          APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
-          TARGET_REPO: "${{ secrets.TARGET_REPO }}"
-          TARGET_WORKFLOW: "deploy_staging_mainnet_depositor_bot.yaml"
