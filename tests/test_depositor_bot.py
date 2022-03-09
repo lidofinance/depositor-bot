@@ -1,5 +1,5 @@
 import logging
-
+import time
 from tests.fixtures.pytest_fixtures import *
 from tests.utils.logs import find_log_message
 
@@ -13,7 +13,8 @@ def test_distribute_rewards_no_create_tx(
     caplog,
     setup_web3_fixtures_distribute_rewards,
     depositor_bot,
-    setup_account
+    setup_account,
+    setup_no_create_txs
 ):
     caplog.set_level(logging.INFO)
     depositor_bot.run_distribute_rewards_cycle()
@@ -27,7 +28,23 @@ def test_delegate_no_create_tx(
     caplog,
     setup_web3_fixtures_delegate,
     depositor_bot,
-    setup_account
+    setup_account,
+    setup_no_create_txs
+):
+    caplog.set_level(logging.INFO)
+    depositor_bot.run_delegate_cycle()
+    assert not find_log_message(caplog, ISSUES_FOUND_LOG)
+    assert find_log_message(caplog, ISSUES_NOT_FOUND_DELEGATE_LOG)
+    assert find_log_message(caplog, 'Run in dry mode.')
+    assert not find_log_message(caplog, 'Creating tx in blockchain.')
+
+
+def test_delegate_range_no_create_tx(
+    caplog,
+    setup_web3_fixtures_delegate_in_range,
+    depositor_bot,
+    setup_account,
+    setup_no_create_txs
 ):
     caplog.set_level(logging.INFO)
     depositor_bot.run_delegate_cycle()
@@ -91,6 +108,7 @@ def test_delegate_issues__buffered_matics(
     setup_account
 ):
     caplog.set_level(logging.INFO)
+    depositor_bot.LAST_DELEGATE_TIME = time.time()
     depositor_bot.run_delegate_cycle()
 
     assert find_log_message(
@@ -100,6 +118,21 @@ def test_delegate_issues__buffered_matics(
     assert record.msg['value'] == [
         depositor_bot.StMATIC_CONTRACT_HAS_NOT_ENOUGH_BUFFERED_MATIC]
 
+def test_delegate_issues__buffered_matics(
+    caplog,
+    setup_web3_fixtures_delegate_out_range,
+    depositor_bot,
+    setup_account
+):
+    caplog.set_level(logging.INFO)
+    depositor_bot.run_delegate_cycle()
+
+    assert find_log_message(
+        caplog, depositor_bot.StMATIC_CONTRACT_HAS_NOT_ENOUGH_BUFFERED_MATIC)
+    record = find_log_message(caplog, ISSUES_FOUND_LOG)
+    assert record
+    assert record.msg['value'] == [
+        depositor_bot.StMATIC_CONTRACT_HAS_NOT_ENOUGH_BUFFERED_MATIC]
 
 def test_distribute_rewards_issues__not_enough_rewards(
     caplog,
@@ -122,7 +155,7 @@ def test_delegate__no_account(
     caplog,
     depositor_bot,
     setup_web3_fixtures_delegate,
-    setup_np_account
+    setup_no_account
 ):
     caplog.set_level(logging.INFO)
     depositor_bot.run_delegate_cycle()
@@ -138,7 +171,7 @@ def test_distribute_rewards__no_account(
     caplog,
     depositor_bot,
     setup_web3_fixtures_distribute_rewards,
-    setup_np_account
+    setup_no_account
 ):
     caplog.set_level(logging.INFO)
     depositor_bot.run_distribute_rewards_cycle()

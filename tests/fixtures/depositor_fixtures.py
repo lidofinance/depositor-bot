@@ -1,10 +1,48 @@
 from tests.fixtures.common_fixtures import COMMON_FIXTURES
 from tests.fixtures.gas_fee_fixtures import GAS_FEE_FIXTURES
 
+# 0x52349b17 --> totalBuffered
+# 0x509c5df6 --> reservedFunds
+# 0x0d7abc33 --> delegationLowerBound
+# 0x7e978af8 --> getTotalStakeAcrossAllValidators
+
+# totalBuffered > 3 % of total delegated
 DELEGATE_BASE_FIXTURES = {
     'eth_call':(
         (({'to': '0x9ee91F9f426fA633d227f7a9b000E28b9dfd8599', 'data': '0x52349b17'}, 'latest'), {'jsonrpc': '2.0', 'id': 12, 'result': '0x0000000000000000000000000000000000000000000000000000000000010000'}),
-        (({'to': '0x9ee91F9f426fA633d227f7a9b000E28b9dfd8599', 'data': '0x0d7abc33'}, 'latest'), {'jsonrpc': '2.0', 'id': 12, 'result': '0x0000000000000000000000000000000000000000000000000000000000000000'})
+        (({'to': '0x9ee91F9f426fA633d227f7a9b000E28b9dfd8599', 'data': '0x509c5df6'}, 'latest'), {'jsonrpc': '2.0', 'id': 12, 'result': '0x0000000000000000000000000000000000000000000000000000000000000000'}),
+        (({'to': '0x9ee91F9f426fA633d227f7a9b000E28b9dfd8599', 'data': '0x0d7abc33'}, 'latest'), {'jsonrpc': '2.0', 'id': 12, 'result': '0x0000000000000000000000000000000000000000000000000000000000000000'}),
+        (({'to': '0x9ee91F9f426fA633d227f7a9b000E28b9dfd8599', 'data': '0x7e978af8'}, 'latest'), {'jsonrpc': '2.0', 'id': 12, 'result': '0x0000000000000000000000000000000000000000000000000000000000100000'})
+    ),
+    'eth_getBalance': (
+        (['0x3f17f1962B36e491b30A40b2405849e597Ba5FB5', 'latest'], {'jsonrpc': '2.0', 'id': 0, 'result': '0xffffffffffffffff'}),
+    ),
+    **GAS_FEE_FIXTURES,
+    **COMMON_FIXTURES,
+}
+
+#  1 % < totalBuffered < 3% of total delegated
+DELEGATE_FIXTURES_IN_RANGE = {
+    'eth_call':(
+        (({'to': '0x9ee91F9f426fA633d227f7a9b000E28b9dfd8599', 'data': '0x52349b17'}, 'latest'), {'jsonrpc': '2.0', 'id': 12, 'result': '0x0000000000000000000000000000000000000000000000000000000000000002'}),
+        (({'to': '0x9ee91F9f426fA633d227f7a9b000E28b9dfd8599', 'data': '0x509c5df6'}, 'latest'), {'jsonrpc': '2.0', 'id': 12, 'result': '0x0000000000000000000000000000000000000000000000000000000000000000'}),
+        (({'to': '0x9ee91F9f426fA633d227f7a9b000E28b9dfd8599', 'data': '0x0d7abc33'}, 'latest'), {'jsonrpc': '2.0', 'id': 12, 'result': '0x0000000000000000000000000000000000000000000000000000000000000000'}),
+        (({'to': '0x9ee91F9f426fA633d227f7a9b000E28b9dfd8599', 'data': '0x7e978af8'}, 'latest'), {'jsonrpc': '2.0', 'id': 12, 'result': '0x0000000000000000000000000000000000000000000000000000000000000064'})
+    ),
+    'eth_getBalance': (
+        (['0x3f17f1962B36e491b30A40b2405849e597Ba5FB5', 'latest'], {'jsonrpc': '2.0', 'id': 0, 'result': '0xffffffffffffffff'}),
+    ),
+    **GAS_FEE_FIXTURES,
+    **COMMON_FIXTURES,
+}
+
+#  1 % > totalBuffered of total delegated
+DELEGATE_FIXTURES_OUT_RANGE = {
+    'eth_call':(
+        (({'to': '0x9ee91F9f426fA633d227f7a9b000E28b9dfd8599', 'data': '0x52349b17'}, 'latest'), {'jsonrpc': '2.0', 'id': 12, 'result': '0x0000000000000000000000000000000000000000000000000000000000000001'}),
+        (({'to': '0x9ee91F9f426fA633d227f7a9b000E28b9dfd8599', 'data': '0x509c5df6'}, 'latest'), {'jsonrpc': '2.0', 'id': 12, 'result': '0x0000000000000000000000000000000000000000000000000000000000000000'}),
+        (({'to': '0x9ee91F9f426fA633d227f7a9b000E28b9dfd8599', 'data': '0x0d7abc33'}, 'latest'), {'jsonrpc': '2.0', 'id': 12, 'result': '0x0000000000000000000000000000000000000000000000000000000000000000'}),
+        (({'to': '0x9ee91F9f426fA633d227f7a9b000E28b9dfd8599', 'data': '0x7e978af8'}, 'latest'), {'jsonrpc': '2.0', 'id': 12, 'result': '0x0000000000000000000000000000000000000000000000000000000000000064'})
     ),
     'eth_getBalance': (
         (['0x3f17f1962B36e491b30A40b2405849e597Ba5FB5', 'latest'], {'jsonrpc': '2.0', 'id': 0, 'result': '0xffffffffffffffff'}),
@@ -103,7 +141,9 @@ DELEGATOR_FIXTURES_NOT_ENOUGH_BUFFERED_MATIC = {
     **DELEGATE_BASE_FIXTURES,
     'eth_call':(
         (({'to': '0x9ee91F9f426fA633d227f7a9b000E28b9dfd8599', 'data': '0x0d7abc33'}, 'latest'), {'jsonrpc': '2.0', 'id': 12, 'result': '0x0000000000000000000000000000000000000000000000000000000000010000'}),
-        (({'to': '0x9ee91F9f426fA633d227f7a9b000E28b9dfd8599', 'data': '0x52349b17'}, 'latest'), {'jsonrpc': '2.0', 'id': 12, 'result': '0x0000000000000000000000000000000000000000000000000000000000000000'})
+        (({'to': '0x9ee91F9f426fA633d227f7a9b000E28b9dfd8599', 'data': '0x52349b17'}, 'latest'), {'jsonrpc': '2.0', 'id': 12, 'result': '0x0000000000000000000000000000000000000000000000000000000000010000'}),
+        (({'to': '0x9ee91F9f426fA633d227f7a9b000E28b9dfd8599', 'data': '0x509c5df6'}, 'latest'), {'jsonrpc': '2.0', 'id': 12, 'result': '0x0000000000000000000000000000000000000000000000000000000000010000'}),
+        (({'to': '0x9ee91F9f426fA633d227f7a9b000E28b9dfd8599', 'data': '0x7e978af8'}, 'latest'), {'jsonrpc': '2.0', 'id': 12, 'result': '0x0000000000000000000000000000000000000000000000000000000000010000'})
     ),
     'eth_getBalance': (
         (['0x3f17f1962B36e491b30A40b2405849e597Ba5FB5', 'latest'], {'jsonrpc': '2.0', 'id': 0, 'result': '0xffffffffffffffff'}),

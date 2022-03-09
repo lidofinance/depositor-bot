@@ -7,7 +7,6 @@ BUILD_INFO = Gauge(f'{DEPOSITOR_PREFIX}build_info', 'Build info', [
     'name',
     'network',
     'max_gas_fee',
-    'max_buffered_matics',
     'contract_gas_limit',
     'gas_fee_percentile_1',
     'gas_fee_percentile_days_history_1',
@@ -32,6 +31,7 @@ ACCOUNT_BALANCE = Gauge(f'{DEPOSITOR_PREFIX}account_balance', 'Account balance')
 
 BUFFERED_MATIC = Gauge(f'{DEPOSITOR_PREFIX}buffered_matic', 'Buffered MATIC')
 REQUIRED_BUFFERED_MATIC = Gauge(f'{DEPOSITOR_PREFIX}required_buffered_matic', 'Min buffered MATIC amount required for delegate')
+TOTAL_DELEGATED = Gauge(f'{DEPOSITOR_PREFIX}total_delegated', 'total delegated')
 CREATING_TRANSACTIONS = Gauge(f'{DEPOSITOR_PREFIX}creating_transactions', 'Creating transactions', ['bot'])
 
 REWARDS_MATIC = Gauge(f'{DEPOSITOR_PREFIX}rewards_matic', 'Rewards MATIC')

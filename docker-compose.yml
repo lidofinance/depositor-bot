@@ -1,7 +1,7 @@
 version: "3.7"
 services:
   polygon-lido-depositor-bot:
-    image: lidofinance/depositor-bot
+    image: polygonlidofinance/depositor-bot
     build: .
     container_name: polygon-lido-depositor-bot
     restart: unless-stopped

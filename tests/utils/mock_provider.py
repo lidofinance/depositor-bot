@@ -13,6 +13,10 @@ class MockProvider(JSONBaseProvider):
         super().__init__()
 
     def make_request(self, method: RPCEndpoint, params: Any) -> RPCResponse:
+        print("-------------------------")
+        print("method", method)
+        print("params", params)
+        print("-------------------------")
         if method in self._mock_object:
             result = next((x for x in self._mock_object[method] if x[0] == params), None)
             if result is not None:
