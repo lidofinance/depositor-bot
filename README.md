@@ -46,7 +46,6 @@ docker-compose up
 |-----------------------------------|:----------:|:-------------:|:------------------------------------------------------------------------------------------------------|
 | NETWORK (required)                |     -      |    `None`     | Network (e.g. mainnet, goerli)                                                                        |
 | WEB3_INFURA_PROJECT_ID (required) |     -      |    `None`     | Project ID in infura                                                                                  |
-| MAX_BUFFERED_MATICS               |1000000 ETH |`1000000 ether`| Maximum amount of MATIC in the buffer, after which the bot deposits at any gas                        |
 | MAX_GAS_FEE                       |  100 GWEI  |  `100 gwei`   | Bot will wait for a lower price. Treshold for gas_fee                                                 |
 | GAS_FEE_PERCENTILE_1              |     20     |     `20`      | Percentile for first recommended fee calculation                                                      |
 | GAS_FEE_PERCENTILE_DAYS_HISTORY_1 |     1      |      `1`      | Percentile for first recommended calculates from N days of the fee history                            |
@@ -59,5 +58,5 @@ docker-compose up
 | MIN_PRIORITY_FEE                  |   2 GWEI   |   `2 gwei`    | Min priority fee that will be used in tx                                                              |
 | MAX_PRIORITY_FEE                  |  10 GWEI   |   `10 gwei`   | Max priority fee that will be used in tx (4 gwei recommended)                                         |
 | CYCLE                             |   86400    |    `86400`    | The time interval between each delegation and reward distribution                                     |
-| RETRY_GAS_FEE                     |  60 sec    |     `60`      | The time interval to wait before retrying to submit a transaction if the gas Fee is too high          |
-| RETRY_GAS_FEE_TIMES               |    60      |     `60`      | The number of times to retry before sleep for a Cycle (RETRY_GAS_FEE * RETRY_GAS_FEE_TIMES)           |
+| MAX_RATIO                         |     3      |     `3`       | The ratio (totalBuffered * 100 / totalStaked), if the ratio > MAX_RATIO delegate automatically        |
+| MIN_RATIO                         |     1      |     `1`       | The min ratio to delegate the buffered tokens                                                         |
