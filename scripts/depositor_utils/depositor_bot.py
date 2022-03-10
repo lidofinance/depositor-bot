@@ -60,6 +60,7 @@ class DepositorBot:
             'Depositor bot',
             variables.NETWORK,
             variables.MAX_GAS_FEE,
+            variables.MAX_BUFFERED_ETHERS,
             variables.CONTRACT_GAS_LIMIT,
             variables.GAS_FEE_PERCENTILE_1,
             variables.GAS_FEE_PERCENTILE_DAYS_HISTORY_1,
