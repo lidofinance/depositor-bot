@@ -60,7 +60,6 @@ class DepositorBot:
             'Depositor bot',
             variables.NETWORK,
             variables.MAX_GAS_FEE,
-            variables.MAX_BUFFERED_ETHERS,
             variables.CONTRACT_GAS_LIMIT,
             variables.GAS_FEE_PERCENTILE_1,
             variables.GAS_FEE_PERCENTILE_DAYS_HISTORY_1,
@@ -176,12 +175,13 @@ class DepositorBot:
             deposit_issues.append(self.LIDO_CONTRACT_HAS_NOT_ENOUGH_BUFFERED_ETHER)
 
         is_high_buffer = buffered_ether >= variables.MAX_BUFFERED_ETHERS
+        logger.info({'msg': 'Check max ether in buffer.', 'value': is_high_buffer})
 
         # Gas price check
         recommended_gas_fee = self.gas_fee_strategy.get_recommended_gas_fee((
             (variables.GAS_FEE_PERCENTILE_DAYS_HISTORY_1, variables.GAS_FEE_PERCENTILE_1),
             (variables.GAS_FEE_PERCENTILE_DAYS_HISTORY_2, variables.GAS_FEE_PERCENTILE_2),
-        ), force = is_high_buffer)
+        ), force=is_high_buffer)
 
         GAS_FEE.labels('max_fee').set(variables.MAX_GAS_FEE)
         GAS_FEE.labels('current_fee').set(current_gas_fee)
@@ -204,17 +204,8 @@ class DepositorBot:
                 }
             })
 
-            if self.gas_fee_strategy.is_waiting_beneficial(
-                buffered_ether,
-                variables.GAS_FEE_PERCENTILE_1,
-                variables.GAS_FEE_PERCENTILE_DAYS_HISTORY_1,
-                current_gas_fee,
-                recommended_gas_fee,
-            ):
-                logger.info({'msg': 'Waiting is more proficient than depositing.'})
-                deposit_issues.append(self.GAS_FEE_HIGHER_THAN_RECOMMENDED)
-            else:
-                logger.info({'msg': 'Depositing is more proficient than waiting.'})
+            logger.info({'msg': 'Waiting is more proficient than depositing.'})
+            deposit_issues.append(self.GAS_FEE_HIGHER_THAN_RECOMMENDED)
 
         # Security module check
         can_deposit = DepositSecurityModuleInterface.canDeposit(block_identifier=self._current_block.hash.hex())
