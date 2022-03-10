@@ -26,7 +26,8 @@ from scripts.utils.metrics import (
     REQUIRED_BUFFERED_MATIC,
     REQUIRED_REWARDS_MATIC,
     REWARDS_MATIC,
-    TOTAL_DELEGATED
+    TOTAL_DELEGATED,
+    DELEGATE_RATIO
 )
 from scripts.utils import variables
 from scripts.utils.gas_strategy import GasFeeStrategy
@@ -95,7 +96,7 @@ class DepositorBot:
         self.run_delegate_cycle()
         logger.info({'msg': f'Delegate method end.'})
 
-        time.sleep(10)
+        time.sleep(60)
 
         if self.LAST_DISTRIBUTE_TIME + variables.CYCLE <= time.time():
             self.run_distribute_rewards_cycle()
@@ -254,25 +255,26 @@ class DepositorBot:
         reserved_funds = StMATICInterface.reservedFunds()
         delegation_lower_bound = StMATICInterface.delegationLowerBound()
         total_delegated = StMATICInterface.getTotalStakeAcrossAllValidators()
-        ratio = (total_buffered - reserved_funds) * 100 / total_delegated
+        delegate_ratio = (total_buffered - reserved_funds) * 100 / total_delegated
 
         BUFFERED_MATIC.set(total_buffered)
         REQUIRED_BUFFERED_MATIC.set(delegation_lower_bound)
         TOTAL_DELEGATED.set(total_delegated)
+        DELEGATE_RATIO.set(delegate_ratio)
 
         logger.info({'msg': 'Call `totalBuffered()`.', 'value': {
             'total_buffered': total_buffered,
             'reserved_funds': reserved_funds,
             'delegation_lower_bound': delegation_lower_bound,
             'total_delegated': total_delegated,
-            'ratio': ratio,
+            'delegate_ratio': delegate_ratio,
         }})
 
         is_high_buffer = False
-        if ratio > variables.MAX_RATIO:
+        if delegate_ratio > variables.MAX_RATIO:
             is_high_buffer = True
-        elif ratio > variables.MIN_RATIO \
-                and ratio < variables.MAX_RATIO \
+        elif delegate_ratio >= variables.MIN_RATIO \
+                and delegate_ratio <= variables.MAX_RATIO \
                 and self.LAST_DELEGATE_TIME + variables.CYCLE <= time.time():
             is_high_buffer = True
         else:
@@ -306,7 +308,6 @@ class DepositorBot:
                     'max_fee': variables.MAX_GAS_FEE,
                     'current_fee': current_gas_fee,
                     'recommended_fee': recommended_gas_fee,
-                    'total_buffered': total_buffered,
                 }
             })
             delegate_issues.append(self.GAS_FEE_HIGHER_THAN_RECOMMENDED)
