@@ -64,8 +64,6 @@ class DepositorBot:
             variables.CONTRACT_GAS_LIMIT,
             variables.GAS_FEE_PERCENTILE_1,
             variables.GAS_FEE_PERCENTILE_DAYS_HISTORY_1,
-            variables.GAS_FEE_PERCENTILE_2,
-            variables.GAS_FEE_PERCENTILE_DAYS_HISTORY_2,
             variables.GAS_PRIORITY_FEE_PERCENTILE,
             variables.MIN_PRIORITY_FEE,
             variables.MAX_PRIORITY_FEE,
@@ -181,7 +179,6 @@ class DepositorBot:
         # Gas price check
         recommended_gas_fee = self.gas_fee_strategy.get_recommended_gas_fee((
             (variables.GAS_FEE_PERCENTILE_DAYS_HISTORY_1, variables.GAS_FEE_PERCENTILE_1),
-            (variables.GAS_FEE_PERCENTILE_DAYS_HISTORY_2, variables.GAS_FEE_PERCENTILE_2),
         ), force=is_high_buffer)
 
         GAS_FEE.labels('max_fee').set(variables.MAX_GAS_FEE)
