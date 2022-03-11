@@ -1,7 +1,19 @@
 # <img src="https://docs.lido.fi/img/logo.svg" alt="Lido" width="46"/> Lido Depositor bot
 
-## Depositor and Pause bot
-Small bots that will 
+## Depositor bot description
+Depositor bot - Deposits buffered ether via depositBufferedEther call on "DepositSecurityModule" smart contract using special gas strategy.
+
+The strategy is to check two things: how much buffered ether on smart contract are and gas fee.
+
+We deposit when all the following points are correct:
+- We received council signatures enough for quorum.
+- Gas fee is lower or equal than 5-th percentile for past day.
+- There are buffered ether more or equal than calculation from special formula that depend on gas fee.
+
+## Pauser bot
+If one of the councils send pause message (means something very bad going on), depositor bot try to send tx that will pause protocol.  
+Also, council daemon also tries to pause protocol by itself
+
 
 ## How to install
 
