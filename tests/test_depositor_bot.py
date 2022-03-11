@@ -5,7 +5,7 @@ from tests.utils.logs import find_log_message
 
 
 ISSUES_FOUND_LOG = 'Issues found.'
-ISSUES_NOT_FOUND_LOG = 'No issues found. Try to deposit.'
+ISSUES_NOT_FOUND_LOG = 'No issues found.'
 
 
 def test_deposit_issues__account_balance(
