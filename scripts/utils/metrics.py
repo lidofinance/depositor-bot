@@ -11,8 +11,6 @@ BUILD_INFO = Gauge(f'{DEPOSITOR_PREFIX}build_info', 'Build info', [
     'contract_gas_limit',
     'gas_fee_percentile_1',
     'gas_fee_percentile_days_history_1',
-    'gas_fee_percentile_2',
-    'gas_fee_percentile_days_history_2',
     'gas_priority_fee_percentile',
     'min_priority_fee',
     'max_priority_fee',

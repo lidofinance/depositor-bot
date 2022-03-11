@@ -93,6 +93,7 @@ class GasFeeStrategy:
         a = 24  # ~ ether/hour
         keys_hour = a / 32
         p = 32 * 10**18 * apr / 365 / 24  # ~ Profit in hour
-        c = 378300  # wei is constant for every deposit tx that should be paid
+        cc = 378300  # gas constant for every deposit tx that should be paid
         multiply_constant = 1.5  # we will get profit with constant from 1 to 2, but the most profitable will be 1.5
-        return sqrt(multiply_constant * c * gas_fee * keys_hour / p) * 32 * 10**18
+
+        return sqrt(multiply_constant * cc * gas_fee * keys_hour / p) * 32 * 10**18
