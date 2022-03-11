@@ -34,13 +34,3 @@ FLASHBOTS_RPC = {
     Network.Mainnet: "https://relay.flashbots.net",
     Network.Görli: "https://relay-goerli.flashbots.net",
 }
-
-DEPOSIT_CONTRACT_DEPLOY_BLOCK = {
-    Network.Mainnet: 11052984,
-    Network.Görli: 3085928,
-}
-
-# 100 blocks is safe enough
-UNREORGABLE_DISTANCE = 100
-# reasonably high number (nb. if there is > 10000 deposit events infura will throw error)
-EVENT_QUERY_STEP = 1000
