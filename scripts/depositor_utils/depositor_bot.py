@@ -6,7 +6,7 @@ from typing import List, Tuple
 from brownie import web3, Wei, chain
 from eth_account import Account
 from hexbytes import HexBytes
-from web3.exceptions import BlockNotFound
+from web3.exceptions import BlockNotFound, TransactionNotFound
 from web3.types import TxParams
 
 from scripts.depositor_utils.kafka import DepositBotMsgRecipient
@@ -264,7 +264,7 @@ class DepositorBot:
         logger.info({'msg': 'Creating tx in blockchain.'})
 
         if self.last_fb_deposit_failed:
-            logger.info({'msg': 'Try to deposit. Classic mode'})
+            logger.info({'msg': 'Try to deposit. Classic mode.'})
 
             self.last_fb_deposit_failed = False
             self.do_classic_deposit(deposit_params, priority)
@@ -322,10 +322,13 @@ class DepositorBot:
                 'gasUsed': rec[-1]['gasUsed'],
                 'transactionHash': rec[-1]['transactionHash'].hex(),
             }})
+        except TransactionNotFound as error:
+            self.last_fb_deposit_failed = True
+            logger.error({'msg': f'Deposit failed.', 'error': str(error)})
+            DEPOSIT_FAILURE.inc()
         except Exception as error:
             logger.error({'msg': f'Deposit failed.', 'error': str(error)})
             DEPOSIT_FAILURE.inc()
-            self.last_fb_deposit_failed = True
         else:
             SUCCESS_DEPOSIT.inc()
             logger.info({'msg': f'Deposit method end. Sleep for 1 minute.'})
@@ -345,7 +348,7 @@ class DepositorBot:
                 },
             )
         except BaseException as error:
-            logger.error({'msg': f'Deposit failed.', 'error': error})
+            logger.error({'msg': f'Deposit failed.', 'error': str(error)})
             DEPOSIT_FAILURE.inc()
         else:
             logger.info({'msg': f'Deposited successfully.', 'value': str(result.logs)})
