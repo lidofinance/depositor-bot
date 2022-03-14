@@ -35,8 +35,6 @@ class DepositPauseBot:
             None,
             None,
             None,
-            None,
-            None,
             variables.KAFKA_TOPIC,
             variables.ACCOUNT.address if variables.ACCOUNT else '0x0',
             variables.CREATE_TRANSACTIONS,
