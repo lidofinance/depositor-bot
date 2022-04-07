@@ -1,5 +1,0 @@
-eth-brownie==1.17.2
-numpy==1.22.1
-prometheus-client==0.13.0
-confluent_kafka==1.8.2
-git+https://github.com/lidofinance/web3-flashbots.git@v1.1.0

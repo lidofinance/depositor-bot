@@ -45,3 +45,5 @@ else:
     logger.warning({'msg': 'Account not provided. Run in dry mode.'})
 
 CREATE_TRANSACTIONS = os.getenv('CREATE_TRANSACTIONS') == 'true'
+
+WEB3_RPC_ENDPOINTS = os.getenv('WEB3_RPC_ENDPOINTS', '').split(',')
