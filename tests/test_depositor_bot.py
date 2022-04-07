@@ -121,6 +121,7 @@ def test_depositor_bot__no_account(
     setup_web3_deposit_fixtures,
     depositor_bot,
     setup_deposit_message_to_kafka,
+    remove_sleep,
 ):
     caplog.set_level(logging.INFO)
     depositor_bot.run_cycle()

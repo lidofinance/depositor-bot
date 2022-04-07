@@ -10,7 +10,6 @@ from web3.exceptions import BlockNotFound, TransactionNotFound
 from web3.types import TxParams
 
 from scripts.depositor_utils.kafka import DepositBotMsgRecipient
-from scripts.utils.healthcheck_pulse import pulse
 from scripts.utils.interfaces import (
     DepositSecurityModuleInterface,
     DepositContractInterface,
@@ -29,7 +28,7 @@ from scripts.utils.metrics import (
     BUILD_INFO,
     REQUIRED_BUFFERED_ETHER,
 )
-from scripts.utils import variables
+from scripts.utils import variables, healthcheck_pulse
 from scripts.utils.gas_strategy import GasFeeStrategy
 
 
@@ -105,7 +104,7 @@ class DepositorBot:
         Fetch latest signs from
         """
         logger.info({'msg': 'Ping server ok status.'})
-        pulse()
+        healthcheck_pulse.pulse()
 
         logger.info({'msg': 'New deposit cycle.'})
         self._update_state()

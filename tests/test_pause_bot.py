@@ -9,6 +9,7 @@ def test_no_pause_messages(
         setup_web3_fixtures_for_pause,
         pause_bot,
         setup_ping_message_to_kafka,
+        remove_sleep,
 ):
     """Just cycle with no pause msg and no pause tx"""
     caplog.set_level(logging.INFO)
@@ -23,6 +24,7 @@ def test_no_pause_if_protocol_was_paused(
         setup_web3_fixtures_paused,
         pause_bot,
         setup_pause_message_to_kafka,
+        remove_sleep,
 ):
     """Test no pause tx if protocol already paused"""
 
@@ -40,6 +42,7 @@ def test_pause_msg_receive(
         setup_web3_fixtures_for_pause,
         pause_bot,
         setup_pause_message_to_kafka,
+        remove_sleep,
 ):
     """Retry each time pause tx falls locally or in blockchain"""
     caplog.set_level(logging.INFO)
@@ -57,6 +60,7 @@ def test_pause_with_account(
         setup_web3_fixtures_for_pause,
         pause_bot,
         setup_pause_message_to_kafka,
+        remove_sleep,
 ):
     caplog.set_level(logging.INFO)
     pause_bot.run_cycle()
@@ -74,6 +78,7 @@ def test_pause_with_account_in_prod(
         setup_web3_fixtures_for_pause,
         pause_bot,
         setup_pause_message_to_kafka,
+        remove_sleep,
 ):
     caplog.set_level(logging.INFO)
     pause_bot.run_cycle()
