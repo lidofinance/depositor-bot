@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 def main():
+    logger.info({'msg': 'Start up healthcheck service on port: 9010.'})
     start_pulse_server()
 
     logger.info({'msg': 'Start up metrics service on port: 9000.'})
