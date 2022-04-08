@@ -6,7 +6,7 @@ services:
     container_name: lido-depositor-bot
     restart: unless-stopped
     ports:
-      - 127.0.0.1:9000:8080
+      - 127.0.0.1:9000:9000
     environment:
       - NETWORK=${NETWORK}
       - WEB3_INFURA_PROJECT_ID=${WEB3_INFURA_PROJECT_ID}
@@ -24,7 +24,7 @@ services:
     container_name: lido-pause-bot
     restart: unless-stopped
     ports:
-      - 127.0.0.1:9001:8080
+      - 127.0.0.1:9001:9000
     environment:
       - NETWORK=${NETWORK}
       - WEB3_INFURA_PROJECT_ID=${WEB3_INFURA_PROJECT_ID}

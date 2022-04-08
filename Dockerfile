@@ -1,30 +1,40 @@
-FROM python:3.9-slim as builder
+FROM python:3.9-slim as base
 
-RUN apt-get update && \
-    apt-get install -y curl python3-dev gcc g++ libc-dev git
-
-COPY requirements.txt .
-RUN pip install -r requirements.txt
-
-FROM python:3.9-slim as production
-
+RUN apt-get update && apt-get install -y --no-install-recommends -qq gcc libffi-dev g++ git curl
 WORKDIR /app
 
-RUN mkdir /var/www && chown www-data /var/www && \
-    apt-get update && apt-get install -y curl && \
-    apt-get clean && find /var/lib/apt/lists/ -type f -delete && \
-    chown www-data /app/
+FROM base as builder
 
-COPY --from=builder /usr/local/ /usr/local/
+ENV POETRY_VERSION=1.1.13
+RUN pip install --no-cache-dir poetry==$POETRY_VERSION
+
+COPY pyproject.toml poetry.lock ./
+RUN python -m venv --copies /venv
+
+RUN . /venv/bin/activate && poetry install --no-dev --no-root
+
+
+FROM base as production
+
+COPY --from=builder /venv /venv
 COPY . .
 
-ENV PATH=$PATH:/usr/local/bin
-ENV PYTHONPATH="/usr/local/lib/python3.9/site-packages/"
+RUN mkdir -p /var/www && chown www-data /var/www && \
+    apt-get clean && find /var/lib/apt/lists/ -type f -delete && \
+    chown -R www-data /app/ && chown -R www-data /venv
 
-EXPOSE 8080
+ENV PYTHONPATH="/venv/lib/python3.9/site-packages/"
+ENV PATH=$PATH:/venv/bin
+ENV PYTHONDONTWRITEBYTECODE 1
+ENV PYTHONUNBUFFERED 1
+ENV PULSE_SERVER_PORT 9010
+ENV PROMETHEUS_PORT 9000
+
+EXPOSE $PROMETHEUS_PORT
 USER www-data
 
-HEALTHCHECK --interval=10s --timeout=3s CMD curl -f http://localhost:8080/healthcheck || exit 1
+HEALTHCHECK --interval=10s --timeout=3s \
+    CMD curl -f http://localhost:$PULSE_SERVER_PORT/healthcheck || exit 1
 
-ENTRYPOINT ["/usr/local/bin/brownie"]
+ENTRYPOINT ["brownie"]
 CMD ["run", "depositor"]

@@ -28,7 +28,7 @@ from scripts.utils.metrics import (
     BUILD_INFO,
     REQUIRED_BUFFERED_ETHER,
 )
-from scripts.utils import variables
+from scripts.utils import variables, healthcheck_pulse
 from scripts.utils.gas_strategy import GasFeeStrategy
 
 
@@ -103,6 +103,9 @@ class DepositorBot:
         """
         Fetch latest signs from
         """
+        logger.info({'msg': 'Ping server ok status.'})
+        healthcheck_pulse.pulse()
+
         logger.info({'msg': 'New deposit cycle.'})
         self._update_state()
 
