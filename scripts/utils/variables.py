@@ -47,3 +47,6 @@ else:
 CREATE_TRANSACTIONS = os.getenv('CREATE_TRANSACTIONS') == 'true'
 
 WEB3_RPC_ENDPOINTS = os.getenv('WEB3_RPC_ENDPOINTS', '').split(',')
+
+PROMETHEUS_PORT = int(os.getenv('PROMETHEUS_PORT', '9000'))
+PULSE_SERVER_PORT = int(os.getenv('PULSE_SERVER_PORT', '9010'))

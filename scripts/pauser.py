@@ -12,11 +12,13 @@ logger = logging.getLogger(__name__)
 
 
 def main():
-    logger.info({'msg': 'Start up healthcheck service on port: 9010.'})
+    logger.info({'msg': 'Start Pause bot.'})
+
+    logger.info({'msg': f'Start up healthcheck service on port: {variables.PULSE_SERVER_PORT}.'})
     start_pulse_server()
 
-    logger.info({'msg': 'Start up metrics service on port: 9000.'})
-    start_http_server(9000)
+    logger.info({'msg': f'Start up metrics service on port: {variables.PROMETHEUS_PORT}.'})
+    start_http_server(variables.PROMETHEUS_PORT)
 
     if variables.WEB3_RPC_ENDPOINTS:
         web3.disconnect()
