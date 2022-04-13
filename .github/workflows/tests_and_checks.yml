@@ -33,19 +33,7 @@ jobs:
           KAFKA_PASSWORD: ${{ secrets.KAFKA_PASSWORD }}
 
   python-checks:
-    name: Check python codestyle and security issues
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - name: Set up Python 3.9
-        uses: actions/setup-python@v2
-        with:
-          python-version: 3.9
-      - uses: Gr1N/setup-poetry@v7
-      - name: Install dependencies
-        run: |
-          poetry install
-      - uses: lidofinance/linters/.github/actions/lint-python@master
+    uses: lidofinance/linters/.github/workflows/python.yml@master
 
   security-checks:
     name: Check security issues
