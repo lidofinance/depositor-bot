@@ -1,0 +1,69 @@
+name: Tests and checks
+
+on: 
+  push:
+  pull_request:
+    types:
+      [opened, synchronize, reopened, ready_for_review]
+    branches:    
+      - 'develop'
+      - 'main'
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Set up Python 3.9
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.9
+
+      - uses: Gr1N/setup-poetry@v7
+
+      - name: Install dependencies
+        run: |
+          poetry install
+
+      - name: Test with pytest
+        run: |
+          poetry run pytest tests
+        env:
+          NETWORK: ${{ secrets.NETWORK }}
+          WEB3_INFURA_PROJECT_ID: ${{ secrets.WEB3_INFURA_PROJECT_ID }}
+          KAFKA_TOPIC: ${{ secrets.KAFKA_TOPIC }}
+          KAFKA_BROKER_ADDRESS_1: ${{ secrets.KAFKA_BROKER_ADDRESS_1 }}
+          KAFKA_USERNAME: ${{ secrets.KAFKA_USERNAME }}
+          KAFKA_PASSWORD: ${{ secrets.KAFKA_PASSWORD }}
+
+  python-checks:
+    name: Check python codestyle and security issues
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Python 3.9
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.9
+      - uses: Gr1N/setup-poetry@v7
+      - name: Install dependencies
+        run: |
+          poetry install
+      - uses: lidofinance/linters/.github/actions/lint-python@master
+
+  security-checks:
+    name: Check security issues
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: lidofinance/linters/.github/actions/lint-security@master
+
+  docker-checks:
+    name: Check docker issues
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: lidofinance/linters/.github/actions/lint-docker@master
+  
