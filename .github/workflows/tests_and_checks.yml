@@ -33,17 +33,8 @@ jobs:
           KAFKA_USERNAME: ${{ secrets.KAFKA_USERNAME }}
           KAFKA_PASSWORD: ${{ secrets.KAFKA_PASSWORD }}
 
-  security-checks:
-    name: Check security issues
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - uses: lidofinance/linters/.github/actions/lint-security@master
-
-  docker-checks:
-    name: Check docker issues
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - uses: lidofinance/linters/.github/actions/lint-docker@master
+  security:
+    uses: lidofinance/linters/.github/workflows/security.yml@master
   
+  docker:
+    uses: lidofinance/linters/.github/workflows/docker.yml@master
