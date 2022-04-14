@@ -1,9 +1,11 @@
-name: Tests
+name: Tests and checks
 
-on: [push]
+on: 
+  push:
 
 jobs:
-  build:
+  tests:
+    name: App tests
     runs-on: ubuntu-latest
 
     steps:
@@ -30,3 +32,9 @@ jobs:
           KAFKA_BROKER_ADDRESS_1: ${{ secrets.KAFKA_BROKER_ADDRESS_1 }}
           KAFKA_USERNAME: ${{ secrets.KAFKA_USERNAME }}
           KAFKA_PASSWORD: ${{ secrets.KAFKA_PASSWORD }}
+
+  security:
+    uses: lidofinance/linters/.github/workflows/security.yml@master
+  
+  docker:
+    uses: lidofinance/linters/.github/workflows/docker.yml@master
