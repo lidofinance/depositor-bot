@@ -13,7 +13,7 @@ RUN pip install --no-cache-dir poetry==$POETRY_VERSION
 COPY pyproject.toml poetry.lock ./
 RUN python -m venv --copies /venv
 
-# shellcheck disable=SC1091
+# hadolint disable=SC1091
 RUN . /venv/bin/activate && poetry install --no-dev --no-root
 
 
