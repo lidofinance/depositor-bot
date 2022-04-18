@@ -3,6 +3,7 @@ import json
 import pytest
 from brownie.network import web3, accounts
 
+from scripts.utils import healthcheck_pulse
 from tests.fixtures.depositor_fixtures import (
     DEPOSITOR_BASE_FIXTURES, DEPOSITOR_FIXTURES_WITH_HIGH_GAS,
     DEPOSITOR_FIXTURES_WITH_DEPOSIT_PROHIBIT, DEPOSITOR_FIXTURES_NOT_ENOUGH_BUFFERED_ETHER,
@@ -274,3 +275,5 @@ def depositor_bot():
 def remove_sleep(monkeypatch):
     import time
     monkeypatch.setattr(time, 'sleep', lambda x: x)
+
+    monkeypatch.setattr(healthcheck_pulse, 'pulse', lambda: None)

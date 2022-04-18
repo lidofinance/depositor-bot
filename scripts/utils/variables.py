@@ -45,3 +45,11 @@ else:
     logger.warning({'msg': 'Account not provided. Run in dry mode.'})
 
 CREATE_TRANSACTIONS = os.getenv('CREATE_TRANSACTIONS') == 'true'
+
+RAW_WEB3_RPC_ENDPOINTS = os.getenv('WEB3_RPC_ENDPOINTS', '')
+WEB3_RPC_ENDPOINTS = RAW_WEB3_RPC_ENDPOINTS.split(',') if RAW_WEB3_RPC_ENDPOINTS else None
+
+PROMETHEUS_PORT = int(os.getenv('PROMETHEUS_PORT', '9000'))
+PULSE_SERVER_PORT = int(os.getenv('PULSE_SERVER_PORT', '9010'))
+
+MAX_CYCLE_LIFETIME_IN_SECONDS = int(os.getenv('MAX_CYCLE_LIFETIME_IN_SECONDS', '300'))

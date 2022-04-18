@@ -3,6 +3,7 @@ import time
 from collections import defaultdict
 from typing import List, Tuple
 
+import timeout_decorator
 from brownie import web3, Wei, chain
 from eth_account import Account
 from hexbytes import HexBytes
@@ -28,7 +29,7 @@ from scripts.utils.metrics import (
     BUILD_INFO,
     REQUIRED_BUFFERED_ETHER,
 )
-from scripts.utils import variables
+from scripts.utils import variables, healthcheck_pulse
 from scripts.utils.gas_strategy import GasFeeStrategy
 
 
@@ -88,21 +89,32 @@ class DepositorBot:
     def run_as_daemon(self):
         """Super-Mega infinity cycle!"""
         while True:
-            try:
-                for _ in chain.new_blocks():
-                    self.run_cycle()
-            except (BlockNotFound, ValueError) as error:
-                logger.warning({'msg': 'Fetch block exception.', 'error': str(error)})
-                # Waiting for new block
-                time.sleep(13)
-            except Exception as error:
-                logger.warning({'msg': 'Unexpected exception.', 'error': str(error)})
-                time.sleep(13)
+            self._waiting_for_new_block_and_run_cycle()
+
+    @timeout_decorator.timeout(variables.MAX_CYCLE_LIFETIME_IN_SECONDS)
+    def _waiting_for_new_block_and_run_cycle(self):
+        try:
+            for _ in chain.new_blocks():
+                self.run_cycle()
+        except (BlockNotFound, ValueError) as error:
+            logger.warning({'msg': 'Fetch block exception.', 'error': str(error)})
+            # Waiting for new block
+            time.sleep(13)
+        except timeout_decorator.TimeoutError as exception:
+            # Bot is stuck. Drop bot and restart using Docker service
+            logger.error({'msg': 'Depositor bot do not respond.', 'error': str(exception)})
+            raise timeout_decorator.TimeoutError('Depositor bot stuck. Restarting using docker service.') from exception
+        except Exception as error:
+            logger.warning({'msg': 'Unexpected exception.', 'error': str(error)})
+            time.sleep(13)
 
     def run_cycle(self):
         """
         Fetch latest signs from
         """
+        logger.info({'msg': 'Ping server ok status.'})
+        healthcheck_pulse.pulse()
+
         logger.info({'msg': 'New deposit cycle.'})
         self._update_state()
 

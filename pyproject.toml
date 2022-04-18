@@ -1,0 +1,23 @@
+[tool.poetry]
+name = "depositor-bot"
+version = "3.0.0"
+description = "Project description"
+authors = ["Raman <roman.s@p2p.org>"]
+license = "MIT License"
+readme = "README.md"
+include = [
+    "LICENSE",
+]
+
+[tool.poetry.dependencies]
+python = ">=3.9,<3.10"
+eth-brownie = "1.18.1"
+numpy = "1.22.3"
+prometheus-client = "0.14.0"
+confluent-kafka = "1.8.2"
+flashbots = {git = "https://github.com/lidofinance/web3-flashbots.git", rev = "v1.1.0"}
+web3-multi-provider = "0.2.0"
+timeout-decorator = "^0.5.0"
+
+[tool.poetry.dev-dependencies]
+pytest = "^6.2.5"

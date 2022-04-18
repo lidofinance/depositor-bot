@@ -2,14 +2,14 @@ import logging
 import time
 from typing import List
 
+import timeout_decorator
 from brownie import chain, web3
 from web3.exceptions import BlockNotFound
 
 from scripts.pauser_utils.kafka import PauseBotMsgRecipient
 from scripts.utils.interfaces import DepositSecurityModuleInterface
 from scripts.utils.metrics import CREATING_TRANSACTIONS, BUILD_INFO
-from scripts.utils import variables
-
+from scripts.utils import variables, healthcheck_pulse
 
 logger = logging.getLogger(__name__)
 
@@ -59,17 +59,31 @@ class DepositPauseBot:
     def run_as_daemon(self):
         """Super-Mega infinity cycle!"""
         while True:
-            try:
-                for _ in chain.new_blocks():
-                    self.run_cycle()
-            except BlockNotFound as error:
-                logger.warning({'msg': 'Fetch block exception (BlockNotFound)', 'error': str(error)})
-                time.sleep(10)
+            self._waiting_for_new_block_and_run_cycle()
+
+    @timeout_decorator.timeout(variables.MAX_CYCLE_LIFETIME_IN_SECONDS)
+    def _waiting_for_new_block_and_run_cycle(self):
+        try:
+            for _ in chain.new_blocks():
+                self.run_cycle()
+
+        except timeout_decorator.TimeoutError as exception:
+            # Bot is stuck. Drop bot and restart using Docker service
+            logger.error({'msg': 'Pauser bot do not respond.', 'error': str(exception)})
+            raise timeout_decorator.TimeoutError('Pauser bot stuck. Restarting using docker service.') from exception
+
+        except BlockNotFound as error:
+            logger.warning({'msg': 'Fetch block exception (BlockNotFound)', 'error': str(error)})
+            time.sleep(10)
 
     def run_cycle(self):
         """
         Fetch latest signs from
         """
+        logger.info({'msg': 'Ping server ok status.'})
+        healthcheck_pulse.pulse()
+
+        logger.info({'msg': 'New deposit cycle.'})
         self._update_current_block()
 
         # Pause message instantly if we receive pause message

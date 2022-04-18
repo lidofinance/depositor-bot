@@ -27,7 +27,7 @@ Python packages
 ```bash
 git clone git@github.com:lidofinance/depositor-bot.git
 cd depositor-bot
-pip install -r requirements.txt
+poetry install
 ```
 
 ## Run script
@@ -35,7 +35,7 @@ pip install -r requirements.txt
 To run (development):  
 
 Envs:
-```
+```bash
 export WEB3_INFURA_PROJECT_ID=...
 export KAFKA_BROKER_ADDRESS_1=...
 export KAFKA_USERNAME=...
@@ -44,7 +44,7 @@ export KAFKA_TOPIC=...
 ```
 
 Run:  
-```
+```bash
 # For depositor bot
 brownie run depositor --network=mainnet
 
@@ -57,7 +57,7 @@ brownie run pause --network=mainnet
 To run bot in dry mode in docker:
 1. Required envs:`NETWORK` (e.g. mainnet) and `WEB3_INFURA_PROJECT_ID`.
 2. Run
-```
+```bash
 docker-compose up
 ```
 *Optional*: provide `WALLET_PRIVATE_KEY` env to run with account.  
@@ -65,23 +65,25 @@ docker-compose up
 
 ## Available variables 
 
-| Vars in env                       |   Amount   | Default - Raw | Description                                                                                           |
-|-----------------------------------|:----------:|:-------------:|:------------------------------------------------------------------------------------------------------|
-| NETWORK (required)                |     -      |    `None`     | Network (e.g. mainnet, goerli)                                                                        |
-| WEB3_INFURA_PROJECT_ID (required) |     -      |    `None`     | Project ID in infura                                                                                  |
-| KAFKA_BROKER_ADDRESS_1 (required) |     -      |    `None`     | Kafka servers url and port                                                                            |
-| KAFKA_USERNAME (required)         |     -      |    `None`     | Kafka username                                                                                        |
-| KAFKA_PASSWORD (required)         |     -      |    `None`     | Kafka password                                                                                        |
-| KAFKA_TOPIC (required)            |     -      |    `None`     | Kafka topic name (for msg receiving)                                                                  |
-| FLASHBOT_SIGNATURE (required)     |     -      |    `None`     | Private key - Used to identify account in flashbot`s rpc (should NOT be equal to WALLET private key)  |
-| KAFKA_GROUP_PREFIX                |     -      |    `None`     | Just for staging (staging-)                                                                           |
-| MAX_BUFFERED_ETHERS               |  5000 ETH  | `5000 ether`  | Maximum amount of ETH in the buffer, after which the bot deposits at any gas                          |
-| MAX_GAS_FEE                       |  100 GWEI  |  `100 gwei`   | Bot will wait for a lower price. Treshold for gas_fee                                                 |
-| GAS_FEE_PERCENTILE_1              |     20     |     `20`      | Percentile for first recommended fee calculation                                                      |
-| GAS_FEE_PERCENTILE_DAYS_HISTORY_1 |     1      |      `1`      | Percentile for first recommended calculates from N days of the fee history                            |
-| GAS_PRIORITY_FEE_PERCENTILE       |     55     |     `55`      | Priority transaction will be N percentile from priority fees in last block (min 2 gwei - max 10 gwei) |
-| CONTRACT_GAS_LIMIT                | 10 * 10**6 |  `10000000`   | Default transaction gas limit                                                                         |
-| WALLET_PRIVATE_KEY                |     -      |    `None`     | Account private key                                                                                   |
-| CREATE_TRANSACTIONS               |     -      |    `None`     | If `true` then tx will be send to blockchain                                                          |
-| MIN_PRIORITY_FEE                  |   2 GWEI   |   `2 gwei`    | Min priority fee that will be used in tx                                                              |
-| MAX_PRIORITY_FEE                  |  10 GWEI   |   `10 gwei`   | Max priority fee that will be used in tx (4 gwei recommended)                                         |
+| Vars in env                       |   Amount   | Default - Raw | Description                                                                                                                                     |
+|-----------------------------------|:----------:|:-------------:|:------------------------------------------------------------------------------------------------------------------------------------------------|
+| NETWORK (required)                |     -      |    `None`     | Network (e.g. mainnet, goerli)                                                                                                                  |
+| WEB3_INFURA_PROJECT_ID (required) |     -      |    `None`     | Project ID in infura                                                                                                                            |
+| KAFKA_BROKER_ADDRESS_1 (required) |     -      |    `None`     | Kafka servers url and port                                                                                                                      |
+| KAFKA_USERNAME (required)         |     -      |    `None`     | Kafka username value                                                                                                                            |
+| KAFKA_PASSWORD (required)         |     -      |    `None`     | Kafka password value                                                                                                                            |
+| KAFKA_TOPIC (required)            |     -      |    `None`     | Kafka topic name (for msg receiving)                                                                                                            |
+| FLASHBOT_SIGNATURE (required)     |     -      |    `None`     | Private key - Used to identify account in flashbot`s rpc (should NOT be equal to WALLET private key)                                            |
+| KAFKA_GROUP_PREFIX                |     -      |    `None`     | Just for staging (staging-)                                                                                                                     |
+| MAX_BUFFERED_ETHERS               |  5000 ETH  | `5000 ether`  | Maximum amount of ETH in the buffer, after which the bot deposits at any gas                                                                    |
+| MAX_GAS_FEE                       |  100 GWEI  |  `100 gwei`   | Bot will wait for a lower price. Treshold for gas_fee                                                                                           |
+| GAS_FEE_PERCENTILE_1              |     20     |     `20`      | Percentile for first recommended fee calculation                                                                                                |
+| GAS_FEE_PERCENTILE_DAYS_HISTORY_1 |     1      |      `1`      | Percentile for first recommended calculates from N days of the fee history                                                                      |
+| GAS_PRIORITY_FEE_PERCENTILE       |     55     |     `55`      | Priority transaction will be N percentile from priority fees in last block (min 2 gwei - max 10 gwei)                                           |
+| CONTRACT_GAS_LIMIT                | 10 * 10**6 |  `10000000`   | Default transaction gas limit                                                                                                                   |
+| WALLET_PRIVATE_KEY                |     -      |    `None`     | Account private key                                                                                                                             |
+| CREATE_TRANSACTIONS               |     -      |    `None`     | If `true` then tx will be send to blockchain                                                                                                    |
+| MIN_PRIORITY_FEE                  |   2 GWEI   |   `2 gwei`    | Min priority fee that will be used in tx                                                                                                        |
+| MAX_PRIORITY_FEE                  |  10 GWEI   |   `10 gwei`   | Max priority fee that will be used in tx (4 gwei recommended)                                                                                   |
+| WEB3_RPC_ENDPOINTS                |     -      |      ``       | List of rpc endpoints that will be used to send requests separated by comma (`,`). If not provided will be used infura (WEB3_INFURA_PROJECT_ID) |
+| MAX_CYCLE_LIFETIME_IN_SECONDS     | 6 minutes  |     `300`     | Max lifetime of usual cycle. If cycle will not end in this time, bot will crush                                                                 |
