@@ -64,17 +64,16 @@ class DepositPauseBot:
     @timeout_decorator.timeout(variables.MAX_CYCLE_LIFETIME_IN_SECONDS)
     def _waiting_for_new_block_and_run_cycle(self):
         try:
-            for _ in chain.new_blocks():
-                self.run_cycle()
-
+            self.run_cycle()
         except timeout_decorator.TimeoutError as exception:
             # Bot is stuck. Drop bot and restart using Docker service
             logger.error({'msg': 'Pauser bot do not respond.', 'error': str(exception)})
             raise timeout_decorator.TimeoutError('Pauser bot stuck. Restarting using docker service.') from exception
-
         except BlockNotFound as error:
             logger.warning({'msg': 'Fetch block exception (BlockNotFound)', 'error': str(error)})
-            time.sleep(10)
+            time.sleep(13)
+        else:
+            time.sleep(13)
 
     def run_cycle(self):
         """
