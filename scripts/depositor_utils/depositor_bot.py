@@ -94,8 +94,7 @@ class DepositorBot:
     @timeout_decorator.timeout(variables.MAX_CYCLE_LIFETIME_IN_SECONDS)
     def _waiting_for_new_block_and_run_cycle(self):
         try:
-            for _ in chain.new_blocks():
-                self.run_cycle()
+            self.run_cycle()
         except (BlockNotFound, ValueError) as error:
             logger.warning({'msg': 'Fetch block exception.', 'error': str(error)})
             # Waiting for new block
@@ -106,6 +105,8 @@ class DepositorBot:
             raise timeout_decorator.TimeoutError('Depositor bot stuck. Restarting using docker service.') from exception
         except Exception as error:
             logger.warning({'msg': 'Unexpected exception.', 'error': str(error)})
+            time.sleep(13)
+        else:
             time.sleep(13)
 
     def run_cycle(self):
