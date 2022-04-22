@@ -68,6 +68,7 @@ docker-compose up
 | Vars in env                       |   Amount   | Default - Raw | Description                                                                                                                                     |
 |-----------------------------------|:----------:|:-------------:|:------------------------------------------------------------------------------------------------------------------------------------------------|
 | NETWORK (required)                |     -      |    `None`     | Network (e.g. mainnet, goerli)                                                                                                                  |
+| WEB3_CHAIN_ID (required)          |     1      |      `1`      | Web3 chain id (1 - mainnet, 5 - goerli)                                                                                                         |
 | WEB3_INFURA_PROJECT_ID (required) |     -      |    `None`     | Project ID in infura                                                                                                                            |
 | KAFKA_BROKER_ADDRESS_1 (required) |     -      |    `None`     | Kafka servers url and port                                                                                                                      |
 | KAFKA_USERNAME (required)         |     -      |    `None`     | Kafka username value                                                                                                                            |

@@ -23,8 +23,6 @@ def main():
         web3.disconnect()
         web3.provider = MultiHTTPProvider(variables.WEB3_RPC_ENDPOINTS)
 
-    variables.WEB3_CHAIN_ID = web3.eth.chain_id
-
     from scripts.pauser_utils.pause_bot import DepositPauseBot
     deposit_pause_bot = DepositPauseBot()
     deposit_pause_bot.run_as_daemon()
