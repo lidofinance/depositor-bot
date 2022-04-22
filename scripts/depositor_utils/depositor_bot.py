@@ -4,13 +4,16 @@ from collections import defaultdict
 from typing import List, Tuple
 
 import timeout_decorator
-from brownie import web3, Wei, chain
+from brownie import web3, Wei
 from eth_account import Account
 from hexbytes import HexBytes
 from web3.exceptions import BlockNotFound, TransactionNotFound
 from web3.types import TxParams
+from web3_multi_provider import NoActiveProviderError
 
 from scripts.depositor_utils.kafka import DepositBotMsgRecipient
+from scripts.utils.exceptions import StuckException
+from scripts.utils.fetch_latest_block import fetch_latest_block
 from scripts.utils.interfaces import (
     DepositSecurityModuleInterface,
     DepositContractInterface,
@@ -98,16 +101,22 @@ class DepositorBot:
         except (BlockNotFound, ValueError) as error:
             logger.warning({'msg': 'Fetch block exception.', 'error': str(error)})
             # Waiting for new block
-            time.sleep(13)
+            time.sleep(15)
         except timeout_decorator.TimeoutError as exception:
             # Bot is stuck. Drop bot and restart using Docker service
             logger.error({'msg': 'Depositor bot do not respond.', 'error': str(exception)})
             raise timeout_decorator.TimeoutError('Depositor bot stuck. Restarting using docker service.') from exception
+        except StuckException as exception:
+            logger.error({'msg': 'Depositor bot stuck on same block. No alternative providers provided.', 'error': str(exception)})
+            raise StuckException from exception
+        except NoActiveProviderError as exception:
+            logger.error({'msg': 'No active node available.', 'error': str(exception)})
+            raise NoActiveProviderError from exception
         except Exception as error:
             logger.warning({'msg': 'Unexpected exception.', 'error': str(error)})
-            time.sleep(13)
+            time.sleep(15)
         else:
-            time.sleep(13)
+            time.sleep(15)
 
     def run_cycle(self):
         """
@@ -141,8 +150,7 @@ class DepositorBot:
                 break
 
     def _update_state(self):
-        self._current_block = web3.eth.get_block('latest')
-        logger.info({'msg': f'Fetch `latest` block.', 'value': self._current_block.number})
+        self._current_block = fetch_latest_block(self._current_block.number if self._current_block else 0)
 
         self.deposit_root = DepositContractInterface.get_deposit_root(block_identifier=self._current_block.hash.hex())
         logger.info({'msg': f'Call `get_deposit_root()`.', 'value': str(self.deposit_root)})
