@@ -12,7 +12,6 @@ from web3.types import TxParams
 from web3_multi_provider import NoActiveProviderError
 
 from scripts.depositor_utils.kafka import DepositBotMsgRecipient
-from scripts.utils.exceptions import StuckException
 from scripts.utils.fetch_latest_block import fetch_latest_block
 from scripts.utils.interfaces import (
     DepositSecurityModuleInterface,
@@ -106,9 +105,6 @@ class DepositorBot:
             # Bot is stuck. Drop bot and restart using Docker service
             logger.error({'msg': 'Depositor bot do not respond.', 'error': str(exception)})
             raise timeout_decorator.TimeoutError('Depositor bot stuck. Restarting using docker service.') from exception
-        except StuckException as exception:
-            logger.error({'msg': 'Depositor bot stuck on same block. No alternative providers provided.', 'error': str(exception)})
-            raise StuckException from exception
         except NoActiveProviderError as exception:
             logger.error({'msg': 'No active node available.', 'error': str(exception)})
             raise NoActiveProviderError from exception

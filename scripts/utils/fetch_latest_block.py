@@ -1,9 +1,9 @@
 import logging
+import time
 
 from brownie import web3
 from web3_multi_provider import MultiHTTPProvider
 
-from scripts.utils.exceptions import StuckException
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +18,9 @@ def fetch_latest_block(_prev_block_number):
 
     if not isinstance(web3.provider, MultiHTTPProvider):
         # If default provider is active (infura)
-        raise StuckException('Default provider returns same block number.')
+        logger.info({'msg': f'Same block number as previous. Wait for new one. Sleep for 5 seconds and try again.'})
+        time.sleep(5)
+        return fetch_latest_block(_prev_block_number)
 
     # if MultiHTTPProvider - try to iterate and find one that retuns another block
     begin_provider_index = web3.provider._current_provider_index
@@ -31,4 +33,6 @@ def fetch_latest_block(_prev_block_number):
         if _prev_block_number != _current_block.number:
             return _current_block
         elif begin_provider_index == web3.provider._current_provider_index:
-            raise StuckException('All providers returns same block.')
+            logger.info({'msg': f'All providers returns same block. Sleep for 5 seconds and try again.'})
+            time.sleep(5)
+            return fetch_latest_block(_prev_block_number)

@@ -5,10 +5,9 @@ from typing import List
 import timeout_decorator
 from brownie import web3
 from web3.exceptions import BlockNotFound
-from web3_multi_provider import MultiHTTPProvider, NoActiveProviderError
+from web3_multi_provider import NoActiveProviderError
 
 from scripts.pauser_utils.kafka import PauseBotMsgRecipient
-from scripts.utils.exceptions import StuckException
 from scripts.utils.fetch_latest_block import fetch_latest_block
 from scripts.utils.interfaces import DepositSecurityModuleInterface
 from scripts.utils.metrics import CREATING_TRANSACTIONS, BUILD_INFO
@@ -77,9 +76,6 @@ class DepositPauseBot:
         except BlockNotFound as error:
             logger.warning({'msg': 'Fetch block exception (BlockNotFound)', 'error': str(error)})
             time.sleep(15)
-        except StuckException as exception:
-            logger.error({'msg': 'Pauser bot stuck on same block. No alternative providers provided.', 'error': str(exception)})
-            raise StuckException from exception
         except NoActiveProviderError as exception:
             logger.error({'msg': 'No active node available.', 'error': str(exception)})
             raise NoActiveProviderError from exception
