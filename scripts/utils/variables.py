@@ -31,7 +31,8 @@ KAFKA_PASSWORD = os.getenv('KAFKA_PASSWORD')
 KAFKA_TOPIC = os.getenv('KAFKA_TOPIC')
 KAFKA_GROUP_PREFIX = os.getenv('KAFKA_GROUP_PREFIX', '')
 
-WEB3_CHAIN_ID = web3.eth.chain_id
+# Should be reinitialized after brownie pre-script
+WEB3_CHAIN_ID = 1
 
 # Account private key
 WALLET_PRIVATE_KEY = os.getenv('WALLET_PRIVATE_KEY', None)
