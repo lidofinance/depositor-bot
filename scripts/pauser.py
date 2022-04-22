@@ -2,7 +2,6 @@ from brownie import web3
 from prometheus_client import start_http_server
 from web3_multi_provider import MultiHTTPProvider
 
-from scripts.pauser_utils.pause_bot import DepositPauseBot
 from scripts.utils import variables
 from scripts.utils.healthcheck_pulse import start_pulse_server
 from scripts.utils.logging import logging
@@ -24,5 +23,8 @@ def main():
         web3.disconnect()
         web3.provider = MultiHTTPProvider(variables.WEB3_RPC_ENDPOINTS)
 
+    variables.WEB3_CHAIN_ID = web3.eth.chain_id
+
+    from scripts.pauser_utils.pause_bot import DepositPauseBot
     deposit_pause_bot = DepositPauseBot()
     deposit_pause_bot.run_as_daemon()
