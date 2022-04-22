@@ -25,8 +25,6 @@ def main():
         web3.disconnect()
         web3.provider = MultiHTTPProvider(variables.WEB3_RPC_ENDPOINTS)
 
-    variables.WEB3_CHAIN_ID = web3.eth.chain_id
-
     flashbot(web3, web3.eth.account.from_key(variables.FLASHBOT_SIGNATURE), FLASHBOTS_RPC[variables.WEB3_CHAIN_ID])
 
     from scripts.depositor_utils.depositor_bot import DepositorBot
