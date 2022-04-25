@@ -10,6 +10,12 @@ class Network(IntEnum):
     Ropsten = 3
 
 
+NETWORK_CHAIN_ID = {
+    'mainnet': 1,
+    'goerli': 5,
+}
+
+
 LIDO_CONTRACT_ADDRESSES = {
     Network.Mainnet: "0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84",
     Network.Görli: "0x1643E812aE58766192Cf7D2Cf9567dF2C37e9B7F",

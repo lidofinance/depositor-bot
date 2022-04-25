@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "depositor-bot"
-version = "3.0.3"
+version = "3.0.4"
 description = "Project description"
 authors = ["Raman <roman.s@p2p.org>"]
 license = "MIT License"
