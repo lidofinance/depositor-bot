@@ -1,8 +1,9 @@
 import logging
 import os
 
-from brownie import Wei, web3, accounts
+from brownie import Wei, accounts
 
+from scripts.utils.constants import NETWORK_CHAIN_ID
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +33,7 @@ KAFKA_TOPIC = os.getenv('KAFKA_TOPIC')
 KAFKA_GROUP_PREFIX = os.getenv('KAFKA_GROUP_PREFIX', '')
 
 # Should be reinitialized after brownie pre-script
-WEB3_CHAIN_ID = int(os.getenv('WEB3_CHAIN_ID', 1))
+WEB3_CHAIN_ID = NETWORK_CHAIN_ID[NETWORK]
 
 # Account private key
 WALLET_PRIVATE_KEY = os.getenv('WALLET_PRIVATE_KEY', None)
