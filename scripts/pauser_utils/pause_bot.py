@@ -102,7 +102,7 @@ class DepositPauseBot:
         self._current_block = fetch_latest_block(self._current_block.number if self._current_block else 0)
 
         self.protocol_is_paused = DepositSecurityModuleInterface.isPaused(
-            block_identifier=self._current_block.hash.hex(),
+            block_identifier={"blockHash": self._current_block.hash.hex()},
         )
         logger.info({'msg': f'Call `isPaused()`.', 'value': self.protocol_is_paused})
 
