@@ -148,10 +148,10 @@ class DepositorBot:
     def _update_state(self):
         self._current_block = fetch_latest_block(self._current_block.number if self._current_block else 0)
 
-        self.deposit_root = DepositContractInterface.get_deposit_root(block_identifier=self._current_block.hash.hex())
+        self.deposit_root = DepositContractInterface.get_deposit_root({"blockHash": self._current_block.hash.hex()})
         logger.info({'msg': f'Call `get_deposit_root()`.', 'value': str(self.deposit_root)})
 
-        self.keys_op_index = NodeOperatorsRegistryInterface.getKeysOpIndex(block_identifier=self._current_block.hash.hex())
+        self.keys_op_index = NodeOperatorsRegistryInterface.getKeysOpIndex({"blockHash": self._current_block.hash.hex()})
         logger.info({'msg': f'Call `getKeysOpIndex()`.', 'value': self.keys_op_index})
 
         self.kafka.update_messages()
@@ -179,7 +179,7 @@ class DepositorBot:
         current_gas_fee = web3.eth.get_block('pending').baseFeePerGas
         
         # Lido contract buffered ether check
-        buffered_ether = LidoInterface.getBufferedEther(block_identifier=self._current_block.hash.hex())
+        buffered_ether = LidoInterface.getBufferedEther({"blockHash": self._current_block.hash.hex()})
         logger.info({'msg': 'Call `getBufferedEther()`.', 'value': buffered_ether})
         BUFFERED_ETHER.set(buffered_ether)
 
@@ -223,7 +223,7 @@ class DepositorBot:
             deposit_issues.append(self.GAS_FEE_HIGHER_THAN_RECOMMENDED)
 
         # Security module check
-        can_deposit = DepositSecurityModuleInterface.canDeposit(block_identifier=self._current_block.hash.hex())
+        can_deposit = DepositSecurityModuleInterface.canDeposit({"blockHash": self._current_block.hash.hex()})
         logger.info({'msg': 'Call `canDeposit()`.', 'value': can_deposit})
         if not can_deposit:
             logger.warning({'msg': self.DEPOSIT_SECURITY_ISSUE, 'value': can_deposit})
