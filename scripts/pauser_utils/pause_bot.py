@@ -79,6 +79,9 @@ class DepositPauseBot:
         except NoActiveProviderError as exception:
             logger.error({'msg': 'No active node available.', 'error': str(exception)})
             raise NoActiveProviderError from exception
+        except Exception as exception:
+            logger.warning({'msg': 'Unexpected exception.', 'error': str(exception)})
+            time.sleep(15)
         else:
             time.sleep(15)
 
