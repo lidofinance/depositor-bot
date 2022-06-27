@@ -1,0 +1,71 @@
+groups:
+- name: AccountBalanceGroup
+  rules:
+  - alert: AccountBalanceLow
+    expr: depositor_bot_account_balance{service="lido-depositor-bot"} < 3*10^18
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "Account balance is lower than 3 ETH."
+      description: "Account balance is {{ $value }}.\n Runbook: https://www.notion.so/Group-account_balance_group-54c28e098145437ebe82e64228a74beb"
+
+  - alert: AccountBalanceCriticalLow
+    expr: depositor_bot_account_balance{service="lido-depositor-bot"}/10^18 < 1
+    for: 5m
+    labels:
+      severity: high
+    annotations:
+      summary: "Account balance is lower than 1 ETH."
+      description: "Account balance is {{ $value }}.\n Runbook: https://www.notion.so/Group-account_balance_group-54c28e098145437ebe82e64228a74beb"
+
+- name: KafkaGroup
+  rules:
+    - alert: NoCouncilPings
+      expr: sum(delta(depositor_bot_kafka_ping_messages{service="lido-depositor-bot"}[3m])) < 1
+      for: 5m
+      labels:
+        severity: high
+      annotations:
+        summary: "No pings from council daemons."
+        description: "There is no ping messages from kafka.\n Playbook: Runbook: https://www.notion.so/Group-kafka_group-79fbf129188c4f97bf1db7f80d92f11a"
+
+    - alert: NoPingsFromNO
+      expr: delta(depositor_bot_kafka_ping_messages{service="lido-depositor-bot"}[3m]) < 1
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "One of council daemons stopped sending pings to kafka."
+        description: "Council daemon with address {{ $labels.address }} do not respond.\n Runbook: https://www.notion.so/Group-kafka_group-79fbf129188c4f97bf1db7f80d92f11a"
+
+- name: DepositorBotActivityGroup
+  rules:
+    - alert: DepositorBotStuck
+      expr: changes(depositor_bot_gas_fee{type="current_fee"}[5m]) == 0
+      for: 2m
+      labels:
+        severity: high
+      annotations:
+        summary: "Depositor bot stuck."
+        description: "Current gas fee in depositor bot is same for 5 minutes.\n Runbook: https://www.notion.so/Group-DepositorBotActivityGroup-98d5e3a44d4d4ed6b01cf2cd23e09b71"
+
+    - alert: NoDepositsFor2Days
+      expr: max(increase(depositor_bot_deposit_success_total{service="lido-depositor-bot"}[2d])) < 1 and depositor_bot_required_buffered_ether < depositor_bot_buffered_ether
+      for: 0
+      labels:
+        severity: medium
+      annotations:
+        summary: "Depositor bot didn't deposit for 2 days."
+        description: "Some issues preventing depositor bot from deposits for quite a long time. Runbook: https://www.notion.so/Group-DepositorBotActivityGroup-98d5e3a44d4d4ed6b01cf2cd23e09b71"
+
+- name: ProtocolPausedGroup
+  rules:
+    - alert: ProtocolPaused
+      expr: increase(depositor_bot_kafka_pause_messages[1m]) > 0
+      for: 0
+      labels:
+        severity: critical
+      annotations:
+        summary: "Depositor bot received pause message from council daemon."
+        description: "Runbook: https://www.notion.so/Group-ProtocolPausedGroup-e6c356aa579c4ef0a08c95e050585762"

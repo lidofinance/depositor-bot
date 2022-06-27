@@ -1,0 +1,140 @@
+rule_files:
+  - depositor-bot.rules.yml
+
+evaluation_interval: 1m
+
+tests:
+  - interval: 1m
+    input_series:
+      - series: depositor_bot_account_balance{service="lido-depositor-bot"}
+        values: 4e+18-4e+17x10
+
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: AccountBalanceLow
+        exp_alerts:
+          - exp_labels:
+              alertname: AccountBalanceLow
+              severity: warning
+              service: lido-depositor-bot
+            exp_annotations:
+              summary: Account balance is lower than 3 ETH.
+              description: "Account balance is 0.\n Runbook: https://www.notion.so/Group-account_balance_group-54c28e098145437ebe82e64228a74beb"
+
+      - eval_time: 10m
+        alertname: AccountBalanceCriticalLow
+        exp_alerts: []
+
+  - interval: 1m
+    input_series:
+      - series: depositor_bot_kafka_ping_messages{service="lido-depositor-bot", address="0x1"}
+        values: 1+1x10
+      - series: depositor_bot_kafka_ping_messages{service="lido-depositor-bot", address="0x0"}
+        values: 1 2x9
+
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: NoCouncilPings
+        exp_alerts: []
+
+      - eval_time: 10m
+        alertname: NoPingsFromNO
+        exp_alerts:
+          - exp_labels:
+              alertname: NoPingsFromNO
+              severity: warning
+              service: lido-depositor-bot
+              address: 0x0
+            exp_annotations:
+              summary: One of council daemons stopped sending pings to kafka.
+              description: "Council daemon with address 0x0 do not respond.\n Runbook: https://www.notion.so/Group-kafka_group-79fbf129188c4f97bf1db7f80d92f11a"
+
+  - interval: 1m
+    input_series:
+      - series: depositor_bot_kafka_ping_messages{service="lido-depositor-bot", address="0x1"}
+        values: 3 4x9
+      - series: depositor_bot_kafka_ping_messages{service="lido-depositor-bot", address="0x0"}
+        values: 1 2x9
+
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: NoCouncilPings
+        exp_alerts:
+          - exp_labels:
+              alertname: NoCouncilPings
+              severity: high
+            exp_annotations:
+              summary: No pings from council daemons.
+              description: "There is no ping messages from kafka.\n Playbook: Runbook: https://www.notion.so/Group-kafka_group-79fbf129188c4f97bf1db7f80d92f11a"
+
+  - interval: 1m
+    input_series:
+      - series: depositor_bot_gas_fee{type="current_fee"}
+        values: 10+1x10 20x10
+
+    alert_rule_test:
+      - eval_time: 19m
+        alertname: DepositorBotStuck
+        exp_alerts:
+          - exp_labels:
+              alertname: DepositorBotStuck
+              severity: high
+              type: "current_fee"
+            exp_annotations:
+              summary: Depositor bot stuck.
+              description: "Current gas fee in depositor bot is same for 5 minutes.\n Runbook: https://www.notion.so/Group-DepositorBotActivityGroup-98d5e3a44d4d4ed6b01cf2cd23e09b71"
+
+      - eval_time: 11m
+        alertname: DepositorBotStuck
+        exp_alerts: []
+
+  - interval: 1m
+    input_series:
+      - series: depositor_bot_kafka_pause_messages
+        values: 0x5 1+1x5
+
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: ProtocolPaused
+        exp_alerts:
+          - exp_labels:
+              alertname: ProtocolPaused
+              severity: critical
+            exp_annotations:
+              summary: Depositor bot received pause message from council daemon.
+              description: "Runbook: https://www.notion.so/Group-ProtocolPausedGroup-e6c356aa579c4ef0a08c95e050585762"
+
+      - eval_time: 5m
+        alertname: ProtocolPaused
+        exp_alerts: []
+
+  - interval: 1m
+    input_series:
+      - series: depositor_bot_deposit_success_total{service="lido-depositor-bot"}
+        values: 0x1440 1x2880 1x1440
+
+      - series: depositor_bot_required_buffered_ether
+        values: 0x1440 50x2880 100x1440
+
+      - series: depositor_bot_buffered_ether
+        values: 0x1440 100x1440 50x1440 50+1x1440
+
+    alert_rule_test:
+#      Deposited less than 2 days ago
+      - eval_time: 1d1h
+        alertname: NoDepositsFor2Days
+        exp_alerts: [ ]
+#      Not enough buffered ether
+      - eval_time: 3d10m
+        alertname: NoDepositsFor2Days
+        exp_alerts: []
+#      No deposits for 2 days
+      - eval_time: 3d12h
+        alertname: NoDepositsFor2Days
+        exp_alerts:
+          - exp_labels:
+              alertname: NoDepositsFor2Days
+              severity: medium
+            exp_annotations:
+              summary: Depositor bot didn't deposit for 2 days.
+              description: "Some issues preventing depositor bot from deposits for quite a long time. Runbook: https://www.notion.so/Group-DepositorBotActivityGroup-98d5e3a44d4d4ed6b01cf2cd23e09b71"
