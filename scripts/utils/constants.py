@@ -10,6 +10,12 @@ class Network(IntEnum):
     Ropsten = 3
 
 
+NETWORK_CHAIN_ID = {
+    'mainnet': 1,
+    'goerli': 5,
+}
+
+
 LIDO_CONTRACT_ADDRESSES = {
     Network.Mainnet: "0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84",
     Network.Görli: "0x1643E812aE58766192Cf7D2Cf9567dF2C37e9B7F",
@@ -26,8 +32,8 @@ DEPOSIT_CONTRACT = {
 }
 
 DEPOSIT_SECURITY_MODULE = {
-    Network.Mainnet: "0xDb149235B6F40dC08810AA69869783Be101790e7",
-    Network.Görli: "0xed23ad3ea5fb9d10e7371caef1b141ad1c23a80c",
+    Network.Mainnet: "0x710B3303fB508a84F10793c1106e32bE873C24cd",
+    Network.Görli: "0x7DC1C1ff64078f73C98338e2f17D1996ffBb2eDe",
 }
 
 FLASHBOTS_RPC = {

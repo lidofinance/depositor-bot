@@ -78,7 +78,7 @@ class KafkaMsgRecipient:
                     if not self.msg_types_to_receive or msg_type in self.msg_types_to_receive:
                         self.messages[msg_type].insert(0, value)
             else:
-                logger.error({'msg': f'Kafka error', 'error': msg.error()})
+                logger.error({'msg': f'Kafka error', 'error': str(msg.error())})
 
         logger.info({'msg': 'All messages received.'})
 

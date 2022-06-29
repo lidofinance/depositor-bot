@@ -1021,6 +1021,14 @@ optional = false
 python-versions = "*"
 
 [[package]]
+name = "timeout-decorator"
+version = "0.5.0"
+description = "Timeout decorator"
+category = "main"
+optional = false
+python-versions = "*"
+
+[[package]]
 name = "toml"
 version = "0.10.2"
 description = "Python Library for Tom's Obvious, Minimal Language"
@@ -1160,7 +1168,7 @@ tester = ["eth-tester[py-evm] (==v0.6.0-beta.6)", "py-geth (>=3.7.0,<4)"]
 
 [[package]]
 name = "web3-multi-provider"
-version = "0.2.0"
+version = "0.3.0"
 description = "Web3py provider that makes it easy to switch between different blockchain nodes to make sure application will be be online if main blockchain node will be unavailable."
 category = "main"
 optional = false
@@ -1200,7 +1208,7 @@ multidict = ">=4.0"
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.9,<3.10"
-content-hash = "e228ebcc2b74e7028c73f217cea8f996ad6f4809ae29644321c0f57ac8aa8ad2"
+content-hash = "713aa3aa611285c88872f5399f8741f59e68b4b2bb2af61eeea148e23b67210f"
 
 [metadata.files]
 aiohttp = [
@@ -1910,6 +1918,9 @@ sortedcontainers = [
     {file = "sortedcontainers-2.4.0-py2.py3-none-any.whl", hash = "sha256:a163dcaede0f1c021485e957a39245190e74249897e2ae4b2aa38595db237ee0"},
     {file = "sortedcontainers-2.4.0.tar.gz", hash = "sha256:25caa5a06cc30b6b83d11423433f65d1f9d76c4c6a0c90e3379eaa43b9bfdb88"},
 ]
+timeout-decorator = [
+    {file = "timeout-decorator-0.5.0.tar.gz", hash = "sha256:6a2f2f58db1c5b24a2cc79de6345760377ad8bdc13813f5265f6c3e63d16b3d7"},
+]
 toml = [
     {file = "toml-0.10.2-py2.py3-none-any.whl", hash = "sha256:806143ae5bfb6a3c6e736a764057db0e6a0e05e338b5630894a5f779cabb4f9b"},
     {file = "toml-0.10.2.tar.gz", hash = "sha256:b3bda1d108d5dd99f4a20d24d9c348e91c4db7ab1b749200bded2f839ccbe68f"},
@@ -1954,8 +1965,8 @@ web3 = [
     {file = "web3-5.27.0.tar.gz", hash = "sha256:e4ca28643b74365e7b50ec5db2d1be9799c14ad8d8b6ba31c0ecd3b573725bbd"},
 ]
 web3-multi-provider = [
-    {file = "web3-multi-provider-0.2.0.tar.gz", hash = "sha256:d131ccf03e88e91a5e0cb88b85b1ac57285b413d3d737c53cd69b42be9d9d3b8"},
-    {file = "web3_multi_provider-0.2.0-py3-none-any.whl", hash = "sha256:feb8b72a7422ef23507afb93c6697171a08526bd34d6f3d8a9a6b545929289eb"},
+    {file = "web3-multi-provider-0.3.0.tar.gz", hash = "sha256:4f05261d19c1d247b9e493b948feb98299b3965c744b98c6ec03effe5d33cdfe"},
+    {file = "web3_multi_provider-0.3.0-py3-none-any.whl", hash = "sha256:dd13dc1b921275636c0dcb10dcda997c326e65a9ddbf77fd5fe2a8816ded16e2"},
 ]
 websockets = [
     {file = "websockets-9.1-cp36-cp36m-macosx_10_9_x86_64.whl", hash = "sha256:d144b350045c53c8ff09aa1cfa955012dd32f00c7e0862c199edcabb1a8b32da"},

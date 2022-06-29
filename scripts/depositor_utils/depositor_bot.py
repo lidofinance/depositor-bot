@@ -3,13 +3,16 @@ import time
 from collections import defaultdict
 from typing import List, Tuple
 
-from brownie import web3, Wei, chain
+import timeout_decorator
+from brownie import web3, Wei
 from eth_account import Account
 from hexbytes import HexBytes
 from web3.exceptions import BlockNotFound, TransactionNotFound
 from web3.types import TxParams
+from web3_multi_provider import NoActiveProviderError
 
 from scripts.depositor_utils.kafka import DepositBotMsgRecipient
+from scripts.utils.fetch_latest_block import fetch_latest_block
 from scripts.utils.interfaces import (
     DepositSecurityModuleInterface,
     DepositContractInterface,
@@ -88,16 +91,28 @@ class DepositorBot:
     def run_as_daemon(self):
         """Super-Mega infinity cycle!"""
         while True:
-            try:
-                for _ in chain.new_blocks():
-                    self.run_cycle()
-            except (BlockNotFound, ValueError) as error:
-                logger.warning({'msg': 'Fetch block exception.', 'error': str(error)})
-                # Waiting for new block
-                time.sleep(13)
-            except Exception as error:
-                logger.warning({'msg': 'Unexpected exception.', 'error': str(error)})
-                time.sleep(13)
+            self._waiting_for_new_block_and_run_cycle()
+
+    @timeout_decorator.timeout(variables.MAX_CYCLE_LIFETIME_IN_SECONDS)
+    def _waiting_for_new_block_and_run_cycle(self):
+        try:
+            self.run_cycle()
+        except (BlockNotFound, ValueError) as error:
+            logger.warning({'msg': 'Fetch block exception.', 'error': str(error)})
+            # Waiting for new block
+            time.sleep(15)
+        except timeout_decorator.TimeoutError as exception:
+            # Bot is stuck. Drop bot and restart using Docker service
+            logger.error({'msg': 'Depositor bot do not respond.', 'error': str(exception)})
+            raise timeout_decorator.TimeoutError('Depositor bot stuck. Restarting using docker service.') from exception
+        except NoActiveProviderError as exception:
+            logger.error({'msg': 'No active node available.', 'error': str(exception)})
+            raise NoActiveProviderError from exception
+        except Exception as error:
+            logger.warning({'msg': 'Unexpected exception.', 'error': str(error)})
+            time.sleep(15)
+        else:
+            time.sleep(15)
 
     def run_cycle(self):
         """
@@ -131,13 +146,12 @@ class DepositorBot:
                 break
 
     def _update_state(self):
-        self._current_block = web3.eth.get_block('latest')
-        logger.info({'msg': f'Fetch `latest` block.', 'value': self._current_block.number})
+        self._current_block = fetch_latest_block(self._current_block.number if self._current_block else 0)
 
-        self.deposit_root = DepositContractInterface.get_deposit_root(block_identifier=self._current_block.hash.hex())
+        self.deposit_root = DepositContractInterface.get_deposit_root(block_identifier={"blockHash": self._current_block.hash.hex()})
         logger.info({'msg': f'Call `get_deposit_root()`.', 'value': str(self.deposit_root)})
 
-        self.keys_op_index = NodeOperatorsRegistryInterface.getKeysOpIndex(block_identifier=self._current_block.hash.hex())
+        self.keys_op_index = NodeOperatorsRegistryInterface.getKeysOpIndex(block_identifier={"blockHash": self._current_block.hash.hex()})
         logger.info({'msg': f'Call `getKeysOpIndex()`.', 'value': self.keys_op_index})
 
         self.kafka.update_messages()
@@ -149,7 +163,7 @@ class DepositorBot:
 
         # ------- Other checks -------
         if variables.ACCOUNT:
-            balance = web3.eth.get_balance(variables.ACCOUNT.address)
+            balance = web3.eth.get_balance(variables.ACCOUNT.address, block_identifier={"blockHash": self._current_block.hash.hex()})
             ACCOUNT_BALANCE.set(balance)
             if balance < Wei('0.05 ether'):
                 logger.warning({'msg': self.NOT_ENOUGH_BALANCE_ON_ACCOUNT, 'value': balance})
@@ -165,7 +179,7 @@ class DepositorBot:
         current_gas_fee = web3.eth.get_block('pending').baseFeePerGas
         
         # Lido contract buffered ether check
-        buffered_ether = LidoInterface.getBufferedEther(block_identifier=self._current_block.hash.hex())
+        buffered_ether = LidoInterface.getBufferedEther(block_identifier={"blockHash": self._current_block.hash.hex()})
         logger.info({'msg': 'Call `getBufferedEther()`.', 'value': buffered_ether})
         BUFFERED_ETHER.set(buffered_ether)
 
@@ -209,14 +223,17 @@ class DepositorBot:
             deposit_issues.append(self.GAS_FEE_HIGHER_THAN_RECOMMENDED)
 
         # Security module check
-        can_deposit = DepositSecurityModuleInterface.canDeposit(block_identifier=self._current_block.hash.hex())
+        can_deposit = DepositSecurityModuleInterface.canDeposit(block_identifier={"blockHash": self._current_block.hash.hex()})
         logger.info({'msg': 'Call `canDeposit()`.', 'value': can_deposit})
         if not can_deposit:
             logger.warning({'msg': self.DEPOSIT_SECURITY_ISSUE, 'value': can_deposit})
             deposit_issues.append(self.DEPOSIT_SECURITY_ISSUE)
 
         # Check that contract has unused operators keys
-        avail_keys = NodeOperatorsRegistryInterface.assignNextSigningKeys.call(1, {'from': LidoInterface.address})[0]
+        avail_keys = NodeOperatorsRegistryInterface.assignNextSigningKeys.call(
+            1, {'from': LidoInterface.address},
+            block_identifier={"blockHash": self._current_block.hash.hex()}
+        )[0]
         has_keys = bool(avail_keys)
         OPERATORS_FREE_KEYS.set(1 if has_keys else 0)
         logger.info({'msg': 'Call `getNodeOperator()` and `getNodeOperatorsCount()`. Value is free keys', 'value': has_keys})

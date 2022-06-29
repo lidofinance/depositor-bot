@@ -70,8 +70,8 @@ docker-compose up
 | NETWORK (required)                |     -      |    `None`     | Network (e.g. mainnet, goerli)                                                                                                                  |
 | WEB3_INFURA_PROJECT_ID (required) |     -      |    `None`     | Project ID in infura                                                                                                                            |
 | KAFKA_BROKER_ADDRESS_1 (required) |     -      |    `None`     | Kafka servers url and port                                                                                                                      |
-| KAFKA_USERNAME (required)         |     -      |    `None`     | Kafka username                                                                                                                                  |
-| KAFKA_PASSWORD (required)         |     -      |    `None`     | Kafka password                                                                                                                                  |
+| KAFKA_USERNAME (required)         |     -      |    `None`     | Kafka username value                                                                                                                            |
+| KAFKA_PASSWORD (required)         |     -      |    `None`     | Kafka password value                                                                                                                            |
 | KAFKA_TOPIC (required)            |     -      |    `None`     | Kafka topic name (for msg receiving)                                                                                                            |
 | FLASHBOT_SIGNATURE (required)     |     -      |    `None`     | Private key - Used to identify account in flashbot`s rpc (should NOT be equal to WALLET private key)                                            |
 | KAFKA_GROUP_PREFIX                |     -      |    `None`     | Just for staging (staging-)                                                                                                                     |
@@ -86,6 +86,7 @@ docker-compose up
 | MIN_PRIORITY_FEE                  |   2 GWEI   |   `2 gwei`    | Min priority fee that will be used in tx                                                                                                        |
 | MAX_PRIORITY_FEE                  |  10 GWEI   |   `10 gwei`   | Max priority fee that will be used in tx (4 gwei recommended)                                                                                   |
 | WEB3_RPC_ENDPOINTS                |     -      |      ``       | List of rpc endpoints that will be used to send requests separated by comma (`,`). If not provided will be used infura (WEB3_INFURA_PROJECT_ID) |
+| MAX_CYCLE_LIFETIME_IN_SECONDS     | 6 minutes  |     `300`     | Max lifetime of usual cycle. If cycle will not end in this time, bot will crush                                                                 |
 
 ## Release flow
 

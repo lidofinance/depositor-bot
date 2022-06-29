@@ -1,20 +1,26 @@
-name: Tests
+name: Tests and checks
 
-on: [push]
+on: 
+  push:
 
 jobs:
-  build:
+  tests:
+    name: App tests
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v2
 
       - name: Set up Python 3.9
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v4
         with:
           python-version: 3.9
 
-      - uses: Gr1N/setup-poetry@v7
+      - name: Setup poetry
+        run: |
+          curl -sSL https://raw.githubusercontent.com/python-poetry/poetry/master/get-poetry.py | python - && echo "$HOME/.poetry/bin" >> $GITHUB_PATH
+        env:
+          POETRY_VERSION: 1.1.13
 
       - name: Install dependencies
         run: |
@@ -30,3 +36,9 @@ jobs:
           KAFKA_BROKER_ADDRESS_1: ${{ secrets.KAFKA_BROKER_ADDRESS_1 }}
           KAFKA_USERNAME: ${{ secrets.KAFKA_USERNAME }}
           KAFKA_PASSWORD: ${{ secrets.KAFKA_PASSWORD }}
+
+  security:
+    uses: lidofinance/linters/.github/workflows/security.yml@master
+  
+  docker:
+    uses: lidofinance/linters/.github/workflows/docker.yml@master

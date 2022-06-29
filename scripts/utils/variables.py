@@ -1,8 +1,9 @@
 import logging
 import os
 
-from brownie import Wei, web3, accounts
+from brownie import Wei, accounts
 
+from scripts.utils.constants import NETWORK_CHAIN_ID
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +32,8 @@ KAFKA_PASSWORD = os.getenv('KAFKA_PASSWORD')
 KAFKA_TOPIC = os.getenv('KAFKA_TOPIC')
 KAFKA_GROUP_PREFIX = os.getenv('KAFKA_GROUP_PREFIX', '')
 
-WEB3_CHAIN_ID = web3.eth.chain_id
+# Should be reinitialized after brownie pre-script
+WEB3_CHAIN_ID = NETWORK_CHAIN_ID[NETWORK]
 
 # Account private key
 WALLET_PRIVATE_KEY = os.getenv('WALLET_PRIVATE_KEY', None)
@@ -46,7 +48,10 @@ else:
 
 CREATE_TRANSACTIONS = os.getenv('CREATE_TRANSACTIONS') == 'true'
 
-WEB3_RPC_ENDPOINTS = os.getenv('WEB3_RPC_ENDPOINTS', '').split(',')
+RAW_WEB3_RPC_ENDPOINTS = os.getenv('WEB3_RPC_ENDPOINTS', '')
+WEB3_RPC_ENDPOINTS = RAW_WEB3_RPC_ENDPOINTS.split(',') if RAW_WEB3_RPC_ENDPOINTS else None
 
 PROMETHEUS_PORT = int(os.getenv('PROMETHEUS_PORT', '9000'))
 PULSE_SERVER_PORT = int(os.getenv('PULSE_SERVER_PORT', '9010'))
+
+MAX_CYCLE_LIFETIME_IN_SECONDS = int(os.getenv('MAX_CYCLE_LIFETIME_IN_SECONDS', '300'))
