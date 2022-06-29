@@ -86,3 +86,15 @@ docker-compose up
 | MIN_PRIORITY_FEE                  |   2 GWEI   |   `2 gwei`    | Min priority fee that will be used in tx                                                                                                        |
 | MAX_PRIORITY_FEE                  |  10 GWEI   |   `10 gwei`   | Max priority fee that will be used in tx (4 gwei recommended)                                                                                   |
 | WEB3_RPC_ENDPOINTS                |     -      |      ``       | List of rpc endpoints that will be used to send requests separated by comma (`,`). If not provided will be used infura (WEB3_INFURA_PROJECT_ID) |
+
+## Release flow
+
+To create new release:
+
+1. Merge all changes to the `main` branch
+1. Navigate to Repo => Actions
+1. Run action "Prepare release" action against `main` branch
+1. When action execution is finished, navigate to Repo => Pull requests
+1. Find pull request named "chore(release): X.X.X" review and merge it with "Rebase and merge" (or "Squash and merge")
+1. After merge release action will be triggered automatically
+1. Navigate to Repo => Actions and see last actions logs for further details 
