@@ -7,7 +7,7 @@ from scripts.utils import variables
 from scripts.utils.constants import FLASHBOTS_RPC
 from scripts.utils.healthcheck_pulse import start_pulse_server
 from scripts.utils.logging import logging
-from scripts.utils.metrics_collector_middleware import metrics_collector
+from scripts.utils.requests_metric_middleware import add_requests_metric_middleware
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +30,7 @@ def main():
     flashbot(web3, web3.eth.account.from_key(variables.FLASHBOT_SIGNATURE), FLASHBOTS_RPC[variables.WEB3_CHAIN_ID])
 
     logger.info({'msg': 'Add metrics to web3 requests.'})
-    web3.middleware_onion.add(metrics_collector)
+    add_requests_metric_middleware(web3)
 
     from scripts.depositor_utils.depositor_bot import DepositorBot
     depositor_bot = DepositorBot()

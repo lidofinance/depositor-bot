@@ -1168,7 +1168,7 @@ tester = ["eth-tester[py-evm] (==v0.6.0-beta.6)", "py-geth (>=3.7.0,<4)"]
 
 [[package]]
 name = "web3-multi-provider"
-version = "0.4.0"
+version = "0.4.1"
 description = "Web3py provider that makes it easy to switch between different blockchain nodes to make sure application will be be online if main blockchain node will be unavailable."
 category = "main"
 optional = false
@@ -1208,7 +1208,7 @@ multidict = ">=4.0"
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.9,<3.10"
-content-hash = "2d5f7c2cab1586407d55fa97dcfb5a69e1aaf20076e37b12033228188ef7c8fb"
+content-hash = "4d3a119f67bc60a4e53b00ee58d0870892fec685ead8c4c9ef2916ab4e2582f9"
 
 [metadata.files]
 aiohttp = [

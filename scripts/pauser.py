@@ -5,7 +5,7 @@ from web3_multi_provider import MultiProvider
 from scripts.utils import variables
 from scripts.utils.healthcheck_pulse import start_pulse_server
 from scripts.utils.logging import logging
-from scripts.utils.metrics_collector_middleware import metrics_collector
+from scripts.utils.requests_metric_middleware import add_requests_metric_middleware
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +25,7 @@ def main():
         web3.provider = MultiProvider(variables.WEB3_RPC_ENDPOINTS)
 
     logger.info({'msg': 'Add metrics to web3 requests.'})
-    web3.middleware_onion.add(metrics_collector)
+    add_requests_metric_middleware(web3)
 
     from scripts.pauser_utils.pause_bot import DepositPauseBot
     deposit_pause_bot = DepositPauseBot()
