@@ -1,9 +1,8 @@
-from prometheus_client.metrics import Gauge, Counter
+from prometheus_client.metrics import Gauge, Counter, Histogram
 
+PREFIX = 'depositor_bot'
 
-DEPOSITOR_PREFIX = 'depositor_bot_'
-
-BUILD_INFO = Gauge(f'{DEPOSITOR_PREFIX}build_info', 'Build info', [
+BUILD_INFO = Gauge('build_info', 'Build info', [
     'name',
     'network',
     'max_gas_fee',
@@ -17,22 +16,59 @@ BUILD_INFO = Gauge(f'{DEPOSITOR_PREFIX}build_info', 'Build info', [
     'kafka_topic',
     'account_address',
     'create_transactions',
-])
+], namespace=PREFIX)
 
-GAS_FEE = Gauge(f'{DEPOSITOR_PREFIX}gas_fee', 'Gas fee', ['type'])
+GAS_FEE = Gauge('gas_fee', 'Gas fee', ['type'], namespace=PREFIX)
 
-DEPOSIT_FAILURE = Counter(f'{DEPOSITOR_PREFIX}deposit_failure', 'Deposit failure')
-SUCCESS_DEPOSIT = Counter(f'{DEPOSITOR_PREFIX}deposit_success', 'Deposit done')
+DEPOSIT_FAILURE = Counter('deposit_failure', 'Deposit failure', namespace=PREFIX)
+SUCCESS_DEPOSIT = Counter('deposit_success', 'Deposit done', namespace=PREFIX)
 
-ACCOUNT_BALANCE = Gauge(f'{DEPOSITOR_PREFIX}account_balance', 'Account balance')
+ACCOUNT_BALANCE = Gauge('account_balance', 'Account balance', namespace=PREFIX)
 
-KAFKA_DEPOSIT_MESSAGES = Gauge(f'{DEPOSITOR_PREFIX}kafka_deposit_messages', 'Guardians deposit messages', ['address', 'version'])
-KAFKA_PAUSE_MESSAGES = Gauge(f'{DEPOSITOR_PREFIX}kafka_pause_messages', 'Guardians pause messages', ['address', 'version'])
-KAFKA_PING_MESSAGES = Gauge(f'{DEPOSITOR_PREFIX}kafka_ping_messages', 'Guardians ping messages', ['address', 'version'])
+KAFKA_DEPOSIT_MESSAGES = Gauge(
+    'kafka_deposit_messages',
+    'Guardians deposit messages',
+    ['address', 'version'],
+    namespace=PREFIX,
+)
+KAFKA_PAUSE_MESSAGES = Gauge(
+    'kafka_pause_messages',
+    'Guardians pause messages',
+    ['address', 'version'],
+    namespace=PREFIX,
+)
+KAFKA_PING_MESSAGES = Gauge(
+    'kafka_ping_messages',
+    'Guardians ping messages',
+    ['address', 'version'],
+    namespace=PREFIX,
+)
 
-CURRENT_QUORUM_SIZE = Gauge(f'{DEPOSITOR_PREFIX}quorum_size', 'Current quorum size')
-BUFFERED_ETHER = Gauge(f'{DEPOSITOR_PREFIX}buffered_ether', 'Buffered ether')
-OPERATORS_FREE_KEYS = Gauge(f'{DEPOSITOR_PREFIX}operator_free_keys', 'Has free keys')
-CREATING_TRANSACTIONS = Gauge(f'{DEPOSITOR_PREFIX}creating_transactions', 'Creating transactions', ['bot'])
+CURRENT_QUORUM_SIZE = Gauge(
+    'quorum_size',
+    'Current quorum size',
+    namespace=PREFIX,
+)
 
-REQUIRED_BUFFERED_ETHER = Gauge(f'{DEPOSITOR_PREFIX}required_buffered_ether', 'Buffered ether amount required for deposit')
+BUFFERED_ETHER = Gauge('buffered_ether', 'Buffered ether', namespace=PREFIX)
+OPERATORS_FREE_KEYS = Gauge('operator_free_keys', 'Has free keys', namespace=PREFIX)
+CREATING_TRANSACTIONS = Gauge('creating_transactions', 'Creating transactions', ['bot'], namespace=PREFIX)
+
+REQUIRED_BUFFERED_ETHER = Gauge(
+    'required_buffered_ether',
+    'Buffered ether amount required for deposit',
+    namespace=PREFIX,
+)
+
+ETH_RPC_REQUESTS_DURATION = Histogram(
+    'eth_rpc_requests_duration',
+    'Duration of requests to ETH1 RPC',
+    namespace=PREFIX
+)
+
+ETH_RPC_REQUESTS = Counter(
+    'eth_rpc_requests',
+    'Total count of requests to ETH1 RPC',
+    ['method', 'code', 'domain'],
+    namespace=PREFIX
+)
