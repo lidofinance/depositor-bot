@@ -1,11 +1,11 @@
 from brownie import web3
 from prometheus_client import start_http_server
-from web3_multi_provider import MultiHTTPProvider
+from web3_multi_provider import MultiProvider
 
 from scripts.utils import variables
 from scripts.utils.healthcheck_pulse import start_pulse_server
 from scripts.utils.logging import logging
-
+from scripts.utils.requests_metric_middleware import add_requests_metric_middleware
 
 logger = logging.getLogger(__name__)
 
@@ -20,8 +20,12 @@ def main():
     start_http_server(variables.PROMETHEUS_PORT)
 
     if variables.WEB3_RPC_ENDPOINTS:
+        logger.info({'msg': 'Connect MultiHTTPProviders.', 'rpc_count': len(variables.WEB3_RPC_ENDPOINTS)})
         web3.disconnect()
-        web3.provider = MultiHTTPProvider(variables.WEB3_RPC_ENDPOINTS)
+        web3.provider = MultiProvider(variables.WEB3_RPC_ENDPOINTS)
+
+    logger.info({'msg': 'Add metrics to web3 requests.'})
+    add_requests_metric_middleware(web3)
 
     from scripts.pauser_utils.pause_bot import DepositPauseBot
     deposit_pause_bot = DepositPauseBot()
