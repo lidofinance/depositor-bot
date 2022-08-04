@@ -19,7 +19,8 @@ tests:
               service: lido-depositor-bot
             exp_annotations:
               summary: Account balance is lower than 3 ETH.
-              description: "Account balance is 0.\n Runbook: https://www.notion.so/Group-account_balance_group-54c28e098145437ebe82e64228a74beb"
+              description: "Account balance is 0."
+              runbook: "https://www.notion.so/Group-account_balance_group-54c28e098145437ebe82e64228a74beb"
 
       - eval_time: 10m
         alertname: AccountBalanceCriticalLow
@@ -47,7 +48,8 @@ tests:
               address: 0x0
             exp_annotations:
               summary: One of council daemons stopped sending pings to kafka.
-              description: "Council daemon with address 0x0 do not respond.\n Runbook: https://www.notion.so/Group-kafka_group-79fbf129188c4f97bf1db7f80d92f11a"
+              description: "Council daemon with address 0x0 do not respond."
+              runbook: "https://www.notion.so/Group-kafka_group-79fbf129188c4f97bf1db7f80d92f11a"
 
   - interval: 1m
     input_series:
@@ -65,24 +67,27 @@ tests:
               severity: high
             exp_annotations:
               summary: No pings from council daemons.
-              description: "There is no ping messages from kafka.\n Playbook: Runbook: https://www.notion.so/Group-kafka_group-79fbf129188c4f97bf1db7f80d92f11a"
+              description: "There is no ping messages from kafka."
+              runbook: "https://www.notion.so/Group-kafka_group-79fbf129188c4f97bf1db7f80d92f11a"
 
   - interval: 1m
     input_series:
-      - series: depositor_bot_gas_fee{type="current_fee"}
+      - series: depositor_bot_gas_fee{type="current_fee", service="lido-depositor-bot"}
         values: 10+1x10 20x10
 
     alert_rule_test:
-      - eval_time: 19m
+      - eval_time: 25m
         alertname: DepositorBotStuck
         exp_alerts:
           - exp_labels:
               alertname: DepositorBotStuck
               severity: high
+              service: lido-depositor-bot
               type: "current_fee"
             exp_annotations:
               summary: Depositor bot stuck.
-              description: "Current gas fee in depositor bot is same for 5 minutes.\n Runbook: https://www.notion.so/Group-DepositorBotActivityGroup-98d5e3a44d4d4ed6b01cf2cd23e09b71"
+              description: "Current gas fee in depositor bot is same for 5 minutes."
+              runbook: "https://www.notion.so/Group-DepositorBotActivityGroup-98d5e3a44d4d4ed6b01cf2cd23e09b71"
 
       - eval_time: 11m
         alertname: DepositorBotStuck
@@ -90,7 +95,7 @@ tests:
 
   - interval: 1m
     input_series:
-      - series: depositor_bot_kafka_pause_messages
+      - series: depositor_bot_kafka_pause_messages{service="lido-depositor-bot"}
         values: 0x5 1+1x5
 
     alert_rule_test:
@@ -99,10 +104,12 @@ tests:
         exp_alerts:
           - exp_labels:
               alertname: ProtocolPaused
-              severity: critical
+              severity: security
+              service: lido-depositor-bot
             exp_annotations:
               summary: Depositor bot received pause message from council daemon.
-              description: "Runbook: https://www.notion.so/Group-ProtocolPausedGroup-e6c356aa579c4ef0a08c95e050585762"
+              description: Protocol was paused. Possible it was an attack to protocol.
+              runbook: "https://www.notion.so/Group-ProtocolPausedGroup-e6c356aa579c4ef0a08c95e050585762"
 
       - eval_time: 5m
         alertname: ProtocolPaused
@@ -123,7 +130,7 @@ tests:
 #      Deposited less than 2 days ago
       - eval_time: 1d1h
         alertname: NoDepositsFor2Days
-        exp_alerts: [ ]
+        exp_alerts: []
 #      Not enough buffered ether
       - eval_time: 3d10m
         alertname: NoDepositsFor2Days
@@ -137,4 +144,27 @@ tests:
               severity: medium
             exp_annotations:
               summary: Depositor bot didn't deposit for 2 days.
-              description: "Some issues preventing depositor bot from deposits for quite a long time. Runbook: https://www.notion.so/Group-DepositorBotActivityGroup-98d5e3a44d4d4ed6b01cf2cd23e09b71"
+              description: "Some issues preventing depositor bot from deposits for quite a long time."
+              runbook: "https://www.notion.so/Group-DepositorBotActivityGroup-98d5e3a44d4d4ed6b01cf2cd23e09b71"
+
+  - interval: 1m
+    input_series:
+      - series: depositor_bot_buffered_ether{service="lido-depositor-bot"}
+        values: 4000e+18x20 6000e+18x100
+
+    alert_rule_test:
+      - eval_time: 1h30m
+        alertname: HighETHInBuffer
+        exp_alerts:
+          - exp_labels:
+              alertname: HighETHInBuffer
+              service: lido-depositor-bot
+              severity: high
+            exp_annotations:
+              summary: Buffered ETH more than 5000 ETH for 1h.
+              description: Buffered ETH - 6000.
+              runbook: "https://www.notion.so/Group-HighETHInBuffer-ec50675ac0b14044a277b4dcdb01a287"
+
+      - eval_time: 10m
+        alertname: HighETHInBuffer
+        exp_alerts: [ ]
