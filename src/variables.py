@@ -1,29 +1,31 @@
 import logging
 import os
 
-from brownie import Wei, accounts
+from eth_account import Account
+from web3 import Web3
 
-from scripts.utils.constants import NETWORK_CHAIN_ID
+from blockchain.constants import NETWORK_CHAIN_ID
 
 logger = logging.getLogger(__name__)
 
 
 NETWORK = os.getenv('NETWORK')
+ENVIRONMENT = os.getenv('ENVIRONMENT', '')
 
 # Transaction limits
-MAX_GAS_FEE = Wei(os.getenv('MAX_GAS_FEE', '100 gwei'))
-CONTRACT_GAS_LIMIT = Wei(os.getenv('CONTRACT_GAS_LIMIT', 10 * 10**6))
+MAX_GAS_FEE = Web3.toWei(*os.getenv('MAX_GAS_FEE', '100 gwei').split(' '))
+CONTRACT_GAS_LIMIT = int(os.getenv('CONTRACT_GAS_LIMIT', 15 * 10**6))
 
 # Gas fee percentile
 GAS_FEE_PERCENTILE_1: int = int(os.getenv('GAS_FEE_PERCENTILE_1', 5))
 GAS_FEE_PERCENTILE_DAYS_HISTORY_1: int = int(os.getenv('GAS_FEE_PERCENTILE_DAYS_HISTORY_1', 1))
 
-GAS_PRIORITY_FEE_PERCENTILE = int(os.getenv('GAS_PRIORITY_FEE_PERCENTILE', 55))
+GAS_PRIORITY_FEE_PERCENTILE = int(os.getenv('GAS_PRIORITY_FEE_PERCENTILE', 25))
 
-MIN_PRIORITY_FEE = Wei(os.getenv('MIN_PRIORITY_FEE', '2 gwei'))
-MAX_PRIORITY_FEE = Wei(os.getenv('MAX_PRIORITY_FEE', '10 gwei'))
+MIN_PRIORITY_FEE = Web3.toWei(*os.getenv('MIN_PRIORITY_FEE', '1 gwei').split(' '))
+MAX_PRIORITY_FEE = Web3.toWei(*os.getenv('MAX_PRIORITY_FEE', '10 gwei').split(' '))
 
-MAX_BUFFERED_ETHERS = Wei(os.getenv('MAX_BUFFERED_ETHERS', '5000 ether'))
+MAX_BUFFERED_ETHERS = Web3.toWei(*os.getenv('MAX_BUFFERED_ETHERS', '5000 ether').split(' '))
 
 # Kafka secrets
 KAFKA_BROKER_ADDRESS_1 = os.getenv('KAFKA_BROKER_ADDRESS_1')
@@ -40,7 +42,7 @@ WALLET_PRIVATE_KEY = os.getenv('WALLET_PRIVATE_KEY', None)
 FLASHBOT_SIGNATURE = os.getenv('FLASHBOT_SIGNATURE')
 
 if WALLET_PRIVATE_KEY:
-    ACCOUNT = accounts.add(WALLET_PRIVATE_KEY)
+    ACCOUNT = Account.from_key(WALLET_PRIVATE_KEY)
     logger.info({'msg': 'Load account from private key.', 'value': ACCOUNT.address})
 else:
     ACCOUNT = None
@@ -48,10 +50,9 @@ else:
 
 CREATE_TRANSACTIONS = os.getenv('CREATE_TRANSACTIONS') == 'true'
 
-RAW_WEB3_RPC_ENDPOINTS = os.getenv('WEB3_RPC_ENDPOINTS', '')
-WEB3_RPC_ENDPOINTS = RAW_WEB3_RPC_ENDPOINTS.split(',') if RAW_WEB3_RPC_ENDPOINTS else None
+WEB3_RPC_ENDPOINTS = os.getenv('WEB3_RPC_ENDPOINTS', '').split(',')
 
 PROMETHEUS_PORT = int(os.getenv('PROMETHEUS_PORT', '9000'))
 PULSE_SERVER_PORT = int(os.getenv('PULSE_SERVER_PORT', '9010'))
 
-MAX_CYCLE_LIFETIME_IN_SECONDS = int(os.getenv('MAX_CYCLE_LIFETIME_IN_SECONDS', '300'))
+MAX_CYCLE_LIFETIME_IN_SECONDS = int(os.getenv('MAX_CYCLE_LIFETIME_IN_SECONDS', '30000'))

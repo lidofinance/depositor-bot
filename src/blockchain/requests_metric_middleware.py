@@ -6,7 +6,7 @@ from requests import Response, HTTPError
 from web3 import Web3
 from web3.types import RPCEndpoint, RPCResponse
 
-from scripts.utils.metrics import ETH_RPC_REQUESTS_DURATION, ETH_RPC_REQUESTS
+from metrics.metrics import ETH_RPC_REQUESTS_DURATION, ETH_RPC_REQUESTS
 
 logger = logging.getLogger(__name__)
 

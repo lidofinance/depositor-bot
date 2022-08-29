@@ -3,7 +3,7 @@ import json
 import pytest
 from brownie.network import web3, accounts
 
-from scripts.utils import healthcheck_pulse
+from metrics import healthcheck_pulse
 from tests.fixtures.depositor_fixtures import (
     DEPOSITOR_BASE_FIXTURES, DEPOSITOR_FIXTURES_WITH_HIGH_GAS,
     DEPOSITOR_FIXTURES_WITH_DEPOSIT_PROHIBIT, DEPOSITOR_FIXTURES_NOT_ENOUGH_BUFFERED_ETHER,
@@ -35,7 +35,7 @@ def send_message_to_kafka(monkeypatch, msgs):
 
         return _
 
-    from scripts.utils.kafka import Consumer
+    from transport.msg_providers.kafka import Consumer
     monkeypatch.setattr(Consumer, 'poll', make_poll())
 
 
@@ -178,7 +178,7 @@ def setup_ping_message_to_kafka(monkeypatch):
 
 @pytest.fixture(scope='function')
 def setup_account(monkeypatch):
-    from scripts.utils import variables
+    import variables
 
     monkeypatch.setenv('WALLET_PRIVATE_KEY', '0000000000000000000000000000000000000000000000000000000000000000')
     monkeypatch.setattr(variables, 'WALLET_PRIVATE_KEY', '0000000000000000000000000000000000000000000000000000000000000000')
@@ -191,7 +191,7 @@ def setup_account(monkeypatch):
 
 @pytest.fixture(scope='function')
 def setup_create_txs(monkeypatch):
-    from scripts.utils import variables
+    import variables
     monkeypatch.setenv('CREATE_TRANSACTIONS', 'true')
     monkeypatch.setattr(variables, 'CREATE_TRANSACTIONS', True)
     yield
@@ -255,7 +255,7 @@ def setup_web3_deposit_fixtures_with_high_gas():
 
 @pytest.fixture()
 def pause_bot():
-    from scripts.pauser_utils.pause_bot import DepositPauseBot
+    from bots.pause_bot import DepositPauseBot
 
     bot = DepositPauseBot()
     yield bot
@@ -264,7 +264,7 @@ def pause_bot():
 
 @pytest.fixture()
 def depositor_bot():
-    from scripts.depositor_utils.depositor_bot import DepositorBot
+    from bots.depositor_bot import DepositorBot
 
     bot = DepositorBot()
     yield bot
@@ -277,3 +277,8 @@ def remove_sleep(monkeypatch):
     monkeypatch.setattr(time, 'sleep', lambda x: x)
 
     monkeypatch.setattr(healthcheck_pulse, 'pulse', lambda: None)
+
+
+@pytest.fixture()
+def remove_signature_check(monkeypatch):
+    pass
