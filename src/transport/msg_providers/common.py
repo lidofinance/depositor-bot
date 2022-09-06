@@ -13,21 +13,15 @@ class BaseMessageProvider(abc.ABC):
     """Abstract message provider that receives messages and"""
     MAX_MESSAGES_RECEIVE = 1000
 
-    def __init__(self, message_schema: Schema):
+    def __init__(self, client: str, message_schema: Schema):
         self.message_schema = message_schema
+        self.client = client
 
     def get_messages(self) -> List[dict]:
         messages = []
 
-        tmp = self._receive_message()
-
         for i in range(self.MAX_MESSAGES_RECEIVE):
-            # msg = self._receive_message()
-            try:
-                msg = next(tmp)
-                msg = json.dumps(msg)
-            except StopIteration:
-                break
+            msg = self._receive_message()
 
             if msg is None:
                 break

@@ -14,6 +14,7 @@ from blockchain.fetch_latest_block import fetch_latest_block
 from cryptography.verify_signature import compute_vs
 from metrics import healthcheck_pulse
 from metrics.metrics import BUILD_INFO
+from metrics.transport_message_metrics import message_metrics
 from transport.msg_providers.kafka import KafkaMessageProvider
 from transport.msg_providers.rabbit import RabbitProvider, MessageType
 from transport.msg_schemas import PauseMessageSchema, get_pause_messages_sign_filter, PauseMessage, PingMessageSchema
@@ -45,11 +46,13 @@ class PauserBot:
                     message_schema=PauseMessageSchema,
                 ),
                 RabbitProvider(
+                    client='pauser',
                     routing_keys=[MessageType.PING, MessageType.PAUSE],
                     message_schema=Schema(Or(PauseMessageSchema, PingMessageSchema)),
                 ),
             ],
             filters=[
+                message_metrics,
                 get_pause_messages_sign_filter(self.pause_prefix),
             ],
         )
@@ -99,7 +102,7 @@ class PauserBot:
         logger.info({'msg': 'New pause cycle.'})
         self._update_state()
 
-        is_paused = contracts.deposit_security_module.functions.isPaused().call()
+        is_paused = contracts.deposit_security_module.functions.isPaused().call(block_identifier=self.current_block.hash.hex())
         logger.info({'msg': f'Call `isPaused()`.', 'value': is_paused})
 
         messages = self.receive_pause_messages()

@@ -11,8 +11,8 @@ from blockchain.constants import (
 from variables import WEB3_CHAIN_ID
 
 
-def load_abi(abi_name):
-    f = open(f'./interfaces/{abi_name}.json')
+def load_abi(abi_path, abi_name):
+    f = open(f'{abi_path}{abi_name}.json')
     return json.load(f)
 
 
@@ -24,26 +24,26 @@ class Contracts:
     deposit_security_module = None
     deposit_contract = None
 
-    def initialize(self, w3: Web3):
+    def initialize(self, w3: Web3, abi_path='./interfaces/'):
         __initialized = True
 
         self.lido = w3.eth.contract(
             address=LIDO_CONTRACT_ADDRESSES[WEB3_CHAIN_ID],
-            abi=load_abi('Lido'),
+            abi=load_abi(abi_path, 'Lido'),
         )
         self.node_operator_registry = w3.eth.contract(
             address=NODE_OPS_ADDRESSES[WEB3_CHAIN_ID],
-            abi=load_abi('NodeOperatorRegistry'),
+            abi=load_abi(abi_path, 'NodeOperatorRegistry'),
         )
 
         self.deposit_security_module = w3.eth.contract(
             address=DEPOSIT_SECURITY_MODULE[WEB3_CHAIN_ID],
-            abi=load_abi('DepositSecurityModule'),
+            abi=load_abi(abi_path, 'DepositSecurityModule'),
         )
 
         self.deposit_contract = w3.eth.contract(
             address=DEPOSIT_CONTRACT[WEB3_CHAIN_ID],
-            abi=load_abi('DepositContract'),
+            abi=load_abi(abi_path, 'DepositContract'),
         )
 
     @staticmethod

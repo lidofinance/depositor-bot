@@ -4,7 +4,7 @@ import os
 from eth_account import Account
 from web3 import Web3
 
-from blockchain.constants import NETWORK_CHAIN_ID
+from blockchain.constants import NETWORK_CHAIN_ID, Network
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +35,7 @@ KAFKA_TOPIC = os.getenv('KAFKA_TOPIC')
 KAFKA_GROUP_PREFIX = os.getenv('KAFKA_GROUP_PREFIX', '')
 
 # Should be reinitialized after brownie pre-script
-WEB3_CHAIN_ID = NETWORK_CHAIN_ID[NETWORK]
+WEB3_CHAIN_ID = NETWORK_CHAIN_ID.get(NETWORK, Network.Mainnet)
 
 # Account private key
 WALLET_PRIVATE_KEY = os.getenv('WALLET_PRIVATE_KEY', None)
@@ -56,3 +56,8 @@ PROMETHEUS_PORT = int(os.getenv('PROMETHEUS_PORT', '9000'))
 PULSE_SERVER_PORT = int(os.getenv('PULSE_SERVER_PORT', '9010'))
 
 MAX_CYCLE_LIFETIME_IN_SECONDS = int(os.getenv('MAX_CYCLE_LIFETIME_IN_SECONDS', '30000'))
+
+RABBIT_MQ_HOST = os.getenv('RABBIT_MQ_HOST', '127.0.0.1')
+RABBIT_MQ_PORT = int(os.getenv('RABBIT_MQ_PORT', '61613'))
+RABBIT_MQ_USERNAME = os.getenv('RABBIT_MQ_USERNAME', 'admin1')
+RABBIT_MQ_PASSWORD = os.getenv('RABBIT_MQ_PASSWORD', 'admin1')

@@ -1,11 +1,11 @@
 import json
 import logging
-import threading
 from typing import Optional, List
 
-import pika
+import stomp
 from schema import Schema
 
+import variables
 from transport.msg_providers.common import BaseMessageProvider
 from variables import NETWORK, ENVIRONMENT
 
@@ -21,29 +21,28 @@ class MessageType:
 class RabbitProvider(BaseMessageProvider):
     _queue: List[dict] = []
 
-    def __init__(self, message_schema: Schema, routing_keys: List[str]):
+    def __init__(self, client: str, message_schema: Schema, routing_keys: List[str]):
+        super().__init__(client, message_schema)
+
         logger.info({'msg': 'Rabbit initialize.'})
 
-        self.rabbit = pika.BlockingConnection(pika.ConnectionParameters(host='localhost'))
-        self.channel = self.rabbit.channel()
+        self.conn = stomp.Connection([(variables.RABBIT_MQ_HOST, variables.RABBIT_MQ_PORT)])
 
-        exchange = f'{NETWORK}-{ENVIRONMENT}'
+        _self = self
 
-        result = self.channel.queue_declare(queue='', exclusive=True)
-        queue_name = result.method.queue
+        class STOMPListener(stomp.ConnectionListener):
+            def on_message(self, frame):
+                _self._receive_message_from_queue(frame.body)
+
+        self.conn.set_listener(self.client, STOMPListener())
+
+        self.conn.connect(variables.RABBIT_MQ_USERNAME, variables.RABBIT_MQ_PASSWORD, wait=True)
 
         for rk in routing_keys:
-            self.channel.queue_bind(exchange=exchange, queue=queue_name, routing_key=rk)
-
-        self.channel.basic_consume(queue=queue_name, on_message_callback=self._receive_message_from_queue, auto_ack=True)
-
-        thread = threading.Thread(target=self.channel.start_consuming, daemon=True)
-        thread.start()
-
-        super().__init__(message_schema)
+            self.conn.subscribe(destination=f'{NETWORK}-{ENVIRONMENT}/{rk}', id=self.client + rk, ack='auto')
 
     def __del__(self):
-        self.rabbit.close()
+        self.conn.disconnect()
 
     def _receive_message(self) -> Optional[dict]:
         try:
@@ -51,7 +50,7 @@ class RabbitProvider(BaseMessageProvider):
         except IndexError:
             return None
 
-    def _receive_message_from_queue(self, ch, method, properties, body):
+    def _receive_message_from_queue(self, body):
         self._queue.append(body)
 
     def _process_msg(self, msg: str) -> Optional[dict]:

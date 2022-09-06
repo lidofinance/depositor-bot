@@ -48,7 +48,7 @@ class DepositorBot:
     DEPOSIT_SECURITY_ISSUE = 'Deposit security module prohibits the deposit.'
     LIDO_CONTRACT_HAS_NOT_ENOUGH_BUFFERED_ETHER = 'Lido contract has not enough buffered ether.'
     LIDO_CONTRACT_HAS_NO_FREE_SUBMITTED_KEYS = 'Lido contract has no free keys.'
-    QUORUM_IS_NOT_READY = 'Quorum is not ready'
+    QUORUM_IS_NOT_READY = 'Quorum is not ready.'
 
     current_block = None
     deposit_root: str = None
@@ -77,6 +77,7 @@ class DepositorBot:
                     message_schema=Schema(Or(DepositMessageSchema, PingMessageSchema)),
                 ),
                 RabbitProvider(
+                    client='depositor',
                     routing_keys=[MessageType.PING, MessageType.DEPOSIT],
                     message_schema=Schema(Or(DepositMessageSchema, PingMessageSchema)),
                 ),
@@ -140,6 +141,7 @@ class DepositorBot:
         deposit_issues = self.get_deposit_issues()
 
         if not deposit_issues:
+            logger.info({'msg': f'No issues found.', 'value': deposit_issues})
             return self.do_deposit()
 
         logger.info({'msg': f'Issues found.', 'value': deposit_issues})
@@ -296,6 +298,7 @@ class DepositorBot:
 
         CURRENT_QUORUM_SIZE.set(len(quorum_messages))
         if len(quorum_messages) < self.min_signs_to_deposit:
+            logger.warning({'msg': self.QUORUM_IS_NOT_READY})
             return True
 
     def _form_a_quorum(self) -> List[DepositMessage]:

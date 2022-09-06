@@ -29,6 +29,6 @@ def main():
     logger.info({'msg': 'Load contracts.'})
     contracts.initialize(w3)
 
-    from bots.pause_bot import DepositPauseBot
-    deposit_pause_bot = DepositPauseBot(w3)
+    from bots.pause_bot import PauserBot
+    deposit_pause_bot = PauserBot(w3)
     deposit_pause_bot.run_as_daemon()
