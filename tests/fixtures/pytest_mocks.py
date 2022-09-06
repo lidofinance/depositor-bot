@@ -123,11 +123,11 @@ def remove_sleep(monkeypatch):
 
 @pytest.fixture()
 def remove_transport(monkeypatch):
-    monkeypatch.setattr(KafkaMessageProvider, '__init__', lambda _, message_schema, client: None)
+    monkeypatch.setattr(KafkaMessageProvider, '__init__', lambda _, client, message_schema: None)
     monkeypatch.setattr(KafkaMessageProvider, '_receive_message', lambda _: None)
     monkeypatch.setattr(KafkaMessageProvider, '__del__', lambda _: None)
 
-    monkeypatch.setattr(RabbitProvider, '__init__', lambda _, message_schema, routing_keys: None)
+    monkeypatch.setattr(RabbitProvider, '__init__', lambda _, client, message_schema, routing_keys: None)
     monkeypatch.setattr(RabbitProvider, '_receive_message', lambda _: None)
     monkeypatch.setattr(RabbitProvider, '__del__', lambda _: None)
 
