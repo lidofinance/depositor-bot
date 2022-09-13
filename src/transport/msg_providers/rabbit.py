@@ -2,12 +2,12 @@ import json
 import logging
 from typing import Optional, List
 
-import stomp
 from schema import Schema
 
 import variables
 from transport.msg_providers.common import BaseMessageProvider
-from variables import NETWORK, ENVIRONMENT
+from transport.msg_providers.stomp.client import Client
+from variables import NETWORK, KAFKA_TOPIC
 
 logger = logging.getLogger(__name__)
 
@@ -26,23 +26,21 @@ class RabbitProvider(BaseMessageProvider):
 
         logger.info({'msg': 'Rabbit initialize.'})
 
-        self.conn = stomp.Connection([(variables.RABBIT_MQ_HOST, variables.RABBIT_MQ_PORT)])
+        self.client = Client(variables.RABBIT_MQ_HOST)
 
-        _self = self
+        self.client.connect(
+            login=variables.RABBIT_MQ_USERNAME,
+            passcode=variables.RABBIT_MQ_PASSWORD,
+        )
 
-        class STOMPListener(stomp.ConnectionListener):
-            def on_message(self, frame):
-                _self._receive_message_from_queue(frame.body)
-
-        self.conn.set_listener(self.client, STOMPListener())
-
-        self.conn.connect(variables.RABBIT_MQ_USERNAME, variables.RABBIT_MQ_PASSWORD, wait=True)
+        def on_message(frame):
+            self._receive_message_from_queue(frame.body)
 
         for rk in routing_keys:
-            self.conn.subscribe(destination=f'{NETWORK}-{ENVIRONMENT}/{rk}', id=self.client + rk, ack='auto')
+            self.client.subscribe(f'/exchange/{NETWORK}-{KAFKA_TOPIC}/{rk}', callback=on_message)
 
     def __del__(self):
-        self.conn.disconnect()
+        self.client.disconnect()
 
     def _receive_message(self) -> Optional[dict]:
         try:
