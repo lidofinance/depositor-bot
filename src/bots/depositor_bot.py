@@ -125,6 +125,9 @@ class DepositorBot:
         except NoActiveProviderError as exception:
             logger.error({'msg': 'No active node available.', 'error': str(exception)})
             raise NoActiveProviderError from exception
+        except ConnectionError as error:
+            logger.error({'msg': error.args, 'error': str(error)})
+            raise ConnectionError from error
         except ValueError as error:
             logger.error({'msg': error.args, 'error': str(error)})
             time.sleep(15)

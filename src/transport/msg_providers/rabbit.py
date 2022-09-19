@@ -1,3 +1,4 @@
+import datetime
 import json
 import logging
 from typing import Optional, List
@@ -20,18 +21,15 @@ class MessageType:
 
 class RabbitProvider(BaseMessageProvider):
     _queue: List[dict] = []
+    last_reconnect_dt = datetime.datetime.now()
+    connection = True
 
     def __init__(self, client: str, message_schema: Schema, routing_keys: List[str]):
         super().__init__(client, message_schema)
 
         logger.info({'msg': 'Rabbit initialize.'})
 
-        self.client = Client(variables.RABBIT_MQ_HOST)
-
-        self.client.connect(
-            login=variables.RABBIT_MQ_USERNAME,
-            passcode=variables.RABBIT_MQ_PASSWORD,
-        )
+        self._create_client()
 
         def on_message(frame):
             self._receive_message_from_queue(frame.body)
@@ -39,10 +37,43 @@ class RabbitProvider(BaseMessageProvider):
         for rk in routing_keys:
             self.client.subscribe(f'/exchange/{NETWORK}-{KAFKA_TOPIC}/{rk}', callback=on_message)
 
+    def _create_client(self):
+        logger.info({'msg': 'Create StompClient.'})
+        self.client = Client(
+            variables.RABBIT_MQ_URL,
+            on_close=self._recreate_client,
+        )
+        self.client.connect(
+            login=variables.RABBIT_MQ_USERNAME,
+            passcode=variables.RABBIT_MQ_PASSWORD,
+            host=variables.RABBIT_MQ_HOST,
+            timeout=10,
+        )
+
+    def _recreate_client(self):
+        # Make sure client creating won't be instantly
+        import time
+        time.sleep(5)
+        logger.error({'msg': 'Trying to reconnect to client.'})
+        current_dt = datetime.datetime.now()
+        if current_dt - self.last_reconnect_dt < datetime.timedelta(seconds=5):
+            self.connection = False
+            logger.error({'msg': '2 failed reconnections in 5 seconds.'})
+
+        self.last_reconnect_dt = current_dt
+
+        logger.warning({'msg': 'Trying to reconnect to WebSocket.'})
+        import time
+        time.sleep(2)
+        self._create_client()
+
     def __del__(self):
         self.client.disconnect()
 
     def _receive_message(self) -> Optional[dict]:
+        if not self.connection:
+            raise ConnectionError('Connection RabbitMQ was lost.')
+
         try:
             return self._queue.pop()
         except IndexError:

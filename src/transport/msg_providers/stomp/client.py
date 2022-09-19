@@ -1,5 +1,6 @@
 import time
 from threading import Thread
+from typing import Callable
 
 from .frame import Frame
 import websocket
@@ -12,14 +13,15 @@ VERSIONS = '1.0,1.1'
 
 class Client:
 
-    def __init__(self, url):
-
+    def __init__(self, url: str, on_close: Callable):
         self.url = url
         self.ws = websocket.WebSocketApp(self.url)
         self.ws.on_open = self._on_open
         self.ws.on_message = self._on_message
         self.ws.on_error = self._on_error
         self.ws.on_close = self._on_close
+
+        self.on_close = on_close
 
         self.opened = False
 
@@ -32,7 +34,7 @@ class Client:
         self.errorCallback = None
 
     def _connect(self, timeout=0):
-        thread = Thread(target=self.ws.run_forever, kwargs={"ping_interval": 1})
+        thread = Thread(target=self.ws.run_forever, kwargs={'ping_interval': 1})
         thread.daemon = True
         thread.start()
 
@@ -40,7 +42,7 @@ class Client:
         while self.opened is False:
             time.sleep(.25)
             total_ms += 250
-            if 0 < timeout < total_ms:
+            if 0 < timeout*1000 < total_ms:
                 raise TimeoutError(f"Connection to {self.url} timed out")
 
     def _on_open(self, ws_app, *args):
@@ -48,11 +50,12 @@ class Client:
 
     def _on_close(self, ws_app, *args):
         self.connected = False
-        logging.debug("Whoops! Lost connection to " + self.ws.url)
+        logging.error("Lost connection to " + self.ws.url)
         self._clean_up()
+        self.on_close()
 
     def _on_error(self, ws_app, error, *args):
-        logging.debug(error)
+        logging.error(error)
 
     def _on_message(self, ws_app, message, *args):
         logging.debug("\n<<< " + str(message))
@@ -114,6 +117,7 @@ class Client:
         self,
         login=None,
         passcode=None,
+        host='/',
         headers=None,
         connect_callback=None,
         error_callback=None,
@@ -124,7 +128,7 @@ class Client:
         self._connect(timeout)
 
         headers = headers if headers is not None else {}
-        headers['host'] = self.url
+        headers['host'] = host
         headers['accept-version'] = VERSIONS
         headers['heart-beat'] = '10000,10000'
 
