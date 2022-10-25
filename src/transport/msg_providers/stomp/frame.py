@@ -14,8 +14,6 @@ class Frame:
         lines = [self.command]
 
         skip_content_length = 'content-length' in self.headers
-        if skip_content_length:
-            del self.headers['content-length']
 
         for name, value in self.headers.items():
             lines.append(name + ":" + value)

@@ -77,7 +77,6 @@ python src/pauser.py
 | MAX_PRIORITY_FEE                  |  10 GWEI   |         `10 gwei`         | Max priority fee that will be used in tx (4 gwei recommended)                                                                                   |
 | MAX_CYCLE_LIFETIME_IN_SECONDS     | 6 minutes  |           `300`           | Max lifetime of usual cycle. If cycle will not end in this time, bot will crush                                                                 |
 | RABBIT_MQ_URL                     |            | `ws://127.0.0.1:15674/ws` | url with ws protocol supported                                                                                                                  |
-| RABBIT_MQ_HOST                    |            |            `/`            | RabbitMQ virtualhost                                                                                                                            |
 | RABBIT_MQ_USERNAME                |   guest    |          `guest`          | RabbitMQ username for virtualhost                                                                                                               |
 | RABBIT_MQ_PASSWORD                |   guest    |          `guest`          | RabbitMQ password for virtualhost                                                                                                               |
 

@@ -46,7 +46,7 @@ class RabbitProvider(BaseMessageProvider):
         self.client.connect(
             login=variables.RABBIT_MQ_USERNAME,
             passcode=variables.RABBIT_MQ_PASSWORD,
-            host=variables.RABBIT_MQ_HOST,
+            host='/',
             timeout=10,
         )
 
@@ -63,7 +63,6 @@ class RabbitProvider(BaseMessageProvider):
         self.last_reconnect_dt = current_dt
 
         logger.warning({'msg': 'Trying to reconnect to WebSocket.'})
-        import time
         time.sleep(2)
         self._create_client()
 
