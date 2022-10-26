@@ -55,7 +55,7 @@ class Client:
         self.on_close()
 
     def _on_error(self, ws_app, error, *args):
-        logging.error(error)
+        logging.error({'msg': 'Websocket error.', 'error': error})
 
     def _on_message(self, ws_app, message, *args):
         logging.debug("\n<<< " + str(message))
@@ -103,7 +103,7 @@ class Client:
                 _results.append(self.errorCallback(frame))
         else:
             info = "Unhandled received MESSAGE: " + frame.command
-            logging.debug(info)
+            logging.error(info)
             _results.append(info)
 
         return _results
@@ -168,9 +168,14 @@ class Client:
     def subscribe(self, destination, callback=None, headers=None):
         if headers is None:
             headers = {}
+
         if 'id' not in headers:
-            headers["id"] = "sub-" + str(self.counter)
+            headers['id'] = 'sub-' + str(self.counter)
             self.counter += 1
+
+        if 'ack' not in headers:
+            headers['ack'] = 'auto'
+
         headers['destination'] = destination
         self.subscriptions[headers["id"]] = callback
         self._transmit("SUBSCRIBE", headers)

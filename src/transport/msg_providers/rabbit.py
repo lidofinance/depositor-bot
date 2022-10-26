@@ -1,6 +1,7 @@
 import datetime
 import json
 import logging
+import time
 from typing import Optional, List
 
 from schema import Schema
@@ -28,14 +29,8 @@ class RabbitProvider(BaseMessageProvider):
         super().__init__(client, message_schema)
 
         logger.info({'msg': 'Rabbit initialize.'})
-
+        self.routing_keys = routing_keys
         self._create_client()
-
-        def on_message(frame):
-            self._receive_message_from_queue(frame.body)
-
-        for rk in routing_keys:
-            self.client.subscribe(f'/exchange/{NETWORK}-{KAFKA_TOPIC}/{rk}', callback=on_message)
 
     def _create_client(self):
         logger.info({'msg': 'Create StompClient.'})
@@ -49,6 +44,18 @@ class RabbitProvider(BaseMessageProvider):
             host='/',
             timeout=10,
         )
+        self._subscribe()
+
+    def _subscribe(self):
+        def on_message(frame):
+            self._receive_message_from_queue(frame.body)
+
+        while self.client.opened:
+            if self.client.connected:
+                for rk in self.routing_keys:
+                    self.client.subscribe(f'/amq/queue/{rk}', callback=on_message)
+                break
+            time.sleep(1)
 
     def _recreate_client(self):
         # Make sure client creating won't be instantly

@@ -15,7 +15,7 @@ def compute_vs(v: int, s: str) -> str:
             v += 27
         else:
             msg = 'Signature invalid v byte.'
-            logger.error(msg={'msg': 'Signature invalid v byte.', 'data': str(v)})
+            logger.error({'msg': 'Signature invalid v byte.', 'data': str(v)})
             raise ValueError(msg)
 
     _vs = bytearray.fromhex(s[2:])

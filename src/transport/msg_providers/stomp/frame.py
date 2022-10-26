@@ -18,7 +18,7 @@ class Frame:
         for name, value in self.headers.items():
             lines.append(name + ":" + value)
 
-        if self.body is not None and not skip_content_length:
+        if self.body and not skip_content_length:
             lines.append(f"content-length:{len(self.body)}")
 
         lines.append(Byte['LF'] + self.body)
