@@ -11,7 +11,7 @@ jobs:
 
       - name: Bump version and update CHANGELOG.MD
         id: changelog
-        uses: lidofinance/conventional-changelog-action@v3.11.0
+        uses: lidofinance/conventional-changelog-action@v3.19.0
         with:
           git-message: "chore(release): {version}"
           tag-prefix: ""
