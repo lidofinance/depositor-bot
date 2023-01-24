@@ -70,18 +70,26 @@ class DepositorBot:
         self.deposit_prefix = contracts.deposit_security_module.functions.ATTEST_MESSAGE_PREFIX().call()
         logger.info({'msg': 'Call `ATTEST_MESSAGE_PREFIX()`.', 'value': str(self.deposit_prefix)})
 
+        transports = []
+
+        if variables.MESSAGE_TRANSPORT == 'rabbit' or variables.MESSAGE_TRANSPORT == 'both':
+            transports.append(RabbitProvider(
+                client='depositor',
+                routing_keys=[MessageType.PING, MessageType.DEPOSIT],
+                message_schema=Schema(Or(DepositMessageSchema, PingMessageSchema)),
+            ))
+
+        if variables.MESSAGE_TRANSPORT == 'kafka' or variables.MESSAGE_TRANSPORT == 'both':
+            transports.append(KafkaMessageProvider(
+                client=f'{variables.KAFKA_GROUP_PREFIX}deposit',
+                message_schema=Schema(Or(DepositMessageSchema, PingMessageSchema)),
+            ))
+
+        if transports.count() < 1:
+            logger.warning({'msg': 'No transports found.'})
+
         self.message_storage = MessageStorage(
-            transports=[
-                KafkaMessageProvider(
-                    client=f'{variables.KAFKA_GROUP_PREFIX}deposit',
-                    message_schema=Schema(Or(DepositMessageSchema, PingMessageSchema)),
-                ),
-                RabbitProvider(
-                    client='depositor',
-                    routing_keys=[MessageType.PING, MessageType.DEPOSIT],
-                    message_schema=Schema(Or(DepositMessageSchema, PingMessageSchema)),
-                ),
-            ],
+            transports,
             filters=[
                 message_metrics,
                 get_deposit_messages_sign_filter(self.deposit_prefix),

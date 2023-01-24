@@ -39,18 +39,26 @@ class PauserBot:
         self.pause_prefix = contracts.deposit_security_module.functions.PAUSE_MESSAGE_PREFIX().call()
         logger.info({'msg': f'Call `PAUSE_MESSAGE_PREFIX()`.', 'value': self.pause_prefix})
 
+        transports = []
+
+        if variables.MESSAGE_TRANSPORT == 'rabbit' or variables.MESSAGE_TRANSPORT == 'both':
+            transports.append(RabbitProvider(
+                client='pauser',
+                routing_keys=[MessageType.PING, MessageType.PAUSE],
+                message_schema=Schema(Or(PauseMessageSchema, PingMessageSchema)),
+            ))
+
+        if variables.MESSAGE_TRANSPORT == 'kafka' or variables.MESSAGE_TRANSPORT == 'both':
+            transports.append(KafkaMessageProvider(
+                client=f'{variables.KAFKA_GROUP_PREFIX}pause',
+                message_schema=PauseMessageSchema,
+            ))
+
+        if transports.count() < 1:
+            logger.warning({'msg': 'No transports found.'})
+
         self.message_storage = MessageStorage(
-            transports=[
-                KafkaMessageProvider(
-                    client=f'{variables.KAFKA_GROUP_PREFIX}pause',
-                    message_schema=PauseMessageSchema,
-                ),
-                RabbitProvider(
-                    client='pauser',
-                    routing_keys=[MessageType.PING, MessageType.PAUSE],
-                    message_schema=Schema(Or(PauseMessageSchema, PingMessageSchema)),
-                ),
-            ],
+            transports,
             filters=[
                 message_metrics,
                 get_pause_messages_sign_filter(self.pause_prefix),

@@ -61,3 +61,6 @@ RABBIT_MQ_URL = os.getenv('RABBIT_MQ_URL', 'ws://127.0.0.1:15674/ws')
 
 RABBIT_MQ_USERNAME = os.getenv('RABBIT_MQ_USERNAME', 'guest')
 RABBIT_MQ_PASSWORD = os.getenv('RABBIT_MQ_PASSWORD', 'guest')
+
+# rabbit / kafka / both
+MESSAGE_TRANSPORT = os.getenv('MESSAGE_TRANSPORT', 'rabbit')
