@@ -42,21 +42,20 @@ class PauserBot:
 
         transports = []
 
-        if variables.MESSAGE_TRANSPORT in [TransportType.RABBIT, TransportType.ALL]:
+        if TransportType.RABBIT in variables.MESSAGE_TRANSPORTS:
             transports.append(RabbitProvider(
                 client='pauser',
                 routing_keys=[MessageType.PING, MessageType.PAUSE],
                 message_schema=Schema(Or(PauseMessageSchema, PingMessageSchema)),
             ))
 
-        if variables.MESSAGE_TRANSPORT in [TransportType.KAFKA, TransportType.ALL]:
+        if TransportType.KAFKA in variables.MESSAGE_TRANSPORTS:
             transports.append(KafkaMessageProvider(
                 client=f'{variables.KAFKA_GROUP_PREFIX}pause',
                 message_schema=PauseMessageSchema,
             ))
 
-        if len(transports) < 1:
-            logger.warning({'msg': 'No transports found.'})
+        if not transports: raise ValueError('No transports found.')
 
         self.message_storage = MessageStorage(
             transports,
