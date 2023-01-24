@@ -55,7 +55,9 @@ class PauserBot:
                 message_schema=PauseMessageSchema,
             ))
 
-        if not transports: raise ValueError('No transports found.')
+        if not transports:
+            logger.error({'msg': 'No transports found', 'value': variables.MESSAGE_TRANSPORTS})
+            raise ValueError(f'No transports found. Provided value: {variables.MESSAGE_TRANSPORTS}')
 
         self.message_storage = MessageStorage(
             transports,
