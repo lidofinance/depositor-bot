@@ -42,14 +42,14 @@ class PauserBot:
 
         transports = []
 
-        if variables.MESSAGE_TRANSPORT in [TransportType.RABBIT, TransportType.BOTH]:
+        if variables.MESSAGE_TRANSPORT in [TransportType.RABBIT, TransportType.ALL]:
             transports.append(RabbitProvider(
                 client='pauser',
                 routing_keys=[MessageType.PING, MessageType.PAUSE],
                 message_schema=Schema(Or(PauseMessageSchema, PingMessageSchema)),
             ))
 
-        if variables.MESSAGE_TRANSPORT in [TransportType.KAFKA, TransportType.BOTH]:
+        if variables.MESSAGE_TRANSPORT in [TransportType.KAFKA, TransportType.ALL]:
             transports.append(KafkaMessageProvider(
                 client=f'{variables.KAFKA_GROUP_PREFIX}pause',
                 message_schema=PauseMessageSchema,

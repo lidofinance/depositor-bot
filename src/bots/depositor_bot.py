@@ -72,14 +72,14 @@ class DepositorBot:
 
         transports = []
 
-        if variables.MESSAGE_TRANSPORT in [TransportType.RABBIT, TransportType.BOTH]:
+        if variables.MESSAGE_TRANSPORT in [TransportType.RABBIT, TransportType.ALL]:
             transports.append(RabbitProvider(
                 client='depositor',
                 routing_keys=[MessageType.PING, MessageType.DEPOSIT],
                 message_schema=Schema(Or(DepositMessageSchema, PingMessageSchema)),
             ))
 
-        if variables.MESSAGE_TRANSPORT in [TransportType.KAFKA, TransportType.BOTH]:
+        if variables.MESSAGE_TRANSPORT in [TransportType.KAFKA, TransportType.ALL]:
             transports.append(KafkaMessageProvider(
                 client=f'{variables.KAFKA_GROUP_PREFIX}deposit',
                 message_schema=Schema(Or(DepositMessageSchema, PingMessageSchema)),
