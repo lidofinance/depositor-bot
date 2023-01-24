@@ -55,7 +55,7 @@ class PauserBot:
                 message_schema=PauseMessageSchema,
             ))
 
-        if transports.count() < 1:
+        if len(transports) < 1:
             logger.warning({'msg': 'No transports found.'})
 
         self.message_storage = MessageStorage(

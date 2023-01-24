@@ -85,7 +85,7 @@ class DepositorBot:
                 message_schema=Schema(Or(DepositMessageSchema, PingMessageSchema)),
             ))
 
-        if transports.count() < 1:
+        if len(transports) < 1:
             logger.warning({'msg': 'No transports found.'})
 
         self.message_storage = MessageStorage(
