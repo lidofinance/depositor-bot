@@ -5,6 +5,7 @@ from eth_account import Account
 from web3 import Web3
 
 from blockchain.constants import NETWORK_CHAIN_ID, Network
+from src.types import TransportType
 
 logger = logging.getLogger(__name__)
 
@@ -63,4 +64,4 @@ RABBIT_MQ_USERNAME = os.getenv('RABBIT_MQ_USERNAME', 'guest')
 RABBIT_MQ_PASSWORD = os.getenv('RABBIT_MQ_PASSWORD', 'guest')
 
 # rabbit / kafka / both
-MESSAGE_TRANSPORT = os.getenv('MESSAGE_TRANSPORT', 'rabbit')
+MESSAGE_TRANSPORT = os.getenv('MESSAGE_TRANSPORT', TransportType.RABBIT)

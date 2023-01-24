@@ -37,7 +37,7 @@ from transport.msg_schemas import (
     DepositMessage,
 )
 from transport.msg_storage import MessageStorage
-
+from src.types import TransportType
 
 logger = logging.getLogger(__name__)
 
@@ -72,14 +72,14 @@ class DepositorBot:
 
         transports = []
 
-        if variables.MESSAGE_TRANSPORT == 'rabbit' or variables.MESSAGE_TRANSPORT == 'both':
+        if variables.MESSAGE_TRANSPORT in [TransportType.RABBIT, TransportType.BOTH]:
             transports.append(RabbitProvider(
                 client='depositor',
                 routing_keys=[MessageType.PING, MessageType.DEPOSIT],
                 message_schema=Schema(Or(DepositMessageSchema, PingMessageSchema)),
             ))
 
-        if variables.MESSAGE_TRANSPORT == 'kafka' or variables.MESSAGE_TRANSPORT == 'both':
+        if variables.MESSAGE_TRANSPORT in [TransportType.KAFKA, TransportType.BOTH]:
             transports.append(KafkaMessageProvider(
                 client=f'{variables.KAFKA_GROUP_PREFIX}deposit',
                 message_schema=Schema(Or(DepositMessageSchema, PingMessageSchema)),

@@ -19,6 +19,7 @@ from transport.msg_providers.kafka import KafkaMessageProvider
 from transport.msg_providers.rabbit import RabbitProvider, MessageType
 from transport.msg_schemas import PauseMessageSchema, get_pause_messages_sign_filter, PauseMessage, PingMessageSchema
 from transport.msg_storage import MessageStorage
+from src.types import TransportType
 
 logger = logging.getLogger(__name__)
 
@@ -41,14 +42,14 @@ class PauserBot:
 
         transports = []
 
-        if variables.MESSAGE_TRANSPORT == 'rabbit' or variables.MESSAGE_TRANSPORT == 'both':
+        if variables.MESSAGE_TRANSPORT in [TransportType.RABBIT, TransportType.BOTH]:
             transports.append(RabbitProvider(
                 client='pauser',
                 routing_keys=[MessageType.PING, MessageType.PAUSE],
                 message_schema=Schema(Or(PauseMessageSchema, PingMessageSchema)),
             ))
 
-        if variables.MESSAGE_TRANSPORT == 'kafka' or variables.MESSAGE_TRANSPORT == 'both':
+        if variables.MESSAGE_TRANSPORT in [TransportType.KAFKA, TransportType.BOTH]:
             transports.append(KafkaMessageProvider(
                 client=f'{variables.KAFKA_GROUP_PREFIX}pause',
                 message_schema=PauseMessageSchema,
