@@ -19,6 +19,7 @@ from transport.msg_providers.kafka import KafkaMessageProvider
 from transport.msg_providers.rabbit import RabbitProvider, MessageType
 from transport.msg_schemas import PauseMessageSchema, get_pause_messages_sign_filter, PauseMessage, PingMessageSchema
 from transport.msg_storage import MessageStorage
+from src.types import TransportType
 
 logger = logging.getLogger(__name__)
 
@@ -39,18 +40,27 @@ class PauserBot:
         self.pause_prefix = contracts.deposit_security_module.functions.PAUSE_MESSAGE_PREFIX().call()
         logger.info({'msg': f'Call `PAUSE_MESSAGE_PREFIX()`.', 'value': self.pause_prefix})
 
+        transports = []
+
+        if TransportType.RABBIT in variables.MESSAGE_TRANSPORTS:
+            transports.append(RabbitProvider(
+                client='pauser',
+                routing_keys=[MessageType.PING, MessageType.PAUSE],
+                message_schema=Schema(Or(PauseMessageSchema, PingMessageSchema)),
+            ))
+
+        if TransportType.KAFKA in variables.MESSAGE_TRANSPORTS:
+            transports.append(KafkaMessageProvider(
+                client=f'{variables.KAFKA_GROUP_PREFIX}pause',
+                message_schema=PauseMessageSchema,
+            ))
+
+        if not transports:
+            logger.error({'msg': 'No transports found', 'value': variables.MESSAGE_TRANSPORTS})
+            raise ValueError(f'No transports found. Provided value: {variables.MESSAGE_TRANSPORTS}')
+
         self.message_storage = MessageStorage(
-            transports=[
-                KafkaMessageProvider(
-                    client=f'{variables.KAFKA_GROUP_PREFIX}pause',
-                    message_schema=PauseMessageSchema,
-                ),
-                RabbitProvider(
-                    client='pauser',
-                    routing_keys=[MessageType.PING, MessageType.PAUSE],
-                    message_schema=Schema(Or(PauseMessageSchema, PingMessageSchema)),
-                ),
-            ],
+            transports,
             filters=[
                 message_metrics,
                 get_pause_messages_sign_filter(self.pause_prefix),
