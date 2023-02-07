@@ -28,7 +28,7 @@ NODE_OPS_ADDRESSES = {
 
 DEPOSIT_CONTRACT = {
     Network.Mainnet: "0x00000000219ab540356cBB839Cbe05303d7705Fa",
-    Network.Görli: "0xff50ed3d0ec03ac01d4c79aad74928bff48a7b2b",
+    Network.Görli: "0xff50ed3d0ec03aC01D4C79aAd74928BFF48a7b2b",
 }
 
 DEPOSIT_SECURITY_MODULE = {

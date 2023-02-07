@@ -1,13 +1,12 @@
-import os
 from typing import Any
 
-from web3 import HTTPProvider
-from web3._utils.request import make_post_request
 from web3.providers import JSONBaseProvider
 from web3.types import RPCEndpoint, RPCResponse
 
 
 class MockProvider(JSONBaseProvider):
+    _current_provider_index = 0
+
     def __init__(self, mock_object: dict):
         self._mock_object = mock_object
         super().__init__()
