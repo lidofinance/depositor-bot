@@ -1,20 +1,16 @@
 import logging
-from math import sqrt
 from typing import List, Tuple, Iterable
 
 import numpy
-from brownie import Wei
-from brownie.network.web3 import Web3
-
+from web3 import Web3
 
 logger = logging.getLogger(__name__)
 
 
 class GasFeeStrategy:
     BLOCKS_IN_ONE_DAY = 6600
-    LATEST_BLOCK = 'latest'
 
-    def __init__(self, w3: Web3, blocks_count_cache: int = 300, max_gas_fee: int = Wei('100 gwei')):
+    def __init__(self, w3: Web3, blocks_count_cache: int = 300, max_gas_fee: int = Web3.toWei('100', 'gwei')):
         """
         gas_history_block_cache - blocks count that gas his
         """
@@ -53,10 +49,10 @@ class GasFeeStrategy:
         requests_count = total_blocks_to_fetch // 1024 + 1
 
         gas_fees = []
-        last_block = self.LATEST_BLOCK
+        last_block = 'latest'
 
         for i in range(requests_count):
-            stats = self._w3.eth.fee_history(1024, last_block)
+            stats = self._w3.eth.fee_history(1024, last_block, [])
             last_block = stats['oldestBlock'] - 2
             gas_fees = stats['baseFeePerGas'] + gas_fees
 
@@ -84,16 +80,11 @@ class GasFeeStrategy:
 
         return min_recommended_fee
 
-    def get_recommended_buffered_ether_to_deposit(self, gas_fee):
-        """Returns suggested minimum buffered ether to deposit"""
-        apr = 0.044  # Protocol APR
-        # ether/14 days : select sum(tr.value)/1e18 from ethereum."transactions" as tr
-        # where tr.to = '\xae7ab96520DE3A18E5e111B5EaAb095312D7fE84'
-        # and tr.block_time >= '2021-12-01' and tr.block_time < '2021-12-15' and tr.value < 600*1e18;
-        a = 24  # ~ ether/hour
-        keys_hour = a / 32
-        p = 32 * 10**18 * apr / 365 / 24  # ~ Profit in hour
-        cc = 378300  # gas constant for every deposit tx that should be paid
-        multiply_constant = 1.5  # we will get profit with constant from 1 to 2, but the most profitable will be 1.5
-
-        return sqrt(multiply_constant * cc * gas_fee * keys_hour / p) * 32 * 10**18
+    def get_priority_fee(self, percentile: int, min_priority_fee: int, max_priority_fee: int):
+        return min(
+            max(
+                self._w3.eth.fee_history(1, 'latest', reward_percentiles=[percentile])['reward'][0][0],
+                min_priority_fee,
+            ),
+            max_priority_fee,
+        )
