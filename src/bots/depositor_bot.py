@@ -37,7 +37,7 @@ from transport.msg_schemas import (
     DepositMessage,
 )
 from transport.msg_storage import MessageStorage
-from src.types import TransportType
+from variables_types import TransportType
 
 logger = logging.getLogger(__name__)
 

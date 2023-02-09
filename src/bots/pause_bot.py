@@ -19,7 +19,7 @@ from transport.msg_providers.kafka import KafkaMessageProvider
 from transport.msg_providers.rabbit import RabbitProvider, MessageType
 from transport.msg_schemas import PauseMessageSchema, get_pause_messages_sign_filter, PauseMessage, PingMessageSchema
 from transport.msg_storage import MessageStorage
-from src.types import TransportType
+from variables_types import TransportType
 
 logger = logging.getLogger(__name__)
 
