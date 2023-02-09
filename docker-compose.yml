@@ -14,7 +14,7 @@ services:
       - KAFKA_USERNAME=${KAFKA_USERNAME}
       - KAFKA_PASSWORD=${KAFKA_PASSWORD}
       - KAFKA_TOPIC=${KAFKA_TOPIC}
-    command: python src/depositor.py
+    command: src/depositor.py
 
   lido-pause-bot:
     image: lidofinance/depositor-bot
@@ -30,4 +30,4 @@ services:
       - KAFKA_USERNAME=${KAFKA_USERNAME}
       - KAFKA_PASSWORD=${KAFKA_PASSWORD}
       - KAFKA_TOPIC=${KAFKA_TOPIC}
-    command: python src/pauser.py
+    command: src/pauser.py
