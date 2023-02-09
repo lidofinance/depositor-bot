@@ -5,7 +5,7 @@ from eth_account import Account
 from web3 import Web3
 
 from blockchain.constants import NETWORK_CHAIN_ID, Network
-from src.types import TransportType
+from variables_types import TransportType
 
 logger = logging.getLogger(__name__)
 
