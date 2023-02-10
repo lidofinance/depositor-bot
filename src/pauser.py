@@ -6,7 +6,7 @@ import variables
 from metrics.healthcheck_pulse import start_pulse_server
 from metrics.logging import logging
 from blockchain.requests_metric_middleware import add_requests_metric_middleware
-from src.blockchain.contracts import contracts
+from blockchain.contracts import contracts
 
 logger = logging.getLogger(__name__)
 
