@@ -33,5 +33,6 @@ def main():
     deposit_pause_bot = PauserBot(w3)
     deposit_pause_bot.run_as_daemon()
 
+
 if __name__ == '__main__':
     main()
