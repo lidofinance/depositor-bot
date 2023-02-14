@@ -165,6 +165,7 @@ class PauserBot:
 
         pause_function = contracts.deposit_security_module.functions.pauseDeposits(
             message['blockNumber'],
+            message['stakingModuleId'],
             (message['signature']['r'], compute_vs(message['signature']['v'], message['signature']['s']))
         )
 

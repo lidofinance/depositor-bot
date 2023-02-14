@@ -52,7 +52,7 @@ class DepositorBot:
 
     current_block = None
     deposit_root: str = None
-    keys_op_index: int = None
+    nonce: int = None
     last_fb_deposit_failed = False
 
     def __init__(self, w3: Web3):
@@ -179,8 +179,8 @@ class DepositorBot:
         self.deposit_root = '0x' + contracts.deposit_contract.functions.get_deposit_root().call(block_identifier=self.current_block.hash.hex()).hex()
         logger.info({'msg': f'Call `get_deposit_root()`.', 'value': str(self.deposit_root)})
 
-        self.keys_op_index = contracts.node_operator_registry.functions.getKeysOpIndex().call(block_identifier=self.current_block.hash.hex())
-        logger.info({'msg': f'Call `getKeysOpIndex()`.', 'value': self.keys_op_index})
+        self.nonce = contracts.node_operator_registry.functions.getNonce().call(block_identifier=self.current_block.hash.hex())
+        logger.info({'msg': f'Call `getNonce()`.', 'value': self.nonce})
 
     def get_deposit_issues(self) -> List[str]:
         deposit_issues = []
@@ -289,7 +289,7 @@ class DepositorBot:
 
             # Maybe council daemon already reports next block
             if message['blockNumber'] <= self.current_block.number:
-                if message['keysOpIndex'] != self.keys_op_index:
+                if message['nonce'] != self.nonce:
                     return False
 
                 if message['depositRoot'] != self.deposit_root:
@@ -364,7 +364,7 @@ class DepositorBot:
 
         logger.info({'msg': 'Sending deposit transaction.', 'values': {
             'deposit_root': str(self.deposit_root),
-            'keys_op_index': self.keys_op_index,
+            'nonce': self.nonce,
             'block_number': quorum[0]['blockNumber'],
             'block_hash': quorum[0]['blockHash'],
             'signs': signs,
@@ -381,10 +381,12 @@ class DepositorBot:
             return
 
         deposit_function = contracts.deposit_security_module.functions.depositBufferedEther(
-            self.deposit_root,
-            self.keys_op_index,
             quorum[0]['blockNumber'],
             quorum[0]['blockHash'],
+            self.deposit_root,
+            quorum[0]['stakingModuleId'],
+            self.nonce,
+            None,
             signs,
         )
 
