@@ -37,7 +37,7 @@ def test_no_pause_if_protocol_was_paused(
     pause_bot.run_cycle()
 
     assert find_log_message(caplog, 'Fetch `latest` block.')
-    is_paused = find_log_message(caplog, 'Call `isPaused()`.')
+    is_paused = find_log_message(caplog, 'Call `getStakingModuleIsActive()`.')
     assert is_paused.msg['value']
     assert not find_log_message(caplog, 'Message pause protocol initiate.')
 

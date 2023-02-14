@@ -112,10 +112,10 @@ class PauserBot:
         logger.info({'msg': 'New pause cycle.'})
         self._update_state()
 
-        is_paused = contracts.deposit_security_module.functions.isPaused().call(block_identifier=self.current_block.hash.hex())
-        logger.info({'msg': f'Call `isPaused()`.', 'value': is_paused})
-
         messages = self.receive_pause_messages()
+        stakingModuleId = messages[0]['stakingModuleId']
+        is_paused = contracts.deposit_security_module.functions.getStakingModuleIsActive(stakingModuleId).call(block_identifier=self.current_block.hash.hex())
+        logger.info({'msg': f'Call `getStakingModuleIsActive()`.', 'value': is_paused, 'stakingModuleId': stakingModuleId})
 
         if is_paused:
             self.message_storage.clear()
