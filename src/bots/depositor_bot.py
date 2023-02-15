@@ -41,6 +41,7 @@ from variables_types import TransportType
 
 logger = logging.getLogger(__name__)
 
+MODULE_ID = 1
 
 class DepositorBot:
     NOT_ENOUGH_BALANCE_ON_ACCOUNT = 'Account balance is too low.'
@@ -261,7 +262,7 @@ class DepositorBot:
             return True
 
     def _prohibit_to_deposit_issue(self) -> bool:
-        can_deposit = contracts.deposit_security_module.functions.canDeposit().call(block_identifier=self.current_block.hash.hex())
+        can_deposit = contracts.deposit_security_module.functions.canDeposit(MODULE_ID).call(block_identifier=self.current_block.hash.hex())
         logger.info({'msg': 'Call `canDeposit()`.', 'value': can_deposit})
 
         if not can_deposit:
