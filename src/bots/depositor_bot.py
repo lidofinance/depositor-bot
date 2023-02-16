@@ -198,8 +198,8 @@ class DepositorBot:
         if self._prohibit_to_deposit_issue():
             deposit_issues.append(self.DEPOSIT_SECURITY_ISSUE)
 
-        if self._available_keys_issue():
-            deposit_issues.append(self.LIDO_CONTRACT_HAS_NO_FREE_SUBMITTED_KEYS)
+        # if self._available_keys_issue():
+        #     deposit_issues.append(self.LIDO_CONTRACT_HAS_NO_FREE_SUBMITTED_KEYS)
 
         if self._quorum_issue():
             deposit_issues.append(self.QUORUM_IS_NOT_READY)
