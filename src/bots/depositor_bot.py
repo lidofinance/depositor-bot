@@ -286,20 +286,25 @@ class DepositorBot:
 
         def _actualize_message(message: DepositMessage):
             if message['type'] != 'deposit':
+                logger.info({'msg': f'_actualize_message message.type issue', 'value': message['type']})
                 return False
 
             # Maybe council daemon already reports next block
             if message['blockNumber'] <= self.current_block.number:
                 if message['nonce'] != self.nonce:
+                    logger.info({'msg': f'_actualize_message message.nonce issue', 'value': message['nonce']})
                     return False
 
                 if message['depositRoot'] != self.deposit_root:
+                    logger.info({'msg': f'_actualize_message message.depositRoot issue', 'value': message['depositRoot']})
                     return False
 
                 if message['blockNumber'] + 200 < self.current_block.number:
+                    logger.info({'msg': f'_actualize_message message.blockNumber issue', 'value': message['blockNumber']})
                     return False
 
             if message['guardianAddress'] not in self.guardians_list:
+                logger.info({'msg': f'_actualize_message message.guardianAddress issue', 'value': message['guardianAddress']})
                 return False
 
             return True
@@ -310,6 +315,10 @@ class DepositorBot:
         quorum_messages = self._form_a_quorum()
 
         CURRENT_QUORUM_SIZE.set(len(quorum_messages))
+
+        logger.info({'msg': f'_quorum_issue min_signs_to_deposit.', 'value': self.min_signs_to_deposit})
+        logger.info({'msg': f'quorum_messages length.', 'value': len(quorum_messages)})
+
         if len(quorum_messages) < self.min_signs_to_deposit:
             logger.warning({'msg': self.QUORUM_IS_NOT_READY})
             return True
@@ -317,7 +326,10 @@ class DepositorBot:
     def _form_a_quorum(self) -> List[DepositMessage]:
         dict_for_sort = defaultdict(lambda: defaultdict(list))
 
+        logger.info({'msg': f'dict_for_sort.', 'value': dict_for_sort})
+        
         for message in self.message_storage.messages:
+            logger.info({'msg': f'dict_for_sort message.', 'value': message})
             dict_for_sort[message['blockNumber']][message['blockHash']].append(message)
 
         max_quorum = 0
@@ -333,6 +345,9 @@ class DepositorBot:
                     quorum_block_hash = block_hash
 
         quorum_messages = self._remove_address_duplicates(dict_for_sort[quorum_block_number][quorum_block_hash])
+
+        logger.info({'msg': f'min_signs_to_deposit.', 'value': self.min_signs_to_deposit})
+        logger.info({'msg': f'max_quorum.', 'value': max_quorum})
 
         if max_quorum >= self.min_signs_to_deposit:
             logger.info({'msg': f'Quorum ready.', 'value': quorum_messages})

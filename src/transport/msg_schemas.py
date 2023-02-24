@@ -66,12 +66,11 @@ class DepositMessage(TypedDict):
     signature: Signature
     stakingModuleId: int
 
-
 def get_deposit_messages_sign_filter(deposit_prefix) -> Callable:
     def check_deposit_messages(msg: DepositMessage) -> bool:
         return verify_message_with_signature(
-            data=[deposit_prefix, msg['depositRoot'], msg['nonce'], msg['blockNumber'], msg['blockHash']],
-            abi=['bytes32', 'bytes32', 'uint256', 'uint256', 'bytes32'],
+            data=[deposit_prefix, msg['blockNumber'], msg['blockHash'], msg['depositRoot'], msg['stakingModuleId'], msg['nonce']],
+            abi=['bytes32', 'uint256', 'bytes32', 'bytes32', 'uint256', 'uint256'],
             address=msg['guardianAddress'],
             vrs=(
                 msg['signature']['v'],
