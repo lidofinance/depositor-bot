@@ -402,7 +402,7 @@ class DepositorBot:
             self.deposit_root,
             quorum[0]['stakingModuleId'],
             self.nonce,
-            None,
+            bytearray(),
             signs,
         )
 
