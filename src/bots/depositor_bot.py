@@ -423,11 +423,11 @@ class DepositorBot:
         })
 
         signed = self.w3.eth.account.sign_transaction(transaction, variables.ACCOUNT.privateKey)
-
-        if self.last_fb_deposit_failed:
-            self._do_classic_deposit(signed)
-        else:
-            self._do_flashbots_deposit(signed)
+        self._do_classic_deposit(signed)
+        # if self.last_fb_deposit_failed:
+        #     self._do_classic_deposit(signed)
+        # else:
+        #     self._do_flashbots_deposit(signed)
 
         logger.info({'msg': f'Deposit method end. Sleep for 1 minute.'})
         time.sleep(60)
