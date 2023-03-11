@@ -25,11 +25,13 @@ def main():
     logger.info({'msg': 'Connect MultiHTTPProviders.', 'rpc_count': len(variables.WEB3_RPC_ENDPOINTS)})
     w3 = Web3(MultiProvider(variables.WEB3_RPC_ENDPOINTS))
 
-    if variables.FLASHBOT_SIGNATURE is not None:
+    if variables.FLASHBOT_SIGNATURE is None:
+        logger.info({'msg': 'No flashbots middleware.'})
+    elif variables.WEB3_CHAIN_ID in FLASHBOTS_RPC:
         logger.info({'msg': 'Add flashbots middleware.'})
         flashbot(w3, w3.eth.account.from_key(variables.FLASHBOT_SIGNATURE), FLASHBOTS_RPC[variables.WEB3_CHAIN_ID])
     else:
-        logger.info({'msg': 'No flashbots middleware.'})
+        logger.info({'msg': 'No flashbots available for this network.'})
 
     logger.info({'msg': 'Add metrics to web3 requests.'})
     add_requests_metric_middleware(w3)

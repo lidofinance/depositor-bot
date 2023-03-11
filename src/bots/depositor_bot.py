@@ -12,6 +12,7 @@ from web3_multi_provider import NoActiveProviderError
 
 import variables
 from blockchain.buffered_eth import get_recommended_buffered_ether_to_deposit
+from blockchain.constants import FLASHBOTS_RPC
 from blockchain.contracts import contracts
 from blockchain.fetch_latest_block import fetch_latest_block
 from blockchain.gas_strategy import GasFeeStrategy
@@ -40,9 +41,12 @@ from transport.msg_schemas import (
 from transport.msg_storage import MessageStorage
 from variables_types import TransportType
 
+
 logger = logging.getLogger(__name__)
 
+
 MODULE_ID = 1
+
 
 class DepositorBot:
     NOT_ENOUGH_BALANCE_ON_ACCOUNT = 'Account balance is too low.'
@@ -181,8 +185,11 @@ class DepositorBot:
         self.deposit_root = '0x' + contracts.deposit_contract.functions.get_deposit_root().call(block_identifier=self.current_block.hash.hex()).hex()
         logger.info({'msg': f'Call `get_deposit_root()`.', 'value': str(self.deposit_root)})
 
-        self.nonce = contracts.node_operator_registry.functions.getNonce().call(block_identifier=self.current_block.hash.hex())
+        self.nonce = self._get_nonce()
         logger.info({'msg': f'Call `getNonce()`.', 'value': self.nonce})
+
+    def _get_nonce(self) -> int:
+        return contracts.node_operator_registry.functions.getNonce().call(block_identifier=self.current_block.hash.hex())
 
     def get_deposit_issues(self) -> List[str]:
         deposit_issues = []
@@ -403,7 +410,7 @@ class DepositorBot:
             self.deposit_root,
             quorum[0]['stakingModuleId'],
             self.nonce,
-            bytearray(),
+            b'',
             signs,
         )
 
@@ -424,11 +431,15 @@ class DepositorBot:
         })
 
         signed = self.w3.eth.account.sign_transaction(transaction, variables.ACCOUNT.privateKey)
-        self._do_classic_deposit(signed)
-        # if self.last_fb_deposit_failed:
-        #     self._do_classic_deposit(signed)
-        # else:
-        #     self._do_flashbots_deposit(signed)
+
+        if (
+            variables.FLASHBOT_SIGNATURE is None
+            and variables.WEB3_CHAIN_ID in FLASHBOTS_RPC
+            and not self.last_fb_deposit_failed
+        ):
+            self._do_flashbots_deposit(signed)
+        else:
+            self._do_classic_deposit(signed)
 
         logger.info({'msg': f'Deposit method end. Sleep for 1 minute.'})
         time.sleep(60)

@@ -3,6 +3,7 @@ import asyncio
 import aiohttp
 import aiofiles
 
+
 sync_config = {
     'branch': 'feature/shapella-upgrade',
     'repo': 'lidofinance/lido-dao',
@@ -41,5 +42,7 @@ async def run():
         async with aiofiles.open(local_path, 'w') as f:
             await f.write(json.dumps(file_content, indent=2))
 
-loop = asyncio.get_event_loop()
-loop.run_until_complete(run())
+
+if __name__ == '__main__':
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(run())

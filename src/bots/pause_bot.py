@@ -113,16 +113,26 @@ class PauserBot:
         self._update_state()
 
         messages = self.receive_pause_messages()
-        stakingModuleId = messages[0]['stakingModuleId']
-        is_paused = contracts.staking_router.functions.getStakingModuleIsActive(stakingModuleId).call(block_identifier=self.current_block.hash.hex())
-        logger.info({'msg': f'Call `getStakingModuleIsActive()`.', 'value': is_paused, 'stakingModuleId': stakingModuleId})
+
+        if not messages:
+            return
+
+        staking_module_id = messages[0]['stakingModuleId']
+        is_paused = contracts.staking_router.functions.getStakingModuleIsActive(staking_module_id).call(
+            block_identifier=self.current_block.hash.hex(),
+        )
+
+        logger.info({
+            'msg': f'Call `getStakingModuleIsActive()`.',
+            'value': is_paused,
+            'stakingModuleId': staking_module_id,
+        })
 
         if is_paused:
             self.message_storage.clear()
             return
 
-        if messages:
-            self.pause_protocol(messages)
+        self.pause_protocol(messages)
 
     def _update_state(self):
         healthcheck_pulse.pulse()
