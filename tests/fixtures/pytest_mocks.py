@@ -88,6 +88,7 @@ def setup_pause_message_to_kafka(monkeypatch):
         "blockNumber": 13726495,
         "guardianAddress": "0x3dc4cF780F2599B528F37dedB34449Fb65Ef7d4A",
         "guardianIndex": 0,
+        "stakingModuleId": 1,
         "signature": {
             "_vs": "0xd4933925f5f97a9632b4b1bc621a1c2771d58eaf6eee27dcf915eac8af010537",
             "r": "0xbaa668505cd496caaf7117dd074338197200175057909ab73a04463656bdb0fa",
@@ -139,6 +140,7 @@ def setup_pause_message_to_store(monkeypatch):
         "blockNumber": 13726495,
         "guardianAddress": "0x3dc4cF780F2599B528F37dedB34449Fb65Ef7d4A",
         "guardianIndex": 0,
+        "stakingModuleId": 1,
         "signature": {
             "_vs": "0xd4933925f5f97a9632b4b1bc621a1c2771d58eaf6eee27dcf915eac8af010537",
             "r": "0xbaa668505cd496caaf7117dd074338197200175057909ab73a04463656bdb0fa",
@@ -178,11 +180,12 @@ def setup_deposit_message_to_kafka(monkeypatch):
     send_message_to_store(monkeypatch, [{
         "type": "deposit",
         "depositRoot": "0x4eff65af4dac60f23b625a5d9c80f9cc36b0754cd1db072cd47bd6d053e2f94e",
-        "keysOpIndex": 67,
+        "nonce": 1,
         "blockNumber": 13726495,
         "blockHash": "0x432e218931e9b94f0702ecb1b0d084c467a86b384767ce38c4fe164463070532",
         "guardianAddress": "0x43464Fe06c18848a2E2e913194D64c1970f4326a",
         "guardianIndex": 8,
+        "stakingModuleId": 1,
         "signature": {
             "r": "0xc2235eb6983f80d19158f807d5d90d93abec52034ea7184bbf164ba211f00116",
             "s": "0x75354ffc9fb6e7a4b4c01c622661a1d0382ace8c4ff8024626e39ac1a6a613d0",

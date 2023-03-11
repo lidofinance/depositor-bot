@@ -7,6 +7,7 @@ from blockchain.constants import (
     NODE_OPS_ADDRESSES,
     DEPOSIT_SECURITY_MODULE,
     DEPOSIT_CONTRACT,
+    STAKING_ROUTER,
 )
 from variables import WEB3_CHAIN_ID
 
@@ -23,6 +24,7 @@ class Contracts:
     node_operator_registry = None
     deposit_security_module = None
     deposit_contract = None
+    staking_router = None
 
     def initialize(self, w3: Web3, abi_path='./interfaces/'):
         __initialized = True
@@ -44,6 +46,11 @@ class Contracts:
         self.deposit_contract = w3.eth.contract(
             address=DEPOSIT_CONTRACT[WEB3_CHAIN_ID],
             abi=load_abi(abi_path, 'DepositContract'),
+        )
+
+        self.staking_router = w3.eth.contract(
+            address=STAKING_ROUTER[WEB3_CHAIN_ID],
+            abi=load_abi(abi_path, 'StakingRouter'),
         )
 
     @staticmethod

@@ -1,4 +1,5 @@
 import logging
+import traceback
 import time
 from collections import defaultdict
 from typing import List, Tuple
@@ -11,6 +12,7 @@ from web3_multi_provider import NoActiveProviderError
 
 import variables
 from blockchain.buffered_eth import get_recommended_buffered_ether_to_deposit
+from blockchain.constants import FLASHBOTS_RPC
 from blockchain.contracts import contracts
 from blockchain.fetch_latest_block import fetch_latest_block
 from blockchain.gas_strategy import GasFeeStrategy
@@ -39,7 +41,11 @@ from transport.msg_schemas import (
 from transport.msg_storage import MessageStorage
 from variables_types import TransportType
 
+
 logger = logging.getLogger(__name__)
+
+
+MODULE_ID = 1
 
 
 class DepositorBot:
@@ -52,7 +58,7 @@ class DepositorBot:
 
     current_block = None
     deposit_root: str = None
-    keys_op_index: int = None
+    nonce: int = None
     last_fb_deposit_failed = False
 
     def __init__(self, w3: Web3):
@@ -141,7 +147,7 @@ class DepositorBot:
             logger.error({'msg': error.args, 'error': str(error)})
             time.sleep(15)
         except Exception as error:
-            logger.warning({'msg': 'Unexpected exception.', 'error': str(error)})
+            logger.warning({'msg': 'Unexpected exception.', 'error': str(error), 'details': traceback.format_exc()})
             time.sleep(15)
         else:
             time.sleep(15)
@@ -179,8 +185,11 @@ class DepositorBot:
         self.deposit_root = '0x' + contracts.deposit_contract.functions.get_deposit_root().call(block_identifier=self.current_block.hash.hex()).hex()
         logger.info({'msg': f'Call `get_deposit_root()`.', 'value': str(self.deposit_root)})
 
-        self.keys_op_index = contracts.node_operator_registry.functions.getKeysOpIndex().call(block_identifier=self.current_block.hash.hex())
-        logger.info({'msg': f'Call `getKeysOpIndex()`.', 'value': self.keys_op_index})
+        self.nonce = self._get_nonce()
+        logger.info({'msg': f'Call `getNonce()`.', 'value': self.nonce})
+
+    def _get_nonce(self) -> int:
+        return contracts.node_operator_registry.functions.getNonce().call(block_identifier=self.current_block.hash.hex())
 
     def get_deposit_issues(self) -> List[str]:
         deposit_issues = []
@@ -197,8 +206,8 @@ class DepositorBot:
         if self._prohibit_to_deposit_issue():
             deposit_issues.append(self.DEPOSIT_SECURITY_ISSUE)
 
-        if self._available_keys_issue():
-            deposit_issues.append(self.LIDO_CONTRACT_HAS_NO_FREE_SUBMITTED_KEYS)
+        # if self._available_keys_issue():
+        #     deposit_issues.append(self.LIDO_CONTRACT_HAS_NO_FREE_SUBMITTED_KEYS)
 
         if self._quorum_issue():
             deposit_issues.append(self.QUORUM_IS_NOT_READY)
@@ -261,7 +270,7 @@ class DepositorBot:
             return True
 
     def _prohibit_to_deposit_issue(self) -> bool:
-        can_deposit = contracts.deposit_security_module.functions.canDeposit().call(block_identifier=self.current_block.hash.hex())
+        can_deposit = contracts.deposit_security_module.functions.canDeposit(MODULE_ID).call(block_identifier=self.current_block.hash.hex())
         logger.info({'msg': 'Call `canDeposit()`.', 'value': can_deposit})
 
         if not can_deposit:
@@ -285,20 +294,25 @@ class DepositorBot:
 
         def _actualize_message(message: DepositMessage):
             if message['type'] != 'deposit':
+                logger.info({'msg': f'_actualize_message message.type issue', 'value': message['type']})
                 return False
 
             # Maybe council daemon already reports next block
             if message['blockNumber'] <= self.current_block.number:
-                if message['keysOpIndex'] != self.keys_op_index:
+                if message['nonce'] != self.nonce:
+                    logger.info({'msg': f'_actualize_message message.nonce issue', 'value': message['nonce']})
                     return False
 
                 if message['depositRoot'] != self.deposit_root:
+                    logger.info({'msg': f'_actualize_message message.depositRoot issue', 'value': message['depositRoot']})
                     return False
 
                 if message['blockNumber'] + 200 < self.current_block.number:
+                    logger.info({'msg': f'_actualize_message message.blockNumber issue', 'value': message['blockNumber']})
                     return False
 
             if message['guardianAddress'] not in self.guardians_list:
+                logger.info({'msg': f'_actualize_message message.guardianAddress issue', 'value': message['guardianAddress']})
                 return False
 
             return True
@@ -309,6 +323,10 @@ class DepositorBot:
         quorum_messages = self._form_a_quorum()
 
         CURRENT_QUORUM_SIZE.set(len(quorum_messages))
+
+        logger.info({'msg': f'_quorum_issue min_signs_to_deposit.', 'value': self.min_signs_to_deposit})
+        logger.info({'msg': f'quorum_messages length.', 'value': len(quorum_messages)})
+
         if len(quorum_messages) < self.min_signs_to_deposit:
             logger.warning({'msg': self.QUORUM_IS_NOT_READY})
             return True
@@ -316,7 +334,10 @@ class DepositorBot:
     def _form_a_quorum(self) -> List[DepositMessage]:
         dict_for_sort = defaultdict(lambda: defaultdict(list))
 
+        logger.info({'msg': f'dict_for_sort.', 'value': dict_for_sort})
+        
         for message in self.message_storage.messages:
+            logger.info({'msg': f'dict_for_sort message.', 'value': message})
             dict_for_sort[message['blockNumber']][message['blockHash']].append(message)
 
         max_quorum = 0
@@ -332,6 +353,9 @@ class DepositorBot:
                     quorum_block_hash = block_hash
 
         quorum_messages = self._remove_address_duplicates(dict_for_sort[quorum_block_number][quorum_block_hash])
+
+        logger.info({'msg': f'min_signs_to_deposit.', 'value': self.min_signs_to_deposit})
+        logger.info({'msg': f'max_quorum.', 'value': max_quorum})
 
         if max_quorum >= self.min_signs_to_deposit:
             logger.info({'msg': f'Quorum ready.', 'value': quorum_messages})
@@ -364,7 +388,7 @@ class DepositorBot:
 
         logger.info({'msg': 'Sending deposit transaction.', 'values': {
             'deposit_root': str(self.deposit_root),
-            'keys_op_index': self.keys_op_index,
+            'nonce': self.nonce,
             'block_number': quorum[0]['blockNumber'],
             'block_hash': quorum[0]['blockHash'],
             'signs': signs,
@@ -381,10 +405,12 @@ class DepositorBot:
             return
 
         deposit_function = contracts.deposit_security_module.functions.depositBufferedEther(
-            self.deposit_root,
-            self.keys_op_index,
             quorum[0]['blockNumber'],
             quorum[0]['blockHash'],
+            self.deposit_root,
+            quorum[0]['stakingModuleId'],
+            self.nonce,
+            b'',
             signs,
         )
 
@@ -406,10 +432,14 @@ class DepositorBot:
 
         signed = self.w3.eth.account.sign_transaction(transaction, variables.ACCOUNT.privateKey)
 
-        if self.last_fb_deposit_failed:
-            self._do_classic_deposit(signed)
-        else:
+        if (
+            variables.FLASHBOT_SIGNATURE is None
+            and variables.WEB3_CHAIN_ID in FLASHBOTS_RPC
+            and not self.last_fb_deposit_failed
+        ):
             self._do_flashbots_deposit(signed)
+        else:
+            self._do_classic_deposit(signed)
 
         logger.info({'msg': f'Deposit method end. Sleep for 1 minute.'})
         time.sleep(60)

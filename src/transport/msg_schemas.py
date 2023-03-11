@@ -26,7 +26,7 @@ Deposit msg example
 {
     "type": "deposit",
     "depositRoot": "0xbc034415ccde0596f39095fd2d99c2fa1e335de3f70b34dcd78e2ab21fa0c5e8",
-    "keysOpIndex": 16,
+    "nonce": 16,
     "blockNumber": 5737984,
     "blockHash": "0x432e218931e9b94f0702ecb1b0d084c467a86b384767ce38c4fe164463070532",
     "guardianAddress": "0x43464Fe06c18848a2E2e913194D64c1970f4326a",
@@ -47,29 +47,30 @@ Deposit msg example
 DepositMessageSchema = Schema({
     'type': And(str, lambda t: t in ('deposit',)),
     'depositRoot': And(str, HASH_REGREX),
-    'keysOpIndex': int,
+    'nonce': int,
     'blockNumber': int,
     'blockHash': And(str, HASH_REGREX),
     'guardianAddress': And(str, ADDRESS_REGREX),
     'signature': SignatureSchema,
+    'stakingModuleId': int
 }, ignore_extra_keys=True)
 
 
 class DepositMessage(TypedDict):
     type: str
     depositRoot: str
-    keysOpIndex: str
+    nonce: str
     blockNumber: int
     blockHash: str
     guardianAddress: str
     signature: Signature
-
+    stakingModuleId: int
 
 def get_deposit_messages_sign_filter(deposit_prefix) -> Callable:
     def check_deposit_messages(msg: DepositMessage) -> bool:
         return verify_message_with_signature(
-            data=[deposit_prefix, msg['depositRoot'], msg['keysOpIndex'], msg['blockNumber'], msg['blockHash']],
-            abi=['bytes32', 'bytes32', 'uint256', 'uint256', 'bytes32'],
+            data=[deposit_prefix, msg['blockNumber'], msg['blockHash'], msg['depositRoot'], msg['stakingModuleId'], msg['nonce']],
+            abi=['bytes32', 'uint256', 'bytes32', 'bytes32', 'uint256', 'uint256'],
             address=msg['guardianAddress'],
             vrs=(
                 msg['signature']['v'],
@@ -103,6 +104,7 @@ PauseMessageSchema = Schema({
     'blockNumber': int,
     'guardianAddress': And(str, ADDRESS_REGREX),
     'signature': SignatureSchema,
+    'stakingModuleId': int
 }, ignore_extra_keys=True)
 
 
@@ -111,6 +113,7 @@ class PauseMessage(TypedDict):
     blockNumber: int
     guardianAddress: str
     signature: Signature
+    stakingModuleId: int
 
 
 def get_pause_messages_sign_filter(pause_prefix: str) -> Callable:
@@ -133,4 +136,5 @@ PingMessageSchema = Schema({
     'type': And(str, lambda t: t in ('ping',)),
     'blockNumber': int,
     'guardianAddress': And(str, ADDRESS_REGREX),
+    'stakingModuleIds': [int]
 }, ignore_extra_keys=True)
