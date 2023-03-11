@@ -114,7 +114,7 @@ class PauserBot:
 
         messages = self.receive_pause_messages()
         stakingModuleId = messages[0]['stakingModuleId']
-        is_paused = contracts.deposit_security_module.functions.getStakingModuleIsActive(stakingModuleId).call(block_identifier=self.current_block.hash.hex())
+        is_paused = contracts.staking_router.functions.getStakingModuleIsActive(stakingModuleId).call(block_identifier=self.current_block.hash.hex())
         logger.info({'msg': f'Call `getStakingModuleIsActive()`.', 'value': is_paused, 'stakingModuleId': stakingModuleId})
 
         if is_paused:

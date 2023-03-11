@@ -42,6 +42,10 @@ DEPOSIT_SECURITY_MODULE = {
     Network.Zhejiang: "0xaaB7034eB0C0556c61c4E2F5B9884abf9EE357c9",
 }
 
+STAKING_ROUTER = {
+    Network.Zhejiang: "0x0Ed4aCd69f6e00a2Ca0d141f8A900aC6BFaF70F0",
+}
+
 FLASHBOTS_RPC = {
     Network.Mainnet: "https://relay.flashbots.net",
     Network.Görli: "https://relay-goerli.flashbots.net",

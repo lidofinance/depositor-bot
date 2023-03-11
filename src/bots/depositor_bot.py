@@ -1,4 +1,5 @@
 import logging
+import traceback
 import time
 from collections import defaultdict
 from typing import List, Tuple
@@ -142,7 +143,7 @@ class DepositorBot:
             logger.error({'msg': error.args, 'error': str(error)})
             time.sleep(15)
         except Exception as error:
-            logger.warning({'msg': 'Unexpected exception.', 'error': str(error)})
+            logger.warning({'msg': 'Unexpected exception.', 'error': str(error), 'details': traceback.format_exc()})
             time.sleep(15)
         else:
             time.sleep(15)
