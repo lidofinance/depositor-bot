@@ -280,7 +280,7 @@ class DepositorBot:
 
         # TODO: get rid of try catch after the V2 upgrade
         except Exception as error:
-            logger.info({'msg': 'canDeposit call exception.', 'error': str(error), 'details': traceback.format_exc()})
+            logger.info({'msg': 'canDeposit call exception.', 'error': str(error)})
             return False
 
     def _available_keys_issue(self) -> bool:
