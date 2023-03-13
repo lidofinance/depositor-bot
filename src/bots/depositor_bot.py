@@ -186,10 +186,10 @@ class DepositorBot:
         logger.info({'msg': f'Call `get_deposit_root()`.', 'value': str(self.deposit_root)})
 
         self.nonce = self._get_nonce()
-        logger.info({'msg': f'Call `getNonce()`.', 'value': self.nonce})
+        logger.info({'msg': f'Call `getKeysOpIndex()`.', 'value': self.nonce})
 
     def _get_nonce(self) -> int:
-        return contracts.node_operator_registry.functions.getNonce().call(block_identifier=self.current_block.hash.hex())
+        return contracts.node_operator_registry.functions.getKeysOpIndex().call(block_identifier=self.current_block.hash.hex())
 
     def get_deposit_issues(self) -> List[str]:
         deposit_issues = []
