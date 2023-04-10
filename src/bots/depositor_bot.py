@@ -186,10 +186,10 @@ class DepositorBot:
         logger.info({'msg': f'Call `get_deposit_root()`.', 'value': str(self.deposit_root)})
 
         self.nonce = self._get_nonce()
-        logger.info({'msg': f'Call `getNonce()`.', 'value': self.nonce})
+        logger.info({'msg': f'Call `getKeysOpIndex()`.', 'value': self.nonce})
 
     def _get_nonce(self) -> int:
-        return contracts.node_operator_registry.functions.getNonce().call(block_identifier=self.current_block.hash.hex())
+        return contracts.node_operator_registry.functions.getKeysOpIndex().call(block_identifier=self.current_block.hash.hex())
 
     def get_deposit_issues(self) -> List[str]:
         deposit_issues = []
@@ -270,12 +270,18 @@ class DepositorBot:
             return True
 
     def _prohibit_to_deposit_issue(self) -> bool:
-        can_deposit = contracts.deposit_security_module.functions.canDeposit(MODULE_ID).call(block_identifier=self.current_block.hash.hex())
-        logger.info({'msg': 'Call `canDeposit()`.', 'value': can_deposit})
+        try:
+            can_deposit = contracts.deposit_security_module.functions.canDeposit(MODULE_ID).call(block_identifier=self.current_block.hash.hex())
+            logger.info({'msg': 'Call canDeposit().', 'value': can_deposit})
 
-        if not can_deposit:
-            logger.warning({'msg': self.DEPOSIT_SECURITY_ISSUE, 'value': can_deposit})
-            return True
+            if not can_deposit:
+                logger.warning({'msg': self.DEPOSIT_SECURITY_ISSUE, 'value': can_deposit})
+                return True
+
+        # TODO: get rid of try catch after the V2 upgrade
+        except Exception as error:
+            logger.info({'msg': 'canDeposit call exception.', 'error': str(error)})
+            return False
 
     def _available_keys_issue(self) -> bool:
         available_keys = contracts.node_operator_registry.functions.assignNextSigningKeys(1).call(
