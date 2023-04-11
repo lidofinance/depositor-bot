@@ -5,6 +5,7 @@ from schema import Regex, Schema, And
 
 from cryptography.verify_signature import verify_message_with_signature
 
+
 HASH_REGREX = Regex('^0x[0-9,A-F]{64}$', flags=re.IGNORECASE)
 ADDRESS_REGREX = Regex('^0x[0-9,A-F]{40}$', flags=re.IGNORECASE)
 
@@ -66,6 +67,7 @@ class DepositMessage(TypedDict):
     signature: Signature
     stakingModuleId: int
 
+
 def get_deposit_messages_sign_filter(deposit_prefix) -> Callable:
     def check_deposit_messages(msg: DepositMessage) -> bool:
         return verify_message_with_signature(
@@ -119,8 +121,8 @@ class PauseMessage(TypedDict):
 def get_pause_messages_sign_filter(pause_prefix: str) -> Callable:
     def check_pause_message(msg: PauseMessage) -> bool:
         return verify_message_with_signature(
-            data=[pause_prefix, msg['blockNumber']],
-            abi=['bytes32', 'uint256'],
+            data=[pause_prefix, msg['blockNumber'], msg['stakingModuleId']],
+            abi=['bytes32', 'uint256', 'uint256'],
             address=msg['guardianAddress'],
             vrs=(
                 msg['signature']['v'],
