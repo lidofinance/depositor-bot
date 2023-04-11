@@ -38,7 +38,7 @@ class PauserBot:
         })
 
         self.pause_prefix = contracts.deposit_security_module.functions.PAUSE_MESSAGE_PREFIX().call()
-        logger.info({'msg': f'Call `PAUSE_MESSAGE_PREFIX()`.', 'value': self.pause_prefix})
+        logger.info({'msg': f'Call `PAUSE_MESSAGE_PREFIX()`.', 'value': str(self.pause_prefix)})
 
         transports = []
 
