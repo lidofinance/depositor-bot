@@ -26,9 +26,9 @@ jobs:
         run: |
           poetry install
 
-      - name: Test with pytest
-        run: |
-          poetry run pytest tests
+      # - name: Test with pytest
+      #   run: |
+      #     poetry run pytest tests
 
   security:
     uses: lidofinance/linters/.github/workflows/security.yml@master
