@@ -24,11 +24,11 @@ class PulseRequestHandler(SimpleHTTPRequestHandler):
         if datetime.now() - _last_pulse > timedelta(minutes=5):
             self.send_response(503)
             self.end_headers()
-            self.wfile.write(b'{"status": "fail", "reason": "timeout exceeded"}\n')
+            self.wfile.write(b'{"metrics": "fail", "reason": "timeout exceeded"}\n')
         else:
             self.send_response(200)
             self.end_headers()
-            self.wfile.write(b'{"status": "ok", "reason": "ok"}\n')
+            self.wfile.write(b'{"metrics": "ok", "reason": "ok"}\n')
 
     def log_request(self, *args, **kwargs):
         # Disable non-error logs
