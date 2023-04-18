@@ -23,31 +23,30 @@ def test_no_pause_messages(
 
 
 def test_no_pause_if_protocol_was_paused(
-        caplog,
-        setup_web3_fixtures_paused,
-        setup_pause_message_to_kafka,
-        remove_sleep,
-        remove_transport,
+    caplog,
+    setup_web3_fixtures_paused,
+    setup_pause_message_to_kafka,
+    remove_sleep,
+    remove_transport,
 ):
     """Test no pause tx if protocol already paused"""
-
     caplog.set_level(logging.INFO)
     contracts.initialize(setup_web3_fixtures_paused)
     pause_bot = PauserBot(setup_web3_fixtures_paused)
     pause_bot.run_cycle()
 
     assert find_log_message(caplog, 'Fetch `latest` block.')
-    is_paused = find_log_message(caplog, 'Call `getStakingModuleIsActive()`.')
-    assert is_paused.msg['value']
+    is_paused_log = find_log_message(caplog, 'Call `getStakingModuleIsActive()`.')
+    assert not is_paused_log.msg['value']
     assert not find_log_message(caplog, 'Message pause protocol initiate.')
 
 
 def test_pause_msg_receive(
-        caplog,
-        setup_web3_fixtures_for_pause,
-        setup_pause_message_to_kafka,
-        remove_sleep,
-        remove_transport,
+    caplog,
+    setup_web3_fixtures_for_pause,
+    setup_pause_message_to_kafka,
+    remove_sleep,
+    remove_transport,
 ):
     """Retry each time pause tx falls locally or in blockchain"""
     caplog.set_level(logging.INFO)
