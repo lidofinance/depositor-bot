@@ -128,7 +128,7 @@ class PauserBot:
             'stakingModuleId': staking_module_id,
         })
 
-        if is_paused:
+        if not is_paused:
             self.message_storage.clear()
             return
 
