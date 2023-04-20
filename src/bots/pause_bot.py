@@ -118,17 +118,17 @@ class PauserBot:
             return
 
         staking_module_id = messages[0]['stakingModuleId']
-        is_paused = contracts.staking_router.functions.getStakingModuleIsActive(staking_module_id).call(
+        is_active = contracts.staking_router.functions.getStakingModuleIsActive(staking_module_id).call(
             block_identifier=self.current_block.hash.hex(),
         )
 
         logger.info({
             'msg': f'Call `getStakingModuleIsActive()`.',
-            'value': is_paused,
+            'value': is_active,
             'stakingModuleId': staking_module_id,
         })
 
-        if is_paused:
+        if not is_active:
             self.message_storage.clear()
             return
 
