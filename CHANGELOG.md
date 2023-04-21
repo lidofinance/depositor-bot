@@ -1,4 +1,4 @@
-# [4.1.0](https://github.com/lidofinance/depositor-bot/compare/v3.3.1...4.1.0) (2023-04-21)
+# [4.2.0](https://github.com/lidofinance/depositor-bot/compare/v3.3.1...4.2.0) (2023-04-21)
 
 
 ### Bug Fixes
