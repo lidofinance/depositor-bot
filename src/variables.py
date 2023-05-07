@@ -11,7 +11,6 @@ logger = logging.getLogger(__name__)
 
 
 NETWORK = os.getenv('NETWORK')
-ENVIRONMENT = os.getenv('ENVIRONMENT', '')
 
 # Transaction limits
 MAX_GAS_FEE = Web3.toWei(*os.getenv('MAX_GAS_FEE', '100 gwei').split(' '))

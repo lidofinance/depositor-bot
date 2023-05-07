@@ -2,7 +2,7 @@ import logging
 import traceback
 import time
 from collections import defaultdict
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 
 import timeout_decorator
 from schema import Or, Schema
@@ -192,6 +192,9 @@ class DepositorBot:
         return contracts.node_operator_registry.functions.getKeysOpIndex().call(block_identifier=self.current_block.hash.hex())
 
     def get_deposit_issues(self) -> List[str]:
+        # Filter non-valid messages. Actualized messages will be used in various checks.
+        self.actualize_messages()
+
         deposit_issues = []
 
         if self._account_balance_issue():
@@ -203,14 +206,17 @@ class DepositorBot:
         if self._high_gas_fee_issue():
             deposit_issues.append(self.GAS_FEE_HIGHER_THAN_RECOMMENDED)
 
-        if self._prohibit_to_deposit_issue():
-            deposit_issues.append(self.DEPOSIT_SECURITY_ISSUE)
-
-        # if self._available_keys_issue():
-        #     deposit_issues.append(self.LIDO_CONTRACT_HAS_NO_FREE_SUBMITTED_KEYS)
-
         if self._quorum_issue():
             deposit_issues.append(self.QUORUM_IS_NOT_READY)
+
+        # if stacking_module_id is None deposit_issues would contain QUORUM_IS_NOT_READY because there is no messages
+        stacking_module_id = self._get_latest_staking_module_id_in_messages()
+        if stacking_module_id:
+            if self._prohibit_to_deposit_issue(stacking_module_id):
+                deposit_issues.append(self.DEPOSIT_SECURITY_ISSUE)
+
+            if self._available_keys_issue(stacking_module_id):
+                deposit_issues.append(self.LIDO_CONTRACT_HAS_NO_FREE_SUBMITTED_KEYS)
 
         return deposit_issues
 
@@ -269,36 +275,47 @@ class DepositorBot:
             })
             return True
 
-    def _prohibit_to_deposit_issue(self) -> bool:
-        try:
-            can_deposit = contracts.deposit_security_module.functions.canDeposit(MODULE_ID).call(block_identifier=self.current_block.hash.hex())
-            logger.info({'msg': 'Call canDeposit().', 'value': can_deposit})
-
-            if not can_deposit:
-                logger.warning({'msg': self.DEPOSIT_SECURITY_ISSUE, 'value': can_deposit})
-                return True
-
-        # TODO: get rid of try catch after the V2 upgrade
-        except Exception as error:
-            logger.info({'msg': 'canDeposit call exception.', 'error': str(error)})
-            return False
-
-    def _available_keys_issue(self) -> bool:
-        available_keys = contracts.node_operator_registry.functions.assignNextSigningKeys(1).call(
-            {'from': contracts.lido.address},
+    def _prohibit_to_deposit_issue(self, stacking_module_id: int) -> bool:
+        can_deposit = contracts.deposit_security_module.functions.canDeposit(stacking_module_id).call(
             block_identifier=self.current_block.hash.hex(),
-        )[0]
+        )
+        logger.info({'msg': 'Call canDeposit().', 'value': can_deposit})
 
-        OPERATORS_FREE_KEYS.set(1 if available_keys else 0)
-        logger.info({'msg': 'Call `assignNextSigningKeys()`.', 'value': bool(available_keys)})
+        if not can_deposit:
+            logger.warning({'msg': self.DEPOSIT_SECURITY_ISSUE, 'value': can_deposit})
+            return True
 
-        if not available_keys:
+    def _available_keys_issue(self, stacking_module_id: int) -> bool:
+        depositable_ether = contracts.lido.functions.getDepositableEther().call(
+            block_identifier=self.current_block.hash.hex(),
+        )
+        possible_deposits = contracts.staking_router.functions.getStakingModuleMaxDepositsCount(
+            stacking_module_id,
+            depositable_ether,
+        ).call(
+            block_identifier=self.current_block.hash.hex(),
+        )
+
+        OPERATORS_FREE_KEYS.set(1 if possible_deposits else 0)
+
+        if not possible_deposits:
             logger.warning({'msg': self.LIDO_CONTRACT_HAS_NO_FREE_SUBMITTED_KEYS})
             return True
 
     def _quorum_issue(self) -> bool:
+        quorum_messages = self._form_a_quorum()
 
-        def _actualize_message(message: DepositMessage):
+        CURRENT_QUORUM_SIZE.set(len(quorum_messages))
+
+        logger.info({'msg': f'_quorum_issue min_signs_to_deposit.', 'value': self.min_signs_to_deposit})
+        logger.info({'msg': f'quorum_messages length.', 'value': len(quorum_messages)})
+
+        if len(quorum_messages) < self.min_signs_to_deposit:
+            logger.warning({'msg': self.QUORUM_IS_NOT_READY})
+            return True
+
+    def actualize_messages(self):
+        def _actualize_messages(message: DepositMessage):
             if message['type'] != 'deposit':
                 logger.info({'msg': f'_actualize_message message.type issue', 'value': message['type']})
                 return False
@@ -324,18 +341,12 @@ class DepositorBot:
             return True
 
         self.message_storage.update_messages()
-        self.message_storage.get_messages(_actualize_message)
+        self.message_storage.get_messages(_actualize_messages)
 
-        quorum_messages = self._form_a_quorum()
-
-        CURRENT_QUORUM_SIZE.set(len(quorum_messages))
-
-        logger.info({'msg': f'_quorum_issue min_signs_to_deposit.', 'value': self.min_signs_to_deposit})
-        logger.info({'msg': f'quorum_messages length.', 'value': len(quorum_messages)})
-
-        if len(quorum_messages) < self.min_signs_to_deposit:
-            logger.warning({'msg': self.QUORUM_IS_NOT_READY})
-            return True
+    def _get_latest_staking_module_id_in_messages(self) -> Optional[int]:
+        messages = self._form_a_quorum()
+        if messages:
+            return messages[0]['stakingModuleId']
 
     def _form_a_quorum(self) -> List[DepositMessage]:
         dict_for_sort = defaultdict(lambda: defaultdict(list))

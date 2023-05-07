@@ -10,6 +10,7 @@ from metrics.healthcheck_pulse import start_pulse_server
 from metrics.logging import logging
 from blockchain.requests_metric_middleware import add_requests_metric_middleware
 
+
 logger = logging.getLogger(__name__)
 
 
