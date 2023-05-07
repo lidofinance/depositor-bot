@@ -1,9 +1,10 @@
-from fixtures.common_fixtures import COMMON_FIXTURES
+from fixtures.common_fixtures import COMMON_FIXTURES, LIDO_LOCATOR_CALLS
 from fixtures.gas_fee_fixtures import GAS_FEE_FIXTURES
 
 
 DEPOSITOR_BASE_FIXTURES = {
     'eth_call': (
+        *LIDO_LOCATOR_CALLS,
         (({'to': '0x710B3303fB508a84F10793c1106e32bE873C24cd', 'data': '0x062b662e'}, 'latest'), {'jsonrpc': '2.0', 'id': 11, 'result': '0x0000000000000000000000000000000000000000000000000000000000000001'}),
         (({'to': '0x710B3303fB508a84F10793c1106e32bE873C24cd', 'data': '0xc6dda2c3'}, 'latest'), {'jsonrpc': '2.0', 'id': 12, 'result': '0x1670745baff8f26a6c2e451bc4eedecf0009a8271dcf5d224e8ab295f22b0863'}),
         (({'to': '0x00000000219ab540356cBB839Cbe05303d7705Fa', 'data': '0xc5f2892f'}, '0xd17320'), {'jsonrpc': '2.0', 'id': 0, 'result': '0x4eff65af4dac60f23b625a5d9c80f9cc36b0754cd1db072cd47bd6d053e2f94e'}),
@@ -76,6 +77,7 @@ DEPOSITOR_FIXTURES_WITH_HIGH_GAS = {
 DEPOSITOR_FIXTURES_WITH_DEPOSIT_PROHIBIT = {
     **DEPOSITOR_BASE_FIXTURES,
     'eth_call': (
+        *LIDO_LOCATOR_CALLS,
         (({'to': '0x710B3303fB508a84F10793c1106e32bE873C24cd', 'data': '0x062b662e'}, 'latest'), {'jsonrpc': '2.0', 'id': 11, 'result': '0x0000000000000000000000000000000000000000000000000000000000000001'}),
         (({'to': '0x710B3303fB508a84F10793c1106e32bE873C24cd', 'data': '0xc6dda2c3'}, 'latest'), {'jsonrpc': '2.0', 'id': 12, 'result': '0x1670745baff8f26a6c2e451bc4eedecf0009a8271dcf5d224e8ab295f22b0863'}),
         (({'to': '0x00000000219ab540356cBB839Cbe05303d7705Fa', 'data': '0xc5f2892f'}, '0xd17320'), {'jsonrpc': '2.0', 'id': 0, 'result': '0x4eff65af4dac60f23b625a5d9c80f9cc36b0754cd1db072cd47bd6d053e2f94e'}),
@@ -97,6 +99,7 @@ DEPOSITOR_FIXTURES_WITH_DEPOSIT_PROHIBIT = {
 DEPOSITOR_FIXTURES_NOT_ENOUGH_BUFFERED_ETHER = {
     **DEPOSITOR_BASE_FIXTURES,
     'eth_call': (
+        *LIDO_LOCATOR_CALLS,
         (({'to': '0x710B3303fB508a84F10793c1106e32bE873C24cd', 'data': '0x062b662e'}, 'latest'), {'jsonrpc': '2.0', 'id': 11, 'result': '0x0000000000000000000000000000000000000000000000000000000000000001'}),
         (({'to': '0x710B3303fB508a84F10793c1106e32bE873C24cd', 'data': '0xc6dda2c3'}, 'latest'), {'jsonrpc': '2.0', 'id': 12, 'result': '0x1670745baff8f26a6c2e451bc4eedecf0009a8271dcf5d224e8ab295f22b0863'}),
         (({'to': '0x00000000219ab540356cBB839Cbe05303d7705Fa', 'data': '0xc5f2892f'}, '0xd17320'), {'jsonrpc': '2.0', 'id': 0, 'result': '0x4eff65af4dac60f23b625a5d9c80f9cc36b0754cd1db072cd47bd6d053e2f94e'}),
@@ -117,6 +120,7 @@ DEPOSITOR_FIXTURES_NOT_ENOUGH_BUFFERED_ETHER = {
 DEPOSITOR_FIXTURES_NO_FREE_KEYS = {
     **DEPOSITOR_BASE_FIXTURES,
     'eth_call': (
+        *LIDO_LOCATOR_CALLS,
         (({'to': '0x710B3303fB508a84F10793c1106e32bE873C24cd', 'data': '0x062b662e'}, 'latest'), {'jsonrpc': '2.0', 'id': 11, 'result': '0x0000000000000000000000000000000000000000000000000000000000000001'}),
         (({'to': '0x710B3303fB508a84F10793c1106e32bE873C24cd', 'data': '0xc6dda2c3'}, 'latest'), {'jsonrpc': '2.0', 'id': 12, 'result': '0x1670745baff8f26a6c2e451bc4eedecf0009a8271dcf5d224e8ab295f22b0863'}),
         (({'to': '0x00000000219ab540356cBB839Cbe05303d7705Fa', 'data': '0xc5f2892f'}, '0xd17320'), {'jsonrpc': '2.0', 'id': 0, 'result': '0x4eff65af4dac60f23b625a5d9c80f9cc36b0754cd1db072cd47bd6d053e2f94e'}),

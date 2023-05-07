@@ -185,6 +185,7 @@ class DepositorBot:
         self.deposit_root = '0x' + contracts.deposit_contract.functions.get_deposit_root().call(block_identifier=self.current_block.hash.hex()).hex()
         logger.info({'msg': f'Call `get_deposit_root()`.', 'value': str(self.deposit_root)})
 
+        # TODO replace nonce with getStakingModuleNonce
         self.nonce = self._get_nonce()
         logger.info({'msg': f'Call `getKeysOpIndex()`.', 'value': self.nonce})
 
