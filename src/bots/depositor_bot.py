@@ -210,13 +210,13 @@ class DepositorBot:
         if self._quorum_issue():
             deposit_issues.append(self.QUORUM_IS_NOT_READY)
 
-        # if stacking_module_id is None deposit_issues would contain QUORUM_IS_NOT_READY because there is no messages
-        stacking_module_id = self._get_latest_staking_module_id_in_messages()
-        if stacking_module_id:
-            if self._prohibit_to_deposit_issue(stacking_module_id):
+        # if staking_module_id is None deposit_issues would contain QUORUM_IS_NOT_READY because there is no messages
+        staking_module_id = self._get_latest_staking_module_id_in_messages()
+        if staking_module_id:
+            if self._prohibit_to_deposit_issue(staking_module_id):
                 deposit_issues.append(self.DEPOSIT_SECURITY_ISSUE)
 
-            if self._available_keys_issue(stacking_module_id):
+            if self._available_keys_issue(staking_module_id):
                 deposit_issues.append(self.LIDO_CONTRACT_HAS_NO_FREE_SUBMITTED_KEYS)
 
         return deposit_issues
@@ -237,8 +237,10 @@ class DepositorBot:
         pending_gas_fee = self.w3.eth.get_block('pending').baseFeePerGas
         logger.info({'msg': 'Get pending `baseFeePerGas`.', 'value': pending_gas_fee})
 
-        buffered_ether = contracts.lido.functions.getBufferedEther().call(block_identifier=self.current_block.hash.hex())
-        logger.info({'msg': 'Call `getBufferedEther()`.', 'value': buffered_ether})
+        buffered_ether = contracts.lido.functions.getDepositableEther().call(
+            block_identifier=self.current_block.hash.hex(),
+        )
+        logger.info({'msg': 'Call `getDepositableEther()`.', 'value': buffered_ether})
         BUFFERED_ETHER.set(buffered_ether)
 
         recommended_buffered_ether = get_recommended_buffered_ether_to_deposit(pending_gas_fee)
@@ -251,7 +253,9 @@ class DepositorBot:
 
     def _high_gas_fee_issue(self) -> bool:
         current_gas_fee = self.w3.eth.get_block('pending').baseFeePerGas
-        buffered_ether = contracts.lido.functions.getBufferedEther().call(block_identifier=self.current_block.hash.hex())
+        buffered_ether = contracts.lido.functions.getDepositableEther().call(
+            block_identifier=self.current_block.hash.hex(),
+        )
 
         is_high_buffer = buffered_ether >= variables.MAX_BUFFERED_ETHERS
         logger.info({'msg': 'Check max ether in buffer.', 'value': is_high_buffer})
@@ -276,8 +280,8 @@ class DepositorBot:
             })
             return True
 
-    def _prohibit_to_deposit_issue(self, stacking_module_id: int) -> bool:
-        can_deposit = contracts.deposit_security_module.functions.canDeposit(stacking_module_id).call(
+    def _prohibit_to_deposit_issue(self, staking_module_id: int) -> bool:
+        can_deposit = contracts.deposit_security_module.functions.canDeposit(staking_module_id).call(
             block_identifier=self.current_block.hash.hex(),
         )
         logger.info({'msg': 'Call canDeposit().', 'value': can_deposit})
@@ -286,12 +290,12 @@ class DepositorBot:
             logger.warning({'msg': self.DEPOSIT_SECURITY_ISSUE, 'value': can_deposit})
             return True
 
-    def _available_keys_issue(self, stacking_module_id: int) -> bool:
+    def _available_keys_issue(self, staking_module_id: int) -> bool:
         depositable_ether = contracts.lido.functions.getDepositableEther().call(
             block_identifier=self.current_block.hash.hex(),
         )
         possible_deposits = contracts.staking_router.functions.getStakingModuleMaxDepositsCount(
-            stacking_module_id,
+            staking_module_id,
             depositable_ether,
         ).call(
             block_identifier=self.current_block.hash.hex(),
