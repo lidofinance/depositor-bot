@@ -414,14 +414,6 @@ class DepositorBot:
             'priority_fee': priority,
         }})
 
-        if not variables.ACCOUNT:
-            logger.info({'msg': 'Account was not provided.'})
-            return
-
-        if not variables.CREATE_TRANSACTIONS:
-            logger.info({'msg': 'Run in dry mode.'})
-            return
-
         deposit_function = contracts.deposit_security_module.functions.depositBufferedEther(
             quorum[0]['blockNumber'],
             quorum[0]['blockHash'],
@@ -436,6 +428,16 @@ class DepositorBot:
             deposit_function.call()
         except ContractLogicError as error:
             logger.error({'msg': 'Local transaction reverted.', 'error': str(error)})
+            return
+
+        logger.info({'msg': 'Deposit local call succeed.'})
+
+        if not variables.ACCOUNT:
+            logger.info({'msg': 'Account was not provided.'})
+            return
+
+        if not variables.CREATE_TRANSACTIONS:
+            logger.info({'msg': 'Run in dry mode.'})
             return
 
         logger.info({'msg': 'Transaction call completed successfully.'})
