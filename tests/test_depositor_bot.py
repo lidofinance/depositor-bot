@@ -12,13 +12,13 @@ ISSUES_NOT_FOUND_LOG = 'No issues found.'
 
 
 def test_deposit_issues__account_balance(
-        caplog,
-        setup_web3_deposit_fixtures_small_balance,
-        remove_sleep,
-        remove_transport,
-        setup_ping_message_to_kafka,
-        setup_deposit_message_to_kafka,
-        setup_account,
+    caplog,
+    setup_web3_deposit_fixtures_small_balance,
+    remove_sleep,
+    remove_transport,
+    setup_ping_message_to_kafka,
+    setup_deposit_message_to_kafka,
+    setup_account,
 ):
     caplog.set_level(logging.INFO)
     contracts.initialize(setup_web3_deposit_fixtures_small_balance)
@@ -55,12 +55,12 @@ def test_deposit_issues__gas_strategy(
 
 
 def test_deposit_issues__security_check(
-        caplog,
-        setup_web3_deposit_fixtures_prohibits_the_deposit,
-        remove_sleep,
-        remove_transport,
-        setup_ping_message_to_kafka,
-        setup_deposit_message_to_kafka,
+    caplog,
+    setup_web3_deposit_fixtures_prohibits_the_deposit,
+    remove_sleep,
+    remove_transport,
+    setup_ping_message_to_kafka,
+    setup_deposit_message_to_kafka,
 ):
     caplog.set_level(logging.INFO)
     contracts.initialize(setup_web3_deposit_fixtures_prohibits_the_deposit)
@@ -76,12 +76,12 @@ def test_deposit_issues__security_check(
 
 
 def test_deposit_issues__buffered_ether(
-        caplog,
-        setup_web3_deposit_fixtures_not_enough_buffered_ether,
-        remove_sleep,
-        remove_transport,
-        setup_ping_message_to_kafka,
-        setup_deposit_message_to_kafka,
+    caplog,
+    setup_web3_deposit_fixtures_not_enough_buffered_ether,
+    remove_sleep,
+    remove_transport,
+    setup_ping_message_to_kafka,
+    setup_deposit_message_to_kafka,
 ):
     caplog.set_level(logging.INFO)
     contracts.initialize(setup_web3_deposit_fixtures_not_enough_buffered_ether)
@@ -116,16 +116,14 @@ def test_deposit_issues__enough_signs(
     assert not find_log_message(caplog, ISSUES_NOT_FOUND_LOG)
 
 
-@pytest.mark.skip
 def test_deposit_issues__no_free_keys(
-        caplog,
-        setup_web3_deposit_fixtures_no_free_keys,
-        remove_sleep,
-        remove_transport,
-        setup_ping_message_to_kafka,
-        setup_deposit_message_to_kafka,
+    caplog,
+    setup_web3_deposit_fixtures_no_free_keys,
+    remove_sleep,
+    remove_transport,
+    setup_ping_message_to_kafka,
+    setup_deposit_message_to_kafka,
 ):
-    # ToDo if no keys are available bot should not send transaction
     caplog.set_level(logging.INFO)
     contracts.initialize(setup_web3_deposit_fixtures_no_free_keys)
     depositor_bot = DepositorBot(setup_web3_deposit_fixtures_no_free_keys)
@@ -140,39 +138,43 @@ def test_deposit_issues__no_free_keys(
 
 
 def test_depositor_bot__no_account(
-        caplog,
-        setup_web3_deposit_fixtures,
-        setup_deposit_message_to_kafka,
-        remove_sleep,
-        remove_transport,
+    caplog,
+    setup_web3_deposit_fixtures,
+    setup_deposit_message_to_kafka,
+    remove_sleep,
+    remove_transport,
 ):
     caplog.set_level(logging.INFO)
     contracts.initialize(setup_web3_deposit_fixtures)
+    contracts.deposit_security_module.functions.depositBufferedEther = Mock()
     depositor_bot = DepositorBot(setup_web3_deposit_fixtures)
     depositor_bot._get_nonce = Mock(return_value=1)
     depositor_bot.run_cycle()
 
     assert not find_log_message(caplog, ISSUES_FOUND_LOG)
     assert find_log_message(caplog, ISSUES_NOT_FOUND_LOG)
+    assert find_log_message(caplog, 'Deposit local call succeed.')
     assert find_log_message(caplog, 'Account was not provided.')
 
 
 def test_depositor_bot__no_create_tx(
-        caplog,
-        setup_web3_deposit_fixtures,
-        setup_deposit_message_to_kafka,
-        setup_account,
-        remove_sleep,
-        remove_transport,
+    caplog,
+    setup_web3_deposit_fixtures,
+    setup_deposit_message_to_kafka,
+    setup_account,
+    remove_sleep,
+    remove_transport,
 ):
     caplog.set_level(logging.INFO)
     contracts.initialize(setup_web3_deposit_fixtures)
+    contracts.deposit_security_module.functions.depositBufferedEther = Mock()
     depositor_bot = DepositorBot(setup_web3_deposit_fixtures)
     depositor_bot._get_nonce = Mock(return_value=1)
     depositor_bot.run_cycle()
 
     assert not find_log_message(caplog, ISSUES_FOUND_LOG)
     assert find_log_message(caplog, ISSUES_NOT_FOUND_LOG)
+    assert find_log_message(caplog, 'Deposit local call succeed.')
     assert find_log_message(caplog, 'Run in dry mode.')
 
 
