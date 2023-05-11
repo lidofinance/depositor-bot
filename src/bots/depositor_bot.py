@@ -454,7 +454,7 @@ class DepositorBot:
         signed = self.w3.eth.account.sign_transaction(transaction, variables.ACCOUNT.privateKey)
 
         if (
-            variables.FLASHBOT_SIGNATURE is None
+            variables.FLASHBOT_SIGNATURE is not None
             and variables.WEB3_CHAIN_ID in FLASHBOTS_RPC
             and not self.last_fb_deposit_failed
         ):
