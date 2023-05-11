@@ -394,6 +394,16 @@ class DepositorBot:
 
         return list(filter(_filter, messages))
 
+    @staticmethod
+    def _check_transaction(transaction) -> bool:
+        try:
+            transaction.call()
+        except ContractLogicError as error:
+            logger.error({'msg': 'Local transaction reverted.', 'error': str(error)})
+            return False
+
+        return True
+
     def do_deposit(self):
         quorum = self._form_a_quorum()
 
@@ -425,10 +435,7 @@ class DepositorBot:
             signs,
         )
 
-        try:
-            deposit_function.call()
-        except ContractLogicError as error:
-            logger.error({'msg': 'Local transaction reverted.', 'error': str(error)})
+        if not self._check_transaction(deposit_function):
             return
 
         logger.info({'msg': 'Deposit local call succeed.'})

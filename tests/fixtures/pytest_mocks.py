@@ -1,4 +1,5 @@
 import json
+from unittest.mock import Mock
 
 import pytest
 from eth_account import Account
@@ -163,6 +164,14 @@ def setup_account(monkeypatch):
     monkeypatch.setenv('WALLET_PRIVATE_KEY', '')
     monkeypatch.setattr(variables, 'WALLET_PRIVATE_KEY', None)
     monkeypatch.setattr(variables, 'ACCOUNT', None)
+
+
+@pytest.fixture
+def setup_flashbots(monkeypatch):
+    import variables
+    monkeypatch.setattr(variables, 'FLASHBOT_SIGNATURE', '0000000000000000000000000000000000000000000000000000000000000000')
+    yield
+    monkeypatch.setattr(variables, 'FLASHBOT_SIGNATURE', None)
 
 
 @pytest.fixture(scope='function')
