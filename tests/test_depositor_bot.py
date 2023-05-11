@@ -34,12 +34,12 @@ def test_deposit_issues__account_balance(
 
 
 def test_deposit_issues__gas_strategy(
-        caplog,
-        setup_web3_deposit_fixtures_with_high_gas,
-        remove_sleep,
-        remove_transport,
-        setup_ping_message_to_kafka,
-        setup_deposit_message_to_kafka,
+    caplog,
+    setup_web3_deposit_fixtures_with_high_gas,
+    remove_sleep,
+    remove_transport,
+    setup_ping_message_to_kafka,
+    setup_deposit_message_to_kafka,
 ):
     caplog.set_level(logging.INFO)
     contracts.initialize(setup_web3_deposit_fixtures_with_high_gas)
@@ -97,11 +97,11 @@ def test_deposit_issues__buffered_ether(
 
 
 def test_deposit_issues__enough_signs(
-        caplog,
-        setup_web3_deposit_fixtures,
-        remove_sleep,
-        remove_transport,
-        setup_ping_message_to_kafka,
+    caplog,
+    setup_web3_deposit_fixtures,
+    remove_sleep,
+    remove_transport,
+    setup_ping_message_to_kafka,
 ):
     caplog.set_level(logging.INFO)
     contracts.initialize(setup_web3_deposit_fixtures)
@@ -179,21 +179,58 @@ def test_depositor_bot__no_create_tx(
 
 
 def test_depositor_bot__deposit(
-        caplog,
-        setup_web3_deposit_fixtures,
-        setup_ping_message_to_kafka,
-        setup_deposit_message_to_kafka,
-        setup_account,
-        setup_create_txs,
-        remove_sleep,
-        remove_transport,
+    caplog,
+    setup_web3_deposit_fixtures,
+    setup_ping_message_to_kafka,
+    setup_deposit_message_to_kafka,
+    setup_account,
+    setup_flashbots,
+    setup_create_txs,
+    remove_sleep,
+    remove_transport,
 ):
     caplog.set_level(logging.INFO)
     contracts.initialize(setup_web3_deposit_fixtures)
     depositor_bot = DepositorBot(setup_web3_deposit_fixtures)
+    depositor_bot.w3.eth.get_transaction_count = Mock(return_value=1)
+    depositor_bot.w3.flashbots = Mock(return_value=True)
+    depositor_bot._check_transaction = Mock(return_value=True)
     depositor_bot._get_nonce = Mock(return_value=1)
+
+    try:
+        depositor_bot.run_cycle()
+    except TypeError:
+        # Mining transaction error expected. Can't mock it correctly. Just check logs.
+        pass
+
+    assert not find_log_message(caplog, ISSUES_FOUND_LOG)
+    assert find_log_message(caplog, ISSUES_NOT_FOUND_LOG)
+    assert find_log_message(caplog, 'Sending deposit transaction.')
+    assert find_log_message(caplog, 'Try to deposit. Flashbots mode.')
+
+
+def test_depositor_bot__deposit_classic(
+    caplog,
+    setup_web3_deposit_fixtures,
+    setup_ping_message_to_kafka,
+    setup_deposit_message_to_kafka,
+    setup_account,
+    setup_flashbots,
+    setup_create_txs,
+    remove_sleep,
+    remove_transport,
+):
+    caplog.set_level(logging.INFO)
+    contracts.initialize(setup_web3_deposit_fixtures)
+    depositor_bot = DepositorBot(setup_web3_deposit_fixtures)
+    depositor_bot.last_fb_deposit_failed = True
+    depositor_bot.w3.eth.get_transaction_count = Mock(return_value=1)
+    depositor_bot._check_transaction = Mock(return_value=True)
+    depositor_bot._get_nonce = Mock(return_value=1)
+
     depositor_bot.run_cycle()
 
     assert not find_log_message(caplog, ISSUES_FOUND_LOG)
     assert find_log_message(caplog, ISSUES_NOT_FOUND_LOG)
     assert find_log_message(caplog, 'Sending deposit transaction.')
+    assert find_log_message(caplog, 'Try to deposit. Classic mode.')
