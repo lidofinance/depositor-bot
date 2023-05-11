@@ -22,7 +22,7 @@ GAS_FEE_PERCENTILE_DAYS_HISTORY_1: int = int(os.getenv('GAS_FEE_PERCENTILE_DAYS_
 
 GAS_PRIORITY_FEE_PERCENTILE = int(os.getenv('GAS_PRIORITY_FEE_PERCENTILE', 25))
 
-MIN_PRIORITY_FEE = Web3.toWei(*os.getenv('MIN_PRIORITY_FEE', '1 gwei').split(' '))
+MIN_PRIORITY_FEE = Web3.toWei(*os.getenv('MIN_PRIORITY_FEE', '50 mwei').split(' '))
 MAX_PRIORITY_FEE = Web3.toWei(*os.getenv('MAX_PRIORITY_FEE', '10 gwei').split(' '))
 
 MAX_BUFFERED_ETHERS = Web3.toWei(*os.getenv('MAX_BUFFERED_ETHERS', '5000 ether').split(' '))
