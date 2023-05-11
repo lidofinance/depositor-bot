@@ -130,10 +130,10 @@ def test_deposit_issues__no_free_keys(
     depositor_bot._get_nonce = Mock(return_value=1)
     depositor_bot.run_cycle()
 
-    assert find_log_message(caplog, depositor_bot.LIDO_CONTRACT_HAS_NO_FREE_SUBMITTED_KEYS)
+    assert find_log_message(caplog, depositor_bot.DEPOSITOR_CAN_DEPOSIT_KEYS)
     record = find_log_message(caplog, ISSUES_FOUND_LOG)
     assert record
-    assert record.msg['value'] == [depositor_bot.LIDO_CONTRACT_HAS_NO_FREE_SUBMITTED_KEYS]
+    assert record.msg['value'] == [depositor_bot.DEPOSITOR_CAN_DEPOSIT_KEYS]
     assert not find_log_message(caplog, ISSUES_NOT_FOUND_LOG)
 
 

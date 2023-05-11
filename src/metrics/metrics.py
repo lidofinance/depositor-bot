@@ -51,7 +51,7 @@ CURRENT_QUORUM_SIZE = Gauge(
 )
 
 BUFFERED_ETHER = Gauge('buffered_ether', 'Buffered ether', namespace=PREFIX)
-OPERATORS_FREE_KEYS = Gauge('operator_free_keys', 'Has free keys', namespace=PREFIX)
+CAN_DEPOSIT_KEYS = Gauge('can_deposit_keys', 'Can depositor bot deposit keys.', namespace=PREFIX)
 
 REQUIRED_BUFFERED_ETHER = Gauge(
     'required_buffered_ether',
