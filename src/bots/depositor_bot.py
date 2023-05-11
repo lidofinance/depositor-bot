@@ -24,7 +24,7 @@ from metrics.metrics import (
     BUFFERED_ETHER,
     REQUIRED_BUFFERED_ETHER,
     GAS_FEE,
-    OPERATORS_FREE_KEYS,
+    CAN_DEPOSIT_KEYS,
     CURRENT_QUORUM_SIZE,
     DEPOSIT_FAILURE,
     SUCCESS_DEPOSIT,
@@ -53,7 +53,8 @@ class DepositorBot:
     GAS_FEE_HIGHER_THAN_RECOMMENDED = 'Gas fee is higher than recommended fee.'
     DEPOSIT_SECURITY_ISSUE = 'Deposit security module prohibits the deposit.'
     LIDO_CONTRACT_HAS_NOT_ENOUGH_BUFFERED_ETHER = 'Lido contract has not enough buffered ether.'
-    LIDO_CONTRACT_HAS_NO_FREE_SUBMITTED_KEYS = 'Lido contract has no free keys.'
+    DEPOSITOR_CAN_DEPOSIT_KEYS = 'Depositor can not deposit keys. ' \
+                                 'No keys, paused staking module or not enough reserved ether.'
     QUORUM_IS_NOT_READY = 'Quorum is not ready.'
 
     current_block = None
@@ -168,7 +169,7 @@ class DepositorBot:
             self.NOT_ENOUGH_BALANCE_ON_ACCOUNT,
             self.DEPOSIT_SECURITY_ISSUE,
             self.LIDO_CONTRACT_HAS_NOT_ENOUGH_BUFFERED_ETHER,
-            self.LIDO_CONTRACT_HAS_NO_FREE_SUBMITTED_KEYS,
+            self.DEPOSITOR_CAN_DEPOSIT_KEYS,
         ]
 
         for long_issue in long_issues:
@@ -216,8 +217,8 @@ class DepositorBot:
             if self._prohibit_to_deposit_issue(staking_module_id):
                 deposit_issues.append(self.DEPOSIT_SECURITY_ISSUE)
 
-            if self._available_keys_issue(staking_module_id):
-                deposit_issues.append(self.LIDO_CONTRACT_HAS_NO_FREE_SUBMITTED_KEYS)
+            if self._cen_deposit_keys_issue(staking_module_id):
+                deposit_issues.append(self.DEPOSITOR_CAN_DEPOSIT_KEYS)
 
         return deposit_issues
 
@@ -290,7 +291,7 @@ class DepositorBot:
             logger.warning({'msg': self.DEPOSIT_SECURITY_ISSUE, 'value': can_deposit})
             return True
 
-    def _available_keys_issue(self, staking_module_id: int) -> bool:
+    def _cen_deposit_keys_issue(self, staking_module_id: int) -> bool:
         depositable_ether = contracts.lido.functions.getDepositableEther().call(
             block_identifier=self.current_block.hash.hex(),
         )
@@ -300,20 +301,21 @@ class DepositorBot:
         ).call(
             block_identifier=self.current_block.hash.hex(),
         )
+        logger.info({
+            'msg': f'Call getStakingModuleMaxDepositsCount({staking_module_id}, {depositable_ether}).',
+            'value': possible_deposits,
+        })
 
-        OPERATORS_FREE_KEYS.set(1 if possible_deposits else 0)
+        CAN_DEPOSIT_KEYS.set(1 if possible_deposits else 0)
 
         if not possible_deposits:
-            logger.warning({'msg': self.LIDO_CONTRACT_HAS_NO_FREE_SUBMITTED_KEYS})
+            logger.warning({'msg': self.DEPOSITOR_CAN_DEPOSIT_KEYS})
             return True
 
     def _quorum_issue(self) -> bool:
         quorum_messages = self._form_a_quorum()
 
         CURRENT_QUORUM_SIZE.set(len(quorum_messages))
-
-        logger.info({'msg': f'_quorum_issue min_signs_to_deposit.', 'value': self.min_signs_to_deposit})
-        logger.info({'msg': f'quorum_messages length.', 'value': len(quorum_messages)})
 
         if len(quorum_messages) < self.min_signs_to_deposit:
             logger.warning({'msg': self.QUORUM_IS_NOT_READY})
@@ -356,10 +358,8 @@ class DepositorBot:
     def _form_a_quorum(self) -> List[DepositMessage]:
         dict_for_sort = defaultdict(lambda: defaultdict(list))
 
-        logger.info({'msg': f'dict_for_sort.', 'value': dict_for_sort})
-        
         for message in self.message_storage.messages:
-            logger.info({'msg': f'dict_for_sort message.', 'value': message})
+            logger.debug({'msg': f'dict_for_sort message.', 'value': message})
             dict_for_sort[message['blockNumber']][message['blockHash']].append(message)
 
         max_quorum = 0
@@ -375,9 +375,6 @@ class DepositorBot:
                     quorum_block_hash = block_hash
 
         quorum_messages = self._remove_address_duplicates(dict_for_sort[quorum_block_number][quorum_block_hash])
-
-        logger.info({'msg': f'min_signs_to_deposit.', 'value': self.min_signs_to_deposit})
-        logger.info({'msg': f'max_quorum.', 'value': max_quorum})
 
         if max_quorum >= self.min_signs_to_deposit:
             logger.info({'msg': f'Quorum ready.', 'value': quorum_messages})
