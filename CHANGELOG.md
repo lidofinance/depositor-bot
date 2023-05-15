@@ -1,3 +1,7 @@
+## [4.2.1](https://github.com/lidofinance/depositor-bot/compare/4.2.0...4.2.1) (2023-05-15)
+
+
+
 # [4.2.0](https://github.com/lidofinance/depositor-bot/compare/v3.3.1...4.2.0) (2023-04-21)
 
 
@@ -101,10 +105,6 @@
 
 
 ## [3.0.2](https://github.com/lidofinance/depositor-bot/compare/v3.0.1...v3.0.2) (2022-04-22)
-
-
-
-## [3.0.1](https://github.com/lidofinance/depositor-bot/compare/v3.0.0...v3.0.1) (2022-04-22)
 
 
 
