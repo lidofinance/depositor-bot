@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "depositor-bot"
-version = "4.2.0"
+version = "4.2.1"
 description = "Bot that collects council signatures, checks blockchain state and signatures and do deposits. Also pause bot send pause tx if there is security warning."
 authors = ["Raman <roman.s@p2p.org>"]
 license = "MIT License"
