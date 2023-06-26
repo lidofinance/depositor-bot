@@ -1,3 +1,6 @@
+# This file is no longer used by semantic-release
+For the latest release notes, please see the [GitHub releases page](https://github.com/lidofinance/depositor-bot/releases).
+
 # [4.1.0](https://github.com/lidofinance/depositor-bot/compare/v3.3.1...4.1.0) (2023-04-21)
 
 

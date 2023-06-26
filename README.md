@@ -81,12 +81,10 @@ python src/pauser.py
 
 ## Release flow
 
-To create new release:
+To create a new release:
 
-1. Merge all changes to the `main` branch
-2. Navigate to Repo => Actions
-3. Run action "Prepare release" action against `main` branch
-4. When action execution is finished, navigate to Repo => Pull requests
-5. Find pull request named "chore(release): X.X.X" review and merge it with "Rebase and merge" (or "Squash and merge")
-6. After merge release action will be triggered automatically
-7. Navigate to Repo => Actions and see last actions logs for further details 
+1. Merge all changes to the `main` branch.
+1. After the merge, the `Prepare release draft` action will run automatically. When the action is complete, a release draft is created.
+1. When you need to release, go to Repo → Releases.
+1. Publish the desired release draft manually by clicking the edit button - this release is now the `Latest Published`.
+1. After publication, the action to create a release bump will be triggered automatically.
