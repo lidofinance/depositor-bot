@@ -2,7 +2,7 @@
 name = "depositor-bot"
 version = "4.1.0"
 description = "Bot that collects council signatures, checks blockchain state and signatures and do deposits. Also pause bot send pause tx if there is security warning."
-authors = ["Raman <roman.s@p2p.org>"]
+authors = ["Raman <raman.s@lido.fi>"]
 license = "MIT License"
 readme = "README.md"
 include = [
@@ -10,16 +10,16 @@ include = [
 ]
 
 [tool.poetry.dependencies]
-python = ">=3.9,<3.11"
+python = ">=3.9,<3.12"
 numpy = "1.23.3"
 prometheus-client = "0.14.1"
-confluent-kafka = "1.9.2"
 timeout-decorator = "^0.5.0"
-web3-multi-provider = "^0.4.1"
+web3-multi-provider = "^0.6.0"
 schema = "^0.7.5"
 web3 = "^5.30.0"
 flashbots = "^1.0.2"
 websocket-client = "^1.4.1"
+confluent-kafka = "^2.2.0"
 
 [tool.poetry.dev-dependencies]
 pytest = "^7.1.3"
