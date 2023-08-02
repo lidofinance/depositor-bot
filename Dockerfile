@@ -26,7 +26,7 @@ ENV POETRY_VERSION=1.4.2 \
     PATH="/opt/poetry/bin:$PATH"
 
 # install poetry - respects $POETRY_VERSION & $POETRY_HOME
-RUN curl -sSL https://install.python-poetry.org | python -
+RUN set -o pipefail && %curl -sSL https://install.python-poetry.org | python -
 
 COPY pyproject.toml poetry.lock ./
 RUN poetry install
