@@ -25,8 +25,11 @@ ENV POETRY_VERSION=1.4.2 \
     POETRY_HOME=/opt/poetry \
     PATH="/opt/poetry/bin:$PATH"
 
+# Set the SHELL option -o pipefail before RUN with a pipe in
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
 # install poetry - respects $POETRY_VERSION & $POETRY_HOME
-RUN set -o pipefail && %curl -sSL https://install.python-poetry.org | python -
+RUN curl -sSL https://install.python-poetry.org | python -
 
 COPY pyproject.toml poetry.lock ./
 RUN poetry install
