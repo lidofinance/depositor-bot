@@ -10,7 +10,7 @@ include = [
 ]
 
 [tool.poetry.dependencies]
-python = ">=3.9,<3.12"
+python = ">=3.9,<3.11"
 numpy = "1.23.3"
 prometheus-client = "0.14.1"
 timeout-decorator = "^0.5.0"
