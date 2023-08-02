@@ -31,7 +31,6 @@ To run (development):
 Envs:
 ```bash
 export NETWORK=...
-export ENVIRONMENT=...
 export WEB3_RPC_ENDPOINTS=...
 export FLASHBOT_SIGNATURE=...
 export KAFKA_BROKER_ADDRESS_1=...
@@ -58,36 +57,34 @@ python src/pauser.py
 |-----------------------------------|:----------:|:-------------------------:|:------------------------------------------------------------------------------------------------------------------------------------------------|
 | WEB3_RPC_ENDPOINTS (required)     |     -      |            ``             | List of rpc endpoints that will be used to send requests separated by comma (`,`). If not provided will be used infura (WEB3_INFURA_PROJECT_ID) |
 | NETWORK (required)                |     -      |          `None`           | Network (e.g. mainnet, goerli)                                                                                                                  |
-| ENVIRONMENT (required)            |     -      |            ``             | Enviroment (e.g. mainnet/stage/testnet)                                                                                                         |
 | WALLET_PRIVATE_KEY                |     -      |          `None`           | Account private key                                                                                                                             |
 | FLASHBOT_SIGNATURE (required)     |     -      |          `None`           | Private key - Used to identify account in flashbot`s rpc (should NOT be equal to WALLET private key)                                            |
 | CREATE_TRANSACTIONS               |     -      |          `None`           | If `true` then tx will be send to blockchain                                                                                                    |
-| KAFKA_BROKER_ADDRESS_1 (required) |     -      |          `None`           | Kafka servers url and port                                                                                                                      |
-| KAFKA_USERNAME (required)         |     -      |          `None`           | Kafka username value                                                                                                                            |
-| KAFKA_PASSWORD (required)         |     -      |          `None`           | Kafka password value                                                                                                                            |
-| KAFKA_TOPIC (required)            |     -      |          `None`           | Kafka topic name (for msg receiving)                                                                                                            |
-| KAFKA_GROUP_PREFIX                |     -      |          `None`           | Just for staging (staging-)                                                                                                                     |
 | MAX_BUFFERED_ETHERS               |  5000 ETH  |       `5000 ether`        | Maximum amount of ETH in the buffer, after which the bot deposits at any gas                                                                    |
 | MAX_GAS_FEE                       |  100 GWEI  |        `100 gwei`         | Bot will wait for a lower price. Treshold for gas_fee                                                                                           |
 | GAS_FEE_PERCENTILE_1              |     5      |            `5`            | Percentile for first recommended fee calculation                                                                                                |
 | GAS_FEE_PERCENTILE_DAYS_HISTORY_1 |     1      |            `1`            | Percentile for first recommended calculates from N days of the fee history                                                                      |
 | GAS_PRIORITY_FEE_PERCENTILE       |     25     |           `25`            | Priority transaction will be N percentile from priority fees in last block (min `MIN_PRIORITY_FEE` - max `MAX_PRIORITY_FEE`)                    |
 | CONTRACT_GAS_LIMIT                | 15 * 10**6 |        `15000000`         | Default transaction gas limit                                                                                                                   |
-| MIN_PRIORITY_FEE                  |   2 GWEI   |         `2 gwei`          | Min priority fee that will be used in tx                                                                                                        |
+| MIN_PRIORITY_FEE                  |  50 mwei   |         `50 mwei`         | Min priority fee that will be used in tx                                                                                                        |
 | MAX_PRIORITY_FEE                  |  10 GWEI   |         `10 gwei`         | Max priority fee that will be used in tx (4 gwei recommended)                                                                                   |
 | MAX_CYCLE_LIFETIME_IN_SECONDS     | 6 minutes  |           `300`           | Max lifetime of usual cycle. If cycle will not end in this time, bot will crush                                                                 |
+| TRANSPORTS                        |     -      |         `rabbit`          | Transports used in bot. One of/or both: rabbit/kafka.                                                                                           |
 | RABBIT_MQ_URL                     |            | `ws://127.0.0.1:15674/ws` | url with ws protocol supported                                                                                                                  |
 | RABBIT_MQ_USERNAME                |   guest    |          `guest`          | RabbitMQ username for virtualhost                                                                                                               |
 | RABBIT_MQ_PASSWORD                |   guest    |          `guest`          | RabbitMQ password for virtualhost                                                                                                               |
+| KAFKA_BROKER_ADDRESS_1            |     -      |          `None`           | Kafka servers url and port                                                                                                                      |
+| KAFKA_USERNAME                    |     -      |          `None`           | Kafka username value                                                                                                                            |
+| KAFKA_PASSWORD                    |     -      |          `None`           | Kafka password value                                                                                                                            |
+| KAFKA_TOPIC                       |     -      |          `None`           | Kafka topic name (for msg receiving)                                                                                                            |
+| KAFKA_GROUP_PREFIX                |     -      |          `None`           | Just for staging (staging-)                                                                                                                     |
 
 ## Release flow
 
-To create new release:
+To create a new release:
 
-1. Merge all changes to the `main` branch
-2. Navigate to Repo => Actions
-3. Run action "Prepare release" action against `main` branch
-4. When action execution is finished, navigate to Repo => Pull requests
-5. Find pull request named "chore(release): X.X.X" review and merge it with "Rebase and merge" (or "Squash and merge")
-6. After merge release action will be triggered automatically
-7. Navigate to Repo => Actions and see last actions logs for further details 
+1. Merge all changes to the `main` branch.
+1. After the merge, the `Prepare release draft` action will run automatically. When the action is complete, a release draft is created.
+1. When you need to release, go to Repo → Releases.
+1. Publish the desired release draft manually by clicking the edit button - this release is now the `Latest Published`.
+1. After publication, the action to create a release bump will be triggered automatically.

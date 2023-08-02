@@ -2,13 +2,7 @@ import json
 
 from web3 import Web3
 
-from blockchain.constants import (
-    LIDO_CONTRACT_ADDRESSES,
-    NODE_OPS_ADDRESSES,
-    DEPOSIT_SECURITY_MODULE,
-    DEPOSIT_CONTRACT,
-    STAKING_ROUTER,
-)
+from blockchain.constants import LIDO_LOCATOR, NODE_OPS_ADDRESSES, DEPOSIT_CONTRACT
 from variables import WEB3_CHAIN_ID
 
 
@@ -29,18 +23,24 @@ class Contracts:
     def initialize(self, w3: Web3, abi_path='./interfaces/'):
         __initialized = True
 
-        self.lido = w3.eth.contract(
-            address=LIDO_CONTRACT_ADDRESSES[WEB3_CHAIN_ID],
-            abi=load_abi(abi_path, 'Lido'),
+        self.lido_locator = w3.eth.contract(
+            address=LIDO_LOCATOR[WEB3_CHAIN_ID],
+            abi=load_abi(abi_path, 'LidoLocator'),
         )
-        self.node_operator_registry = w3.eth.contract(
-            address=NODE_OPS_ADDRESSES[WEB3_CHAIN_ID],
-            abi=load_abi(abi_path, 'NodeOperatorRegistry'),
+
+        self.lido = w3.eth.contract(
+            address=self.lido_locator.functions.lido().call(),
+            abi=load_abi(abi_path, 'Lido'),
         )
 
         self.deposit_security_module = w3.eth.contract(
-            address=DEPOSIT_SECURITY_MODULE[WEB3_CHAIN_ID],
+            address=self.lido_locator.functions.depositSecurityModule().call(),
             abi=load_abi(abi_path, 'DepositSecurityModule'),
+        )
+
+        self.staking_router = w3.eth.contract(
+            address=self.lido_locator.functions.stakingRouter().call(),
+            abi=load_abi(abi_path, 'StakingRouter'),
         )
 
         self.deposit_contract = w3.eth.contract(
@@ -48,9 +48,10 @@ class Contracts:
             abi=load_abi(abi_path, 'DepositContract'),
         )
 
-        self.staking_router = w3.eth.contract(
-            address=STAKING_ROUTER[WEB3_CHAIN_ID],
-            abi=load_abi(abi_path, 'StakingRouter'),
+        # TODO remove after get_nonce will be replaced with staking call
+        self.node_operator_registry = w3.eth.contract(
+            address=NODE_OPS_ADDRESSES[WEB3_CHAIN_ID],
+            abi=load_abi(abi_path, 'NodeOperatorRegistry'),
         )
 
     @staticmethod

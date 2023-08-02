@@ -2,7 +2,7 @@ import logging
 import traceback
 import time
 from collections import defaultdict
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 
 import timeout_decorator
 from schema import Or, Schema
@@ -24,7 +24,7 @@ from metrics.metrics import (
     BUFFERED_ETHER,
     REQUIRED_BUFFERED_ETHER,
     GAS_FEE,
-    OPERATORS_FREE_KEYS,
+    CAN_DEPOSIT_KEYS,
     CURRENT_QUORUM_SIZE,
     DEPOSIT_FAILURE,
     SUCCESS_DEPOSIT,
@@ -53,7 +53,8 @@ class DepositorBot:
     GAS_FEE_HIGHER_THAN_RECOMMENDED = 'Gas fee is higher than recommended fee.'
     DEPOSIT_SECURITY_ISSUE = 'Deposit security module prohibits the deposit.'
     LIDO_CONTRACT_HAS_NOT_ENOUGH_BUFFERED_ETHER = 'Lido contract has not enough buffered ether.'
-    LIDO_CONTRACT_HAS_NO_FREE_SUBMITTED_KEYS = 'Lido contract has no free keys.'
+    DEPOSITOR_CAN_DEPOSIT_KEYS = 'Depositor can not deposit keys. ' \
+                                 'No keys, paused staking module or not enough reserved ether.'
     QUORUM_IS_NOT_READY = 'Quorum is not ready.'
 
     current_block = None
@@ -168,7 +169,7 @@ class DepositorBot:
             self.NOT_ENOUGH_BALANCE_ON_ACCOUNT,
             self.DEPOSIT_SECURITY_ISSUE,
             self.LIDO_CONTRACT_HAS_NOT_ENOUGH_BUFFERED_ETHER,
-            self.LIDO_CONTRACT_HAS_NO_FREE_SUBMITTED_KEYS,
+            self.DEPOSITOR_CAN_DEPOSIT_KEYS,
         ]
 
         for long_issue in long_issues:
@@ -185,6 +186,7 @@ class DepositorBot:
         self.deposit_root = '0x' + contracts.deposit_contract.functions.get_deposit_root().call(block_identifier=self.current_block.hash.hex()).hex()
         logger.info({'msg': f'Call `get_deposit_root()`.', 'value': str(self.deposit_root)})
 
+        # TODO replace nonce with getStakingModuleNonce
         self.nonce = self._get_nonce()
         logger.info({'msg': f'Call `getKeysOpIndex()`.', 'value': self.nonce})
 
@@ -192,6 +194,9 @@ class DepositorBot:
         return contracts.node_operator_registry.functions.getKeysOpIndex().call(block_identifier=self.current_block.hash.hex())
 
     def get_deposit_issues(self) -> List[str]:
+        # Filter non-valid messages. Actualized messages will be used in various checks.
+        self.actualize_messages()
+
         deposit_issues = []
 
         if self._account_balance_issue():
@@ -203,14 +208,17 @@ class DepositorBot:
         if self._high_gas_fee_issue():
             deposit_issues.append(self.GAS_FEE_HIGHER_THAN_RECOMMENDED)
 
-        if self._prohibit_to_deposit_issue():
-            deposit_issues.append(self.DEPOSIT_SECURITY_ISSUE)
-
-        # if self._available_keys_issue():
-        #     deposit_issues.append(self.LIDO_CONTRACT_HAS_NO_FREE_SUBMITTED_KEYS)
-
         if self._quorum_issue():
             deposit_issues.append(self.QUORUM_IS_NOT_READY)
+
+        # if staking_module_id is None deposit_issues would contain QUORUM_IS_NOT_READY because there is no messages
+        staking_module_id = self._get_latest_staking_module_id_in_messages()
+        if staking_module_id:
+            if self._prohibit_to_deposit_issue(staking_module_id):
+                deposit_issues.append(self.DEPOSIT_SECURITY_ISSUE)
+
+            if self._cen_deposit_keys_issue(staking_module_id):
+                deposit_issues.append(self.DEPOSITOR_CAN_DEPOSIT_KEYS)
 
         return deposit_issues
 
@@ -230,8 +238,10 @@ class DepositorBot:
         pending_gas_fee = self.w3.eth.get_block('pending').baseFeePerGas
         logger.info({'msg': 'Get pending `baseFeePerGas`.', 'value': pending_gas_fee})
 
-        buffered_ether = contracts.lido.functions.getBufferedEther().call(block_identifier=self.current_block.hash.hex())
-        logger.info({'msg': 'Call `getBufferedEther()`.', 'value': buffered_ether})
+        buffered_ether = contracts.lido.functions.getDepositableEther().call(
+            block_identifier=self.current_block.hash.hex(),
+        )
+        logger.info({'msg': 'Call `getDepositableEther()`.', 'value': buffered_ether})
         BUFFERED_ETHER.set(buffered_ether)
 
         recommended_buffered_ether = get_recommended_buffered_ether_to_deposit(pending_gas_fee)
@@ -244,7 +254,9 @@ class DepositorBot:
 
     def _high_gas_fee_issue(self) -> bool:
         current_gas_fee = self.w3.eth.get_block('pending').baseFeePerGas
-        buffered_ether = contracts.lido.functions.getBufferedEther().call(block_identifier=self.current_block.hash.hex())
+        buffered_ether = contracts.lido.functions.getDepositableEther().call(
+            block_identifier=self.current_block.hash.hex(),
+        )
 
         is_high_buffer = buffered_ether >= variables.MAX_BUFFERED_ETHERS
         logger.info({'msg': 'Check max ether in buffer.', 'value': is_high_buffer})
@@ -269,36 +281,48 @@ class DepositorBot:
             })
             return True
 
-    def _prohibit_to_deposit_issue(self) -> bool:
-        try:
-            can_deposit = contracts.deposit_security_module.functions.canDeposit(MODULE_ID).call(block_identifier=self.current_block.hash.hex())
-            logger.info({'msg': 'Call canDeposit().', 'value': can_deposit})
-
-            if not can_deposit:
-                logger.warning({'msg': self.DEPOSIT_SECURITY_ISSUE, 'value': can_deposit})
-                return True
-
-        # TODO: get rid of try catch after the V2 upgrade
-        except Exception as error:
-            logger.info({'msg': 'canDeposit call exception.', 'error': str(error)})
-            return False
-
-    def _available_keys_issue(self) -> bool:
-        available_keys = contracts.node_operator_registry.functions.assignNextSigningKeys(1).call(
-            {'from': contracts.lido.address},
+    def _prohibit_to_deposit_issue(self, staking_module_id: int) -> bool:
+        can_deposit = contracts.deposit_security_module.functions.canDeposit(staking_module_id).call(
             block_identifier=self.current_block.hash.hex(),
-        )[0]
+        )
+        logger.info({'msg': 'Call canDeposit().', 'value': can_deposit})
 
-        OPERATORS_FREE_KEYS.set(1 if available_keys else 0)
-        logger.info({'msg': 'Call `assignNextSigningKeys()`.', 'value': bool(available_keys)})
+        if not can_deposit:
+            logger.warning({'msg': self.DEPOSIT_SECURITY_ISSUE, 'value': can_deposit})
+            return True
 
-        if not available_keys:
-            logger.warning({'msg': self.LIDO_CONTRACT_HAS_NO_FREE_SUBMITTED_KEYS})
+    def _cen_deposit_keys_issue(self, staking_module_id: int) -> bool:
+        depositable_ether = contracts.lido.functions.getDepositableEther().call(
+            block_identifier=self.current_block.hash.hex(),
+        )
+        possible_deposits = contracts.staking_router.functions.getStakingModuleMaxDepositsCount(
+            staking_module_id,
+            depositable_ether,
+        ).call(
+            block_identifier=self.current_block.hash.hex(),
+        )
+        logger.info({
+            'msg': f'Call getStakingModuleMaxDepositsCount({staking_module_id}, {depositable_ether}).',
+            'value': possible_deposits,
+        })
+
+        CAN_DEPOSIT_KEYS.set(1 if possible_deposits else 0)
+
+        if not possible_deposits:
+            logger.warning({'msg': self.DEPOSITOR_CAN_DEPOSIT_KEYS})
             return True
 
     def _quorum_issue(self) -> bool:
+        quorum_messages = self._form_a_quorum()
 
-        def _actualize_message(message: DepositMessage):
+        CURRENT_QUORUM_SIZE.set(len(quorum_messages))
+
+        if len(quorum_messages) < self.min_signs_to_deposit:
+            logger.warning({'msg': self.QUORUM_IS_NOT_READY})
+            return True
+
+    def actualize_messages(self):
+        def _actualize_messages(message: DepositMessage):
             if message['type'] != 'deposit':
                 logger.info({'msg': f'_actualize_message message.type issue', 'value': message['type']})
                 return False
@@ -324,26 +348,18 @@ class DepositorBot:
             return True
 
         self.message_storage.update_messages()
-        self.message_storage.get_messages(_actualize_message)
+        self.message_storage.get_messages(_actualize_messages)
 
-        quorum_messages = self._form_a_quorum()
-
-        CURRENT_QUORUM_SIZE.set(len(quorum_messages))
-
-        logger.info({'msg': f'_quorum_issue min_signs_to_deposit.', 'value': self.min_signs_to_deposit})
-        logger.info({'msg': f'quorum_messages length.', 'value': len(quorum_messages)})
-
-        if len(quorum_messages) < self.min_signs_to_deposit:
-            logger.warning({'msg': self.QUORUM_IS_NOT_READY})
-            return True
+    def _get_latest_staking_module_id_in_messages(self) -> Optional[int]:
+        messages = self._form_a_quorum()
+        if messages:
+            return messages[0]['stakingModuleId']
 
     def _form_a_quorum(self) -> List[DepositMessage]:
         dict_for_sort = defaultdict(lambda: defaultdict(list))
 
-        logger.info({'msg': f'dict_for_sort.', 'value': dict_for_sort})
-        
         for message in self.message_storage.messages:
-            logger.info({'msg': f'dict_for_sort message.', 'value': message})
+            logger.debug({'msg': f'dict_for_sort message.', 'value': message})
             dict_for_sort[message['blockNumber']][message['blockHash']].append(message)
 
         max_quorum = 0
@@ -359,9 +375,6 @@ class DepositorBot:
                     quorum_block_hash = block_hash
 
         quorum_messages = self._remove_address_duplicates(dict_for_sort[quorum_block_number][quorum_block_hash])
-
-        logger.info({'msg': f'min_signs_to_deposit.', 'value': self.min_signs_to_deposit})
-        logger.info({'msg': f'max_quorum.', 'value': max_quorum})
 
         if max_quorum >= self.min_signs_to_deposit:
             logger.info({'msg': f'Quorum ready.', 'value': quorum_messages})
@@ -380,6 +393,16 @@ class DepositorBot:
                 return True
 
         return list(filter(_filter, messages))
+
+    @staticmethod
+    def _check_transaction(transaction) -> bool:
+        try:
+            transaction.call()
+        except ContractLogicError as error:
+            logger.error({'msg': 'Local transaction reverted.', 'error': str(error)})
+            return False
+
+        return True
 
     def do_deposit(self):
         quorum = self._form_a_quorum()
@@ -402,14 +425,6 @@ class DepositorBot:
             'priority_fee': priority,
         }})
 
-        if not variables.ACCOUNT:
-            logger.info({'msg': 'Account was not provided.'})
-            return
-
-        if not variables.CREATE_TRANSACTIONS:
-            logger.info({'msg': 'Run in dry mode.'})
-            return
-
         deposit_function = contracts.deposit_security_module.functions.depositBufferedEther(
             quorum[0]['blockNumber'],
             quorum[0]['blockHash'],
@@ -420,10 +435,17 @@ class DepositorBot:
             signs,
         )
 
-        try:
-            deposit_function.call()
-        except ContractLogicError as error:
-            logger.error({'msg': 'Local transaction reverted.', 'error': str(error)})
+        if not self._check_transaction(deposit_function):
+            return
+
+        logger.info({'msg': 'Deposit local call succeed.'})
+
+        if not variables.ACCOUNT:
+            logger.info({'msg': 'Account was not provided.'})
+            return
+
+        if not variables.CREATE_TRANSACTIONS:
+            logger.info({'msg': 'Run in dry mode.'})
             return
 
         logger.info({'msg': 'Transaction call completed successfully.'})
@@ -439,7 +461,7 @@ class DepositorBot:
         signed = self.w3.eth.account.sign_transaction(transaction, variables.ACCOUNT.privateKey)
 
         if (
-            variables.FLASHBOT_SIGNATURE is None
+            variables.FLASHBOT_SIGNATURE is not None
             and variables.WEB3_CHAIN_ID in FLASHBOTS_RPC
             and not self.last_fb_deposit_failed
         ):
