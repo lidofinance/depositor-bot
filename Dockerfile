@@ -1,23 +1,35 @@
-FROM python:3.10.6-slim-bullseye as base
+FROM python:3.10.6-slim as base
 
-RUN apt-get update && apt-get install -y --no-install-recommends -qq gcc=4:10.2.1-1 libffi-dev=3.3-6 g++=4:10.2.1-1 curl=7.74.0-1.3+deb11u7 \
+RUN apt-get update && apt-get install -y --no-install-recommends -qq \
+    gcc=4:10.2.1-1 \
+    libffi-dev=3.3-6 \
+    g++=4:10.2.1-1 \
+    curl=7.74.0-1.3+deb11u7 \
  && apt-get clean \
  && rm -rf /var/lib/apt/lists/*
 
-ENV PYTHONDONTWRITEBYTECODE 1
-ENV PYTHONUNBUFFERED 1
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=off \
+    PIP_DISABLE_PIP_VERSION_CHECK=on \
+    PIP_DEFAULT_TIMEOUT=100 \
+    VENV_PATH="/.venv"
 
 WORKDIR /app
 
 FROM base as builder
 
-ENV POETRY_VERSION=1.4.2
-ENV POETRY_HOME=/opt/poetry
-ENV POETRY_VIRTUALENVS_IN_PROJECT=true
-ENV PATH="$POETRY_HOME/bin:$PATH"
+ENV POETRY_VERSION=1.4.2 \
+    POETRY_VIRTUALENVS_IN_PROJECT=true \
+    POETRY_NO_INTERACTION=1 \
+    POETRY_HOME=/opt/poetry \
+    PATH="/opt/poetry/bin:$PATH"
 
-WORKDIR /app
-RUN pip install --no-cache-dir poetry==$POETRY_VERSION
+# Set the SHELL option -o pipefail before RUN with a pipe in
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+# install poetry - respects $POETRY_VERSION & $POETRY_HOME
+RUN curl -sSL https://install.python-poetry.org | python -
 
 COPY pyproject.toml poetry.lock ./
 RUN poetry install
