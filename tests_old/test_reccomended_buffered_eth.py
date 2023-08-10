@@ -1,4 +1,4 @@
-from blockchain.buffered_eth import get_recommended_buffered_ether_to_deposit
+from blockchain.deposit_strategy.buffered_eth import get_recommended_buffered_ether_to_deposit
 
 
 def test_recommended_buffered_ether():

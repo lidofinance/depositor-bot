@@ -8,6 +8,7 @@ from web3.types import RPCEndpoint, RPCResponse
 
 from metrics.metrics import ETH_RPC_REQUESTS_DURATION, ETH_RPC_REQUESTS
 
+
 logger = logging.getLogger(__name__)
 
 

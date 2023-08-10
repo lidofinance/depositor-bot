@@ -14,6 +14,7 @@ from variables import (
     NETWORK,
 )
 
+
 logger = logging.getLogger(__name__)
 
 

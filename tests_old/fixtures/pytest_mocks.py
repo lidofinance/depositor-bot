@@ -14,9 +14,9 @@ from fixtures.depositor_fixtures import (
 )
 from fixtures.pause_bot_fixtures import PAUSE_BOT_FIXTURES, PAUSED_PROTOCOL_FIXTURES
 from metrics import healthcheck_pulse
-from tests.utils.mock_provider import MockProvider
+from tests_old.utils.mock_provider import MockProvider
 
-from tests.fixtures.gas_fee_fixtures import GAS_FEE_FIXTURES
+from tests_old.fixtures.gas_fee_fixtures import GAS_FEE_FIXTURES
 from transport.msg_providers.kafka import KafkaMessageProvider
 from transport.msg_providers.rabbit import RabbitProvider
 from transport.msg_storage import MessageStorage

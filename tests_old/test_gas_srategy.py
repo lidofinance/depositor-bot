@@ -1,8 +1,7 @@
 import logging
 
-from blockchain.gas_strategy import GasFeeStrategy
+from blockchain.deposit_strategy.gas_strategy import GasFeeStrategy
 from utils.logs import find_log_message
-from fixtures.pytest_mocks import *
 
 
 def test_percentile_calculate(caplog, web3_gas_fee):

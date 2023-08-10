@@ -5,7 +5,8 @@ from eth_account import Account
 from web3 import Web3
 
 from blockchain.constants import NETWORK_CHAIN_ID, Network
-from variables_types import TransportType
+from transport.types import TransportType
+
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +18,7 @@ MAX_GAS_FEE = Web3.toWei(*os.getenv('MAX_GAS_FEE', '100 gwei').split(' '))
 CONTRACT_GAS_LIMIT = int(os.getenv('CONTRACT_GAS_LIMIT', 15 * 10**6))
 
 # Gas fee percentile
-GAS_FEE_PERCENTILE_1: int = int(os.getenv('GAS_FEE_PERCENTILE_1', 5))
+GAS_FEE_PERCENTILE_1: int = int(os.getenv('GAS_FEE_PERCENTILE_1', 20))
 GAS_FEE_PERCENTILE_DAYS_HISTORY_1: int = int(os.getenv('GAS_FEE_PERCENTILE_DAYS_HISTORY_1', 1))
 
 GAS_PRIORITY_FEE_PERCENTILE = int(os.getenv('GAS_PRIORITY_FEE_PERCENTILE', 25))
@@ -55,7 +56,7 @@ WEB3_RPC_ENDPOINTS = os.getenv('WEB3_RPC_ENDPOINTS', '').split(',')
 PROMETHEUS_PORT = int(os.getenv('PROMETHEUS_PORT', '9000'))
 PULSE_SERVER_PORT = int(os.getenv('PULSE_SERVER_PORT', '9010'))
 
-MAX_CYCLE_LIFETIME_IN_SECONDS = int(os.getenv('MAX_CYCLE_LIFETIME_IN_SECONDS', '30000'))
+MAX_CYCLE_LIFETIME_IN_SECONDS = int(os.getenv('MAX_CYCLE_LIFETIME_IN_SECONDS', '1200'))
 
 RABBIT_MQ_URL = os.getenv('RABBIT_MQ_URL', 'ws://127.0.0.1:15674/ws')
 
