@@ -7,7 +7,7 @@ from web3_multi_provider import NoActiveProviderError
 
 from blockchain.constants import SLOT_TIME
 from blockchain.typings import Web3
-from metrics.healthcheck_pulse import pulse
+from metrics import healthcheck_pulse
 from utils.timeout import TimeoutManager, TimeoutManagerError
 
 
@@ -42,8 +42,8 @@ class Executor:
         while True:
             self._wait_for_new_block_and_execute()
 
-    def _wait_for_new_block_and_execute(self):
-        pulse()
+    def _wait_for_new_block_and_execute(self) -> Any:
+        healthcheck_pulse.pulse()
 
         latest_block = self._exception_handler(self._wait_until_next_block)
         result = self._exception_handler(self._execute_function, latest_block)
@@ -53,6 +53,8 @@ class Executor:
         else:
             # If function do not return success code (True or whatever) retry function call with next block.
             self._next_expected_block += 1
+
+        return result
 
     def _wait_until_next_block(self) -> BlockData:
         with TimeoutManager(max(
@@ -65,6 +67,7 @@ class Executor:
                 logger.debug({'msg': 'Fetch latest block.', 'value': latest_block})
 
                 if latest_block['number'] >= self._next_expected_block:
+                    self._next_expected_block = latest_block['number']
                     return latest_block
 
                 time_until_expected_block = (self._next_expected_block - latest_block.number - 1) * SLOT_TIME

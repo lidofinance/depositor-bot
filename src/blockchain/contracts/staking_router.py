@@ -35,7 +35,7 @@ class StakingRouterContract(ContractInterface):
         })
         return response
 
-    def get_staking_module_ids(self, block_identifier: BlockIdentifier = 'latest'):
+    def get_staking_module_ids(self, block_identifier: BlockIdentifier = 'latest') -> list[int]:
         """Returns the ids of all registered staking modules"""
         response = self.functions.getStakingModuleIds().call(block_identifier=block_identifier)
         logger.info({

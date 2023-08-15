@@ -20,13 +20,13 @@ class LidoContracts(Module):
 
     def _load_contracts(self):
         self.deposit_contract: DepositContract = cast(DepositContract, self.web3.eth.contract(
-            address=DEPOSIT_CONTRACT[WEB3_CHAIN_ID],
+            address=DEPOSIT_CONTRACT[self.web3.eth.chain_id],
             ContractFactoryClass=DepositContract,
         ))
 
         self.lido_locator: LidoLocatorContract = cast(LidoLocatorContract, self.web3.eth.contract(
             # ToDo provide lido locator address via env variable
-            address=LIDO_LOCATOR[WEB3_CHAIN_ID],
+            address=LIDO_LOCATOR[self.web3.eth.chain_id],
             ContractFactoryClass=LidoLocatorContract,
         ))
 

@@ -39,7 +39,6 @@ class PauserBot:
 
         if not transports:
             logger.warning({'msg': 'No transports found', 'value': variables.MESSAGE_TRANSPORTS})
-            raise ValueError(f'No transports found. Provided value: {variables.MESSAGE_TRANSPORTS}')
 
         pause_prefix = self.w3.lido.deposit_security_module.get_
 

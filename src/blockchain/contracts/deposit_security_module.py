@@ -90,10 +90,10 @@ class DepositSecurityModuleContract(ContractInterface):
         logger.info({'msg': f'Call `PAUSE_MESSAGE_PREFIX()`.', 'value': response.hex(), 'block_identifier': block_identifier.__repr__()})
         return response
 
-    def get_pause_intent_validity_period_blocks(self, block_identifier: BlockIdentifier = 'latest') -> bytes:
+    def get_pause_intent_validity_period_blocks(self, block_identifier: BlockIdentifier = 'latest') -> int:
         """Returns current `pauseIntentValidityPeriodBlocks` contract parameter (see `pauseDeposits`)."""
         response = self.functions.getPauseIntentValidityPeriodBlocks().call(block_identifier=block_identifier)
-        logger.info({'msg': f'Call `getPauseIntentValidityPeriodBlocks()`.', 'value': response.hex(), 'block_identifier': block_identifier.__repr__()})
+        logger.info({'msg': f'Call `getPauseIntentValidityPeriodBlocks()`.', 'value': response, 'block_identifier': block_identifier.__repr__()})
         return response
 
     def pause_deposits(

@@ -86,7 +86,7 @@ class DepositorBot:
                     # Return failed status to start new cycle with next block, until no deposits done
                     return False
 
-            return True
+        return True
 
     def _check_balance(self):
         if variables.ACCOUNT:
@@ -99,7 +99,7 @@ class DepositorBot:
                     'value': balance,
                 })
         else:
-            logger.info({'msg': 'Check account balance. Dry mode.'})
+            logger.info({'msg': 'No account provided. Dry mode.'})
             ACCOUNT_BALANCE.set(0)
 
     def _deposit_to_module(self, module_id: int) -> bool:
