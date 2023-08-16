@@ -119,7 +119,7 @@ class DepositorBot:
 
         if is_depositable and quorum and gas_is_ok and keys_amount_is_profitable:
             logger.info({'msg': 'Checks passed. Prepare deposit tx.'})
-            return self._prepare_deposit_tx(quorum)
+            return self._build_and_send_deposit_tx(quorum)
 
         logger.info({'msg': 'Checks failed. Skip deposit.'})
         return False
@@ -140,7 +140,7 @@ class DepositorBot:
     def _get_message_actualize_filter(self, module_id: int) -> Callable[[DepositMessage], bool]:
         latest = self.w3.eth.get_block('latest')
 
-        deposit_root = self.w3.lido.deposit_contract.get_deposit_root()
+        deposit_root = '0x' + self.w3.lido.deposit_contract.get_deposit_root().hex()
         nonce = self.w3.lido.staking_router.get_staking_module_nonce(module_id)
         guardians_list = self.w3.lido.deposit_security_module.get_guardians()
 
@@ -148,11 +148,11 @@ class DepositorBot:
             if message['guardianAddress'] not in guardians_list:
                 return False
 
-            if message['blockNumber'] < latest.number - 200:
+            if message['blockNumber'] < latest['number'] - 200:
                 return False
 
             # Message from council is newer than depositor node latest block
-            if message['blockNumber'] > latest.number:
+            if message['blockNumber'] > latest['number']:
                 # can't be verified, so skip
                 return True
 
@@ -180,26 +180,21 @@ class DepositorBot:
             # Remove duplications (blockHash, guardianAddress)
             messages_by_block_hash[message['blockHash']][message['guardianAddress']] = message
 
-        for messages_dict in messages_by_block_hash:
+        for messages_dict in messages_by_block_hash.values():
             unified_messages = messages_dict.values()
 
             quorum_size = len(unified_messages)
 
             if quorum_size >= min_signs_to_deposit:
                 CURRENT_QUORUM_SIZE.set(quorum_size)
-                return unified_messages
+                return list(unified_messages)
 
             max_quorum_size = max(quorum_size, max_quorum_size)
 
         CURRENT_QUORUM_SIZE.set(max_quorum_size)
 
-    def _prepare_deposit_tx(self, quorum: list[DepositMessage]) -> bool:
-        sorted_messages = sorted(quorum, key=lambda msg: int(msg['guardianAddress'], 16))
-
-        signs = [
-            (msg['signature']['r'], compute_vs(msg['signature']['v'], msg['signature']['s']))
-            for msg in sorted_messages
-        ]
+    def _build_and_send_deposit_tx(self, quorum: list[DepositMessage]) -> bool:
+        signs = self._prepare_signs_for_deposit(quorum)
 
         return self._send_deposit_tx(
             quorum[0]['blockNumber'],
@@ -210,6 +205,15 @@ class DepositorBot:
             b'',
             signs,
         )
+
+    @staticmethod
+    def _prepare_signs_for_deposit(quorum: list[DepositMessage]) -> list[tuple[str, str]]:
+        sorted_messages = sorted(quorum, key=lambda msg: int(msg['guardianAddress'], 16))
+
+        return [
+            (msg['signature']['r'], compute_vs(msg['signature']['v'], msg['signature']['s']))
+            for msg in sorted_messages
+        ]
 
     def _send_deposit_tx(
         self,
