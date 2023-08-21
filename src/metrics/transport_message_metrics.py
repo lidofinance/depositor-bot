@@ -26,3 +26,5 @@ def message_metrics_filter(msg: DepositMessage) -> bool:
         # Filter all ping messages, because we use them only for metrics
         PING_MESSAGES.labels(address, version).inc()
         return False
+
+    # TODO Log all filtered messages

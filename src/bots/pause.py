@@ -68,6 +68,7 @@ class PauserBot:
         message_validity_time = self.w3.lido.deposit_security_module.get_pause_intent_validity_period_blocks()
 
         def message_filter(message: PauseMessage) -> bool:
+            # TODO Metrics for filtered messages
             return message['blockNumber'] > current_block['number'] - message_validity_time
 
         return message_filter

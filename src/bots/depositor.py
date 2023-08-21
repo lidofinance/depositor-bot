@@ -77,14 +77,9 @@ class DepositorBot:
         for module_id in module_ids:
             logger.info({'msg': f'Do deposit for module with id: {module_id}.'})
             try:
-                deposited = self._deposit_to_module(module_id)
+                self._deposit_to_module(module_id)
             except ModuleNotSupportedError as error:
                 logger.warning({'msg': 'Module not supported exception.', 'error': str(error)})
-            else:
-                # Exit cycle because it could take a lot of time to send tx
-                if deposited:
-                    # Return failed status to start new cycle with next block, until no deposits done
-                    return False
 
         return True
 
@@ -93,11 +88,6 @@ class DepositorBot:
             balance = self.w3.eth.get_balance(variables.ACCOUNT.address)
             ACCOUNT_BALANCE.set(balance)
             logger.info({'msg': 'Check account balance.', 'value': balance})
-            if balance < self.w3.toWei(0.05, 'ether'):
-                logger.warning({
-                    'msg': f'Small account balance on address `{variables.ACCOUNT.address}`',
-                    'value': balance,
-                })
         else:
             logger.info({'msg': 'No account provided. Dry mode.'})
             ACCOUNT_BALANCE.set(0)
@@ -137,6 +127,33 @@ class DepositorBot:
         is_deposits_paused = self.w3.lido.staking_router.is_staking_module_deposits_paused(module_id)
         return is_active and not is_deposits_paused
 
+    def _get_quorum(self, module_id: int) -> Optional[list[DepositMessage]]:
+        """Returns quorum messages or None is quorum is not ready"""
+        actualize_filter = self._get_message_actualize_filter(module_id)
+        messages = self.message_storage.get_messages(actualize_filter)
+        min_signs_to_deposit = self.w3.lido.deposit_security_module.get_guardian_quorum()
+
+        messages_by_block_hash = defaultdict(dict)
+
+        max_quorum_size = 0
+
+        for message in messages:
+            # Remove duplications (blockHash, guardianAddress)
+            messages_by_block_hash[message['blockHash']][message['guardianAddress']] = message
+
+        for messages_dict in messages_by_block_hash.values():
+            unified_messages = messages_dict.values()
+
+            quorum_size = len(unified_messages)
+
+            if quorum_size >= min_signs_to_deposit:
+                CURRENT_QUORUM_SIZE.set(quorum_size)
+                return list(unified_messages)
+
+            max_quorum_size = max(quorum_size, max_quorum_size)
+
+        CURRENT_QUORUM_SIZE.set(max_quorum_size)
+
     def _get_message_actualize_filter(self, module_id: int) -> Callable[[DepositMessage], bool]:
         latest = self.w3.eth.get_block('latest')
 
@@ -165,33 +182,6 @@ class DepositorBot:
             return True
 
         return message_filter
-
-    def _get_quorum(self, module_id: int) -> Optional[list[DepositMessage]]:
-        """Returns quorum messages or None is quorum is not ready"""
-        actualize_filter = self._get_message_actualize_filter(module_id)
-        messages = self.message_storage.get_messages(actualize_filter)
-        min_signs_to_deposit = self.w3.lido.deposit_security_module.get_guardian_quorum()
-
-        messages_by_block_hash = defaultdict(dict)
-
-        max_quorum_size = 0
-
-        for message in messages:
-            # Remove duplications (blockHash, guardianAddress)
-            messages_by_block_hash[message['blockHash']][message['guardianAddress']] = message
-
-        for messages_dict in messages_by_block_hash.values():
-            unified_messages = messages_dict.values()
-
-            quorum_size = len(unified_messages)
-
-            if quorum_size >= min_signs_to_deposit:
-                CURRENT_QUORUM_SIZE.set(quorum_size)
-                return list(unified_messages)
-
-            max_quorum_size = max(quorum_size, max_quorum_size)
-
-        CURRENT_QUORUM_SIZE.set(max_quorum_size)
 
     def _build_and_send_deposit_tx(self, quorum: list[DepositMessage]) -> bool:
         signs = self._prepare_signs_for_deposit(quorum)
