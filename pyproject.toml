@@ -28,3 +28,7 @@ pythonpath = [
   "src",
   "tests",
 ]
+markers = [
+    "unit",
+    "integration",
+]
