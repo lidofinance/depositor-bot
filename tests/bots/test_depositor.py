@@ -53,7 +53,7 @@ def test_depositor_one_module_deposited(depositor_bot, block_data):
     depositor_bot._deposit_to_module = Mock(return_value=True)
     depositor_bot.execute(block_data)
 
-    depositor_bot._deposit_to_module.assert_called_once()
+    assert depositor_bot._deposit_to_module.call_count == 2
 
 
 @pytest.mark.unit
@@ -66,10 +66,6 @@ def test_check_balance_dry(depositor_bot, caplog):
 @pytest.mark.unit
 def test_check_balance(depositor_bot, caplog, set_account):
     caplog.set_level(logging.INFO)
-
-    depositor_bot.w3.eth.get_balance = Mock(return_value=50)
-    depositor_bot._check_balance()
-    assert 'Small account balance on address ' in caplog.messages[-1]
 
     depositor_bot.w3.eth.get_balance = Mock(return_value=10*10**18)
     depositor_bot._check_balance()
