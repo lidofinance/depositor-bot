@@ -4,8 +4,6 @@ import os
 from eth_account import Account
 from web3 import Web3
 
-from transport.types import TransportType
-
 
 logger = logging.getLogger(__name__)
 

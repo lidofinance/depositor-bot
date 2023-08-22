@@ -36,7 +36,7 @@ jobs:
 
       - name: Run hardhat
         run: |
-          npx hardhat node --fork ${{ secrets.WEB3_RPC_ENDPOINT }}
+          npx hardhat node --fork ${{ secrets.WEB3_RPC_ENDPOINT }} &
 
       - name: Integration Tests with pytest
         run: |
