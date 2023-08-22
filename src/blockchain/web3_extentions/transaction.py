@@ -66,10 +66,10 @@ class TransactionUtils(Module):
             status = self.classic_send(signed, timeout_in_blocks)
 
         if status:
-            TX_SEND.label('success').inc()
+            TX_SEND.labels('success').inc()
             logger.info({'msg': 'Transaction found in blockchain.'})
         else:
-            TX_SEND.label('failure').inc()
+            TX_SEND.labels('failure').inc()
             logger.warning({'msg': 'Transaction not found in blockchain.'})
 
         return status

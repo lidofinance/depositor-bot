@@ -29,6 +29,6 @@ pythonpath = [
   "tests",
 ]
 markers = [
-    "unit",
-    "integration",
+    "unit",  # offline
+    "integration",  # hardhat fork
 ]
