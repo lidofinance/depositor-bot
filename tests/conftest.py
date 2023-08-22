@@ -19,17 +19,6 @@ def set_account():
     variables.ACCOUNT = None
 
 
-@pytest.fixture
-def set_integration_account():
-    # Basic Hardhat account
-    # Address 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
-    variables.ACCOUNT = Account.from_key('0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80')
-    variables.CREATE_TRANSACTIONS = True
-    yield
-    variables.CREATE_TRANSACTIONS = False
-    variables.ACCOUNT = None
-
-
 @pytest.fixture()
 def ping_message(monkeypatch):
     yield {

@@ -2,7 +2,7 @@ from typing import cast
 
 import pytest
 
-import variables
+from blockchain.constants import LIDO_LOCATOR, DEPOSIT_CONTRACT
 from blockchain.contracts.deposit_security_module import DepositSecurityModuleContract
 from blockchain.contracts.lido import LidoContract
 from blockchain.contracts.lido_locator import LidoLocatorContract
@@ -14,7 +14,7 @@ from blockchain.contracts.staking_router import StakingRouterContract
 def lido_locator(web3_provider_integration):
     yield cast(LidoLocatorContract, web3_provider_integration.eth.contract(
         # ToDo provide lido locator address via env variable
-        address=variables.LIDO_LOCATOR,
+        address=LIDO_LOCATOR[web3_provider_integration.eth.chain_id],
         ContractFactoryClass=LidoLocatorContract,
     ))
 
@@ -22,7 +22,7 @@ def lido_locator(web3_provider_integration):
 @pytest.fixture
 def deposit_contract(web3_provider_integration):
     yield cast(DepositContract, web3_provider_integration.eth.contract(
-        address=variables.DEPOSIT_CONTRACT,
+        address=DEPOSIT_CONTRACT[web3_provider_integration.eth.chain_id],
         ContractFactoryClass=DepositContract,
     ))
 
