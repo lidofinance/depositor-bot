@@ -26,7 +26,7 @@ jobs:
         run: |
           poetry install
 
-      - name: [Unit] Test with pytest
+      - name: Unit Tests with pytest
         run: |
           poetry run pytest tests -m unit
 
@@ -38,7 +38,7 @@ jobs:
         run: |
           npx hardhat node --fork ${{ secrets.WEB3_RPC_ENDPOINT }}
 
-      - name: [Integration] Test with pytest
+      - name: Integration Tests with pytest
         run: |
           poetry run pytest tests -m integration
         env:
