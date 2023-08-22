@@ -26,9 +26,23 @@ jobs:
         run: |
           poetry install
 
-      - name: Test with pytest
+      - name: [Unit] Test with pytest
         run: |
-          poetry run pytest tests
+          poetry run pytest tests -m unit
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v3
+      - run: npm install --save-dev hardhat
+
+      - name: Run hardhat
+        run: |
+          npx hardhat node --fork ${{ secrets.WEB3_RPC_ENDPOINT }}
+
+      - name: [Integration] Test with pytest
+        run: |
+          poetry run pytest tests -m integration
+        env:
+          WEB3_RPC_ENDPOINTS: http://127.0.0.1:8545
 
   security:
     uses: lidofinance/linters/.github/workflows/security.yml@master
