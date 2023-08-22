@@ -3,14 +3,13 @@ from typing import cast
 from web3 import Web3
 from web3.module import Module
 
-from blockchain.constants import LIDO_LOCATOR, DEPOSIT_CONTRACT
+import variables
 from blockchain.contracts.deposit import DepositContract
 
 from blockchain.contracts.deposit_security_module import DepositSecurityModuleContract
 from blockchain.contracts.lido import LidoContract
 from blockchain.contracts.lido_locator import LidoLocatorContract
 from blockchain.contracts.staking_router import StakingRouterContract
-from variables import WEB3_CHAIN_ID
 
 
 class LidoContracts(Module):
@@ -20,13 +19,12 @@ class LidoContracts(Module):
 
     def _load_contracts(self):
         self.deposit_contract: DepositContract = cast(DepositContract, self.web3.eth.contract(
-            address=DEPOSIT_CONTRACT[self.web3.eth.chain_id],
+            address=variables.DEPOSIT_CONTRACT,
             ContractFactoryClass=DepositContract,
         ))
 
         self.lido_locator: LidoLocatorContract = cast(LidoLocatorContract, self.web3.eth.contract(
-            # ToDo provide lido locator address via env variable
-            address=LIDO_LOCATOR[self.web3.eth.chain_id],
+            address=variables.LIDO_LOCATOR,
             ContractFactoryClass=LidoLocatorContract,
         ))
 

@@ -24,7 +24,6 @@ def main():
 
     BUILD_INFO.labels(
         'Pause bot',
-        variables.NETWORK,
         variables.MAX_GAS_FEE,
         variables.MAX_BUFFERED_ETHERS,
         variables.CONTRACT_GAS_LIMIT,
