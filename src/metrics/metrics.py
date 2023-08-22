@@ -4,7 +4,6 @@ PREFIX = 'depositor_bot'
 
 BUILD_INFO = Gauge('build_info', 'Build info', [
     'name',
-    'network',
     'max_gas_fee',
     'max_buffered_ethers',
     'contract_gas_limit',

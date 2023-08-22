@@ -137,3 +137,5 @@ debug.log
 
 #cache
 deposit_contract_cache/
+
+node_modules/

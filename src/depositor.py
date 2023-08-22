@@ -28,7 +28,6 @@ def main():
     # Send vars to metrics
     BUILD_INFO.labels(
         'Depositor bot',
-        variables.NETWORK,
         variables.MAX_GAS_FEE,
         variables.MAX_BUFFERED_ETHERS,
         variables.CONTRACT_GAS_LIMIT,
@@ -51,11 +50,9 @@ def main():
         'transaction': TransactionUtils,
     })
 
-    if variables.FLASHBOT_SIGNATURE is None:
-        logger.info({'msg': 'FLASHBOT_SIGNATURE is empty, skip flashbots middleware initialize.'})
-    elif variables.WEB3_CHAIN_ID in FLASHBOTS_RPC:
+    if variables.FLASHBOT_SIGNATURE and variables.FLASHBOTS_RPC:
         logger.info({'msg': 'Add flashbots middleware.'})
-        flashbot(w3, w3.eth.account.from_key(variables.FLASHBOT_SIGNATURE), FLASHBOTS_RPC[variables.WEB3_CHAIN_ID])
+        flashbot(w3, w3.eth.account.from_key(variables.FLASHBOT_SIGNATURE), variables.FLASHBOTS_RPC)
     else:
         logger.info({'msg': 'No flashbots available for this network.'})
 
