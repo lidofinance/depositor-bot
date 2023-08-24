@@ -44,7 +44,7 @@ def pause_message():
 @pytest.fixture
 def add_account_to_guardian(web3_lido_integration, set_integration_account):
     web3_lido_integration.provider.make_request('hardhat_impersonateAccount', [DSM_OWNER])
-    quorum_size = web3_lido_integration.lido.get_guardian_quorum()
+    quorum_size = web3_lido_integration.lido.deposit_security_module.get_guardian_quorum()
 
     try:
         # If guardian removal failed

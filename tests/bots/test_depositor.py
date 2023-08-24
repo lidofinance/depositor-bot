@@ -187,7 +187,7 @@ def test_prepare_signs_for_deposit(deposit_message, depositor_bot):
         },
     }
 
-    expected = [('0xc2235eb6983f80d19158f807d5d90d93abec52034ea7184bbf164ba211f00116', '0x75354ffc9fb6e7a4b4c01c622661a1d0382ace8c4ff8024626e39ac1a6a613d0'), ('0xc2235eb6983f80d19158f807d5d90d93abec52034ea7184bbf164ba211f00116', '0x75354ffc9fb6e7a4b4c01c622661a1d0382ace8c4ff8024626e39ac1a6a613d0')]
+    expected = (('0xc2235eb6983f80d19158f807d5d90d93abec52034ea7184bbf164ba211f00116', '0x75354ffc9fb6e7a4b4c01c622661a1d0382ace8c4ff8024626e39ac1a6a613d0'), ('0xc2235eb6983f80d19158f807d5d90d93abec52034ea7184bbf164ba211f00116', '0x75354ffc9fb6e7a4b4c01c622661a1d0382ace8c4ff8024626e39ac1a6a613d0'))
 
     signs = depositor_bot._prepare_signs_for_deposit([second_council, deposit_message])
     assert signs == expected
