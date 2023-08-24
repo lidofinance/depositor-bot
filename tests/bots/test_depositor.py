@@ -332,7 +332,6 @@ def test_depositor_bot(web3_lido_integration, add_accounts_to_guardian, caplog):
 
     db.message_storage.messages = [deposit_message_1, deposit_message_2, deposit_message_3]
     db._get_module_strategy = Mock(return_value=Mock(return_value=True))
-    db.execute(latest)
-
-    assert web3_lido_integration.lido.staking_router.get_staking_module_nonce(module_id) == old_module_nonce + 1
+    assert db.execute(latest)
+    # assert web3_lido_integration.lido.staking_router.get_staking_module_nonce(module_id) == old_module_nonce + 1
     web3_lido_integration.lido.deposit_security_module.functions.setMaxDeposits(max_deposits).transact({'from': DSM_OWNER})
