@@ -5,6 +5,14 @@ import pytest
 
 import variables
 from bots.depositor import DepositorBot
+from tests.conftest import DSM_OWNER
+
+
+COUNCIL_ADDRESS_1 = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8'
+COUNCIL_PK_1 = '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d'
+
+COUNCIL_ADDRESS_2 = '0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC'
+COUNCIL_PK_2 = '0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a'
 
 
 @pytest.fixture
@@ -239,3 +247,92 @@ def test_get_quorum(depositor_bot, setup_deposit_message):
     assert quorum
     assert deposit_messages[2] in quorum
     assert deposit_messages[3] in quorum
+
+
+def get_deposit_message(web3, account_address, pk, module_id):
+    latest = web3.eth.get_block('latest')
+
+    prefix = web3.lido.deposit_security_module.get_attest_message_prefix()
+    block_number = latest.number
+    deposit_root = '0x' + web3.lido.deposit_contract.get_deposit_root().hex()
+    staking_module_id = int(1)
+    nonce = web3.lido.staking_router.get_staking_module_nonce(module_id)
+
+    # | ATTEST_MESSAGE_PREFIX | blockNumber | blockHash | depositRoot | stakingModuleId | nonce |
+
+    msg_hash = web3.solidityKeccak(
+        ['bytes32', 'uint256', 'bytes32', 'bytes32', 'uint256', 'uint256'],
+        [prefix, block_number, latest.hash.hex(), deposit_root, staking_module_id, nonce],
+    )
+    signed = web3.eth.account.signHash(msg_hash, private_key=pk)
+
+    msg = {
+        "type": "deposit",
+        "depositRoot": deposit_root,
+        "nonce": nonce,
+        "blockNumber": latest.number,
+        "blockHash": latest.hash.hex(),
+        "guardianAddress": account_address,
+        "guardianIndex": 8,
+        "stakingModuleId": staking_module_id,
+        "signature": {
+            "r": signed.r.to_bytes(32, 'big').hex(),
+            "s": signed.s.to_bytes(32, 'big').hex(),
+            "v": signed.v,
+        },
+    }
+
+    return msg
+
+
+@pytest.fixture
+def add_accounts_to_guardian(web3_lido_integration, set_integration_account):
+    web3_lido_integration.provider.make_request('hardhat_impersonateAccount', [DSM_OWNER])
+    quorum_size = web3_lido_integration.lido.deposit_security_module.get_guardian_quorum()
+
+    try:
+        # If guardian removal failed
+        web3_lido_integration.lido.deposit_security_module.functions.addGuardian(COUNCIL_ADDRESS_1, 2).transact({'from': DSM_OWNER})
+        web3_lido_integration.lido.deposit_security_module.functions.addGuardian(COUNCIL_ADDRESS_2, 2).transact({'from': DSM_OWNER})
+    except:
+        pass
+
+    yield web3_lido_integration
+
+    web3_lido_integration.lido.deposit_security_module.functions.removeGuardian(COUNCIL_ADDRESS_1, quorum_size).transact({'from': DSM_OWNER})
+    web3_lido_integration.lido.deposit_security_module.functions.removeGuardian(COUNCIL_ADDRESS_2, quorum_size).transact({'from': DSM_OWNER})
+
+
+@pytest.mark.integration
+def test_depositor_bot(web3_lido_integration, add_accounts_to_guardian, caplog):
+    max_deposits = web3_lido_integration.lido.deposit_security_module.functions.getMaxDeposits().call()
+    web3_lido_integration.lido.deposit_security_module.functions.setMaxDeposits(2).transact({'from': DSM_OWNER})
+
+    latest = web3_lido_integration.eth.get_block('latest')
+
+    module_id = 1
+
+    old_module_nonce = web3_lido_integration.lido.staking_router.get_staking_module_nonce(module_id)
+
+    deposit_message_1 = get_deposit_message(web3_lido_integration, COUNCIL_ADDRESS_1, COUNCIL_PK_1, module_id)
+    deposit_message_2 = get_deposit_message(web3_lido_integration, COUNCIL_ADDRESS_2, COUNCIL_PK_2, module_id)
+    deposit_message_3 = get_deposit_message(web3_lido_integration, COUNCIL_ADDRESS_2, COUNCIL_PK_2, module_id)
+
+    db = DepositorBot(web3_lido_integration)
+    db.message_storage.messages = [deposit_message_2, deposit_message_3]
+    db.execute(latest)
+
+    assert web3_lido_integration.lido.staking_router.get_staking_module_nonce(module_id) == old_module_nonce
+
+    web3_lido_integration.eth.send_transaction({
+        "from": web3_lido_integration.eth.accounts[0],
+        "to": web3_lido_integration.lido.lido.address,
+        "value": 2000 * 10**18
+    })
+
+    db.message_storage.messages = [deposit_message_1, deposit_message_2, deposit_message_3]
+    db._get_module_strategy = Mock(return_value=Mock(return_value=True))
+    db.execute(latest)
+
+    assert web3_lido_integration.lido.staking_router.get_staking_module_nonce(module_id) == old_module_nonce + 1
+    web3_lido_integration.lido.deposit_security_module.functions.setMaxDeposits(max_deposits).transact({'from': DSM_OWNER})

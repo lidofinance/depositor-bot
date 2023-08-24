@@ -7,6 +7,10 @@ from tests.fixtures.provider import *
 from tests.fixtures.contracts import *
 
 
+# https://goerli.etherscan.io/address/0xe57025E250275cA56f92d76660DEcfc490C7E79A#readContract#F12
+DSM_OWNER = '0xa5F1d7D49F581136Cf6e58B32cBE9a2039C48bA1'
+
+
 @pytest.fixture
 def block_data():
     yield BlockData(number=BlockNumber(10), baseFeePerGas=Wei(100))

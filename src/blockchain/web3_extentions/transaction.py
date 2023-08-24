@@ -48,7 +48,7 @@ class TransactionUtils(Module):
             variables.MAX_PRIORITY_FEE,
         )
 
-        transaction = transaction.build_transaction({
+        transaction_dict = transaction.build_transaction({
             'from': variables.ACCOUNT.address,
             # TODO Estimate gas and min(contract_gas_limit, estimated_gas * 1.3)
             'gas': variables.CONTRACT_GAS_LIMIT,
@@ -57,7 +57,7 @@ class TransactionUtils(Module):
             "nonce": self.web3.eth.get_transaction_count(variables.ACCOUNT.address),
         })
 
-        signed = self.web3.eth.account.sign_transaction(transaction, variables.ACCOUNT.privateKey)
+        signed = self.web3.eth.account.sign_transaction(transaction_dict, variables.ACCOUNT.privateKey)
 
         # TODO try to deposit with other relays
         if use_flashbots and getattr(self.web3, 'flashbots', None):

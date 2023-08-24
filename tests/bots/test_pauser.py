@@ -1,15 +1,17 @@
 from unittest.mock import Mock
 
 import pytest
-from eth_account.messages import encode_defunct
+from eth_abi import encode
+from eth_account.messages import encode_defunct, encode_structured_data
 from eth_hash.backends.pycryptodome import keccak256
 
 import variables
 from bots.pause import PauserBot
+from tests.conftest import DSM_OWNER
 
-
-# https://goerli.etherscan.io/address/0xe57025E250275cA56f92d76660DEcfc490C7E79A#readContract#F12
-DSM_OWNER = '0xa5F1d7D49F581136Cf6e58B32cBE9a2039C48bA1'
+# WARNING: These accounts, and their private keys, are publicly known.
+COUNCIL_ADDRESS = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8'
+COUNCIL_PK = '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d'
 
 
 @pytest.fixture
@@ -42,16 +44,46 @@ def pause_message():
 @pytest.fixture
 def add_account_to_guardian(web3_lido_integration, set_integration_account):
     web3_lido_integration.provider.make_request('hardhat_impersonateAccount', [DSM_OWNER])
+    quorum_size = web3_lido_integration.lido.get_guardian_quorum()
 
     try:
         # If guardian removal failed
-        web3_lido_integration.lido.deposit_security_module.functions.addGuardian(variables.ACCOUNT.address, 1).transact({'from': DSM_OWNER})
+        web3_lido_integration.lido.deposit_security_module.functions.addGuardian(COUNCIL_ADDRESS, quorum_size).transact(
+            {'from': DSM_OWNER},
+        )
     except:
         pass
 
-    yield web3_lido_integration
+    yield COUNCIL_ADDRESS
 
-    web3_lido_integration.lido.deposit_security_module.functions.removeGuardian(variables.ACCOUNT.address, 1).transact({'from': DSM_OWNER})
+    web3_lido_integration.lido.deposit_security_module.functions.removeGuardian(COUNCIL_ADDRESS, quorum_size).transact(
+        {'from': DSM_OWNER},
+    )
+
+
+def get_pause_message(web3):
+    latest = web3.eth.get_block('latest')
+
+    prefix = web3.lido.deposit_security_module.get_pause_message_prefix()
+
+    block_number = latest.number
+    staking_module_id = int(1)
+
+    msg_hash = web3.solidityKeccak(['bytes32', 'uint256', 'uint256'], [prefix, block_number, staking_module_id])
+    signed = web3.eth.account.signHash(msg_hash, private_key=COUNCIL_PK)
+
+    return {
+        "blockHash": latest.hash.hex(),
+        "blockNumber": latest.number,
+        "guardianAddress": variables.ACCOUNT.address,
+        "stakingModuleId": 1,
+        "signature": {
+            "r": hex(signed.r),
+            "s": hex(signed.s),
+            "v": signed.v,
+        },
+        "type": "pause"
+    }
 
 
 @pytest.mark.unit
@@ -108,26 +140,7 @@ def test_pause_message_filtered_by_module_id(pause_bot, block_data, pause_messag
 def test_pauser_bot(web3_lido_integration, add_account_to_guardian):
     latest = web3_lido_integration.eth.get_block('latest')
 
-    prefix = web3_lido_integration.lido.deposit_security_module.get_attest_message_prefix()
-    block_number = latest.number.to_bytes(32, 'big')
-    staking_module_id = int(1).to_bytes(32, 'big')
-
-    k = keccak256(prefix + block_number + staking_module_id)
-    msg = encode_defunct(k)
-    signed = web3_lido_integration.eth.account.sign_message(msg, private_key=variables.ACCOUNT.privateKey)
-
-    pm = {
-        "blockHash": latest.hash.hex(),
-        "blockNumber": latest.number,
-        "guardianAddress": variables.ACCOUNT.address,
-        "stakingModuleId": 1,
-        "signature": {
-            "r": hex(signed.r),
-            "s": hex(signed.s),
-            "v": 28
-        },
-        "type": "pause"
-    }
+    pm = get_pause_message(web3_lido_integration)
 
     pb = PauserBot(web3_lido_integration)
     pb.execute(latest)
@@ -148,5 +161,7 @@ def test_pauser_bot(web3_lido_integration, add_account_to_guardian):
     assert not pb.message_storage.messages
 
     # Cleanup
-    web3_lido_integration.lido.deposit_security_module.functions.unpauseDeposits(pm['stakingModuleId']).transact({'from': DSM_OWNER})
+    web3_lido_integration.lido.deposit_security_module.functions.unpauseDeposits(pm['stakingModuleId']).transact(
+        {'from': DSM_OWNER}
+    )
     assert not web3_lido_integration.lido.staking_router.is_staking_module_deposits_paused(1)

@@ -188,8 +188,8 @@ class DepositorBot:
 
         return self._send_deposit_tx(
             quorum[0]['blockNumber'],
-            quorum[0]['blockHash'],
-            quorum[0]['depositRoot'],
+            Hash32(bytes.fromhex(quorum[0]['blockHash'][2:])),
+            Hash32(bytes.fromhex(quorum[0]['depositRoot'][2:])),
             quorum[0]['stakingModuleId'],
             quorum[0]['nonce'],
             b'',
@@ -197,13 +197,13 @@ class DepositorBot:
         )
 
     @staticmethod
-    def _prepare_signs_for_deposit(quorum: list[DepositMessage]) -> list[tuple[str, str]]:
+    def _prepare_signs_for_deposit(quorum: list[DepositMessage]) -> tuple[tuple[str, str]]:
         sorted_messages = sorted(quorum, key=lambda msg: int(msg['guardianAddress'], 16))
 
-        return [
+        return tuple(
             (msg['signature']['r'], compute_vs(msg['signature']['v'], msg['signature']['s']))
             for msg in sorted_messages
-        ]
+        )
 
     def _send_deposit_tx(
         self,
@@ -213,7 +213,7 @@ class DepositorBot:
         staking_module_id: int,
         staking_module_nonce: int,
         payload: bytes,
-        guardian_signs: list[tuple[str, str]]
+        guardian_signs: tuple[tuple[str, str]]
     ) -> bool:
         """Returns transactions success status"""
         # Prepare transaction and send

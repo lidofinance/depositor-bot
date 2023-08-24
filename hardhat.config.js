@@ -8,5 +8,8 @@ module.exports = {
         interval: 12000
       }
     }
-  }
+  },
+  localhost: {
+    timeout: 100_000
+  },
 };
