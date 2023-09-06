@@ -4,7 +4,6 @@ from web3 import Web3
 from web3_multi_provider import FallbackProvider
 
 import variables
-from blockchain.constants import FLASHBOTS_RPC
 from blockchain.executer import Executor
 from blockchain.web3_extentions.lido_contracts import LidoContracts
 from blockchain.web3_extentions.transaction import TransactionUtils

@@ -12,6 +12,7 @@ from metrics.logging import logging
 from blockchain.web3_extentions.requests_metric_middleware import add_requests_metric_middleware
 from metrics.metrics import BUILD_INFO
 
+
 logger = logging.getLogger(__name__)
 
 
