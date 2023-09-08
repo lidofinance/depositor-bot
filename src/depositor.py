@@ -1,48 +1,74 @@
 from prometheus_client import start_http_server
 from flashbots import flashbot
 from web3 import Web3
-from web3_multi_provider import MultiProvider
+from web3_multi_provider import FallbackProvider
 
 import variables
-from blockchain.constants import FLASHBOTS_RPC
-from blockchain.contracts import contracts
+from blockchain.executer import Executor
+from blockchain.web3_extentions.lido_contracts import LidoContracts
+from blockchain.web3_extentions.transaction import TransactionUtils
+from bots.depositor import DepositorBot
 from metrics.healthcheck_pulse import start_pulse_server
 from metrics.logging import logging
-from blockchain.requests_metric_middleware import add_requests_metric_middleware
+from blockchain.web3_extentions.requests_metric_middleware import add_requests_metric_middleware
+from metrics.metrics import BUILD_INFO
 
 
 logger = logging.getLogger(__name__)
 
 
 def main():
-    logger.info({'msg': 'Start Depositor bot.'})
-
     logger.info({'msg': f'Start up healthcheck service on port: {variables.PULSE_SERVER_PORT}.'})
     start_pulse_server()
 
     logger.info({'msg': f'Start up metrics service on port: {variables.PROMETHEUS_PORT}.'})
     start_http_server(variables.PROMETHEUS_PORT)
 
-    logger.info({'msg': 'Connect MultiHTTPProviders.', 'rpc_count': len(variables.WEB3_RPC_ENDPOINTS)})
-    w3 = Web3(MultiProvider(variables.WEB3_RPC_ENDPOINTS))
+    # Send vars to metrics
+    BUILD_INFO.labels(
+        'Depositor bot',
+        variables.MAX_GAS_FEE,
+        variables.MAX_BUFFERED_ETHERS,
+        variables.CONTRACT_GAS_LIMIT,
+        variables.GAS_FEE_PERCENTILE_1,
+        variables.GAS_FEE_PERCENTILE_DAYS_HISTORY_1,
+        variables.GAS_PRIORITY_FEE_PERCENTILE,
+        variables.MIN_PRIORITY_FEE,
+        variables.MAX_PRIORITY_FEE,
+        variables.KAFKA_TOPIC,
+        variables.ACCOUNT.address if variables.ACCOUNT else '0x0',
+        variables.CREATE_TRANSACTIONS,
+    )
 
-    if variables.FLASHBOT_SIGNATURE is None:
-        logger.info({'msg': 'No flashbots middleware.'})
-    elif variables.WEB3_CHAIN_ID in FLASHBOTS_RPC:
+    logger.info({'msg': 'Connect MultiHTTPProviders.', 'rpc_count': len(variables.WEB3_RPC_ENDPOINTS)})
+    w3 = Web3(FallbackProvider(variables.WEB3_RPC_ENDPOINTS))
+
+    logger.info({'msg': 'Initialize Lido contracts.'})
+    w3.attach_modules({
+        'lido': LidoContracts,
+        'transaction': TransactionUtils,
+    })
+
+    if variables.FLASHBOT_SIGNATURE and variables.FLASHBOTS_RPC:
         logger.info({'msg': 'Add flashbots middleware.'})
-        flashbot(w3, w3.eth.account.from_key(variables.FLASHBOT_SIGNATURE), FLASHBOTS_RPC[variables.WEB3_CHAIN_ID])
+        flashbot(w3, w3.eth.account.from_key(variables.FLASHBOT_SIGNATURE), variables.FLASHBOTS_RPC)
     else:
         logger.info({'msg': 'No flashbots available for this network.'})
 
     logger.info({'msg': 'Add metrics to web3 requests.'})
     add_requests_metric_middleware(w3)
 
-    logger.info({'msg': 'Load contracts.'})
-    contracts.initialize(w3)
-
-    from bots.depositor_bot import DepositorBot
+    logger.info({'msg': 'Initialize Depositor bot.'})
     depositor_bot = DepositorBot(w3)
-    depositor_bot.run_as_daemon()
+
+    e = Executor(
+        w3,
+        depositor_bot.execute,
+        5,
+        variables.MAX_CYCLE_LIFETIME_IN_SECONDS,
+    )
+    logger.info({'msg': 'Rum executor.'})
+    e.execute_as_daemon()
 
 
 if __name__ == '__main__':
