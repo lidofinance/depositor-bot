@@ -9,7 +9,7 @@ from schema import Schema
 import variables
 from transport.msg_providers.common import BaseMessageProvider
 from transport.msg_providers.stomp.client import Client
-
+from variables import NETWORK, KAFKA_TOPIC
 
 logger = logging.getLogger(__name__)
 
