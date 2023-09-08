@@ -1,5 +1,6 @@
 import json
 import logging
+from time import time
 
 
 class JsonFormatter(logging.Formatter):
@@ -14,6 +15,7 @@ class JsonFormatter(logging.Formatter):
             'lineno': record.lineno,
             'module': record.module,
             'pathname': record.pathname,
+            'timestamp': int(time()),
             **message,
         })
         return to_json_msg

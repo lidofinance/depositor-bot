@@ -11,8 +11,9 @@ from variables import (
     KAFKA_USERNAME,
     KAFKA_PASSWORD,
     KAFKA_TOPIC,
-    NETWORK,
+    KAFKA_NETWORK,
 )
+
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +29,7 @@ class KafkaMessageProvider(BaseMessageProvider):
     def __init__(self, message_schema: Schema, client: str):
         logger.info({'msg': 'Kafka initialize.'})
 
-        kafka_topic = f'{NETWORK}-{KAFKA_TOPIC}'
+        kafka_topic = f'{KAFKA_NETWORK}-{KAFKA_TOPIC}'
 
         self.kafka = Consumer({
             'client.id': kafka_topic + f'-{client}-client',

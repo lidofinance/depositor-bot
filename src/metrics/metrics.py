@@ -4,7 +4,6 @@ PREFIX = 'depositor_bot'
 
 BUILD_INFO = Gauge('build_info', 'Build info', [
     'name',
-    'network',
     'max_gas_fee',
     'max_buffered_ethers',
     'contract_gas_limit',
@@ -18,27 +17,26 @@ BUILD_INFO = Gauge('build_info', 'Build info', [
     'create_transactions',
 ], namespace=PREFIX)
 
-GAS_FEE = Gauge('gas_fee', 'Gas fee', ['type'], namespace=PREFIX)
+GAS_FEE = Gauge('gas_fee', 'Gas fee', ['type', 'module_id'], namespace=PREFIX)
 
-DEPOSIT_FAILURE = Counter('deposit_failure', 'Deposit failure', namespace=PREFIX)
-SUCCESS_DEPOSIT = Counter('deposit_success', 'Deposit done', namespace=PREFIX)
+TX_SEND = Counter('transactions_send', 'Amount of send transaction from bot.', ['status'], namespace=PREFIX)
 
 ACCOUNT_BALANCE = Gauge('account_balance', 'Account balance', namespace=PREFIX)
 
-KAFKA_DEPOSIT_MESSAGES = Gauge(
-    'kafka_deposit_messages',
+DEPOSIT_MESSAGES = Gauge(
+    'deposit_messages',
     'Guardians deposit messages',
     ['address', 'version'],
     namespace=PREFIX,
 )
-KAFKA_PAUSE_MESSAGES = Gauge(
-    'kafka_pause_messages',
+PAUSE_MESSAGES = Gauge(
+    'pause_messages',
     'Guardians pause messages',
     ['address', 'version'],
     namespace=PREFIX,
 )
-KAFKA_PING_MESSAGES = Gauge(
-    'kafka_ping_messages',
+PING_MESSAGES = Gauge(
+    'ping_messages',
     'Guardians ping messages',
     ['address', 'version'],
     namespace=PREFIX,
@@ -50,12 +48,16 @@ CURRENT_QUORUM_SIZE = Gauge(
     namespace=PREFIX,
 )
 
-BUFFERED_ETHER = Gauge('buffered_ether', 'Buffered ether', namespace=PREFIX)
-CAN_DEPOSIT_KEYS = Gauge('can_deposit_keys', 'Can depositor bot deposit keys.', namespace=PREFIX)
-
-REQUIRED_BUFFERED_ETHER = Gauge(
-    'required_buffered_ether',
-    'Buffered ether amount required for deposit',
+DEPOSITABLE_ETHER = Gauge(
+    'depositable_ether',
+    'Depositable Ether',
+    ['module_id'],
+    namespace=PREFIX,
+)
+POSSIBLE_DEPOSITS_AMOUNT = Gauge(
+    'possible_deposits_amount',
+    'Possible deposits amount.',
+    ['module_id'],
     namespace=PREFIX,
 )
 

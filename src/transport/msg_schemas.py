@@ -1,9 +1,13 @@
+import logging
 import re
 from typing import Callable, TypedDict
 
 from schema import Regex, Schema, And
 
 from cryptography.verify_signature import verify_message_with_signature
+
+
+logger = logging.getLogger(__name__)
 
 
 HASH_REGREX = Regex('^0x[0-9,A-F]{64}$', flags=re.IGNORECASE)
@@ -60,18 +64,20 @@ DepositMessageSchema = Schema({
 class DepositMessage(TypedDict):
     type: str
     depositRoot: str
-    nonce: str
+    nonce: int
     blockNumber: int
     blockHash: str
     guardianAddress: str
     signature: Signature
     stakingModuleId: int
+    app: dict
 
 
-def get_deposit_messages_sign_filter(deposit_prefix) -> Callable:
+def get_deposit_messages_sign_filter(attestation_prefix: bytes) -> Callable:
+    """Returns filter that checks message validity"""
     def check_deposit_messages(msg: DepositMessage) -> bool:
-        return verify_message_with_signature(
-            data=[deposit_prefix, msg['blockNumber'], msg['blockHash'], msg['depositRoot'], msg['stakingModuleId'], msg['nonce']],
+        verified = verify_message_with_signature(
+            data=[attestation_prefix, msg['blockNumber'], msg['blockHash'], msg['depositRoot'], msg['stakingModuleId'], msg['nonce']],
             abi=['bytes32', 'uint256', 'bytes32', 'bytes32', 'uint256', 'uint256'],
             address=msg['guardianAddress'],
             vrs=(
@@ -80,6 +86,11 @@ def get_deposit_messages_sign_filter(deposit_prefix) -> Callable:
                 msg['signature']['s'],
             ),
         )
+
+        if not verified:
+            logger.error({'msg': 'Message verification failed.', 'value': msg})
+
+        return verified
 
     return check_deposit_messages
 
@@ -118,10 +129,10 @@ class PauseMessage(TypedDict):
     stakingModuleId: int
 
 
-def get_pause_messages_sign_filter(pause_prefix: str) -> Callable:
+def get_pause_messages_sign_filter(attestation_prefix: bytes) -> Callable:
     def check_pause_message(msg: PauseMessage) -> bool:
-        return verify_message_with_signature(
-            data=[pause_prefix, msg['blockNumber'], msg['stakingModuleId']],
+        verified = verify_message_with_signature(
+            data=[attestation_prefix, msg['blockNumber'], msg['stakingModuleId']],
             abi=['bytes32', 'uint256', 'uint256'],
             address=msg['guardianAddress'],
             vrs=(
@@ -130,6 +141,11 @@ def get_pause_messages_sign_filter(pause_prefix: str) -> Callable:
                 msg['signature']['s'],
             ),
         )
+
+        if not verified:
+            logger.error({'msg': 'Message verification failed.', 'value': msg})
+
+        return verified
 
     return check_pause_message
 
