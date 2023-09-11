@@ -125,9 +125,7 @@ class DepositorBot:
 
     def _check_module_status(self, module_id: int) -> bool:
         """Returns True if module is ready for deposit"""
-        is_active = self.w3.lido.staking_router.is_staking_module_active(module_id)
-        is_deposits_paused = self.w3.lido.staking_router.is_staking_module_deposits_paused(module_id)
-        return is_active and not is_deposits_paused
+        return self.w3.lido.staking_router.is_staking_module_active(module_id)
 
     def _get_quorum(self, module_id: int) -> Optional[list[DepositMessage]]:
         """Returns quorum messages or None is quorum is not ready"""

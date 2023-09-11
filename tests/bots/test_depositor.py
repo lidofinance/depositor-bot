@@ -81,19 +81,12 @@ def test_check_balance(depositor_bot, caplog, set_account):
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize(
-    "active,paused,expected",
-    [
-        (True, True, False),
-        (True, False, True),
-        (False, True, False),
-        (False, False, False),
-    ],
-)
-def test_depositor_check_module_status(depositor_bot, active, paused, expected):
-    depositor_bot.w3.lido.staking_router.is_staking_module_active = Mock(return_value=active)
-    depositor_bot.w3.lido.staking_router.is_staking_module_deposits_paused = Mock(return_value=paused)
-    assert depositor_bot._check_module_status(1) == expected
+def test_depositor_check_module_status(depositor_bot):
+    depositor_bot.w3.lido.staking_router.is_staking_module_active = Mock(return_value=True)
+    assert depositor_bot._check_module_status(1)
+
+    depositor_bot.w3.lido.staking_router.is_staking_module_active = Mock(return_value=False)
+    assert not depositor_bot._check_module_status(1)
 
 
 @pytest.mark.unit

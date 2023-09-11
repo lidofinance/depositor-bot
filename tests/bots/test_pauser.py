@@ -146,14 +146,14 @@ def test_pauser_bot(web3_lido_integration, add_account_to_guardian):
     pb.execute(latest)
 
     # Check no pause
-    assert not web3_lido_integration.lido.staking_router.is_staking_module_deposits_paused(1)
+    assert web3_lido_integration.lido.staking_router.is_staking_module_active(1)
 
     # Add pause message
     pb.message_storage.messages = [pm]
     pb.execute(latest)
 
     # Check there is pause message and module paused
-    assert web3_lido_integration.lido.staking_router.is_staking_module_deposits_paused(1)
+    assert not web3_lido_integration.lido.staking_router.is_staking_module_active(1)
     assert len(pb.message_storage.messages) == 1
 
     pb.execute(latest)
@@ -164,4 +164,4 @@ def test_pauser_bot(web3_lido_integration, add_account_to_guardian):
     web3_lido_integration.lido.deposit_security_module.functions.unpauseDeposits(pm['stakingModuleId']).transact(
         {'from': DSM_OWNER}
     )
-    assert not web3_lido_integration.lido.staking_router.is_staking_module_deposits_paused(1)
+    assert web3_lido_integration.lido.staking_router.is_staking_module_active(1)

@@ -34,19 +34,6 @@ class StakingRouterContract(ContractInterface):
         })
         return response
 
-    def is_staking_module_deposits_paused(
-        self,
-        staking_module_id: int,
-        block_identifier: BlockIdentifier = 'latest',
-    ) -> bool:
-        response = self.functions.getStakingModuleIsDepositsPaused(staking_module_id).call(block_identifier=block_identifier)
-        logger.info({
-            'msg': f'Call `getStakingModuleIsDepositsPaused({staking_module_id})`.',
-            'value': response,
-            'block_identifier': block_identifier.__repr__(),
-        })
-        return response
-
     def get_staking_module_nonce(
         self,
         staking_module_id: int,
