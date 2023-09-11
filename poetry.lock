@@ -1559,17 +1559,6 @@ files = [
 ]
 
 [[package]]
-name = "timeout-decorator"
-version = "0.5.0"
-description = "Timeout decorator"
-category = "main"
-optional = false
-python-versions = "*"
-files = [
-    {file = "timeout-decorator-0.5.0.tar.gz", hash = "sha256:6a2f2f58db1c5b24a2cc79de6345760377ad8bdc13813f5265f6c3e63d16b3d7"},
-]
-
-[[package]]
 name = "tomli"
 version = "2.0.1"
 description = "A lil' TOML parser"
@@ -1823,4 +1812,4 @@ multidict = ">=4.0"
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.9,<3.11"
-content-hash = "0ffead054631f16e929a7e8e7c68cacd70428c1507834b30c159c3d99c74ec4f"
+content-hash = "671e086219dba68d38a2681b1e0b6666dee97d7fecc06530e1c7076246101756"
