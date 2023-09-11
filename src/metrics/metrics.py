@@ -45,6 +45,7 @@ PING_MESSAGES = Gauge(
 CURRENT_QUORUM_SIZE = Gauge(
     'quorum_size',
     'Current quorum size',
+    ['type'],
     namespace=PREFIX,
 )
 

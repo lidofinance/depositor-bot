@@ -31,6 +31,11 @@ class CuratedModuleDepositStrategy(ModuleDepositStrategyInterface):
 
     def is_deposited_keys_amount_ok(self) -> bool:
         possible_deposits_amount = self._get_possible_deposits_amount()
+
+        if possible_deposits_amount == 0:
+            logger.info({'msg': f'Possible deposits amount is {possible_deposits_amount}. Skip deposit.'})
+            return False
+
         recommended_max_gas = self._calculate_recommended_gas_based_on_deposit_amount(possible_deposits_amount)
 
         base_fee_per_gas = self._get_pending_base_fee()

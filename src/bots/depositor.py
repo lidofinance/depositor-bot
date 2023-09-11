@@ -133,6 +133,8 @@ class DepositorBot:
         messages = self.message_storage.get_messages(actualize_filter)
         min_signs_to_deposit = self.w3.lido.deposit_security_module.get_guardian_quorum()
 
+        CURRENT_QUORUM_SIZE.labels('required').set(min_signs_to_deposit)
+
         messages_by_block_hash = defaultdict(dict)
 
         max_quorum_size = 0
@@ -147,12 +149,12 @@ class DepositorBot:
             quorum_size = len(unified_messages)
 
             if quorum_size >= min_signs_to_deposit:
-                CURRENT_QUORUM_SIZE.set(quorum_size)
+                CURRENT_QUORUM_SIZE.labels('current').set(quorum_size)
                 return list(unified_messages)
 
             max_quorum_size = max(quorum_size, max_quorum_size)
 
-        CURRENT_QUORUM_SIZE.set(max_quorum_size)
+        CURRENT_QUORUM_SIZE.labels('current').set(max_quorum_size)
 
     def _get_message_actualize_filter(self, module_id: int) -> Callable[[DepositMessage], bool]:
         latest = self.w3.eth.get_block('latest')

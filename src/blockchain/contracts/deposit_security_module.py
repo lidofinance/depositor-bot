@@ -47,7 +47,7 @@ class DepositSecurityModuleContract(ContractInterface):
         staking_module_id: int,
         nonce: int,
         deposit_call_data: bytes,
-        guardian_signatures: list[tuple[bytes, bytes]],
+        guardian_signatures: list[tuple[str, str]],
     ):
         """
         Calls LIDO.deposit(maxDepositsPerBlock, stakingModuleId, depositCalldata).
