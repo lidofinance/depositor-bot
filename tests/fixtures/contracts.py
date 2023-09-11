@@ -13,7 +13,6 @@ from blockchain.contracts.staking_router import StakingRouterContract
 @pytest.fixture
 def lido_locator(web3_provider_integration):
     yield cast(LidoLocatorContract, web3_provider_integration.eth.contract(
-        # ToDo provide lido locator address via env variable
         address=variables.LIDO_LOCATOR,
         ContractFactoryClass=LidoLocatorContract,
     ))

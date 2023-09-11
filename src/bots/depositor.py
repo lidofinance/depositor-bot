@@ -23,6 +23,7 @@ from transport.msg_schemas import (
     PingMessageSchema,
     get_deposit_messages_sign_filter,
     DepositMessage,
+    to_check_sum_address,
 )
 from transport.msg_storage import MessageStorage
 from transport.types import TransportType
@@ -65,6 +66,7 @@ class DepositorBot:
             transports,
             filters=[
                 message_metrics_filter,
+                to_check_sum_address,
                 get_deposit_messages_sign_filter(attest_prefix),
             ],
         )
