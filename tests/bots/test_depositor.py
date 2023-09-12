@@ -18,6 +18,7 @@ COUNCIL_PK_2 = '0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab36
 @pytest.fixture
 def depositor_bot(web3_lido_unit, block_data):
     variables.MESSAGE_TRANSPORTS = ''
+    variables.DEPOSIT_MODULES_WHITELIST = [1, 2]
     web3_lido_unit.lido.staking_router.get_staking_module_ids = Mock(return_value=[1, 2])
     web3_lido_unit.eth.get_block = Mock(return_value=block_data)
     yield DepositorBot(web3_lido_unit)
@@ -54,6 +55,15 @@ def test_depositor_check_all_modules(depositor_bot, block_data):
     depositor_bot.execute(block_data)
 
     assert depositor_bot._deposit_to_module.call_count == 2
+
+
+@pytest.mark.unit
+def test_depositor_deposit_only_to_one_module(depositor_bot, block_data):
+    variables.DEPOSIT_MODULES_WHITELIST = [2]
+    depositor_bot._deposit_to_module = Mock(return_value=False)
+    depositor_bot.execute(block_data)
+
+    assert depositor_bot._deposit_to_module.call_count == 1
 
 
 @pytest.mark.unit

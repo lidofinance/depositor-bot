@@ -35,9 +35,9 @@ def main():
         variables.GAS_PRIORITY_FEE_PERCENTILE,
         variables.MIN_PRIORITY_FEE,
         variables.MAX_PRIORITY_FEE,
-        variables.KAFKA_TOPIC,
         variables.ACCOUNT.address if variables.ACCOUNT else '0x0',
         variables.CREATE_TRANSACTIONS,
+        variables.DEPOSIT_MODULES_WHITELIST,
     )
 
     logger.info({'msg': 'Connect MultiHTTPProviders.', 'rpc_count': len(variables.WEB3_RPC_ENDPOINTS)})

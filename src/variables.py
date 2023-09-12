@@ -75,3 +75,6 @@ MAX_BUFFERED_ETHERS = Web3.toWei(*os.getenv('MAX_BUFFERED_ETHERS', '5000 ether')
 PROMETHEUS_PORT = int(os.getenv('PROMETHEUS_PORT', '9000'))
 PULSE_SERVER_PORT = int(os.getenv('PULSE_SERVER_PORT', '9010'))
 MAX_CYCLE_LIFETIME_IN_SECONDS = int(os.getenv('MAX_CYCLE_LIFETIME_IN_SECONDS', '1200'))
+
+# List of ids of staking modules in which the depositor bot will make deposits
+DEPOSIT_MODULES_WHITELIST = [int(module_id) for module_id in os.getenv('MESSAGE_TRANSPORTS', '1').split(',')]

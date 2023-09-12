@@ -17,6 +17,7 @@ services:
       - RABBIT_MQ_PASSWORD=${RABBIT_MQ_PASSWORD}
       - FLASHBOTS_RPC=${FLASHBOTS_RPC}
       - FLASHBOT_SIGNATURE=${FLASHBOT_SIGNATURE}
+      - DEPOSIT_MODULES_WHITELIST=${DEPOSIT_MODULES_WHITELIST}
     command: src/depositor.py
 
   lido-pause-bot:

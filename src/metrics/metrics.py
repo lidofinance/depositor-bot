@@ -12,9 +12,9 @@ BUILD_INFO = Gauge('build_info', 'Build info', [
     'gas_priority_fee_percentile',
     'min_priority_fee',
     'max_priority_fee',
-    'kafka_topic',
     'account_address',
     'create_transactions',
+    'modules_whitelist',
 ], namespace=PREFIX)
 
 GAS_FEE = Gauge('gas_fee', 'Gas fee', ['type', 'module_id'], namespace=PREFIX)
