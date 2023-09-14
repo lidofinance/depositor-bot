@@ -75,6 +75,10 @@ class DepositorBot:
         module_ids = self.w3.lido.staking_router.get_staking_module_ids()
 
         for module_id in module_ids:
+            if module_id not in variables.DEPOSIT_MODULES_WHITELIST:
+                logger.info({'msg': f'Module [{module_id}] not in white list. Skip deposit for module.'})
+                continue
+
             logger.info({'msg': f'Do deposit for module with id: {module_id}.'})
             try:
                 self._deposit_to_module(module_id)
