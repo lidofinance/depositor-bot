@@ -33,9 +33,9 @@ def main():
         None,
         None,
         None,
-        variables.KAFKA_TOPIC,
         variables.ACCOUNT.address if variables.ACCOUNT else '0x0',
         variables.CREATE_TRANSACTIONS,
+        None,
     )
 
     logger.info({'msg': 'Connect MultiHTTPProviders.', 'rpc_count': len(variables.WEB3_RPC_ENDPOINTS)})
