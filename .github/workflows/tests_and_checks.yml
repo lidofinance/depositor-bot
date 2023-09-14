@@ -33,7 +33,7 @@ jobs:
       - name: Set up node
         uses: actions/setup-node@v3.0.0
         with:
-          node-version: 'lts/*'
+          node-version: '18.17.1'
           cache: 'yarn'
 
       - name: Install dependencies
