@@ -40,26 +40,26 @@ This deposit is executed using the depositBufferedEther function within the "Dep
 
 ### Required variables
 
-| Variable                               | Default                                    | Description                                                                                                              |
-|----------------------------------------|--------------------------------------------|--------------------------------------------------------------------------------------------------------------------------|
-| WEB3_RPC_ENDPOINTS                     | -                                          | List of rpc endpoints that will be used to send requests comma separated (`,`)                                           |
-| WALLET_PRIVATE_KEY                     | -                                          | Account private key                                                                                                      |
-| CREATE_TRANSACTIONS                    | false                                      | If true then tx will be send to blockchain                                                                               |
-| LIDO_LOCATOR                           | 0xC1d0b3DE6792Bf6b4b37EccdcC24e45978Cfd2Eb | Lido Locator address. Mainnet by default. Other networks could be found [here](https://docs.lido.fi/deployed-contracts/) |
-| DEPOSIT_CONTRACT                       | 0x00000000219ab540356cBB839Cbe05303d7705Fa | Ethereum deposit contract address                                                                                        |
-| DEPOSIT_MODULES_WHITELIST              | -                                          | List of staking module's ids in which the depositor bot will make deposits                                               |
-| -------------------------------------- | --------------------------------------	    | -----------------------------------------                                                                                |
-| TRANSPORTS                             | -                                          | Transports used in bot. One of/or both: rabbit/kafka                                                                     |
-| RABBIT_MQ_URL                          | -                                          | RabbitMQ url                                                                                                             |
-| RABBIT_MQ_USERNAME                     | -                                          | RabbitMQ username for virtualhost                                                                                        |
-| RABBIT_MQ_PASSWORD                     | -                                          | RabbitMQ password for virtualhost                                                                                        |
-| -------------------------------------- | --- _kafka is not used at the moment_ ---  | -----------------------------------------                                                                                |
-| KAFKA_BROKER_ADDRESS_1                 | -                                          | Kafka servers url and port                                                                                               |
-| KAFKA_USERNAME                         | -                                          | Kafka username                                                                                                           |
-| KAFKA_PASSWORD                         | -                                          | Password for kafka                                                                                                       |
-| KAFKA_NETWORK                          | -                                          | Network type (mainnet or goerli)                                                                                         |
-| KAFKA_TOPIC                            | -                                          | Kafka topic name (for msg receiving)                                                                                     |
-| KAFKA_GROUP_PREFIX                     | -                                          | Just for staging (staging-)                                                                                              |
+| Variable                  | Default                                    | Description                                                                                                              |
+|---------------------------|--------------------------------------------|--------------------------------------------------------------------------------------------------------------------------|
+| WEB3_RPC_ENDPOINTS        | -                                          | List of rpc endpoints that will be used to send requests comma separated (`,`)                                           |
+| WALLET_PRIVATE_KEY        | -                                          | Account private key                                                                                                      |
+| CREATE_TRANSACTIONS       | false                                      | If true then tx will be send to blockchain                                                                               |
+| LIDO_LOCATOR              | 0xC1d0b3DE6792Bf6b4b37EccdcC24e45978Cfd2Eb | Lido Locator address. Mainnet by default. Other networks could be found [here](https://docs.lido.fi/deployed-contracts/) |
+| DEPOSIT_CONTRACT          | 0x00000000219ab540356cBB839Cbe05303d7705Fa | Ethereum deposit contract address                                                                                        |
+| DEPOSIT_MODULES_WHITELIST | -                                          | List of staking module's ids in which the depositor bot will make deposits                                               |
+| ---                       | ---	                                       | ---                                                                                                                      |
+| TRANSPORTS                | -                                          | Transports used in bot. One of/or both: rabbit/kafka                                                                     |
+| RABBIT_MQ_URL             | -                                          | RabbitMQ url                                                                                                             |
+| RABBIT_MQ_USERNAME        | -                                          | RabbitMQ username for virtualhost                                                                                        |
+| RABBIT_MQ_PASSWORD        | -                                          | RabbitMQ password for virtualhost                                                                                        |
+| ---                       | --- _kafka is not used at the moment_ ---  | ---                                                                                                                      |
+| KAFKA_BROKER_ADDRESS_1    | -                                          | Kafka servers url and port                                                                                               |
+| KAFKA_USERNAME            | -                                          | Kafka username                                                                                                           |
+| KAFKA_PASSWORD            | -                                          | Password for kafka                                                                                                       |
+| KAFKA_NETWORK             | -                                          | Network type (mainnet or goerli)                                                                                         |
+| KAFKA_TOPIC               | -                                          | Kafka topic name (for msg receiving)                                                                                     |
+| KAFKA_GROUP_PREFIX        | -                                          | Just for staging (staging-)                                                                                              |
 
 ### Additional variables
 

@@ -23,6 +23,7 @@ from transport.msg_schemas import (
     PingMessageSchema,
     get_deposit_messages_sign_filter,
     DepositMessage,
+    to_check_sum_address,
 )
 from transport.msg_storage import MessageStorage
 from transport.types import TransportType
@@ -65,6 +66,7 @@ class DepositorBot:
             transports,
             filters=[
                 message_metrics_filter,
+                to_check_sum_address,
                 get_deposit_messages_sign_filter(attest_prefix),
             ],
         )
@@ -127,15 +129,15 @@ class DepositorBot:
 
     def _check_module_status(self, module_id: int) -> bool:
         """Returns True if module is ready for deposit"""
-        is_active = self.w3.lido.staking_router.is_staking_module_active(module_id)
-        is_deposits_paused = self.w3.lido.staking_router.is_staking_module_deposits_paused(module_id)
-        return is_active and not is_deposits_paused
+        return self.w3.lido.staking_router.is_staking_module_active(module_id)
 
     def _get_quorum(self, module_id: int) -> Optional[list[DepositMessage]]:
         """Returns quorum messages or None is quorum is not ready"""
         actualize_filter = self._get_message_actualize_filter(module_id)
         messages = self.message_storage.get_messages(actualize_filter)
         min_signs_to_deposit = self.w3.lido.deposit_security_module.get_guardian_quorum()
+
+        CURRENT_QUORUM_SIZE.labels('required').set(min_signs_to_deposit)
 
         messages_by_block_hash = defaultdict(dict)
 
@@ -151,12 +153,12 @@ class DepositorBot:
             quorum_size = len(unified_messages)
 
             if quorum_size >= min_signs_to_deposit:
-                CURRENT_QUORUM_SIZE.set(quorum_size)
+                CURRENT_QUORUM_SIZE.labels('current').set(quorum_size)
                 return list(unified_messages)
 
             max_quorum_size = max(quorum_size, max_quorum_size)
 
-        CURRENT_QUORUM_SIZE.set(max_quorum_size)
+        CURRENT_QUORUM_SIZE.labels('current').set(max_quorum_size)
 
     def _get_message_actualize_filter(self, module_id: int) -> Callable[[DepositMessage], bool]:
         latest = self.w3.eth.get_block('latest')

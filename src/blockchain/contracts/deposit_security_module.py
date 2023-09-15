@@ -47,7 +47,7 @@ class DepositSecurityModuleContract(ContractInterface):
         staking_module_id: int,
         nonce: int,
         deposit_call_data: bytes,
-        guardian_signatures: list[tuple[bytes, bytes]],
+        guardian_signatures: list[tuple[str, str]],
     ):
         """
         Calls LIDO.deposit(maxDepositsPerBlock, stakingModuleId, depositCalldata).
@@ -65,7 +65,7 @@ class DepositSecurityModuleContract(ContractInterface):
 
         | ATTEST_MESSAGE_PREFIX | blockNumber | blockHash | depositRoot | stakingModuleId | nonce |
         """
-        response = self.functions.depositBufferedEther(
+        tx = self.functions.depositBufferedEther(
             block_number,
             block_hash,
             deposit_root,
@@ -83,7 +83,7 @@ class DepositSecurityModuleContract(ContractInterface):
             deposit_call_data,
             guardian_signatures,
         )})
-        return response
+        return tx
 
     def get_pause_message_prefix(self, block_identifier: BlockIdentifier = 'latest') -> bytes:
         response = self.functions.PAUSE_MESSAGE_PREFIX().call(block_identifier=block_identifier)

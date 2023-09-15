@@ -3,6 +3,7 @@ import re
 from typing import Callable, TypedDict
 
 from schema import Regex, Schema, And
+from web3 import Web3
 
 from cryptography.verify_signature import verify_message_with_signature
 
@@ -156,3 +157,8 @@ PingMessageSchema = Schema({
     'guardianAddress': And(str, ADDRESS_REGREX),
     'stakingModuleIds': [int]
 }, ignore_extra_keys=True)
+
+
+def to_check_sum_address(msg: dict):
+    msg['guardianAddress'] = Web3.to_checksum_address(msg['guardianAddress'])
+    return msg

@@ -27,4 +27,4 @@ def message_metrics_filter(msg: DepositMessage) -> bool:
         PING_MESSAGES.labels(address, version).inc()
         return False
 
-    # TODO Log all filtered messages
+    logger.warning({'msg': 'Received unexpected msg type.', 'value': msg, 'type': msg_type})
