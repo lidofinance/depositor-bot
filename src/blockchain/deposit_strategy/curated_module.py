@@ -45,7 +45,7 @@ class CuratedModuleDepositStrategy(ModuleDepositStrategyInterface):
         depositable_ether = self.w3.lido.lido.get_depositable_ether()
         DEPOSITABLE_ETHER.labels(self.module_id).set(depositable_ether)
 
-        possible_deposits_amount = self.w3.lido.staking_router.get_staking_module_deposits_count(
+        possible_deposits_amount = self.w3.lido.staking_router.get_staking_module_max_deposits_count(
             self.module_id,
             depositable_ether,
         )
