@@ -59,8 +59,8 @@ class Executor:
     def _wait_until_next_block(self) -> BlockData:
         with TimeoutManager(max(
             # Wait at least 5 slots before throw exception
-            5 * SLOT_TIME,
-            self.blocks_between_execution * SLOT_TIME * 2
+            12 * SLOT_TIME,
+            self.blocks_between_execution * SLOT_TIME * 8
         )):
             while True:
                 latest_block: BlockData = self.w3.eth.get_block('latest')
