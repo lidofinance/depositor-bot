@@ -4,7 +4,6 @@ from eth_typing import BlockIdentifier, Hash32
 
 from blockchain.contracts.base_interface import ContractInterface
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -19,6 +18,6 @@ class DepositContract(ContractInterface):
         logger.info({
             'msg': f'Call `get_deposit_root()`.',
             'value': response.hex(),
-            'block_identifier': block_identifier.__repr__(),
+            'block_identifier': repr(block_identifier),
         })
         return response

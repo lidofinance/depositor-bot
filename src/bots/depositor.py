@@ -1,34 +1,30 @@
 import logging
 from collections import defaultdict
-from typing import Optional, Callable
+from typing import Callable, Optional
 
 from eth_typing import Hash32
 from schema import Or, Schema
 from web3.types import BlockData
 
 import variables
-
 from blockchain.deposit_strategy.curated_module import CuratedModuleDepositStrategy
 from blockchain.deposit_strategy.interface import ModuleDepositStrategyInterface
 from blockchain.deposit_strategy.prefered_module_to_deposit import get_preferred_to_deposit_module
 from blockchain.typings import Web3
 from cryptography.verify_signature import compute_vs
-from metrics.metrics import (
-    ACCOUNT_BALANCE, CURRENT_QUORUM_SIZE,
-)
+from metrics.metrics import ACCOUNT_BALANCE, CURRENT_QUORUM_SIZE
 from metrics.transport_message_metrics import message_metrics_filter
 from transport.msg_providers.kafka import KafkaMessageProvider
-from transport.msg_providers.rabbit import RabbitProvider, MessageType
+from transport.msg_providers.rabbit import MessageType, RabbitProvider
 from transport.msg_schemas import (
+    DepositMessage,
     DepositMessageSchema,
     PingMessageSchema,
     get_deposit_messages_sign_filter,
-    DepositMessage,
     to_check_sum_address,
 )
 from transport.msg_storage import MessageStorage
 from transport.types import TransportType
-
 
 logger = logging.getLogger(__name__)
 

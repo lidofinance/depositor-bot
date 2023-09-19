@@ -8,8 +8,11 @@ from web3.types import Wei
 
 import variables
 from blockchain.deposit_strategy.interface import ModuleDepositStrategyInterface
-from metrics.metrics import GAS_FEE, DEPOSITABLE_ETHER, POSSIBLE_DEPOSITS_AMOUNT
-
+from metrics.metrics import (
+    DEPOSITABLE_ETHER,
+    GAS_FEE,
+    POSSIBLE_DEPOSITS_AMOUNT,
+)
 
 logger = logging.getLogger(__name__)
 

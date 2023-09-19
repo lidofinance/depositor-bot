@@ -2,11 +2,10 @@ import logging
 import re
 from typing import Callable, TypedDict
 
-from schema import Regex, Schema, And
+from schema import And, Regex, Schema
 from web3 import Web3
 
 from cryptography.verify_signature import verify_message_with_signature
-
 
 logger = logging.getLogger(__name__)
 

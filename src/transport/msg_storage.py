@@ -1,4 +1,4 @@
-from typing import List, Callable, Iterable
+from typing import Callable, Iterable, List
 
 from transport.msg_providers.common import BaseMessageProvider
 from transport.msg_schemas import DepositMessage

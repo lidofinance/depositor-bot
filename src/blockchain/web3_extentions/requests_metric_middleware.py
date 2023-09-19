@@ -2,12 +2,11 @@ import logging
 from typing import Any, Callable
 from urllib.parse import urlparse
 
-from requests import Response, HTTPError
+from requests import HTTPError, Response
 from web3 import Web3
 from web3.types import RPCEndpoint, RPCResponse
 
-from metrics.metrics import ETH_RPC_REQUESTS_DURATION, ETH_RPC_REQUESTS
-
+from metrics.metrics import ETH_RPC_REQUESTS, ETH_RPC_REQUESTS_DURATION
 
 logger = logging.getLogger(__name__)
 

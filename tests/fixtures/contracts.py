@@ -3,10 +3,10 @@ from typing import cast
 import pytest
 
 import variables
+from blockchain.contracts.deposit import DepositContract
 from blockchain.contracts.deposit_security_module import DepositSecurityModuleContract
 from blockchain.contracts.lido import LidoContract
 from blockchain.contracts.lido_locator import LidoLocatorContract
-from blockchain.contracts.deposit import DepositContract
 from blockchain.contracts.staking_router import StakingRouterContract
 
 

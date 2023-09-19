@@ -3,9 +3,9 @@ from unittest.mock import Mock
 import pytest
 
 from blockchain.deposit_strategy.prefered_module_to_deposit import (
-    get_preferred_to_deposit_module,
     get_active_modules,
     get_modules_stats,
+    get_preferred_to_deposit_module,
 )
 
 

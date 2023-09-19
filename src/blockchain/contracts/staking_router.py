@@ -1,9 +1,8 @@
 import logging
 
-from web3.types import Wei, BlockIdentifier
+from web3.types import BlockIdentifier, Wei
 
 from blockchain.contracts.base_interface import ContractInterface
-
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +16,7 @@ class StakingRouterContract(ContractInterface):
         logger.info({
             'msg': f'Call `get_staking_module_ids()`.',
             'value': response,
-            'block_identifier': block_identifier.__repr__(),
+            'block_identifier': repr(block_identifier),
         })
         return response
 
@@ -30,7 +29,7 @@ class StakingRouterContract(ContractInterface):
         logger.info({
             'msg': f'Call `getStakingModuleIsActive({staking_module_id})`.',
             'value': response,
-            'block_identifier': block_identifier.__repr__(),
+            'block_identifier': repr(block_identifier),
         })
         return response
 
@@ -43,7 +42,7 @@ class StakingRouterContract(ContractInterface):
         logger.info({
             'msg': f'Call `getStakingModuleNonce({staking_module_id})`.',
             'value': response,
-            'block_identifier': block_identifier.__repr__(),
+            'block_identifier': repr(block_identifier),
         })
         return response
 
@@ -60,6 +59,6 @@ class StakingRouterContract(ContractInterface):
         logger.info({
             'msg': f'Call `getStakingModuleMaxDepositsCount({staking_module_id}, {depositable_ether})`.',
             'value': response,
-            'block_identifier': block_identifier.__repr__(),
+            'block_identifier': repr(block_identifier),
         })
         return response

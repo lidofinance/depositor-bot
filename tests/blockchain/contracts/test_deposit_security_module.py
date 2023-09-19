@@ -1,7 +1,11 @@
 import pytest
 
 from tests.utils.contract_utils import check_contract
-from tests.utils.regrex import HASH_REGREX, check_value_re, check_value_type, ADDRESS_REGREX
+from tests.utils.regrex import (
+    ADDRESS_REGREX,
+    check_value_re,
+    check_value_type,
+)
 
 
 @pytest.mark.integration

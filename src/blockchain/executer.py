@@ -1,6 +1,6 @@
 import logging
 from time import sleep
-from typing import Callable, Any, Optional
+from typing import Any, Callable, Optional
 
 from web3.types import BlockData
 from web3_multi_provider import NoActiveProviderError
@@ -9,7 +9,6 @@ from blockchain.constants import SLOT_TIME
 from blockchain.typings import Web3
 from metrics import healthcheck_pulse
 from utils.timeout import TimeoutManager, TimeoutManagerError
-
 
 logger = logging.getLogger(__name__)
 

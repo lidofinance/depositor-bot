@@ -1,4 +1,4 @@
-from prometheus_client.metrics import Gauge, Counter, Histogram
+from prometheus_client.metrics import Counter, Gauge, Histogram
 
 PREFIX = 'depositor_bot'
 

@@ -1,9 +1,8 @@
 import abc
 import logging
-from typing import List, Any
+from typing import Any, List
 
 from schema import Schema, SchemaError
-
 
 logger = logging.getLogger(__name__)
 

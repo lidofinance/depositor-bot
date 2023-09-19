@@ -1,9 +1,8 @@
 import logging
 
-from metrics.metrics import DEPOSIT_MESSAGES, PING_MESSAGES, PAUSE_MESSAGES
+from metrics.metrics import DEPOSIT_MESSAGES, PAUSE_MESSAGES, PING_MESSAGES
 from transport.msg_providers.rabbit import MessageType
 from transport.msg_schemas import DepositMessage
-
 
 logger = logging.getLogger(__name__)
 

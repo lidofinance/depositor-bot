@@ -8,12 +8,11 @@ from schema import Schema
 from transport.msg_providers.common import BaseMessageProvider
 from variables import (
     KAFKA_BROKER_ADDRESS_1,
-    KAFKA_USERNAME,
+    KAFKA_NETWORK,
     KAFKA_PASSWORD,
     KAFKA_TOPIC,
-    KAFKA_NETWORK,
+    KAFKA_USERNAME,
 )
-
 
 logger = logging.getLogger(__name__)
 

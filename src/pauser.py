@@ -5,13 +5,12 @@ from web3_multi_provider import FallbackProvider
 import variables
 from blockchain.executer import Executor
 from blockchain.web3_extentions.lido_contracts import LidoContracts
+from blockchain.web3_extentions.requests_metric_middleware import add_requests_metric_middleware
 from blockchain.web3_extentions.transaction import TransactionUtils
 from bots.pause import PauserBot
 from metrics.healthcheck_pulse import start_pulse_server
 from metrics.logging import logging
-from blockchain.web3_extentions.requests_metric_middleware import add_requests_metric_middleware
 from metrics.metrics import BUILD_INFO
-
 
 logger = logging.getLogger(__name__)
 

@@ -1,5 +1,5 @@
 import logging
-from typing import Callable, Any, Optional
+from typing import Any, Callable, Optional
 
 from blockchain.contracts.base_interface import ContractInterface
 

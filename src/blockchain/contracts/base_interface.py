@@ -1,5 +1,5 @@
 import json
-from typing import Optional, Any
+from typing import Any, Optional
 
 from web3 import Web3
 from web3.contract import Contract

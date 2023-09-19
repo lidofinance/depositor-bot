@@ -2,14 +2,17 @@ import logging
 
 from eth_account.datastructures import SignedTransaction
 from web3.contract import ContractFunction
-from web3.exceptions import ContractLogicError, TransactionNotFound, TimeExhausted
+from web3.exceptions import (
+    ContractLogicError,
+    TimeExhausted,
+    TransactionNotFound,
+)
 from web3.module import Module
 from web3.types import BlockData, Wei
 
 import variables
 from blockchain.constants import SLOT_TIME
 from metrics.metrics import TX_SEND
-
 
 logger = logging.getLogger(__name__)
 

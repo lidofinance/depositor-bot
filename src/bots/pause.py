@@ -1,7 +1,7 @@
 import logging
 from typing import Callable
 
-from schema import Schema, Or
+from schema import Or, Schema
 from web3.types import BlockData
 
 import variables
@@ -9,17 +9,16 @@ from blockchain.typings import Web3
 from cryptography.verify_signature import compute_vs
 from metrics.transport_message_metrics import message_metrics_filter
 from transport.msg_providers.kafka import KafkaMessageProvider
-from transport.msg_providers.rabbit import RabbitProvider, MessageType
+from transport.msg_providers.rabbit import MessageType, RabbitProvider
 from transport.msg_schemas import (
-    PauseMessageSchema,
-    get_pause_messages_sign_filter,
     PauseMessage,
+    PauseMessageSchema,
     PingMessageSchema,
+    get_pause_messages_sign_filter,
     to_check_sum_address,
 )
 from transport.msg_storage import MessageStorage
 from transport.types import TransportType
-
 
 logger = logging.getLogger(__name__)
 

@@ -4,7 +4,6 @@ from typing import Any, List, Tuple
 from eth_account import Account
 from web3 import Web3
 
-
 logger = logging.getLogger(__name__)
 
 

@@ -4,7 +4,6 @@ import os
 from eth_account import Account
 from web3 import Web3
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -15,7 +14,7 @@ WEB3_RPC_ENDPOINTS = os.getenv('WEB3_RPC_ENDPOINTS', '').split(',')
 WALLET_PRIVATE_KEY = os.getenv('WALLET_PRIVATE_KEY', None)
 
 if WALLET_PRIVATE_KEY:
-    ACCOUNT = Account.from_key(WALLET_PRIVATE_KEY)
+    ACCOUNT = Account.from_key(private_key=WALLET_PRIVATE_KEY)
     logger.info({'msg': 'Load account from private key.', 'value': ACCOUNT.address})
 else:
     ACCOUNT = None

@@ -1,8 +1,8 @@
-import json
 import asyncio
-import aiohttp
-import aiofiles
+import json
 
+import aiofiles
+import aiohttp
 
 sync_config = {
     'branch': 'feature/shapella-upgrade',

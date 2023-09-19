@@ -3,9 +3,8 @@ from eth_account import Account
 from eth_typing import BlockNumber
 from web3.types import BlockData, Wei
 
-from tests.fixtures.provider import *
 from tests.fixtures.contracts import *
-
+from tests.fixtures.provider import *
 
 # https://goerli.etherscan.io/address/0xe57025E250275cA56f92d76660DEcfc490C7E79A#readContract#F12
 DSM_OWNER = '0xa5F1d7D49F581136Cf6e58B32cBE9a2039C48bA1'

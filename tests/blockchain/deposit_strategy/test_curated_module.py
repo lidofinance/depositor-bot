@@ -5,7 +5,6 @@ import pytest
 import variables
 from blockchain.deposit_strategy.curated_module import CuratedModuleDepositStrategy
 
-
 MODULE_ID = 1337
 
 

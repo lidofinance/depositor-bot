@@ -5,7 +5,6 @@ from web3.module import Module
 
 import variables
 from blockchain.contracts.deposit import DepositContract
-
 from blockchain.contracts.deposit_security_module import DepositSecurityModuleContract
 from blockchain.contracts.lido import LidoContract
 from blockchain.contracts.lido_locator import LidoLocatorContract
