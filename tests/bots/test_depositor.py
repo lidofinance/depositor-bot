@@ -50,28 +50,18 @@ def deposit_message():
 
 
 @pytest.mark.unit
-def test_depositor_check_all_modules(depositor_bot, block_data):
-    depositor_bot._deposit_to_module = Mock(return_value=False)
-    depositor_bot.execute(block_data)
-
-    assert depositor_bot._deposit_to_module.call_count == 2
-
-
-@pytest.mark.unit
-def test_depositor_deposit_only_to_one_module(depositor_bot, block_data):
-    variables.DEPOSIT_MODULES_WHITELIST = [2]
-    depositor_bot._deposit_to_module = Mock(return_value=False)
-    depositor_bot.execute(block_data)
-
-    assert depositor_bot._deposit_to_module.call_count == 1
-
-
-@pytest.mark.unit
 def test_depositor_one_module_deposited(depositor_bot, block_data):
+    modules = list(range(10))
+
+    depositor_bot.w3.lido.deposit_security_module.get_max_deposits = Mock(return_value=100)
+    depositor_bot.w3.lido.lido.get_depositable_ether = Mock(return_value=10 * 32 * 10 ** 18)
+    depositor_bot.w3.lido.staking_router.get_staking_module_ids = Mock(return_value=modules)
+    depositor_bot.w3.lido.staking_router.get_staking_module_max_deposits_count = Mock(return_value=0)
+
     depositor_bot._deposit_to_module = Mock(return_value=True)
     depositor_bot.execute(block_data)
 
-    assert depositor_bot._deposit_to_module.call_count == 2
+    assert depositor_bot._deposit_to_module.call_count == 1
 
 
 @pytest.mark.unit

@@ -10,6 +10,7 @@ import variables
 
 from blockchain.deposit_strategy.curated_module import CuratedModuleDepositStrategy
 from blockchain.deposit_strategy.interface import ModuleDepositStrategyInterface
+from blockchain.deposit_strategy.prefered_module_to_deposit import get_preferred_to_deposit_module
 from blockchain.typings import Web3
 from cryptography.verify_signature import compute_vs
 from metrics.metrics import (
@@ -74,14 +75,10 @@ class DepositorBot:
     def execute(self, block: BlockData) -> bool:
         self._check_balance()
 
-        module_ids = self.w3.lido.staking_router.get_staking_module_ids()
+        module_id = get_preferred_to_deposit_module(self.w3, variables.DEPOSIT_MODULES_WHITELIST)
 
-        for module_id in module_ids:
-            if module_id not in variables.DEPOSIT_MODULES_WHITELIST:
-                logger.info({'msg': f'Module [{module_id}] not in white list. Skip deposit for module.'})
-                continue
-
-            logger.info({'msg': f'Do deposit for module with id: {module_id}.'})
+        if module_id:
+            logger.info({'msg': f'Do deposit to module with id: {module_id}.'})
             try:
                 self._deposit_to_module(module_id)
             except ModuleNotSupportedError as error:
@@ -121,8 +118,7 @@ class DepositorBot:
         return False
 
     def _get_module_strategy(self, module_id: int) -> ModuleDepositStrategyInterface:
-        # ToDo somehow support different gas strategies for different module types
-        if module_id == 1:
+        if module_id in (1, 2):
             return CuratedModuleDepositStrategy(self.w3, module_id)
 
         raise ModuleNotSupportedError(f'Module with id: {module_id} is not supported yet.')

@@ -47,7 +47,7 @@ class StakingRouterContract(ContractInterface):
         })
         return response
 
-    def get_staking_module_deposits_count(
+    def get_staking_module_max_deposits_count(
         self,
         staking_module_id: int,
         depositable_ether: Wei,

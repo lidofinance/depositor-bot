@@ -33,10 +33,10 @@ def test_get_possible_deposits_amount(cmds):
     possible_deposits = depositable_eth // 32
 
     cmds.w3.lido.lido.get_depositable_ether = Mock(return_value=depositable_eth)
-    cmds.w3.lido.staking_router.get_staking_module_deposits_count = Mock(return_value=possible_deposits)
+    cmds.w3.lido.staking_router.get_staking_module_max_deposits_count = Mock(return_value=possible_deposits)
 
     assert cmds._get_possible_deposits_amount() == possible_deposits
-    cmds.w3.lido.staking_router.get_staking_module_deposits_count.assert_called_once_with(
+    cmds.w3.lido.staking_router.get_staking_module_max_deposits_count.assert_called_once_with(
         MODULE_ID,
         depositable_eth,
     )

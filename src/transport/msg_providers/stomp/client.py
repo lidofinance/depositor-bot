@@ -55,7 +55,7 @@ class Client:
         self.on_close()
 
     def _on_error(self, ws_app, error, *args):
-        logging.error({'msg': 'Websocket error.', 'error': error})
+        logging.error({'msg': 'Websocket error.', 'error': str(error)})
 
     def _on_message(self, ws_app, message, *args):
         logging.debug("\n<<< " + str(message))
