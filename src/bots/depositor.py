@@ -151,6 +151,7 @@ class DepositorBot:
             max_quorum_size = max(quorum_size, max_quorum_size)
 
         CURRENT_QUORUM_SIZE.labels('current').set(max_quorum_size)
+        return None
 
     def _get_message_actualize_filter(self, module_id: int) -> Callable[[DepositMessage], bool]:
         latest = self.w3.eth.get_block('latest')

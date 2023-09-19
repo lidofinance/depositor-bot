@@ -29,8 +29,8 @@ def verify_message_with_signature(data: List[Any], abi: List[str], address: str,
     Check that message was correctly signed by provided address holder.
     """
     try:
-        msg_hash = Web3.solidityKeccak(abi, data)
-        recovered_address = Account.recoverHash(msg_hash, vrs=vrs)
+        msg_hash = Web3.solidityKeccak(abi_types=abi, values=data)
+        recovered_address = Account.recoverHash(message_hash=msg_hash, vrs=vrs)
     except Exception as error:
         logger.warning({'msg': 'Check signature failed.', 'error': str(error)})
         return False
