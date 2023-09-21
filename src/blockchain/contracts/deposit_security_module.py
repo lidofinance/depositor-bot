@@ -5,7 +5,6 @@ from web3.types import BlockIdentifier
 
 from blockchain.contracts.base_interface import ContractInterface
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -127,15 +126,3 @@ class DepositSecurityModuleContract(ContractInterface):
             guardian_signature,
         )})
         return tx
-
-    def get_max_deposits(self, block_identifier: BlockIdentifier = 'latest'):
-        """
-        Returns maxDepositsPerBlock
-        """
-        response = self.functions.getMaxDeposits().call(block_identifier=block_identifier)
-        logger.info({
-            'msg': f'Call `getMaxDeposits()`.',
-            'value': response,
-            'block_identifier': block_identifier.__repr__(),
-        })
-        return response
