@@ -1,6 +1,7 @@
 import logging
 
 from eth_account.datastructures import SignedTransaction
+from eth_typing import ChecksumAddress
 from web3.contract import ContractFunction
 from web3.exceptions import ContractLogicError, TransactionNotFound, TimeExhausted
 from web3.module import Module
@@ -47,10 +48,12 @@ class TransactionUtils(Module):
             variables.MAX_PRIORITY_FEE,
         )
 
+        gas_limit = self._estimate_gas(transaction, variables.ACCOUNT.address)
+
         transaction_dict = transaction.build_transaction({
             'from': variables.ACCOUNT.address,
             # TODO Estimate gas and min(contract_gas_limit, estimated_gas * 1.3)
-            'gas': variables.CONTRACT_GAS_LIMIT,
+            'gas': gas_limit,
             'maxFeePerGas': pending['baseFeePerGas'] * 2 + priority,
             'maxPriorityFeePerGas': priority,
             "nonce": self.web3.eth.get_transaction_count(variables.ACCOUNT.address),
@@ -72,6 +75,22 @@ class TransactionUtils(Module):
             logger.warning({'msg': 'Transaction not found in blockchain.'})
 
         return status
+
+    @staticmethod
+    def _estimate_gas(transaction: ContractFunction, account_address: ChecksumAddress) -> int:
+        try:
+            gas = transaction.estimate_gas({'from': account_address})
+        except ContractLogicError as error:
+            logger.warning({'msg': 'Can not estimate gas. Contract logic error.', 'error': str(error)})
+            return variables.CONTRACT_GAS_LIMIT
+        except ValueError as error:
+            logger.warning({'msg': 'Can not estimate gas. Execution reverted.', 'error': str(error)})
+            return variables.CONTRACT_GAS_LIMIT
+
+        return min(
+            variables.CONTRACT_GAS_LIMIT,
+            int(gas * 1.3),
+        )
 
     def flashbots_send(
         self,
