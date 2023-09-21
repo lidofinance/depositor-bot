@@ -1,12 +1,9 @@
 from unittest.mock import Mock
 
 import pytest
-from eth_abi import encode
-from eth_account.messages import encode_defunct, encode_structured_data
-from eth_hash.backends.pycryptodome import keccak256
 
 import variables
-from bots.pause import PauserBot
+from bots.pauser import PauserBot
 from tests.conftest import DSM_OWNER
 
 # WARNING: These accounts, and their private keys, are publicly known.

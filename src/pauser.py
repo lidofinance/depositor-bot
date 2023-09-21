@@ -1,13 +1,13 @@
-from blockchain.executer import Executor
-from bots.pause import PauserBot
 from prometheus_client import start_http_server
 from web3 import Web3
 from web3_multi_provider import FallbackProvider
 
 import variables
+from blockchain.executor import Executor
 from blockchain.web3_extentions.lido_contracts import LidoContracts
 from blockchain.web3_extentions.requests_metric_middleware import add_requests_metric_middleware
 from blockchain.web3_extentions.transaction import TransactionUtils
+from bots.pauser import PauserBot
 from metrics.healthcheck_pulse import start_pulse_server
 from metrics.logging import logging
 from metrics.metrics import BUILD_INFO
