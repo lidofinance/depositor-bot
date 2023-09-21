@@ -30,7 +30,7 @@ This deposit is executed using the depositBufferedEther function within the "Dep
    - Set WEB3_RPC_ENDPOINTS
    - Set WALLET_PRIVATE_KEY
    - Set CREATE_TRANSACTIONS to true
-   - Set TRANSPORTS to rabbit
+   - Set MESSAGE_TRANSPORTS to rabbit
    - Set RABBIT_MQ_URL, RABBIT_MQ_USERNAME and RABBIT_MQ_PASSWORD
 3. ```docker-compose up```
 4. Send metrics and logs to grafana
@@ -49,7 +49,7 @@ This deposit is executed using the depositBufferedEther function within the "Dep
 | DEPOSIT_CONTRACT          | 0x00000000219ab540356cBB839Cbe05303d7705Fa | Ethereum deposit contract address                                                                                        |
 | DEPOSIT_MODULES_WHITELIST | -                                          | List of staking module's ids in which the depositor bot will make deposits                                               |
 | ---                       | ---	                                       | ---                                                                                                                      |
-| TRANSPORTS                | -                                          | Transports used in bot. One of/or both: rabbit/kafka                                                                     |
+| MESSAGE_TRANSPORTS                | -                                          | Transports used in bot. One of/or both: rabbit/kafka                                                                     |
 | RABBIT_MQ_URL             | -                                          | RabbitMQ url                                                                                                             |
 | RABBIT_MQ_USERNAME        | -                                          | RabbitMQ username for virtualhost                                                                                        |
 | RABBIT_MQ_PASSWORD        | -                                          | RabbitMQ password for virtualhost                                                                                        |
