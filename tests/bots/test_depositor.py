@@ -136,6 +136,18 @@ def test_depositor_message_actualizer_not_guardian(setup_deposit_message, deposi
 
 
 @pytest.mark.unit
+def test_depositor_message_actualizer_no_selected_module(setup_deposit_message, depositor_bot, deposit_message, block_data):
+    second = deposit_message.copy()
+    second['stakingModuleId'] = 2
+
+    message_filter = depositor_bot._get_message_actualize_filter(2)
+    assert not list(filter(message_filter, [
+        deposit_message,
+    ]))
+    assert len(list(filter(message_filter, [deposit_message, second]))) == 1
+
+
+@pytest.mark.unit
 def test_depositor_message_actualizer_outdated(setup_deposit_message, depositor_bot, deposit_message, block_data):
     deposit_message['blockNumber'] = block_data['number'] - 250
     message_filter = depositor_bot._get_message_actualize_filter(1)

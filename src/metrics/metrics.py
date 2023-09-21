@@ -26,13 +26,13 @@ ACCOUNT_BALANCE = Gauge('account_balance', 'Account balance', namespace=PREFIX)
 DEPOSIT_MESSAGES = Gauge(
     'deposit_messages',
     'Guardians deposit messages',
-    ['address', 'version'],
+    ['address', 'module_id', 'version'],
     namespace=PREFIX,
 )
 PAUSE_MESSAGES = Gauge(
     'pause_messages',
     'Guardians pause messages',
-    ['address', 'version'],
+    ['address', 'module_id', 'version'],
     namespace=PREFIX,
 )
 PING_MESSAGES = Gauge(
@@ -73,4 +73,11 @@ ETH_RPC_REQUESTS = Counter(
     'Total count of requests to ETH1 RPC',
     ['method', 'code', 'domain'],
     namespace=PREFIX
+)
+
+UNEXPECTED_EXCEPTIONS = Counter(
+    'unexpected_exceptions',
+    'Total count of unexpected exceptions',
+    ['type'],
+    namespace=PREFIX,
 )

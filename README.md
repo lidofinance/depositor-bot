@@ -47,7 +47,7 @@ This deposit is executed using the depositBufferedEther function within the "Dep
 | CREATE_TRANSACTIONS       | false                                      | If true then tx will be send to blockchain                                                                               |
 | LIDO_LOCATOR              | 0xC1d0b3DE6792Bf6b4b37EccdcC24e45978Cfd2Eb | Lido Locator address. Mainnet by default. Other networks could be found [here](https://docs.lido.fi/deployed-contracts/) |
 | DEPOSIT_CONTRACT          | 0x00000000219ab540356cBB839Cbe05303d7705Fa | Ethereum deposit contract address                                                                                        |
-| DEPOSIT_MODULES_WHITELIST | -                                          | List of staking module's ids in which the depositor bot will make deposits                                               |
+| DEPOSIT_MODULES_WHITELIST | 1                                          | List of staking module's ids in which the depositor bot will make deposits                                               |
 | ---                       | ---	                                       | ---                                                                                                                      |
 | MESSAGE_TRANSPORTS        | -                                          | Transports used in bot. One of/or both: rabbit/kafka                                                                     |
 | RABBIT_MQ_URL             | -                                          | RabbitMQ url                                                                                                             |

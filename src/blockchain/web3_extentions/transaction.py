@@ -10,7 +10,6 @@ import variables
 from blockchain.constants import SLOT_TIME
 from metrics.metrics import TX_SEND
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -92,7 +91,7 @@ class TransactionUtils(Module):
         except TransactionNotFound:
             return False
         else:
-            logger.info({'msg': 'Sent transaction found.', 'value': rec[-1]['transactionHash'].hex()})
+            logger.info({'msg': 'Sent transaction included in blockchain.', 'value': rec[-1]['transactionHash'].hex()})
             return True
 
     def classic_send(self, signed_tx: SignedTransaction, timeout_in_blocks: int) -> bool:
@@ -102,13 +101,13 @@ class TransactionUtils(Module):
             logger.error({'msg': 'Transaction reverted.', 'value': str(error)})
             return False
 
-        logger.info({'msg': 'Sent transaction found.', 'value': tx_hash.hex()})
+        logger.info({'msg': 'Transaction sent.', 'value': tx_hash.hex()})
         try:
             tx_receipt = self.web3.eth.wait_for_transaction_receipt(tx_hash, (timeout_in_blocks + 1) * SLOT_TIME)
         except TimeExhausted:
             return False
 
-        logger.info({'msg': 'Transaction found', 'value': tx_receipt['transactionHash'].hex()})
+        logger.info({'msg': 'Sent transaction included in blockchain.', 'value': tx_receipt['transactionHash'].hex()})
         return True
 
     def _get_priority_fee(self, percentile: int, min_priority_fee: Wei, max_priority_fee: Wei):
