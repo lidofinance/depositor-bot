@@ -61,9 +61,15 @@ def web3_with_dvt_module(web3_provider_integration):
 
     assert r.status_code == 200
 
-    r = requests.post(CHRONIX_URL + 'v1/env/' + str(port) + '/simple-dvt/add-node-operators-with-state/')
+    r = requests.post(CHRONIX_URL + 'v1/env/' + str(port) + '/simple-dvt/add-node-operator/', json={
+        'name': 'NOname',
+        'norAddress': '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
+        'rewardAddress': '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
+    })
 
     assert r.status_code == 200
+
+    r = requests.post(CHRONIX_URL + 'v1/env/' + str(port) + '/simple-dvt/add-node-operator-keys/')
 
     yield web3_provider_integration
 
