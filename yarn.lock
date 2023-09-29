@@ -2617,10 +2617,10 @@ chokidar@3.5.3, chokidar@^3.4.0:
   optionalDependencies:
     fsevents "~2.3.2"
 
-chronix@0.0.2-beta-plugin-v10:
-  version "0.0.2-beta-plugin-v10"
-  resolved "https://registry.yarnpkg.com/chronix/-/chronix-0.0.2-beta-plugin-v10.tgz#772ff79cb3c609df8c7db98c2bcd903a03b4d164"
-  integrity sha512-pUXQH9C0YZJ0EdryNCW6zDfhjzxjHRXtkVfQGyLLWq6lb0F/pPJTn4LxlN8keAqPv6yBX8nX4LytswEgC8xoew==
+chronix@0.0.2-beta-plugin-v12:
+  version "0.0.2-beta-plugin-v12"
+  resolved "https://registry.yarnpkg.com/chronix/-/chronix-0.0.2-beta-plugin-v12.tgz#45975ddf9c916528e1185cdef045950ba3888e0e"
+  integrity sha512-z5vMM9cNGqMxxWllN6GZJ+RdoX2KT5/P+PkQ8RQ+Va6N++OJ6byrPJ+WCSorRXyZ9SeAF/QiXfL7ToGcICg98A==
   dependencies:
     "@aragon/os" "^4.4.0"
     "@nomiclabs/hardhat-ethers" "^2.2.3"

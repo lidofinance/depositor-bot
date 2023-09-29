@@ -1,6 +1,6 @@
 {
   "devDependencies": {
-    "chronix": "0.0.2-beta-plugin-v10",
+    "chronix": "0.0.2-beta-plugin-v12",
     "dotenv": "^16.3.1",
     "hardhat": "^2.17.3",
     "simple-dvt-v1": "0.0.5"

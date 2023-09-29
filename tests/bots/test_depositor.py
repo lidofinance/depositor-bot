@@ -258,16 +258,15 @@ def get_deposit_message(web3, account_address, pk, module_id):
     prefix = web3.lido.deposit_security_module.get_attest_message_prefix()
     block_number = latest.number
     deposit_root = '0x' + web3.lido.deposit_contract.get_deposit_root().hex()
-    staking_module_id = int(1)
     nonce = web3.lido.staking_router.get_staking_module_nonce(module_id)
 
     # | ATTEST_MESSAGE_PREFIX | blockNumber | blockHash | depositRoot | stakingModuleId | nonce |
 
-    msg_hash = web3.solidityKeccak(
+    msg_hash = web3.solidity_keccak(
         ['bytes32', 'uint256', 'bytes32', 'bytes32', 'uint256', 'uint256'],
-        [prefix, block_number, latest.hash.hex(), deposit_root, staking_module_id, nonce],
+        [prefix, block_number, latest.hash.hex(), deposit_root, module_id, nonce],
     )
-    signed = web3.eth.account.signHash(msg_hash, private_key=pk)
+    signed = web3.eth.account._sign_hash(msg_hash, private_key=pk)
 
     msg = {
         "type": "deposit",
@@ -277,10 +276,10 @@ def get_deposit_message(web3, account_address, pk, module_id):
         "blockHash": latest.hash.hex(),
         "guardianAddress": account_address,
         "guardianIndex": 8,
-        "stakingModuleId": staking_module_id,
+        "stakingModuleId": module_id,
         "signature": {
-            "r": signed.r.to_bytes(32, 'big').hex(),
-            "s": signed.s.to_bytes(32, 'big').hex(),
+            "r": '0x' + signed.r.to_bytes(32, 'big').hex(),
+            "s": '0x' + signed.s.to_bytes(32, 'big').hex(),
             "v": signed.v,
         },
     }
@@ -291,14 +290,11 @@ def get_deposit_message(web3, account_address, pk, module_id):
 @pytest.fixture
 def add_accounts_to_guardian(web3_lido_integration, set_integration_account):
     web3_lido_integration.provider.make_request('hardhat_impersonateAccount', [DSM_OWNER])
+    web3_lido_integration.provider.make_request('hardhat_setBalance', [DSM_OWNER, '0x500000000000000000000000'])
     quorum_size = web3_lido_integration.lido.deposit_security_module.get_guardian_quorum()
 
-    try:
-        # If guardian removal failed
-        web3_lido_integration.lido.deposit_security_module.functions.addGuardian(COUNCIL_ADDRESS_1, 2).transact({'from': DSM_OWNER})
-        web3_lido_integration.lido.deposit_security_module.functions.addGuardian(COUNCIL_ADDRESS_2, 2).transact({'from': DSM_OWNER})
-    except:
-        pass
+    web3_lido_integration.lido.deposit_security_module.functions.addGuardian(COUNCIL_ADDRESS_1, 2).transact({'from': DSM_OWNER})
+    web3_lido_integration.lido.deposit_security_module.functions.addGuardian(COUNCIL_ADDRESS_2, 2).transact({'from': DSM_OWNER})
 
     yield web3_lido_integration
 
@@ -307,18 +303,32 @@ def add_accounts_to_guardian(web3_lido_integration, set_integration_account):
 
 
 @pytest.mark.integration
-def test_depositor_bot(web3_lido_integration, add_accounts_to_guardian, caplog):
+def test_depositor_bot(web3_lido_integration, add_accounts_to_guardian):
+    variables.DEPOSIT_MODULES_WHITELIST = [1, 2]
+    make_deposit(web3_lido_integration, 1)
+
+
+@pytest.mark.integration
+def test_deposit_to_second_module(web3_with_dvt_module, web3_lido_integration):
+    variables.DEPOSIT_MODULES_WHITELIST = [1, 2]
+    make_deposit(web3_lido_integration, 2)
+
+
+def make_deposit(web3_lido_integration, module_id):
+    web3_lido_integration.provider.make_request('hardhat_setBalance', [
+        web3_lido_integration.eth.accounts[0],
+        '0x500000000000000000000000',
+    ])
+
     max_deposits = web3_lido_integration.lido.deposit_security_module.functions.getMaxDeposits().call()
     web3_lido_integration.lido.deposit_security_module.functions.setMaxDeposits(2).transact({'from': DSM_OWNER})
 
     latest = web3_lido_integration.eth.get_block('latest')
 
-    module_id = 1
-
     old_module_nonce = web3_lido_integration.lido.staking_router.get_staking_module_nonce(module_id)
 
     deposit_message_1 = get_deposit_message(web3_lido_integration, COUNCIL_ADDRESS_1, COUNCIL_PK_1, module_id)
-    deposit_message_2 = get_deposit_message(web3_lido_integration, COUNCIL_ADDRESS_2, COUNCIL_PK_2, module_id)
+    deposit_message_2 = get_deposit_message(web3_lido_integration, COUNCIL_ADDRESS_1, COUNCIL_PK_1, module_id)
     deposit_message_3 = get_deposit_message(web3_lido_integration, COUNCIL_ADDRESS_2, COUNCIL_PK_2, module_id)
 
     db = DepositorBot(web3_lido_integration)
@@ -327,14 +337,14 @@ def test_depositor_bot(web3_lido_integration, add_accounts_to_guardian, caplog):
 
     assert web3_lido_integration.lido.staking_router.get_staking_module_nonce(module_id) == old_module_nonce
 
-    web3_lido_integration.eth.send_transaction({
+    web3_lido_integration.lido.lido.functions.submit(web3_lido_integration.eth.accounts[0]).transact({
         "from": web3_lido_integration.eth.accounts[0],
         "to": web3_lido_integration.lido.lido.address,
-        "value": 2000 * 10**18
+        "value": 50000 * 10**18
     })
 
     db.message_storage.messages = [deposit_message_1, deposit_message_2, deposit_message_3]
     db._get_module_strategy = Mock(return_value=Mock(return_value=True))
     assert db.execute(latest)
-    # assert web3_lido_integration.lido.staking_router.get_staking_module_nonce(module_id) == old_module_nonce + 1
+    assert web3_lido_integration.lido.staking_router.get_staking_module_nonce(module_id) == old_module_nonce + 1
     web3_lido_integration.lido.deposit_security_module.functions.setMaxDeposits(max_deposits).transact({'from': DSM_OWNER})
