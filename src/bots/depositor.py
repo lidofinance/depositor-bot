@@ -7,14 +7,15 @@ from schema import Or, Schema
 from web3.types import BlockData
 
 import variables
-
 from blockchain.deposit_strategy.curated_module import CuratedModuleDepositStrategy
 from blockchain.deposit_strategy.interface import ModuleDepositStrategyInterface
 from blockchain.deposit_strategy.prefered_module_to_deposit import get_preferred_to_deposit_module
 from blockchain.typings import Web3
 from cryptography.verify_signature import compute_vs
 from metrics.metrics import (
-    ACCOUNT_BALANCE, CURRENT_QUORUM_SIZE,
+    ACCOUNT_BALANCE,
+    CURRENT_QUORUM_SIZE,
+    UNEXPECTED_EXCEPTIONS,
 )
 from metrics.transport_message_metrics import message_metrics_filter
 from transport.msg_providers.kafka import KafkaMessageProvider
@@ -28,7 +29,6 @@ from transport.msg_schemas import (
 )
 from transport.msg_storage import MessageStorage
 from transport.types import TransportType
-
 
 logger = logging.getLogger(__name__)
 
@@ -165,6 +165,10 @@ class DepositorBot:
 
         def message_filter(message: DepositMessage) -> bool:
             if message['guardianAddress'] not in guardians_list:
+                UNEXPECTED_EXCEPTIONS.labels('unexpected_guardian_address').inc()
+                return False
+
+            if message['stakingModuleId'] != module_id:
                 return False
 
             if message['blockNumber'] < latest['number'] - 200:

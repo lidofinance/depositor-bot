@@ -18,7 +18,7 @@ def get_preferred_to_deposit_module(w3: Web3, whitelist_modules: list[int]) -> O
     stats = get_modules_stats(w3, active_modules)
 
     # Return module id
-    return stats[0][2]
+    return stats[0][1]
 
 
 def get_active_modules(w3: Web3, whitelist_modules: list[int]) -> list[int]:
@@ -34,13 +34,11 @@ def get_active_modules(w3: Web3, whitelist_modules: list[int]) -> list[int]:
     return modules
 
 
-def get_modules_stats(w3: Web3, modules: list[int]) -> list[tuple[int, int, int]]:
-    max_deposits_count = w3.lido.deposit_security_module.get_max_deposits()
+def get_modules_stats(w3: Web3, modules: list[int]) -> list[tuple[int, int]]:
     depositable_ether = w3.lido.lido.get_depositable_ether()
 
     module_stats = [(
             w3.lido.staking_router.get_staking_module_max_deposits_count(module, depositable_ether),
-            w3.lido.staking_router.get_staking_module_max_deposits_count(module, max_deposits_count * 32 * 10 ** 18),
             module,
         ) for module in modules
     ]

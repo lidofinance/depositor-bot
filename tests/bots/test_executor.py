@@ -4,7 +4,7 @@ from unittest.mock import Mock
 import pytest
 from web3.types import BlockData
 
-from blockchain.executer import Executor
+from blockchain.executor import Executor
 from metrics import healthcheck_pulse
 from utils.timeout import TimeoutManagerError
 

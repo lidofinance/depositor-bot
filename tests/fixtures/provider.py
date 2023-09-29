@@ -14,7 +14,10 @@ from blockchain.web3_extentions.transaction import TransactionUtils
 def web3_lido_unit():
     web3 = Web3()
     web3.lido = Mock()
-    web3.transaction = Mock()
+    web3.attach_modules({
+        'transaction': TransactionUtils,
+    })
+    
     yield web3
 
 
