@@ -57,8 +57,17 @@ def web3_provider_integration():
 
 
 @pytest.fixture(scope="module")
-def web3_with_dvt_module(web3_provider_integration):
-    port = urlparse(web3_provider_integration.provider._hosts_uri[0]).port
+def web3_lido_integration(web3_provider_integration):
+    web3_provider_integration.attach_modules({
+        'lido': LidoContracts,
+        'transaction': TransactionUtils,
+    })
+    yield web3_provider_integration
+
+
+@pytest.fixture(scope="module")
+def web3_with_dvt_module(web3_lido_integration):
+    port = urlparse(web3_lido_integration.provider._hosts_uri[0]).port
 
     r1 = requests.post(CHRONIX_URL + 'v1/env/' + str(port) + '/simple-dvt/deploy/')
 
@@ -82,7 +91,7 @@ def web3_with_dvt_module(web3_provider_integration):
     assert r3.status_code == 200
 
     with open('interfaces/NodeOperatorRegistry.json', 'r') as f:
-        staking_module = web3_provider_integration.eth.contract(
+        staking_module = web3_lido_integration.eth.contract(
             r1.json()['data']['stakingRouterData']['stakingModules'][1]['stakingModuleAddress'],
             abi=json.loads(f.read())
         )
@@ -91,16 +100,7 @@ def web3_with_dvt_module(web3_provider_integration):
         'from': '0x2e59A20f205bB85a89C53f1936454680651E618e'
     })
 
-    for _ in range(25):
-        web3_provider_integration.provider.make_request('hardhat_mine', [])
+    for _ in range(web3_lido_integration.lido.deposit_security_module.functions.getMinDepositBlockDistance().call()):
+        web3_lido_integration.provider.make_request('hardhat_mine', [])
 
-    yield web3_provider_integration
-
-
-@pytest.fixture(scope="module")
-def web3_lido_integration(web3_provider_integration):
-    web3_provider_integration.attach_modules({
-        'lido': LidoContracts,
-        'transaction': TransactionUtils,
-    })
-    yield web3_provider_integration
+    yield web3_lido_integration

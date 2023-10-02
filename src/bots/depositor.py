@@ -102,6 +102,9 @@ class DepositorBot:
         quorum = self._get_quorum(module_id)
         logger.info({'msg': 'Build quorum.', 'value': quorum})
 
+        can_deposit = self.w3.lido.deposit_security_module.can_deposit(module_id)
+        logger.info({'msg': 'Can deposit to module.', 'value': can_deposit})
+
         module_strategy = self._get_module_strategy(module_id)
 
         gas_is_ok = module_strategy.is_gas_price_ok()
@@ -110,7 +113,7 @@ class DepositorBot:
         keys_amount_is_profitable = module_strategy.is_deposited_keys_amount_ok()
         logger.info({'msg': 'Calculations deposit recommendations.', 'value': keys_amount_is_profitable})
 
-        if is_depositable and quorum and gas_is_ok and keys_amount_is_profitable:
+        if is_depositable and quorum and can_deposit and gas_is_ok and keys_amount_is_profitable:
             logger.info({'msg': 'Checks passed. Prepare deposit tx.'})
             return self._build_and_send_deposit_tx(quorum)
 
