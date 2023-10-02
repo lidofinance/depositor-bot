@@ -309,7 +309,7 @@ def test_depositor_bot(web3_lido_integration, add_accounts_to_guardian):
 
 
 @pytest.mark.integration
-def test_deposit_to_second_module(web3_with_dvt_module, web3_lido_integration):
+def test_deposit_to_second_module(web3_with_dvt_module, web3_lido_integration, add_accounts_to_guardian):
     variables.DEPOSIT_MODULES_WHITELIST = [1, 2]
     make_deposit(web3_lido_integration, 2)
 
@@ -321,7 +321,7 @@ def make_deposit(web3_lido_integration, module_id):
     ])
 
     max_deposits = web3_lido_integration.lido.deposit_security_module.functions.getMaxDeposits().call()
-    web3_lido_integration.lido.deposit_security_module.functions.setMaxDeposits(2).transact({'from': DSM_OWNER})
+    web3_lido_integration.lido.deposit_security_module.functions.setMaxDeposits(100).transact({'from': DSM_OWNER})
 
     latest = web3_lido_integration.eth.get_block('latest')
 
@@ -332,7 +332,7 @@ def make_deposit(web3_lido_integration, module_id):
     deposit_message_3 = get_deposit_message(web3_lido_integration, COUNCIL_ADDRESS_2, COUNCIL_PK_2, module_id)
 
     db = DepositorBot(web3_lido_integration)
-    db.message_storage.messages = [deposit_message_2, deposit_message_3]
+    db.message_storage.messages = []
     db.execute(latest)
 
     assert web3_lido_integration.lido.staking_router.get_staking_module_nonce(module_id) == old_module_nonce

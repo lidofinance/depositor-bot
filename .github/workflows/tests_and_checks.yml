@@ -39,9 +39,9 @@ jobs:
       - name: Install dependencies
         run: yarn install --immutable
 
-      - name: Run hardhat
+      - name: Run chronix
         run: |
-          yarn hardhat node --fork ${{ secrets.WEB3_RPC_ENDPOINT }} &
+          yarn chronix start
 
       - name: Integration Tests with pytest
         run: |
