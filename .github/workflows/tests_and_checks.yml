@@ -41,7 +41,7 @@ jobs:
 
       - name: Run chronix
         run: |
-          yarn chronix start
+          yarn chronix start &
 
       - name: Integration Tests with pytest
         run: |
