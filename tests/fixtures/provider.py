@@ -71,6 +71,7 @@ def web3_with_dvt_module(web3_lido_integration):
 
     r1 = requests.post(CHRONIX_URL + 'v1/env/' + str(port) + '/simple-dvt/deploy/')
 
+    print(r1.text)
     assert r1.status_code == 200
 
     r2 = requests.post(CHRONIX_URL + 'v1/env/' + str(port) + '/simple-dvt/add-node-operator/', json={
@@ -79,6 +80,7 @@ def web3_with_dvt_module(web3_lido_integration):
         'rewardAddress': '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
     })
 
+    print(r2.text)
     assert r2.status_code == 200
 
     r3 = requests.post(CHRONIX_URL + 'v1/env/' + str(port) + '/simple-dvt/add-node-operator-keys/', json={
