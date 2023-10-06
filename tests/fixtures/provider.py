@@ -52,6 +52,7 @@ def web3_provider_integration():
         },
     )
 
+    print(response.text)
     port = response.json()['data']['port']
 
     yield Web3(FallbackProvider([f'http://0.0.0.0:{port}/'], request_kwargs={'timeout': 3600}))
