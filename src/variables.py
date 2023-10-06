@@ -60,7 +60,10 @@ CONTRACT_GAS_LIMIT = int(os.getenv('CONTRACT_GAS_LIMIT', 15 * 10**6))
 # Mainnet: "https://relay.flashbots.net",
 # Görli: "https://relay-goerli.flashbots.net",
 FLASHBOTS_RPC = os.getenv('FLASHBOTS_RPC', None)
+AUCTION_BUNDLER_URIS = os.getenv('AUCTION_BUNDLER_URIS', FLASHBOTS_RPC).split(',')
+
 FLASHBOT_SIGNATURE = os.getenv('FLASHBOT_SIGNATURE', None)
+AUCTION_BUNDLER_PRIVATE_KEY = os.getenv('AUCTION_BUNDLER_PRIVATE_KEY', FLASHBOT_SIGNATURE)
 
 # Curated module strategy
 GAS_FEE_PERCENTILE_1: int = int(os.getenv('GAS_FEE_PERCENTILE_1', 20))

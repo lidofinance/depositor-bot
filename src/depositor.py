@@ -5,6 +5,7 @@ from web3_multi_provider import FallbackProvider
 
 import variables
 from blockchain.executor import Executor
+from blockchain.web3_extentions.bundle import activate_relay
 from blockchain.web3_extentions.lido_contracts import LidoContracts
 from blockchain.web3_extentions.requests_metric_middleware import add_requests_metric_middleware
 from blockchain.web3_extentions.transaction import TransactionUtils
@@ -49,8 +50,8 @@ def main():
     })
 
     if variables.FLASHBOT_SIGNATURE and variables.FLASHBOTS_RPC:
-        logger.info({'msg': 'Add flashbots middleware.'})
-        flashbot(w3, w3.eth.account.from_key(variables.FLASHBOT_SIGNATURE), variables.FLASHBOTS_RPC)
+        logger.info({'msg': 'Add private relays.'})
+        activate_relay(w3, variables.FLASHBOT_SIGNATURE, [variables.FLASHBOTS_RPC])
     else:
         logger.info({'msg': 'No flashbots available for this network.'})
 

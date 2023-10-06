@@ -29,7 +29,7 @@ class TransactionUtils(Module):
     def send(
         self,
         transaction: ContractCaller,
-        use_flashbots: bool,
+        use_relay: bool,
         timeout_in_blocks: int,
     ) -> bool:
         if not variables.ACCOUNT:
@@ -61,9 +61,8 @@ class TransactionUtils(Module):
 
         signed = self.w3.eth.account.sign_transaction(transaction_dict, variables.ACCOUNT._private_key)
 
-        # TODO try to deposit with other relays
-        if use_flashbots and getattr(self.w3, 'flashbots', None):
-            status = self.flashbots_send(signed, pending['number'], timeout_in_blocks)
+        if use_relay and getattr(self.w3, 'relay', None):
+            status = self.relay_send(signed, pending['number'], timeout_in_blocks)
         else:
             status = self.classic_send(signed, timeout_in_blocks)
 
@@ -92,14 +91,14 @@ class TransactionUtils(Module):
             int(gas * 1.3),
         )
 
-    def flashbots_send(
+    def relay_send(
         self,
         signed_tx: SignedTransaction,
         pending_block_num: int,
         timeout_in_blocks: int,
     ) -> bool:
         for i in range(timeout_in_blocks):
-            result = self.w3.flashbots.send_bundle(
+            result = self.w3.relay.send_bundle(
                 [{"signed_transaction": signed_tx.rawTransaction}],
                 pending_block_num + i
             )
