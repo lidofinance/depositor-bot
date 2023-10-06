@@ -39,7 +39,12 @@ def web3_provider_integration():
             'fork': variables.WEB3_RPC_ENDPOINTS[0],
             'mining': {
                 'auto': True,
-                'interval': 12000
+                'interval': 12000,
+            },
+            'forking': {
+                # Is valid only for mainnet fork
+                'url': variables.WEB3_RPC_ENDPOINTS[0],
+                'blockNumber': 18275269,
             }
         },
         headers={
