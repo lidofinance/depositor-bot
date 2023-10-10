@@ -59,7 +59,7 @@ CONTRACT_GAS_LIMIT = int(os.getenv('CONTRACT_GAS_LIMIT', 15 * 10**6))
 # FLASHBOTS_RPC URL
 # Mainnet: "https://relay.flashbots.net",
 # Görli: "https://relay-goerli.flashbots.net",
-FLASHBOTS_RPC = os.getenv('FLASHBOTS_RPC', None)
+FLASHBOTS_RPC = os.getenv('FLASHBOTS_RPC', '')
 AUCTION_BUNDLER_URIS = os.getenv('AUCTION_BUNDLER_URIS', FLASHBOTS_RPC).split(',')
 
 FLASHBOT_SIGNATURE = os.getenv('FLASHBOT_SIGNATURE', None)
