@@ -1,14 +1,13 @@
-import pytest
 from eth_account import Account
 from eth_typing import BlockNumber
 from web3.types import BlockData, Wei
 
-from tests.fixtures.provider import *
-from tests.fixtures.contracts import *
+from fixtures import *
 
-
+# https://etherscan.io/address/0xC77F8768774E1c9244BEed705C4354f2113CFc09#readContract#F12
+DSM_OWNER = '0x3e40D73EB977Dc6a537aF587D48316feE66E9C8c'
 # https://goerli.etherscan.io/address/0xe57025E250275cA56f92d76660DEcfc490C7E79A#readContract#F12
-DSM_OWNER = '0xa5F1d7D49F581136Cf6e58B32cBE9a2039C48bA1'
+# DSM_OWNER = '0xa5F1d7D49F581136Cf6e58B32cBE9a2039C48bA1'
 
 
 @pytest.fixture

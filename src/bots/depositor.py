@@ -7,13 +7,15 @@ from schema import Or, Schema
 from web3.types import BlockData
 
 import variables
-
 from blockchain.deposit_strategy.curated_module import CuratedModuleDepositStrategy
 from blockchain.deposit_strategy.interface import ModuleDepositStrategyInterface
+from blockchain.deposit_strategy.prefered_module_to_deposit import get_preferred_to_deposit_module
 from blockchain.typings import Web3
 from cryptography.verify_signature import compute_vs
 from metrics.metrics import (
-    ACCOUNT_BALANCE, CURRENT_QUORUM_SIZE,
+    ACCOUNT_BALANCE,
+    CURRENT_QUORUM_SIZE,
+    UNEXPECTED_EXCEPTIONS,
 )
 from metrics.transport_message_metrics import message_metrics_filter
 from transport.msg_providers.kafka import KafkaMessageProvider
@@ -23,10 +25,10 @@ from transport.msg_schemas import (
     PingMessageSchema,
     get_deposit_messages_sign_filter,
     DepositMessage,
+    to_check_sum_address,
 )
 from transport.msg_storage import MessageStorage
 from transport.types import TransportType
-
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +67,7 @@ class DepositorBot:
             transports,
             filters=[
                 message_metrics_filter,
+                to_check_sum_address,
                 get_deposit_messages_sign_filter(attest_prefix),
             ],
         )
@@ -72,10 +75,10 @@ class DepositorBot:
     def execute(self, block: BlockData) -> bool:
         self._check_balance()
 
-        module_ids = self.w3.lido.staking_router.get_staking_module_ids()
+        module_id = get_preferred_to_deposit_module(self.w3, variables.DEPOSIT_MODULES_WHITELIST)
 
-        for module_id in module_ids:
-            logger.info({'msg': f'Do deposit for module with id: {module_id}.'})
+        if module_id:
+            logger.info({'msg': f'Do deposit to module with id: {module_id}.'})
             try:
                 self._deposit_to_module(module_id)
             except ModuleNotSupportedError as error:
@@ -99,6 +102,9 @@ class DepositorBot:
         quorum = self._get_quorum(module_id)
         logger.info({'msg': 'Build quorum.', 'value': quorum})
 
+        can_deposit = self.w3.lido.deposit_security_module.can_deposit(module_id)
+        logger.info({'msg': 'Can deposit to module.', 'value': can_deposit})
+
         module_strategy = self._get_module_strategy(module_id)
 
         gas_is_ok = module_strategy.is_gas_price_ok()
@@ -107,7 +113,7 @@ class DepositorBot:
         keys_amount_is_profitable = module_strategy.is_deposited_keys_amount_ok()
         logger.info({'msg': 'Calculations deposit recommendations.', 'value': keys_amount_is_profitable})
 
-        if is_depositable and quorum and gas_is_ok and keys_amount_is_profitable:
+        if is_depositable and quorum and can_deposit and gas_is_ok and keys_amount_is_profitable:
             logger.info({'msg': 'Checks passed. Prepare deposit tx.'})
             return self._build_and_send_deposit_tx(quorum)
 
@@ -115,23 +121,22 @@ class DepositorBot:
         return False
 
     def _get_module_strategy(self, module_id: int) -> ModuleDepositStrategyInterface:
-        # ToDo somehow support different gas strategies for different module types
-        if module_id == 1:
+        if module_id in (1, 2):
             return CuratedModuleDepositStrategy(self.w3, module_id)
 
         raise ModuleNotSupportedError(f'Module with id: {module_id} is not supported yet.')
 
     def _check_module_status(self, module_id: int) -> bool:
         """Returns True if module is ready for deposit"""
-        is_active = self.w3.lido.staking_router.is_staking_module_active(module_id)
-        is_deposits_paused = self.w3.lido.staking_router.is_staking_module_deposits_paused(module_id)
-        return is_active and not is_deposits_paused
+        return self.w3.lido.staking_router.is_staking_module_active(module_id)
 
     def _get_quorum(self, module_id: int) -> Optional[list[DepositMessage]]:
         """Returns quorum messages or None is quorum is not ready"""
         actualize_filter = self._get_message_actualize_filter(module_id)
         messages = self.message_storage.get_messages(actualize_filter)
         min_signs_to_deposit = self.w3.lido.deposit_security_module.get_guardian_quorum()
+
+        CURRENT_QUORUM_SIZE.labels('required').set(min_signs_to_deposit)
 
         messages_by_block_hash = defaultdict(dict)
 
@@ -147,12 +152,12 @@ class DepositorBot:
             quorum_size = len(unified_messages)
 
             if quorum_size >= min_signs_to_deposit:
-                CURRENT_QUORUM_SIZE.set(quorum_size)
+                CURRENT_QUORUM_SIZE.labels('current').set(quorum_size)
                 return list(unified_messages)
 
             max_quorum_size = max(quorum_size, max_quorum_size)
 
-        CURRENT_QUORUM_SIZE.set(max_quorum_size)
+        CURRENT_QUORUM_SIZE.labels('current').set(max_quorum_size)
 
     def _get_message_actualize_filter(self, module_id: int) -> Callable[[DepositMessage], bool]:
         latest = self.w3.eth.get_block('latest')
@@ -163,6 +168,10 @@ class DepositorBot:
 
         def message_filter(message: DepositMessage) -> bool:
             if message['guardianAddress'] not in guardians_list:
+                UNEXPECTED_EXCEPTIONS.labels('unexpected_guardian_address').inc()
+                return False
+
+            if message['stakingModuleId'] != module_id:
                 return False
 
             if message['blockNumber'] < latest['number'] - 200:

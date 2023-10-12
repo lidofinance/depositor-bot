@@ -1,19 +1,18 @@
+# from flashbots import flashbot
 from prometheus_client import start_http_server
-from flashbots import flashbot
 from web3 import Web3
 from web3_multi_provider import FallbackProvider
 
 import variables
-from blockchain.constants import FLASHBOTS_RPC
-from blockchain.executer import Executor
+from blockchain.executor import Executor
+from blockchain.web3_extentions.bundle import activate_relay
 from blockchain.web3_extentions.lido_contracts import LidoContracts
+from blockchain.web3_extentions.requests_metric_middleware import add_requests_metric_middleware
 from blockchain.web3_extentions.transaction import TransactionUtils
 from bots.depositor import DepositorBot
 from metrics.healthcheck_pulse import start_pulse_server
 from metrics.logging import logging
-from blockchain.web3_extentions.requests_metric_middleware import add_requests_metric_middleware
 from metrics.metrics import BUILD_INFO
-
 
 logger = logging.getLogger(__name__)
 
@@ -36,9 +35,9 @@ def main():
         variables.GAS_PRIORITY_FEE_PERCENTILE,
         variables.MIN_PRIORITY_FEE,
         variables.MAX_PRIORITY_FEE,
-        variables.KAFKA_TOPIC,
         variables.ACCOUNT.address if variables.ACCOUNT else '0x0',
         variables.CREATE_TRANSACTIONS,
+        variables.DEPOSIT_MODULES_WHITELIST,
     )
 
     logger.info({'msg': 'Connect MultiHTTPProviders.', 'rpc_count': len(variables.WEB3_RPC_ENDPOINTS)})
@@ -51,8 +50,8 @@ def main():
     })
 
     if variables.FLASHBOT_SIGNATURE and variables.FLASHBOTS_RPC:
-        logger.info({'msg': 'Add flashbots middleware.'})
-        flashbot(w3, w3.eth.account.from_key(variables.FLASHBOT_SIGNATURE), variables.FLASHBOTS_RPC)
+        logger.info({'msg': 'Add private relays.'})
+        activate_relay(w3, variables.FLASHBOT_SIGNATURE, [variables.FLASHBOTS_RPC])
     else:
         logger.info({'msg': 'No flashbots available for this network.'})
 
@@ -68,7 +67,7 @@ def main():
         5,
         variables.MAX_CYCLE_LIFETIME_IN_SECONDS,
     )
-    logger.info({'msg': 'Rum executor.'})
+    logger.info({'msg': 'Execute depositor as daemon.'})
     e.execute_as_daemon()
 
 

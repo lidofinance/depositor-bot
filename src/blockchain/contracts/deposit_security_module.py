@@ -5,7 +5,6 @@ from web3.types import BlockIdentifier
 
 from blockchain.contracts.base_interface import ContractInterface
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -47,7 +46,7 @@ class DepositSecurityModuleContract(ContractInterface):
         staking_module_id: int,
         nonce: int,
         deposit_call_data: bytes,
-        guardian_signatures: list[tuple[bytes, bytes]],
+        guardian_signatures: list[tuple[str, str]],
     ):
         """
         Calls LIDO.deposit(maxDepositsPerBlock, stakingModuleId, depositCalldata).
@@ -65,7 +64,7 @@ class DepositSecurityModuleContract(ContractInterface):
 
         | ATTEST_MESSAGE_PREFIX | blockNumber | blockHash | depositRoot | stakingModuleId | nonce |
         """
-        response = self.functions.depositBufferedEther(
+        tx = self.functions.depositBufferedEther(
             block_number,
             block_hash,
             deposit_root,
@@ -83,7 +82,7 @@ class DepositSecurityModuleContract(ContractInterface):
             deposit_call_data,
             guardian_signatures,
         )})
-        return response
+        return tx
 
     def get_pause_message_prefix(self, block_identifier: BlockIdentifier = 'latest') -> bytes:
         response = self.functions.PAUSE_MESSAGE_PREFIX().call(block_identifier=block_identifier)
@@ -127,3 +126,15 @@ class DepositSecurityModuleContract(ContractInterface):
             guardian_signature,
         )})
         return tx
+
+    def get_max_deposits(self, block_identifier: BlockIdentifier = 'latest'):
+        """
+        Returns maxDepositsPerBlock
+        """
+        response = self.functions.getMaxDeposits().call(block_identifier=block_identifier)
+        logger.info({
+            'msg': f'Call `getMaxDeposits()`.',
+            'value': response,
+            'block_identifier': block_identifier.__repr__(),
+        })
+        return response

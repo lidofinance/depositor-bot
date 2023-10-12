@@ -1,12 +1,10 @@
 from unittest.mock import Mock
 
 import pytest
-from eth_abi import encode
-from eth_account.messages import encode_defunct, encode_structured_data
-from eth_hash.backends.pycryptodome import keccak256
 
 import variables
-from bots.pause import PauserBot
+from blockchain.typings import Web3
+from bots.pauser import PauserBot
 from tests.conftest import DSM_OWNER
 
 # WARNING: These accounts, and their private keys, are publicly known.
@@ -44,15 +42,13 @@ def pause_message():
 @pytest.fixture
 def add_account_to_guardian(web3_lido_integration, set_integration_account):
     web3_lido_integration.provider.make_request('hardhat_impersonateAccount', [DSM_OWNER])
-    quorum_size = web3_lido_integration.lido.get_guardian_quorum()
+    web3_lido_integration.provider.make_request('hardhat_setBalance', [DSM_OWNER, '0x500000000000000000000000'])
+    quorum_size = web3_lido_integration.lido.deposit_security_module.get_guardian_quorum()
 
-    try:
-        # If guardian removal failed
-        web3_lido_integration.lido.deposit_security_module.functions.addGuardian(COUNCIL_ADDRESS, quorum_size).transact(
-            {'from': DSM_OWNER},
-        )
-    except:
-        pass
+    # If guardian removal failed
+    web3_lido_integration.lido.deposit_security_module.functions.addGuardian(COUNCIL_ADDRESS, quorum_size).transact(
+        {'from': DSM_OWNER},
+    )
 
     yield COUNCIL_ADDRESS
 
@@ -61,25 +57,24 @@ def add_account_to_guardian(web3_lido_integration, set_integration_account):
     )
 
 
-def get_pause_message(web3):
+def get_pause_message(web3, module_id):
     latest = web3.eth.get_block('latest')
 
     prefix = web3.lido.deposit_security_module.get_pause_message_prefix()
 
     block_number = latest.number
-    staking_module_id = int(1)
 
-    msg_hash = web3.solidityKeccak(['bytes32', 'uint256', 'uint256'], [prefix, block_number, staking_module_id])
-    signed = web3.eth.account.signHash(msg_hash, private_key=COUNCIL_PK)
+    msg_hash = web3.solidity_keccak(['bytes32', 'uint256', 'uint256'], [prefix, block_number, module_id])
+    signed = web3.eth.account._sign_hash(msg_hash, private_key=COUNCIL_PK)
 
     return {
         "blockHash": latest.hash.hex(),
         "blockNumber": latest.number,
         "guardianAddress": variables.ACCOUNT.address,
-        "stakingModuleId": 1,
+        "stakingModuleId": module_id,
         "signature": {
-            "r": hex(signed.r),
-            "s": hex(signed.s),
+            "r": '0x' + signed.r.to_bytes(32, 'big').hex(),
+            "s": '0x' + signed.s.to_bytes(32, 'big').hex(),
             "v": signed.v,
         },
         "type": "pause"
@@ -137,23 +132,31 @@ def test_pause_message_filtered_by_module_id(pause_bot, block_data, pause_messag
 
 
 @pytest.mark.integration
-def test_pauser_bot(web3_lido_integration, add_account_to_guardian):
-    latest = web3_lido_integration.eth.get_block('latest')
+@pytest.mark.parametrize(
+    "module_id",
+    [1, 2],
+)
+def test_pauser_bot(web3_with_dvt_module, add_account_to_guardian, module_id):
+    pause_module(web3_with_dvt_module, module_id)
 
-    pm = get_pause_message(web3_lido_integration)
 
-    pb = PauserBot(web3_lido_integration)
+def pause_module(web3: Web3, module_id: int):
+    latest = web3.eth.get_block('latest')
+
+    pm = get_pause_message(web3, module_id)
+
+    pb = PauserBot(web3)
     pb.execute(latest)
 
     # Check no pause
-    assert not web3_lido_integration.lido.staking_router.is_staking_module_deposits_paused(1)
+    assert web3.lido.staking_router.is_staking_module_active(module_id)
 
     # Add pause message
     pb.message_storage.messages = [pm]
     pb.execute(latest)
 
     # Check there is pause message and module paused
-    assert web3_lido_integration.lido.staking_router.is_staking_module_deposits_paused(1)
+    assert not web3.lido.staking_router.is_staking_module_active(module_id)
     assert len(pb.message_storage.messages) == 1
 
     pb.execute(latest)
@@ -161,7 +164,7 @@ def test_pauser_bot(web3_lido_integration, add_account_to_guardian):
     assert not pb.message_storage.messages
 
     # Cleanup
-    web3_lido_integration.lido.deposit_security_module.functions.unpauseDeposits(pm['stakingModuleId']).transact(
+    web3.lido.deposit_security_module.functions.unpauseDeposits(pm['stakingModuleId']).transact(
         {'from': DSM_OWNER}
     )
-    assert not web3_lido_integration.lido.staking_router.is_staking_module_deposits_paused(1)
+    assert web3.lido.staking_router.is_staking_module_active(module_id)

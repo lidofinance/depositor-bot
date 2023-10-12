@@ -30,13 +30,18 @@ jobs:
         run: |
           poetry run pytest tests -m unit
 
-      - name: Use Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v3
-      - run: npm install --save-dev hardhat
+      - name: Set up node
+        uses: actions/setup-node@v3.0.0
+        with:
+          node-version: '18.17.1'
+          cache: 'yarn'
 
-      - name: Run hardhat
+      - name: Install dependencies
+        run: yarn install --immutable
+
+      - name: Run chronix
         run: |
-          npx hardhat node --fork ${{ secrets.WEB3_RPC_ENDPOINT }} &
+          yarn chronix start &
 
       - name: Integration Tests with pytest
         run: |

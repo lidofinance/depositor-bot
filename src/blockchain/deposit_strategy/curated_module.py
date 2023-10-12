@@ -10,7 +10,6 @@ import variables
 from blockchain.deposit_strategy.interface import ModuleDepositStrategyInterface
 from metrics.metrics import GAS_FEE, DEPOSITABLE_ETHER, POSSIBLE_DEPOSITS_AMOUNT
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -31,6 +30,11 @@ class CuratedModuleDepositStrategy(ModuleDepositStrategyInterface):
 
     def is_deposited_keys_amount_ok(self) -> bool:
         possible_deposits_amount = self._get_possible_deposits_amount()
+
+        if possible_deposits_amount == 0:
+            logger.info({'msg': f'Possible deposits amount is {possible_deposits_amount}. Skip deposit.'})
+            return False
+
         recommended_max_gas = self._calculate_recommended_gas_based_on_deposit_amount(possible_deposits_amount)
 
         base_fee_per_gas = self._get_pending_base_fee()
@@ -40,7 +44,7 @@ class CuratedModuleDepositStrategy(ModuleDepositStrategyInterface):
         depositable_ether = self.w3.lido.lido.get_depositable_ether()
         DEPOSITABLE_ETHER.labels(self.module_id).set(depositable_ether)
 
-        possible_deposits_amount = self.w3.lido.staking_router.get_staking_module_deposits_count(
+        possible_deposits_amount = self.w3.lido.staking_router.get_staking_module_max_deposits_count(
             self.module_id,
             depositable_ether,
         )
@@ -56,7 +60,7 @@ class CuratedModuleDepositStrategy(ModuleDepositStrategyInterface):
         GAS_FEE.labels('based_on_buffer_fee', self.module_id).set(recommended_max_gas)
         return recommended_max_gas
 
-    def _get_pending_base_fee(self):
+    def _get_pending_base_fee(self) -> Wei:
         base_fee_per_gas = self.w3.eth.get_block('pending')['baseFeePerGas']
         logger.info({'msg': 'Fetch base_fee_per_gas for pending block.', 'value': base_fee_per_gas})
         return base_fee_per_gas
@@ -76,9 +80,9 @@ class CuratedModuleDepositStrategy(ModuleDepositStrategyInterface):
 
         return recommended_gas_fee >= current_gas_fee
 
-    def _get_recommended_gas_fee(self):
+    def _get_recommended_gas_fee(self) -> Wei:
         gas_history = self._fetch_gas_fee_history(variables.GAS_FEE_PERCENTILE_DAYS_HISTORY_1)
-        return int(numpy.percentile(gas_history, variables.GAS_FEE_PERCENTILE_1))
+        return Wei(int(numpy.percentile(gas_history, variables.GAS_FEE_PERCENTILE_1)))
 
     def _fetch_gas_fee_history(self, days: int) -> list[int]:
         latest_block_num = self.w3.eth.get_block('latest')['number']

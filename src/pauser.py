@@ -3,13 +3,13 @@ from web3 import Web3
 from web3_multi_provider import FallbackProvider
 
 import variables
-from blockchain.executer import Executor
+from blockchain.executor import Executor
 from blockchain.web3_extentions.lido_contracts import LidoContracts
+from blockchain.web3_extentions.requests_metric_middleware import add_requests_metric_middleware
 from blockchain.web3_extentions.transaction import TransactionUtils
-from bots.pause import PauserBot
+from bots.pauser import PauserBot
 from metrics.healthcheck_pulse import start_pulse_server
 from metrics.logging import logging
-from blockchain.web3_extentions.requests_metric_middleware import add_requests_metric_middleware
 from metrics.metrics import BUILD_INFO
 
 logger = logging.getLogger(__name__)
@@ -32,9 +32,9 @@ def main():
         None,
         None,
         None,
-        variables.KAFKA_TOPIC,
         variables.ACCOUNT.address if variables.ACCOUNT else '0x0',
         variables.CREATE_TRANSACTIONS,
+        None,
     )
 
     logger.info({'msg': 'Connect MultiHTTPProviders.', 'rpc_count': len(variables.WEB3_RPC_ENDPOINTS)})
@@ -59,7 +59,7 @@ def main():
         1,
         variables.MAX_CYCLE_LIFETIME_IN_SECONDS,
     )
-    logger.info({'msg': 'Rum executor.'})
+    logger.info({'msg': 'Execute depositor as daemon.'})
     e.execute_as_daemon()
 
 

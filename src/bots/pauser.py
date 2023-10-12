@@ -10,7 +10,13 @@ from cryptography.verify_signature import compute_vs
 from metrics.transport_message_metrics import message_metrics_filter
 from transport.msg_providers.kafka import KafkaMessageProvider
 from transport.msg_providers.rabbit import RabbitProvider, MessageType
-from transport.msg_schemas import PauseMessageSchema, get_pause_messages_sign_filter, PauseMessage, PingMessageSchema
+from transport.msg_schemas import (
+    PauseMessageSchema,
+    get_pause_messages_sign_filter,
+    PauseMessage,
+    PingMessageSchema,
+    to_check_sum_address,
+)
 from transport.msg_storage import MessageStorage
 from transport.types import TransportType
 
@@ -46,6 +52,7 @@ class PauserBot:
             transports,
             filters=[
                 message_metrics_filter,
+                to_check_sum_address,
                 get_pause_messages_sign_filter(pause_prefix),
             ],
         )
@@ -68,7 +75,6 @@ class PauserBot:
         message_validity_time = self.w3.lido.deposit_security_module.get_pause_intent_validity_period_blocks()
 
         def message_filter(message: PauseMessage) -> bool:
-            # TODO Metrics for filtered messages
             return message['blockNumber'] > current_block['number'] - message_validity_time
 
         return message_filter

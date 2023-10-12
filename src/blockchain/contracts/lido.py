@@ -14,7 +14,7 @@ class LidoContract(ContractInterface):
     def get_depositable_ether(self, block_identifier: BlockIdentifier = 'latest') -> Wei:
         """
         Returns depositable ether amount.
-        Takes into account unfinalized stETH required by WithdrawalQueue
+        Unfinalized stETH required by WithdrawalQueue are excluded from buffered ether.
         """
         response = self.functions.getDepositableEther().call(block_identifier=block_identifier)
         logger.info({'msg': f'Call `getDepositableEther()`.', 'value': response, 'block_identifier': block_identifier.__repr__()})

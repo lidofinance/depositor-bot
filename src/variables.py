@@ -4,7 +4,6 @@ import os
 from eth_account import Account
 from web3 import Web3
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -51,17 +50,20 @@ RABBIT_MQ_PASSWORD = os.getenv('RABBIT_MQ_PASSWORD', 'guest')
 # Transactions settings
 CREATE_TRANSACTIONS = os.getenv('CREATE_TRANSACTIONS') == 'true'
 
-MIN_PRIORITY_FEE = Web3.toWei(*os.getenv('MIN_PRIORITY_FEE', '50 mwei').split(' '))
-MAX_PRIORITY_FEE = Web3.toWei(*os.getenv('MAX_PRIORITY_FEE', '10 gwei').split(' '))
+MIN_PRIORITY_FEE = Web3.to_wei(*os.getenv('MIN_PRIORITY_FEE', '50 mwei').split(' '))
+MAX_PRIORITY_FEE = Web3.to_wei(*os.getenv('MAX_PRIORITY_FEE', '10 gwei').split(' '))
 
-MAX_GAS_FEE = Web3.toWei(*os.getenv('MAX_GAS_FEE', '100 gwei').split(' '))
+MAX_GAS_FEE = Web3.to_wei(*os.getenv('MAX_GAS_FEE', '100 gwei').split(' '))
 CONTRACT_GAS_LIMIT = int(os.getenv('CONTRACT_GAS_LIMIT', 15 * 10**6))
 
 # FLASHBOTS_RPC URL
 # Mainnet: "https://relay.flashbots.net",
 # Görli: "https://relay-goerli.flashbots.net",
-FLASHBOTS_RPC = os.getenv('FLASHBOTS_RPC', None)
+FLASHBOTS_RPC = os.getenv('FLASHBOTS_RPC', '')
+AUCTION_BUNDLER_URIS = os.getenv('AUCTION_BUNDLER_URIS', FLASHBOTS_RPC).split(',')
+
 FLASHBOT_SIGNATURE = os.getenv('FLASHBOT_SIGNATURE', None)
+AUCTION_BUNDLER_PRIVATE_KEY = os.getenv('AUCTION_BUNDLER_PRIVATE_KEY', FLASHBOT_SIGNATURE)
 
 # Curated module strategy
 GAS_FEE_PERCENTILE_1: int = int(os.getenv('GAS_FEE_PERCENTILE_1', 20))
@@ -69,9 +71,12 @@ GAS_FEE_PERCENTILE_DAYS_HISTORY_1: int = int(os.getenv('GAS_FEE_PERCENTILE_DAYS_
 
 GAS_PRIORITY_FEE_PERCENTILE = int(os.getenv('GAS_PRIORITY_FEE_PERCENTILE', 25))
 
-MAX_BUFFERED_ETHERS = Web3.toWei(*os.getenv('MAX_BUFFERED_ETHERS', '5000 ether').split(' '))
+MAX_BUFFERED_ETHERS = Web3.to_wei(*os.getenv('MAX_BUFFERED_ETHERS', '5000 ether').split(' '))
 
 # Metrics
 PROMETHEUS_PORT = int(os.getenv('PROMETHEUS_PORT', '9000'))
 PULSE_SERVER_PORT = int(os.getenv('PULSE_SERVER_PORT', '9010'))
 MAX_CYCLE_LIFETIME_IN_SECONDS = int(os.getenv('MAX_CYCLE_LIFETIME_IN_SECONDS', '1200'))
+
+# List of ids of staking modules in which the depositor bot will make deposits
+DEPOSIT_MODULES_WHITELIST = [int(module_id) for module_id in os.getenv('DEPOSIT_MODULES_WHITELIST', '1').split(',')]
