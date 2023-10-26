@@ -1,4 +1,5 @@
 # from flashbots import flashbot
+from eth_account import Account
 from prometheus_client import start_http_server
 from web3 import Web3
 from web3_multi_provider import FallbackProvider
@@ -49,9 +50,9 @@ def main():
         'transaction': TransactionUtils,
     })
 
-    if variables.FLASHBOT_SIGNATURE and variables.FLASHBOTS_RPC:
+    if variables.AUCTION_BUNDLER_PRIVATE_KEY and variables.AUCTION_BUNDLER_URIS:
         logger.info({'msg': 'Add private relays.'})
-        activate_relay(w3, variables.FLASHBOT_SIGNATURE, [variables.FLASHBOTS_RPC])
+        activate_relay(w3, Account.from_key(variables.AUCTION_BUNDLER_PRIVATE_KEY), variables.AUCTION_BUNDLER_URIS)
     else:
         logger.info({'msg': 'No flashbots available for this network.'})
 

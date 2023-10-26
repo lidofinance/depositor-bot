@@ -56,12 +56,13 @@ MAX_PRIORITY_FEE = Web3.to_wei(*os.getenv('MAX_PRIORITY_FEE', '10 gwei').split('
 MAX_GAS_FEE = Web3.to_wei(*os.getenv('MAX_GAS_FEE', '100 gwei').split(' '))
 CONTRACT_GAS_LIMIT = int(os.getenv('CONTRACT_GAS_LIMIT', 15 * 10**6))
 
-# FLASHBOTS_RPC URL
+# Deprecated: FLASHBOTS_RPC URL
 # Mainnet: "https://relay.flashbots.net",
 # Görli: "https://relay-goerli.flashbots.net",
 FLASHBOTS_RPC = os.getenv('FLASHBOTS_RPC', '')
 AUCTION_BUNDLER_URIS = os.getenv('AUCTION_BUNDLER_URIS', FLASHBOTS_RPC).split(',')
 
+# Deprecated: FLASHBOT_SIGNATURE
 FLASHBOT_SIGNATURE = os.getenv('FLASHBOT_SIGNATURE', None)
 AUCTION_BUNDLER_PRIVATE_KEY = os.getenv('AUCTION_BUNDLER_PRIVATE_KEY', FLASHBOT_SIGNATURE)
 

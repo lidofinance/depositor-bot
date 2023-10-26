@@ -52,7 +52,6 @@ class TransactionUtils(Module):
 
         transaction_dict = transaction.build_transaction({
             'from': variables.ACCOUNT.address,
-            # TODO Estimate gas and min(contract_gas_limit, estimated_gas * 1.3)
             'gas': gas_limit,
             'maxFeePerGas': pending['baseFeePerGas'] * 2 + priority,
             'maxPriorityFeePerGas': priority,
