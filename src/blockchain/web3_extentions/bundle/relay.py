@@ -17,7 +17,6 @@ from eth_typing import HexStr
 from hexbytes import HexBytes
 from toolz import dissoc
 from web3 import Web3
-from web3.exceptions import TransactionNotFound
 from web3.method import Method
 from web3.module import Module
 from web3.types import RPCEndpoint, Nonce, TxParams
@@ -38,8 +37,6 @@ class RelayRPC:
     eth_sendBundle = RPCEndpoint("eth_sendBundle")
     eth_callBundle = RPCEndpoint("eth_callBundle")
     eth_cancelBundle = RPCEndpoint("eth_cancelBundle")
-    eth_sendPrivateTransaction = RPCEndpoint("eth_sendPrivateTransaction")
-    eth_cancelPrivateTransaction = RPCEndpoint("eth_cancelPrivateTransaction")
 
 
 class RelayBundleResponse:
@@ -80,43 +77,9 @@ class RelayBundleResponse:
         return self.w3.keccak(concat_hashes)
 
 
-class RelayTransactionResponse:
-    w3: Web3
-    tx: SignedTxAndHash
-    max_block_number: int
-
-    def __init__(self, w3: Web3, signed_tx: HexBytes, max_block_number: int):
-        self.w3 = w3
-        self.max_block_number = max_block_number
-        self.tx = {
-            "signed_transaction": signed_tx,
-            "hash": self.w3.sha3(signed_tx),
-        }
-
-    def wait(self) -> bool:
-        """Waits up to max block number, returns `True` if/when tx has been mined.
-
-        If tx has not been mined by the time the current block > max_block_number, returns `False`."""
-        while True:
-            try:
-                self.w3.eth.get_transaction(self.tx["hash"])
-                return True
-            except TransactionNotFound:
-                if self.w3.eth.block_number > self.max_block_number:
-                    return False
-                time.sleep(1)
-
-    def receipt(self) -> Optional[TxReceipt]:
-        """Gets private tx receipt if tx has been mined. If tx is not mined within `max_block_number` period, returns None."""
-        if self.wait():
-            return self.w3.eth.get_transaction_receipt(self.tx["hash"])
-        else:
-            return None
-
-
 class Relay(Module):
     signed_txs: List[HexBytes]
-    response: Union[RelayBundleResponse, RelayTransactionResponse]
+    response: RelayBundleResponse
 
     def sign_bundle(
         self,
@@ -129,12 +92,12 @@ class Relay(Module):
         signed_transactions: List[HexBytes] = []
 
         for tx in bundled_transactions:
-            if "signed_transaction" in tx:  # FlashbotsBundleRawTx
+            if "signed_transaction" in tx:
                 tx_params = _parse_signed_tx(tx["signed_transaction"])
                 nonces[tx_params["from"]] = tx_params["nonce"] + 1
                 signed_transactions.append(tx["signed_transaction"])
 
-            elif "signer" in tx:  # FlashbotsBundleTx
+            elif "signer" in tx:
                 signer, tx = tx["signer"], tx["transaction"]
                 tx["from"] = signer.address
 
@@ -349,68 +312,6 @@ class Relay(Module):
     call_bundle: Method[Callable[[Any], Any]] = Method(
         json_rpc_method=RelayRPC.eth_callBundle, mungers=[call_bundle_munger]
     )
-
-    def get_user_stats_munger(self) -> List:
-        return [{"blockNumber": hex(self.w3.eth.block_number)}]
-
-    # sends private transaction
-    # returns tx hash
-    def send_private_transaction_munger(
-        self,
-        transaction: Union[RelayBundleTx, RelayBundleRawTx],
-        max_block_number: Optional[int] = None,
-    ) -> Any:
-        """Sends a single transaction to Flashbots.
-
-        If `max_block_number` is set, Flashbots will try to submit the transaction in every block <= that block (max 25 blocks from present)."""
-        signed_transaction: str
-        if "signed_transaction" in transaction:
-            signed_transaction = transaction["signed_transaction"]
-        else:
-            signed_transaction = (
-                transaction["signer"]
-                .sign_transaction(transaction["transaction"])
-                .rawTransaction
-            )
-        if max_block_number is None:
-            # get current block num, add 25
-            current_block = self.web3.eth.block_number
-            max_block_number = current_block + 25
-        params = {
-            "tx": self.to_hex(signed_transaction),
-            "maxBlockNumber": max_block_number,
-        }
-        self.response = RelayTransactionResponse(
-            self.web3, signed_transaction, max_block_number
-        )
-        return [params]
-
-    sendPrivateTransaction: Method[Callable[[Any], Any]] = Method(
-        json_rpc_method=RelayRPC.eth_sendPrivateTransaction,
-        mungers=[send_private_transaction_munger],
-        result_formatters=raw_bundle_formatter,
-    )
-    send_private_transaction = sendPrivateTransaction
-
-    # cancels private tx given pending private tx hash
-    # returns True if successful, False otherwise
-    def cancel_private_transaction_munger(
-        self,
-        tx_hash: str,
-    ) -> bool:
-        """Stops a private transaction from being sent to miners by Flashbots.
-
-        Note: if a transaction has already been received by a miner, it may still be mined. This simply stops further submissions."""
-        params = {
-            "txHash": tx_hash,
-        }
-        return [params]
-
-    cancelPrivateTransaction: Method[Callable[[Any], Any]] = Method(
-        json_rpc_method=RelayRPC.eth_cancelPrivateTransaction,
-        mungers=[cancel_private_transaction_munger],
-    )
-    cancel_private_transaction = cancelPrivateTransaction
 
 
 def _parse_signed_tx(signed_tx: HexBytes) -> TxParams:

@@ -11,20 +11,19 @@ RELAY_METHODS = [
     "eth_sendBundle",
     "eth_callBundle",
     "eth_cancelBundle",
-    "eth_sendPrivateTransaction",
-    "eth_cancelPrivateTransaction",
 ]
 
 
 def construct_relay_middleware(
     relay_provider: RelayProvider,
 ) -> Middleware:
-    """Captures Flashbots RPC requests and sends them to the Flashbots endpoint
-    while also injecting the required authorization headers
+    """
+        Captures Relay RPC requests and sends them to the private relays
+        while also injecting the required authorization headers
 
-    Keyword arguments:
-    flashbots_provider -- An HTTP provider instantiated with any authorization headers
-    required
+        Keyword arguments:
+        flashbots_provider -- An HTTP provider instantiated with any authorization headers
+        required
     """
 
     def relay_middleware(

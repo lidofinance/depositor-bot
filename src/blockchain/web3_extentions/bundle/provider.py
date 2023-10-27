@@ -39,7 +39,7 @@ class RelayProvider(HTTPProvider):
             "X-Flashbots-Signature": f"{self.signature_account.address}:{signed_message.signature.hex()}"
         }
 
-        if request_all and self.endpoint_uri:
+        if request_all:
             for endpoint_uri in self.endpoint_uris:
                 raw_response = make_post_request(endpoint_uri, request_data, headers=headers)
         else:
