@@ -48,8 +48,8 @@ jobs:
           poetry run pytest tests -m integration
         env:
           WEB3_RPC_ENDPOINTS: ${{ secrets.WEB3_RPC_ENDPOINT }}
-          DEPOSIT_CONTRACT: "0xff50ed3d0ec03aC01D4C79aAd74928BFF48a7b2b"
-          LIDO_LOCATOR: "0x1eDf09b5023DC86737b59dE68a8130De878984f5"
+          DEPOSIT_CONTRACT: "0x00000000219ab540356cbb839cbe05303d7705fa"
+          LIDO_LOCATOR: "0xC1d0b3DE6792Bf6b4b37EccdcC24e45978Cfd2Eb"
 
   security:
     uses: lidofinance/linters/.github/workflows/security.yml@master
