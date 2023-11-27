@@ -48,7 +48,7 @@ jobs:
           poetry run pytest tests -m integration
         env:
           WEB3_RPC_ENDPOINTS: ${{ secrets.WEB3_RPC_ENDPOINT }}
-          DEPOSIT_CONTRACT: "0x00000000219ab540356cbb839cbe05303d7705fa"
+          DEPOSIT_CONTRACT: "0x00000000219ab540356cBB839Cbe05303d7705Fa"
           LIDO_LOCATOR: "0xC1d0b3DE6792Bf6b4b37EccdcC24e45978Cfd2Eb"
 
   security:
