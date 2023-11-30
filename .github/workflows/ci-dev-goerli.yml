@@ -11,9 +11,6 @@ on:
 permissions: {}
 
 jobs:
-  # test:
-  #   ...
-
   deploy:
     runs-on: ubuntu-latest
     # needs: test

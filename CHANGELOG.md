@@ -1,8 +1,9 @@
 # This file is no longer used by semantic-release
 For the latest release notes, please see the [GitHub releases page](https://github.com/lidofinance/depositor-bot/releases).
 
-# [4.1.0](https://github.com/lidofinance/depositor-bot/compare/v3.3.1...4.1.0) (2023-04-21)
+## [4.2.1](https://github.com/lidofinance/depositor-bot/compare/4.2.0...4.2.1) (2023-05-15)
 
+# [4.2.0](https://github.com/lidofinance/depositor-bot/compare/v3.3.1...4.2.0) (2023-04-21)
 
 ### Bug Fixes
 
@@ -104,10 +105,6 @@ For the latest release notes, please see the [GitHub releases page](https://gith
 
 
 ## [3.0.2](https://github.com/lidofinance/depositor-bot/compare/v3.0.1...v3.0.2) (2022-04-22)
-
-
-
-## [3.0.1](https://github.com/lidofinance/depositor-bot/compare/v3.0.0...v3.0.1) (2022-04-22)
 
 
 
