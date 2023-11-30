@@ -2,7 +2,7 @@ import logging
 
 from eth_account.datastructures import SignedTransaction
 from eth_typing import ChecksumAddress
-from web3.contract import ContractFunction
+from web3.contract import ContractCaller
 from web3.exceptions import ContractLogicError, TransactionNotFound, TimeExhausted
 from web3.module import Module
 from web3.types import BlockData, Wei
@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 class TransactionUtils(Module):
     @staticmethod
-    def check(transaction: ContractFunction) -> bool:
+    def check(transaction: ContractCaller) -> bool:
         try:
             transaction.call()
         except (ValueError, ContractLogicError) as error:
@@ -28,8 +28,8 @@ class TransactionUtils(Module):
 
     def send(
         self,
-        transaction: ContractFunction,
-        use_flashbots: bool,
+        transaction: ContractCaller,
+        use_relay: bool,
         timeout_in_blocks: int,
     ) -> bool:
         if not variables.ACCOUNT:
@@ -40,7 +40,7 @@ class TransactionUtils(Module):
             logger.info({'msg': 'Dry mode activated. Sending transaction skipped.'})
             return True
 
-        pending: BlockData = self.web3.eth.get_block('pending')
+        pending: BlockData = self.w3.eth.get_block('pending')
 
         priority = self._get_priority_fee(
             variables.GAS_PRIORITY_FEE_PERCENTILE,
@@ -52,18 +52,16 @@ class TransactionUtils(Module):
 
         transaction_dict = transaction.build_transaction({
             'from': variables.ACCOUNT.address,
-            # TODO Estimate gas and min(contract_gas_limit, estimated_gas * 1.3)
             'gas': gas_limit,
             'maxFeePerGas': pending['baseFeePerGas'] * 2 + priority,
             'maxPriorityFeePerGas': priority,
-            "nonce": self.web3.eth.get_transaction_count(variables.ACCOUNT.address),
+            "nonce": self.w3.eth.get_transaction_count(variables.ACCOUNT.address),
         })
 
-        signed = self.web3.eth.account.sign_transaction(transaction_dict, variables.ACCOUNT.privateKey)
+        signed = self.w3.eth.account.sign_transaction(transaction_dict, variables.ACCOUNT._private_key)
 
-        # TODO try to deposit with other relays
-        if use_flashbots and getattr(self.web3, 'flashbots', None):
-            status = self.flashbots_send(signed, pending['number'], timeout_in_blocks)
+        if use_relay and getattr(self.w3, 'relay', None):
+            status = self.relay_send(signed, pending['number'], timeout_in_blocks)
         else:
             status = self.classic_send(signed, timeout_in_blocks)
 
@@ -77,7 +75,7 @@ class TransactionUtils(Module):
         return status
 
     @staticmethod
-    def _estimate_gas(transaction: ContractFunction, account_address: ChecksumAddress) -> int:
+    def _estimate_gas(transaction: ContractCaller, account_address: ChecksumAddress) -> int:
         try:
             gas = transaction.estimate_gas({'from': account_address})
         except ContractLogicError as error:
@@ -92,14 +90,14 @@ class TransactionUtils(Module):
             int(gas * 1.3),
         )
 
-    def flashbots_send(
+    def relay_send(
         self,
         signed_tx: SignedTransaction,
         pending_block_num: int,
         timeout_in_blocks: int,
     ) -> bool:
         for i in range(timeout_in_blocks):
-            result = self.web3.flashbots.send_bundle(
+            result = self.w3.relay.send_bundle(
                 [{"signed_transaction": signed_tx.rawTransaction}],
                 pending_block_num + i
             )
@@ -115,14 +113,14 @@ class TransactionUtils(Module):
 
     def classic_send(self, signed_tx: SignedTransaction, timeout_in_blocks: int) -> bool:
         try:
-            tx_hash = self.web3.eth.send_raw_transaction(signed_tx.rawTransaction)
+            tx_hash = self.w3.eth.send_raw_transaction(signed_tx.rawTransaction)
         except Exception as error:
             logger.error({'msg': 'Transaction reverted.', 'value': str(error)})
             return False
 
         logger.info({'msg': 'Transaction sent.', 'value': tx_hash.hex()})
         try:
-            tx_receipt = self.web3.eth.wait_for_transaction_receipt(tx_hash, (timeout_in_blocks + 1) * SLOT_TIME)
+            tx_receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, (timeout_in_blocks + 1) * SLOT_TIME)
         except TimeExhausted:
             return False
 
@@ -132,7 +130,7 @@ class TransactionUtils(Module):
     def _get_priority_fee(self, percentile: int, min_priority_fee: Wei, max_priority_fee: Wei):
         return min(
             max(
-                self.web3.eth.fee_history(1, 'latest', reward_percentiles=[percentile])['reward'][0][0],
+                self.w3.eth.fee_history(1, 'latest', reward_percentiles=[percentile])['reward'][0][0],
                 min_priority_fee,
             ),
             max_priority_fee,

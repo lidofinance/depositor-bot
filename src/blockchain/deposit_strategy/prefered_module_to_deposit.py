@@ -25,20 +25,24 @@ def get_active_modules(w3: Web3, whitelist_modules: list[int]) -> list[int]:
     # Get all module ids
     modules = w3.lido.staking_router.get_staking_module_ids()
 
-    # Filter not-whitelisted modules
-    modules = [module for module in modules if module in whitelist_modules]
-
-    # Filter not-active modules
-    modules = [module for module in modules if w3.lido.staking_router.is_staking_module_active(module)]
-
-    return modules
+    return [
+        module for module in modules
+        # Filter not-whitelisted modules
+        if module in whitelist_modules and
+        # Filter not-active modules
+        w3.lido.staking_router.is_staking_module_active(module) and
+        # Filter non-depositable module
+        w3.lido.deposit_security_module.can_deposit(module)
+    ]
 
 
 def get_modules_stats(w3: Web3, modules: list[int]) -> list[tuple[int, int]]:
     depositable_ether = w3.lido.lido.get_depositable_ether()
+    max_deposits = w3.lido.deposit_security_module.get_max_deposits()
+    max_depositable_ether = min(max_deposits * 32 * 10**18, depositable_ether)
 
     module_stats = [(
-            w3.lido.staking_router.get_staking_module_max_deposits_count(module, depositable_ether),
+            w3.lido.staking_router.get_staking_module_max_deposits_count(module, max_depositable_ether),
             module,
         ) for module in modules
     ]

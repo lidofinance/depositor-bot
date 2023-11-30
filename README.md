@@ -69,8 +69,8 @@ This deposit is executed using the depositBufferedEther function within the "Dep
 | MAX_PRIORITY_FEE                  | 10 gwei    | Max priority fee that will be used in tx                                                                                 |
 | MAX_GAS_FEE                       | 100 gwei   | Bot will wait for a lower price. Treshold for gas_fee                                                                    |
 | CONTRACT_GAS_LIMIT                | 15000000   | Default transaction gas limit                                                                                            |
-| FLASHBOTS_RPC                     | -          | Flashbots rpc endpoint                                                                                                   |
-| FLASHBOT_SIGNATURE                | -          | Private key - Used to identify account in flashbot`s rpc (should NOT be equal to WALLET private key)                     |
+| AUCTION_BUNDLER_URIS              | -          | List of relays uris                                                                                                      |
+| AUCTION_BUNDLER_PRIVATE_KEY       | -          | Private key - Used to identify account for relays (should NOT be equal to WALLET private key)                            |
 | GAS_FEE_PERCENTILE_1              | 20         | Percentile for first recommended fee calculation                                                                         |
 | GAS_FEE_PERCENTILE_DAYS_HISTORY_1 | 1          | Percentile for first recommended calculates from N days of the fee history                                               |
 | GAS_PRIORITY_FEE_PERCENTILE       | 25         | Priority transaction will be N percentile from priority fees in last block (min MIN_PRIORITY_FEE - max MAX_PRIORITY_FEE) |

@@ -55,6 +55,7 @@ DEPOSITABLE_ETHER = Gauge(
     ['module_id'],
     namespace=PREFIX,
 )
+
 POSSIBLE_DEPOSITS_AMOUNT = Gauge(
     'possible_deposits_amount',
     'Possible deposits amount.',

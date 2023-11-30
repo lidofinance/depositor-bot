@@ -1,10 +1,12 @@
-from flashbots import flashbot
+# from flashbots import flashbot
+from eth_account import Account
 from prometheus_client import start_http_server
 from web3 import Web3
 from web3_multi_provider import FallbackProvider
 
 import variables
 from blockchain.executor import Executor
+from blockchain.web3_extentions.bundle import activate_relay
 from blockchain.web3_extentions.lido_contracts import LidoContracts
 from blockchain.web3_extentions.requests_metric_middleware import add_requests_metric_middleware
 from blockchain.web3_extentions.transaction import TransactionUtils
@@ -48,9 +50,9 @@ def main():
         'transaction': TransactionUtils,
     })
 
-    if variables.FLASHBOT_SIGNATURE and variables.FLASHBOTS_RPC:
-        logger.info({'msg': 'Add flashbots middleware.'})
-        flashbot(w3, w3.eth.account.from_key(variables.FLASHBOT_SIGNATURE), variables.FLASHBOTS_RPC)
+    if variables.AUCTION_BUNDLER_PRIVATE_KEY and variables.AUCTION_BUNDLER_URIS:
+        logger.info({'msg': 'Add private relays.'})
+        activate_relay(w3, Account.from_key(variables.AUCTION_BUNDLER_PRIVATE_KEY), variables.AUCTION_BUNDLER_URIS)
     else:
         logger.info({'msg': 'No flashbots available for this network.'})
 
