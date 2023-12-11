@@ -5,6 +5,7 @@ from http.server import SimpleHTTPRequestHandler, HTTPServer
 
 import requests
 
+
 SERVER_PORT = int(os.getenv('PULSE_SERVER_PORT', 9010))
 
 _last_pulse = datetime.now()

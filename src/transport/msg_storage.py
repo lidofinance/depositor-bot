@@ -1,6 +1,7 @@
 from typing import List, Callable, Iterable
 
 from transport.msg_providers.common import BaseMessageProvider
+from transport.msg_schemas import DepositMessage
 
 
 class MessageStorage:
@@ -27,13 +28,11 @@ class MessageStorage:
 
         return self.messages
 
-    def update_messages(self):
+    def get_messages(self, actualize_rule: Callable[[DepositMessage], bool]) -> List[dict]:
+        """
+        actualize_rule - is filter that filters all outdated messages
+        """
         self._receive_messages()
-
-    def get_messages(self, actualize_rule: Callable) -> List[dict]:
-        """
-            actualize_rule - function that will filter messages based on all messages in memory and last data from blockchain
-        """
         self.messages = list(filter(actualize_rule, self.messages))
         return self.messages
 
