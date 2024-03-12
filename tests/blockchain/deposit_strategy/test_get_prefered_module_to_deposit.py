@@ -3,7 +3,7 @@ from unittest.mock import Mock
 import pytest
 
 from blockchain.deposit_strategy.prefered_module_to_deposit import (
-    get_preferred_to_deposit_module,
+    get_preferred_to_deposit_modules,
     get_active_modules,
     get_modules_stats,
 )
@@ -18,9 +18,9 @@ def test_get_preferred_to_deposit_module(web3_lido_unit):
     web3_lido_unit.lido.staking_router.get_staking_module_max_deposits_count = Mock(return_value=0)
     web3_lido_unit.lido.deposit_security_module.get_max_deposits = Mock(return_value=100)
 
-    result = get_preferred_to_deposit_module(web3_lido_unit, modules[:-2])
+    result = get_preferred_to_deposit_modules(web3_lido_unit, modules[:-2])
 
-    assert result == 7
+    assert result == [7, 6, 5, 4, 3, 2, 1, 0]
 
 
 @pytest.mark.unit

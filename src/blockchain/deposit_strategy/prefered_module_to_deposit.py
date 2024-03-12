@@ -3,7 +3,7 @@ from typing import Optional
 from blockchain.typings import Web3
 
 
-def get_preferred_to_deposit_module(w3: Web3, whitelist_modules: list[int]) -> Optional[int]:
+def get_preferred_to_deposit_modules(w3: Web3, whitelist_modules: list[int]) -> list[int]:
     """
     Returns preferable module to deposit to make deposits balanced following the rules specified in Staking Router.
     Order is
@@ -11,14 +11,7 @@ def get_preferred_to_deposit_module(w3: Web3, whitelist_modules: list[int]) -> O
     2. Check which module accepts more staking allocation
     """
     active_modules = get_active_modules(w3, whitelist_modules)
-
-    if not active_modules:
-        return None
-
-    stats = get_modules_stats(w3, active_modules)
-
-    # Return module id
-    return stats[0][1]
+    return [module[1] for module in get_modules_stats(w3, active_modules)]
 
 
 def get_active_modules(w3: Web3, whitelist_modules: list[int]) -> list[int]:
