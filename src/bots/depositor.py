@@ -9,7 +9,7 @@ from web3.types import BlockData
 import variables
 from blockchain.deposit_strategy.curated_module import CuratedModuleDepositStrategy
 from blockchain.deposit_strategy.interface import ModuleDepositStrategyInterface
-from blockchain.deposit_strategy.prefered_module_to_deposit import get_preferred_to_deposit_module
+from blockchain.deposit_strategy.prefered_module_to_deposit import get_preferred_to_deposit_modules
 from blockchain.typings import Web3
 from cryptography.verify_signature import compute_vs
 from metrics.metrics import (
@@ -75,9 +75,13 @@ class DepositorBot:
     def execute(self, block: BlockData) -> bool:
         self._check_balance()
 
-        module_id = get_preferred_to_deposit_module(self.w3, variables.DEPOSIT_MODULES_WHITELIST)
+        modules_id = get_preferred_to_deposit_modules(self.w3, variables.DEPOSIT_MODULES_WHITELIST)
 
-        if module_id:
+        if not modules_id:
+            # Read messages in case if no depositable modules for metrics
+            self.message_storage._receive_messages()
+
+        for module_id in modules_id:
             logger.info({'msg': f'Do deposit to module with id: {module_id}.'})
             try:
                 self._deposit_to_module(module_id)
