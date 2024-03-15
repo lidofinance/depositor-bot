@@ -1,6 +1,10 @@
+import logging
 from typing import Optional
 
 from blockchain.typings import Web3
+
+
+logger = logging.getLogger(__name__)
 
 
 def get_preferred_to_deposit_modules(w3: Web3, whitelist_modules: list[int]) -> list[int]:
@@ -11,7 +15,9 @@ def get_preferred_to_deposit_modules(w3: Web3, whitelist_modules: list[int]) -> 
     2. Check which module accepts more staking allocation
     """
     active_modules = get_active_modules(w3, whitelist_modules)
-    return [module[1] for module in get_modules_stats(w3, active_modules)]
+    modules = [module[1] for module in get_modules_stats(w3, active_modules)]
+    logger.info({'msg': 'Calculate preferred modules.', 'value': modules})
+    return modules
 
 
 def get_active_modules(w3: Web3, whitelist_modules: list[int]) -> list[int]:
