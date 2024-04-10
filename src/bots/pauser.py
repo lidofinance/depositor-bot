@@ -10,14 +10,9 @@ from cryptography.verify_signature import compute_vs
 from metrics.transport_message_metrics import message_metrics_filter
 from transport.msg_providers.kafka import KafkaMessageProvider
 from transport.msg_providers.rabbit import RabbitProvider, MessageType
-from transport.msg_schemas import (
-    PauseMessageSchema,
-    get_pause_messages_sign_filter,
-    PauseMessage,
-    PingMessageSchema,
-    to_check_sum_address,
-)
 from transport.msg_storage import MessageStorage
+from transport.msg_types.pause import PauseMessageSchema, get_pause_messages_sign_filter, PauseMessage
+from transport.msg_types.ping import PingMessageSchema, to_check_sum_address
 from transport.types import TransportType
 
 
@@ -80,9 +75,20 @@ class PauserBot:
         return message_filter
 
     def _send_pause_message(self, message: PauseMessage) -> bool:
-        module_id = message['stakingModuleId']
+        if self.w3.lido.deposit_security_module.__class__.__name__ == 'DepositSecurityModuleContractV2':
+            logger.warning({'msg': f'Handle pause message.', 'value': message})
 
-        logger.warning({'msg': f'Handle pause message for module: {module_id}', 'value': message})
+            if message.get('stakingModuleId', -1) == -1:
+                return self._send_pause_v2(message)
+
+        else:
+            if message.get('stakingModuleId', -1) != -1:
+                return self._send_pause(message)
+
+        logger.error({'msg': 'Unsupported message. Outdated schema.', 'value': message})
+
+    def _send_pause(self, message: PauseMessage):
+        module_id = message['stakingModuleId']
 
         if not self.w3.lido.staking_router.is_staking_module_active(module_id):
             # Module already deactivated
@@ -93,6 +99,21 @@ class PauserBot:
         pause_tx = self.w3.lido.deposit_security_module.pause_deposits(
             message['blockNumber'],
             module_id,
+            (message['signature']['r'], compute_vs(message['signature']['v'], message['signature']['s']))
+        )
+
+        result = self.w3.transaction.send(pause_tx, False, 6)
+        logger.info({'msg': f'Transaction send. Result is {result}.', 'value': result})
+        return result
+
+    def _send_pause_v2(self, message: PauseMessage):
+        if self.w3.lido.deposit_security_module.getIsDepositsPaused():
+            logger.info({'msg': f'Lido deposits already paused. Skip message.'})
+            self.message_storage.clear()
+            return False
+
+        pause_tx = self.w3.lido.deposit_security_module.pause_deposits(
+            message['blockNumber'],
             (message['signature']['r'], compute_vs(message['signature']['v'], message['signature']['s']))
         )
 

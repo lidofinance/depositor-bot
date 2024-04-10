@@ -1,8 +1,9 @@
 import logging
 
-from metrics.metrics import DEPOSIT_MESSAGES, PING_MESSAGES, PAUSE_MESSAGES
+from metrics.metrics import DEPOSIT_MESSAGES, PING_MESSAGES, PAUSE_MESSAGES, UNVET_MESSAGES
 from transport.msg_providers.rabbit import MessageType
-from transport.msg_schemas import DepositMessage
+from transport.msg_types.deposit import DepositMessage
+
 
 logger = logging.getLogger(__name__)
 
@@ -17,8 +18,12 @@ def message_metrics_filter(msg: DepositMessage) -> bool:
         PAUSE_MESSAGES.labels(address, msg.get('stakingModuleId', -1), version).inc()
         return True
 
-    if msg_type == MessageType.DEPOSIT:
+    elif msg_type == MessageType.DEPOSIT:
         DEPOSIT_MESSAGES.labels(address, msg.get('stakingModuleId', -1), version).inc()
+        return True
+
+    elif msg_type == MessageType.UNVET:
+        UNVET_MESSAGES.labels(address, msg.get('stakingModuleId', -1), version).inc()
         return True
 
     elif msg_type == MessageType.PING:

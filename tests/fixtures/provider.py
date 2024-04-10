@@ -1,15 +1,17 @@
 import json
+import os
 from unittest.mock import Mock
 from urllib.parse import urlparse
 
 import pytest
 import requests
-from web3 import Web3
+from web3 import Web3, HTTPProvider
 from web3_multi_provider import FallbackProvider
 
 import variables
 from blockchain.web3_extentions.lido_contracts import LidoContracts
 from blockchain.web3_extentions.transaction import TransactionUtils
+from tests.fork import anvil_fork
 
 
 # -- Unit fixtures --
@@ -30,36 +32,13 @@ CHRONIX_URL = 'http://0.0.0.0:8080/'
 # -- Integration fixtures --
 @pytest.fixture(scope="module")
 def web3_provider_integration():
-    hardhat_path = 'v1/env/hardhat/'
-
-    response = requests.post(
-        CHRONIX_URL + hardhat_path,
-        json={
-            'chainId': 1,
-            'fork': variables.WEB3_RPC_ENDPOINTS[0],
-            'mining': {
-                'auto': True,
-                'interval': 12000,
-            },
-            'forking': {
-                # Is valid only for mainnet fork
-                'url': variables.WEB3_RPC_ENDPOINTS[0],
-                'blockNumber': 18275269,
-            }
-        },
-        headers={
-            'Content-Type': 'application/json'
-        },
-    )
-
-    print(response.text)
-    port = response.json()['data']['port']
-
-    yield Web3(FallbackProvider([f'http://0.0.0.0:{port}/'], request_kwargs={'timeout': 3600}))
-
-    r = requests.delete(CHRONIX_URL + hardhat_path + f'{port}/')
-
-    assert r.status_code == 200
+    with anvil_fork(
+        os.getenv('ANVIL_PATH'),
+        variables.EXECUTION_CLIENT_URI[0],
+        request.param[1],
+    ):
+        w3 = Web3(HTTPProvider('http://127.0.0.1:8545', request_kwargs={'timeout': 3600}))
+        yield w3
 
 
 @pytest.fixture(scope="module")

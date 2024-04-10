@@ -18,7 +18,7 @@ services:
       - FLASHBOTS_RPC=${FLASHBOTS_RPC}
       - FLASHBOT_SIGNATURE=${FLASHBOT_SIGNATURE}
       - DEPOSIT_MODULES_WHITELIST=${DEPOSIT_MODULES_WHITELIST}
-    command: src/depositor.py
+    command: depositor
 
   lido-pause-bot:
     image: lidofinance/depositor-bot
@@ -35,4 +35,21 @@ services:
       - RABBIT_MQ_URL=${RABBIT_MQ_URL}
       - RABBIT_MQ_USERNAME=${RABBIT_MQ_USERNAME}
       - RABBIT_MQ_PASSWORD=${RABBIT_MQ_PASSWORD}
-    command: src/pauser.py
+    command: pauser
+
+  lido-unvetting-bot:
+    image: lidofinance/depositor-bot
+    build: .
+    container_name: lido-unvetting-bot
+    restart: unless-stopped
+    ports:
+      - 127.0.0.1:9002:9000
+    environment:
+      - WEB3_RPC_ENDPOINTS=${WEB3_RPC_ENDPOINTS}
+      - WALLET_PRIVATE_KEY=${WALLET_PRIVATE_KEY}
+      - CREATE_TRANSACTIONS=${CREATE_TRANSACTIONS}
+      - MESSAGE_TRANSPORTS=${MESSAGE_TRANSPORTS}
+      - RABBIT_MQ_URL=${RABBIT_MQ_URL}
+      - RABBIT_MQ_USERNAME=${RABBIT_MQ_USERNAME}
+      - RABBIT_MQ_PASSWORD=${RABBIT_MQ_PASSWORD}
+    command: unvetter

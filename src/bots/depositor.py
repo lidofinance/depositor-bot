@@ -20,14 +20,9 @@ from metrics.metrics import (
 from metrics.transport_message_metrics import message_metrics_filter
 from transport.msg_providers.kafka import KafkaMessageProvider
 from transport.msg_providers.rabbit import RabbitProvider, MessageType
-from transport.msg_schemas import (
-    DepositMessageSchema,
-    PingMessageSchema,
-    get_deposit_messages_sign_filter,
-    DepositMessage,
-    to_check_sum_address,
-)
 from transport.msg_storage import MessageStorage
+from transport.msg_types.deposit import DepositMessageSchema, get_deposit_messages_sign_filter, DepositMessage
+from transport.msg_types.ping import PingMessageSchema, to_check_sum_address
 from transport.types import TransportType
 
 logger = logging.getLogger(__name__)
@@ -206,7 +201,7 @@ class DepositorBot:
         )
 
     @staticmethod
-    def _prepare_signs_for_deposit(quorum: list[DepositMessage]) -> tuple[tuple[str, str]]:
+    def _prepare_signs_for_deposit(quorum: list[DepositMessage]) -> tuple[tuple[str, str], ...]:
         sorted_messages = sorted(quorum, key=lambda msg: int(msg['guardianAddress'], 16))
 
         return tuple(

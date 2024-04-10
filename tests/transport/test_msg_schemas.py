@@ -1,6 +1,6 @@
 import pytest
 
-from transport.msg_schemas import to_check_sum_address
+from transport.msg_types.ping import to_check_sum_address
 
 
 @pytest.mark.unit

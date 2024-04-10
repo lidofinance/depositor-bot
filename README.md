@@ -10,6 +10,8 @@ This deposit is executed using the depositBufferedEther function within the "Dep
 
 **The Pauser Bot** obtains pause message from Council Daemon and enacts pause on the specified staking module.
 
+**The Unvetting Bot** obtains unvet message from Council Daemon and enacts unvet on the specified node operator.
+
 ## Table of Contents
 
 - [Running Daemon](#running-daemon)
@@ -76,7 +78,7 @@ This deposit is executed using the depositBufferedEther function within the "Dep
 | GAS_PRIORITY_FEE_PERCENTILE       | 25         | Priority transaction will be N percentile from priority fees in last block (min MIN_PRIORITY_FEE - max MAX_PRIORITY_FEE) |
 | MAX_BUFFERED_ETHERS               | 5000 ether | Maximum amount of ETH in the buffer, after which the bot deposits at any gas                                             |
 | PROMETHEUS_PORT                   | 9000       | Port with metrics server                                                                                                 |
-| PULSE_SERVER_PORT                 | 9010       | Port with bot`s status server                                                                                            |
+| HEALTHCHECK_SERVER_PORT           | 9010       | Port with bot`s status server                                                                                            |
 | MAX_CYCLE_LIFETIME_IN_SECONDS     | 1200       | Max lifetime of usual cycle. If cycle will not end in this time, bot will crush                                          |
 
 ## Metrics and logs

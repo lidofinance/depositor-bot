@@ -1,7 +1,6 @@
-from typing import List, Callable, Iterable
+from typing import List, Callable, Iterable, TypedDict
 
 from transport.msg_providers.common import BaseMessageProvider
-from transport.msg_schemas import DepositMessage
 
 
 class MessageStorage:
@@ -28,7 +27,7 @@ class MessageStorage:
 
         return self.messages
 
-    def get_messages(self, actualize_rule: Callable[[DepositMessage], bool]) -> List[dict]:
+    def get_messages(self, actualize_rule: Callable[[TypedDict], bool]) -> List[dict]:
         """
         actualize_rule - is filter that filters all outdated messages
         """

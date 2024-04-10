@@ -1,10 +1,9 @@
-FROM python:3.10.6-slim as base
+FROM python:3.11.9-slim as base
 
 RUN apt-get update && apt-get install -y --no-install-recommends -qq \
-    gcc=4:10.2.1-1 \
-    libffi-dev=3.3-6 \
-    g++=4:10.2.1-1 \
-    curl=7.74.0-1.3+deb11u10 \
+    gcc=4:12.2.0-3 \
+    libffi-dev=3.4.4-1 \
+    g++=4:12.2.0-3 \
  && apt-get clean \
  && rm -rf /var/lib/apt/lists/*
 
@@ -13,41 +12,39 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=off \
     PIP_DISABLE_PIP_VERSION_CHECK=on \
     PIP_DEFAULT_TIMEOUT=100 \
+    POETRY_VIRTUALENVS_IN_PROJECT=true \
+    POETRY_NO_INTERACTION=1 \
     VENV_PATH="/.venv"
 
-WORKDIR /app
+ENV PATH="$VENV_PATH/bin:$PATH"
 
 FROM base as builder
 
-ENV POETRY_VERSION=1.4.2 \
-    POETRY_VIRTUALENVS_IN_PROJECT=true \
-    POETRY_NO_INTERACTION=1 \
-    POETRY_HOME=/opt/poetry \
-    PATH="/opt/poetry/bin:$PATH"
+ENV POETRY_VERSION=1.8.2
+RUN pip install --no-cache-dir poetry==$POETRY_VERSION
 
-# Set the SHELL option -o pipefail before RUN with a pipe in
-SHELL ["/bin/bash", "-o", "pipefail", "-c"]
-
-# install poetry - respects $POETRY_VERSION & $POETRY_HOME
-RUN curl -sSL https://install.python-poetry.org | python -
-
+WORKDIR /
 COPY pyproject.toml poetry.lock ./
-RUN poetry install
+RUN poetry install --only main --no-root
+
 
 FROM base as production
 
-COPY --from=builder /app /app
-COPY . /app
+COPY --from=builder $VENV_PATH $VENV_PATH
+WORKDIR /app
+COPY . .
 
-ENV PATH="/app/.venv/bin:$PATH"
-ENV PULSE_SERVER_PORT 9010
+RUN apt-get clean && find /var/lib/apt/lists/ -type f -delete && chown -R www-data /app/
+
 ENV PROMETHEUS_PORT 9000
+ENV HEALTHCHECK_SERVER_PORT 9010
 
 EXPOSE $PROMETHEUS_PORT
 USER www-data
 
 HEALTHCHECK --interval=10s --timeout=3s \
-    CMD curl -f http://localhost:$PULSE_SERVER_PORT/healthcheck || exit 1
+    CMD wget --no-verbose --tries=1 --spider http://localhost:$HEALTHCHECK_SERVER_PORT/healthcheck || exit 1
 
-ENTRYPOINT ["python3"]
-CMD ["src/depositor.py"]
+WORKDIR /app/
+
+ENTRYPOINT ["python3/src/main.py"]

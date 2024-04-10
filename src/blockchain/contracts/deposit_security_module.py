@@ -5,6 +5,7 @@ from web3.types import BlockIdentifier
 
 from blockchain.contracts.base_interface import ContractInterface
 
+
 logger = logging.getLogger(__name__)
 
 
@@ -134,6 +135,84 @@ class DepositSecurityModuleContract(ContractInterface):
         response = self.functions.getMaxDeposits().call(block_identifier=block_identifier)
         logger.info({
             'msg': f'Call `getMaxDeposits()`.',
+            'value': response,
+            'block_identifier': block_identifier.__repr__(),
+        })
+        return response
+
+
+class DepositSecurityModuleContractV2(DepositSecurityModuleContract):
+    abi_path = './interfaces/DepositSecurityModuleV2.json'
+
+    def pause_deposits(  # Overwrite base pause_deposits
+        self,
+        block_number: int,
+        guardian_signature: tuple[str, str],
+    ):
+        """
+        Pauses deposits for staking module given that both conditions are satisfied (reverts otherwise):
+
+            1. The function is called by the guardian with index guardianIndex OR sig
+                is a valid signature by the guardian with index guardianIndex of the data
+                defined below.
+
+            2. block.number - blockNumber <= pauseIntentValidityPeriodBlocks
+
+        The signature, if present, must be produced for keccak256 hash of the following
+        message (each component taking 32 bytes):
+
+        | PAUSE_MESSAGE_PREFIX | blockNumber |
+        """
+
+        tx = self.functions.pauseDeposits(
+            block_number,
+            guardian_signature
+        )
+        logger.info({'msg': 'Build `pauseDeposits({}, {})` tx.'.format(
+            block_number,
+            guardian_signature,
+        )})
+        return tx
+
+    def get_unvet_message_prefix(self, block_identifier: BlockIdentifier = 'latest') -> bytes:
+        response = self.functions.UNVET_MESSAGE_PREFIX().call(block_identifier=block_identifier)
+        logger.info({'msg': f'Call `UNVET_MESSAGE_PREFIX()`.', 'value': response.hex(), 'block_identifier': block_identifier.__repr__()})
+        return response
+
+    def unvet_signing_keys(
+            self,
+            block_number: int,
+            staking_module_id: int,
+            nonce: int,
+            operator_ids: list[int],
+            vetted_keys_by_operator: list[int],
+            guardian_signature: tuple[str, str],
+    ):
+        tx = self.functions.pauseDeposits(
+            block_number,
+            staking_module_id,
+            nonce,
+            operator_ids,
+            vetted_keys_by_operator,
+            guardian_signature,
+        )
+        logger.info({'msg': 'Build `unvetSigningKeys({}, {}, {}, {}, {})` tx.'.format(
+            block_number,
+            staking_module_id,
+            nonce,
+            operator_ids,
+            vetted_keys_by_operator,
+            guardian_signature,
+        )})
+        return tx
+
+    def get_is_deposits_paused(self, block_identifier: BlockIdentifier = 'latest'):
+        """
+        Returns if lido deposits are paused
+        """
+        response = self.functions.getIsDepositsPaused().call(block_identifier=block_identifier)
+        logger.info({
+            'msg': f'Call `getIsDepositsPaused()`.',
             'value': response,
             'block_identifier': block_identifier.__repr__(),
         })

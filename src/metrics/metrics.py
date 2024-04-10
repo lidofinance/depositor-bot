@@ -41,6 +41,11 @@ PING_MESSAGES = Gauge(
     ['address', 'version'],
     namespace=PREFIX,
 )
+UNVET_MESSAGES = Gauge(
+    'unvet_messages',
+    'Guardian unvet messages',
+    ['address', 'module_id', 'version']
+)
 
 CURRENT_QUORUM_SIZE = Gauge(
     'quorum_size',
