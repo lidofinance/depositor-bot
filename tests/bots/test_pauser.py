@@ -41,8 +41,8 @@ def pause_message():
 
 @pytest.fixture
 def add_account_to_guardian(web3_lido_integration, set_integration_account):
-    web3_lido_integration.provider.make_request('hardhat_impersonateAccount', [DSM_OWNER])
-    web3_lido_integration.provider.make_request('hardhat_setBalance', [DSM_OWNER, '0x500000000000000000000000'])
+    web3_lido_integration.provider.make_request('anvil_impersonateAccount', [DSM_OWNER])
+    web3_lido_integration.provider.make_request('anvil_setBalance', [DSM_OWNER, '0x500000000000000000000000'])
     quorum_size = web3_lido_integration.lido.deposit_security_module.get_guardian_quorum()
 
     # If guardian removal failed
@@ -133,38 +133,33 @@ def test_pause_message_filtered_by_module_id(pause_bot, block_data, pause_messag
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
-    "module_id",
-    [1, 2],
+    "web3_provider_integration,module_id",
+    [[19628126, 1], [19628126, 2]],
+    indirect=["web3_provider_integration"],
 )
-def test_pauser_bot(web3_with_dvt_module, add_account_to_guardian, module_id):
-    pause_module(web3_with_dvt_module, module_id)
+def test_pauser_bot(web3_provider_integration, add_account_to_guardian, module_id):
+    latest = web3_provider_integration.eth.get_block('latest')
 
+    pm = get_pause_message(web3_provider_integration, module_id)
 
-def pause_module(web3: Web3, module_id: int):
-    latest = web3.eth.get_block('latest')
-
-    pm = get_pause_message(web3, module_id)
-
-    pb = PauserBot(web3)
+    pb = PauserBot(web3_provider_integration)
     pb.execute(latest)
 
+    web3_provider_integration.provider.make_request('anvil_mine', [1])
+
     # Check no pause
-    assert web3.lido.staking_router.is_staking_module_active(module_id)
+    assert web3_provider_integration.lido.staking_router.is_staking_module_active(module_id)
 
     # Add pause message
     pb.message_storage.messages = [pm]
     pb.execute(latest)
 
+    web3_provider_integration.provider.make_request('anvil_mine', [1])
+
     # Check there is pause message and module paused
-    assert not web3.lido.staking_router.is_staking_module_active(module_id)
+    assert not web3_provider_integration.lido.staking_router.is_staking_module_active(module_id)
     assert len(pb.message_storage.messages) == 1
 
     pb.execute(latest)
     # Check pause message cleaned
     assert not pb.message_storage.messages
-
-    # Cleanup
-    web3.lido.deposit_security_module.functions.unpauseDeposits(pm['stakingModuleId']).transact(
-        {'from': DSM_OWNER}
-    )
-    assert web3.lido.staking_router.is_staking_module_active(module_id)
