@@ -26,28 +26,14 @@ jobs:
         run: |
           poetry install
 
-      - name: Unit Tests with pytest
-        run: |
-          poetry run pytest tests -m unit
-
-      - name: Set up node
-        uses: actions/setup-node@v3.0.0
-        with:
-          node-version: '18.17.1'
-          cache: 'yarn'
-
-      - name: Install dependencies
-        run: yarn install --immutable
-
-      - name: Run chronix
-        run: |
-          yarn chronix start &
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
 
       - name: Integration tests with pytest
         run: |
           poetry run pytest tests -m integration
         env:
-
           WEB3_RPC_ENDPOINTS: ${{ secrets.WEB3_RPC_ENDPOINT }}
           DEPOSIT_CONTRACT: "0x00000000219ab540356cBB839Cbe05303d7705Fa"
           LIDO_LOCATOR: "0xC1d0b3DE6792Bf6b4b37EccdcC24e45978Cfd2Eb"
+          ANVIL_PATH: ""

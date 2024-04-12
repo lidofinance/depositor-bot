@@ -180,15 +180,15 @@ class DepositSecurityModuleContractV2(DepositSecurityModuleContract):
         return response
 
     def unvet_signing_keys(
-            self,
-            block_number: int,
-            staking_module_id: int,
-            nonce: int,
-            operator_ids: list[int],
-            vetted_keys_by_operator: list[int],
-            guardian_signature: tuple[str, str],
+        self,
+        block_number: int,
+        staking_module_id: int,
+        nonce: int,
+        operator_ids: list[int],
+        vetted_keys_by_operator: list[int],
+        guardian_signature: tuple[str, str],
     ):
-        tx = self.functions.pauseDeposits(
+        tx = self.functions.unvetSigningKeys(
             block_number,
             staking_module_id,
             nonce,

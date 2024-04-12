@@ -7,6 +7,7 @@ from web3.types import BlockData
 import variables
 from blockchain.typings import Web3
 from cryptography.verify_signature import compute_vs
+from metrics.metrics import UNEXPECTED_EXCEPTIONS
 from metrics.transport_message_metrics import message_metrics_filter
 from transport.msg_providers.kafka import KafkaMessageProvider
 from transport.msg_providers.rabbit import RabbitProvider, MessageType
@@ -68,8 +69,13 @@ class PauserBot:
     def _get_message_actualize_filter(self) -> Callable[[PauseMessage], bool]:
         current_block = self.w3.eth.get_block('latest')
         message_validity_time = self.w3.lido.deposit_security_module.get_pause_intent_validity_period_blocks()
+        guardians_list = self.w3.lido.deposit_security_module.get_guardians()
 
         def message_filter(message: PauseMessage) -> bool:
+            if message['guardianAddress'] not in guardians_list:
+                UNEXPECTED_EXCEPTIONS.labels('unexpected_guardian_address').inc()
+                return False
+
             return message['blockNumber'] > current_block['number'] - message_validity_time
 
         return message_filter
@@ -107,7 +113,7 @@ class PauserBot:
         return result
 
     def _send_pause_v2(self, message: PauseMessage):
-        if self.w3.lido.deposit_security_module.getIsDepositsPaused():
+        if self.w3.lido.deposit_security_module.get_is_deposits_paused():
             logger.info({'msg': f'Lido deposits already paused. Skip message.'})
             self.message_storage.clear()
             return False

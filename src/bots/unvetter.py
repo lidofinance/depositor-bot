@@ -7,6 +7,7 @@ from web3.types import BlockData
 import variables
 from blockchain.typings import Web3
 from cryptography.verify_signature import compute_vs
+from metrics.metrics import UNEXPECTED_EXCEPTIONS
 from metrics.transport_message_metrics import message_metrics_filter
 from transport.msg_providers.kafka import KafkaMessageProvider
 from transport.msg_providers.rabbit import RabbitProvider, MessageType
@@ -20,9 +21,17 @@ logger = logging.getLogger(__name__)
 
 
 class UnvetterBot:
+
+    fully_initialized = False
+
     def __init__(self, w3: Web3):
         self.w3 = w3
 
+        if self.w3.lido.deposit_security_module.__class__.__name__ == 'DepositSecurityModuleContractV2':
+            self.finalize_init()
+            fully_initialized = True
+
+    def finalize_init(self):
         transports = []
 
         if TransportType.RABBIT in variables.MESSAGE_TRANSPORTS:
@@ -41,7 +50,7 @@ class UnvetterBot:
         if not transports:
             logger.warning({'msg': 'No transports found', 'value': variables.MESSAGE_TRANSPORTS})
 
-        unvet_prefix = self.w3.lido.deposit_security_module.unvet_signing_keys()
+        unvet_prefix = self.w3.lido.deposit_security_module.get_unvet_message_prefix()
 
         self.message_storage = MessageStorage(
             transports,
@@ -53,6 +62,13 @@ class UnvetterBot:
         )
 
     def execute(self, block: BlockData) -> bool:
+        if not self.fully_initialized:
+            if self.w3.lido.deposit_security_module.__class__.__name__ == 'DepositSecurityModuleContractV2':
+                self.finalize_init()
+                self.fully_initialized = True
+            else:
+                return True
+
         messages = self.receive_unvet_messages()
         logger.info({'msg': f'Received {len(messages)} unvet messages.'})
 
@@ -72,7 +88,13 @@ class UnvetterBot:
         for module_id in modules:
             nonces[module_id] = self.w3.lido.staking_router.get_staking_module_nonce(module_id)
 
+        guardians_list = self.w3.lido.deposit_security_module.get_guardians()
+
         def message_filter(message: UnvetMessage) -> bool:
+            if message['guardianAddress'] not in guardians_list:
+                UNEXPECTED_EXCEPTIONS.labels('unexpected_guardian_address').inc()
+                return False
+
             # If message nonce is lower than in module, message is invalid
             # If higher, maybe unvetter node is outdated -> message can be valid
             return message['nonce'] >= nonces[message['stakingModuleId']]

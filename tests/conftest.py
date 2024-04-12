@@ -33,8 +33,8 @@ def set_integration_account():
     variables.ACCOUNT = None
 
 
-@pytest.fixture()
-def ping_message(monkeypatch):
+@pytest.fixture
+def ping_message():
     yield {
         "type": "ping",
         "blockNumber": 13726495,

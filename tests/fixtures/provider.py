@@ -23,7 +23,7 @@ def web3_lido_unit():
 
 
 # -- Integration fixtures --
-@pytest.fixture(scope="module")
+@pytest.fixture
 def web3_provider_integration(request):
     block_num = getattr(request, 'param', None)
 
@@ -36,7 +36,7 @@ def web3_provider_integration(request):
         yield w3
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 def web3_lido_integration(web3_provider_integration):
     web3_provider_integration.attach_modules({
         'lido': LidoContracts,
