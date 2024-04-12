@@ -44,9 +44,9 @@ def deposit_security_module(web3_provider_integration, lido_locator):
 
 
 @pytest.fixture
-def deposit_security_module_v2(web3_provider_integration, lido_locator):
-    upgrade_staking_router_to_v2(web3_provider_integration)
-    yield cast(DepositSecurityModuleContractV2, web3_provider_integration.eth.contract(
+def deposit_security_module_v2(web3_lido_integration, lido_locator):
+    upgrade_staking_router_to_v2(web3_lido_integration)
+    yield cast(DepositSecurityModuleContractV2, web3_lido_integration.eth.contract(
         address=lido_locator.deposit_security_module(),
         ContractFactoryClass=DepositSecurityModuleContractV2,
     ))

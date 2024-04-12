@@ -1,5 +1,6 @@
 import pytest
 
+from tests.fixtures import deposit_security_module_v2
 from tests.utils.contract_utils import check_contract
 from tests.utils.regrex import check_value_re, check_value_type, ADDRESS_REGREX
 
@@ -23,7 +24,7 @@ def test_deposit_security_module_call(deposit_security_module, caplog):
 
 
 @pytest.mark.integration
-def test_deposit_security_module_v2_call(deposit_security_module_v2, caplog):
+def test_deposit_security_module_v2_call(caplog, deposit_security_module_v2):
     check_contract(
         deposit_security_module_v2,
         [
