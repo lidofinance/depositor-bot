@@ -307,38 +307,38 @@ def add_accounts_to_guardian(web3_lido_integration, set_integration_account):
     [[19628126, 1], [19628126, 2]],
     indirect=["web3_provider_integration"],
 )
-def test_depositor_bot(web3_provider_integration, module_id, add_accounts_to_guardian):
+def test_depositor_bot(web3_provider_integration, web3_lido_integration, module_id, add_accounts_to_guardian):
     variables.DEPOSIT_MODULES_WHITELIST = [1, 2]
-    web3_provider_integration.provider.make_request('anvil_setBalance', [
-        web3_provider_integration.eth.accounts[0],
+    web3_lido_integration.provider.make_request('anvil_setBalance', [
+        web3_lido_integration.eth.accounts[0],
         '0x500000000000000000000000',
     ])
 
     for i in range(15):
-        web3_provider_integration.lido.lido.functions.submit(web3_provider_integration.eth.accounts[0]).transact({
-            'from': web3_provider_integration.eth.accounts[0],
+        web3_lido_integration.lido.lido.functions.submit(web3_lido_integration.eth.accounts[0]).transact({
+            'from': web3_lido_integration.eth.accounts[0],
             'value': 10000 * 10 ** 18,
         })
 
-    web3_provider_integration.lido.deposit_security_module.functions.setMaxDeposits(100).transact({'from': DSM_OWNER})
+    web3_lido_integration.lido.deposit_security_module.functions.setMaxDeposits(100).transact({'from': DSM_OWNER})
 
-    latest = web3_provider_integration.eth.get_block('latest')
+    latest = web3_lido_integration.eth.get_block('latest')
 
-    old_module_nonce = web3_provider_integration.lido.staking_router.get_staking_module_nonce(module_id)
+    old_module_nonce = web3_lido_integration.lido.staking_router.get_staking_module_nonce(module_id)
 
-    deposit_message_1 = get_deposit_message(web3_provider_integration, COUNCIL_ADDRESS_1, COUNCIL_PK_1, module_id)
-    deposit_message_2 = get_deposit_message(web3_provider_integration, COUNCIL_ADDRESS_1, COUNCIL_PK_1, module_id)
-    deposit_message_3 = get_deposit_message(web3_provider_integration, COUNCIL_ADDRESS_2, COUNCIL_PK_2, module_id)
+    deposit_message_1 = get_deposit_message(web3_lido_integration, COUNCIL_ADDRESS_1, COUNCIL_PK_1, module_id)
+    deposit_message_2 = get_deposit_message(web3_lido_integration, COUNCIL_ADDRESS_1, COUNCIL_PK_1, module_id)
+    deposit_message_3 = get_deposit_message(web3_lido_integration, COUNCIL_ADDRESS_2, COUNCIL_PK_2, module_id)
 
-    web3_provider_integration.provider.make_request('anvil_mine', [1])
+    web3_lido_integration.provider.make_request('anvil_mine', [1])
 
-    db = DepositorBot(web3_provider_integration)
+    db = DepositorBot(web3_lido_integration)
     db.message_storage.messages = []
     db.execute(latest)
 
-    assert web3_provider_integration.lido.staking_router.get_staking_module_nonce(module_id) == old_module_nonce
+    assert web3_lido_integration.lido.staking_router.get_staking_module_nonce(module_id) == old_module_nonce
 
     db.message_storage.messages = [deposit_message_1, deposit_message_2, deposit_message_3]
     db._get_module_strategy = Mock(return_value=Mock(return_value=True))
     assert db.execute(latest)
-    assert web3_provider_integration.lido.staking_router.get_staking_module_nonce(module_id) == old_module_nonce + 1
+    assert web3_lido_integration.lido.staking_router.get_staking_module_nonce(module_id) == old_module_nonce + 1

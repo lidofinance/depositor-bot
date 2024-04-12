@@ -18,6 +18,7 @@ def pause_bot(web3_lido_unit, block_data):
     web3_lido_unit.eth.get_block = Mock(return_value=block_data)
     variables.MESSAGE_TRANSPORTS = ''
     web3_lido_unit.lido.deposit_security_module.get_pause_intent_validity_period_blocks = Mock(return_value=10)
+    web3_lido_unit.lido.deposit_security_module.get_guardians = Mock(return_value=[COUNCIL_ADDRESS])
     yield PauserBot(web3_lido_unit)
 
 
@@ -26,7 +27,7 @@ def pause_message():
     yield {
         "blockHash": "0xe41c0212516a899c455203e833903c802338daa3048bc637b623f6fba0a1685c",
         "blockNumber": 10,
-        "guardianAddress": "0x3dc4cF780F2599B528F37dedB34449Fb65Ef7d4A",
+        "guardianAddress": COUNCIL_ADDRESS,
         "guardianIndex": 0,
         "stakingModuleId": 1,
         "signature": {
