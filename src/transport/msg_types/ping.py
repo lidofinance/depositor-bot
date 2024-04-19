@@ -20,12 +20,3 @@ PingMessageSchema = Schema({
 def to_check_sum_address(msg: dict):
     msg['guardianAddress'] = Web3.to_checksum_address(msg['guardianAddress'])
     return msg
-
-
-UnvetMessageSchema = Schema({
-    'type': And(str, lambda t: t in ('unvet',)),
-    'blockNumber': int,
-    'guardianAddress': And(str, ADDRESS_REGREX),
-    'signature': SignatureSchema,
-    'stakingModuleId': int
-}, ignore_extra_keys=True)

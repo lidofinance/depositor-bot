@@ -127,7 +127,7 @@ class PauserBot:
         return result
 
     def _send_pause_v2(self, message: PauseMessage):
-        if self.w3.lido.deposit_security_module.get_is_deposits_paused():
+        if self.w3.lido.deposit_security_module.is_deposits_paused():
             logger.info({'msg': f'Lido deposits already paused. Skip message.'})
             self.message_storage.clear()
             return False

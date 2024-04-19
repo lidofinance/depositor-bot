@@ -122,6 +122,7 @@ class UnvetterBot:
 
         unvet_tx = self.w3.lido.deposit_security_module.unvet_signing_keys(
             message['blockNumber'],
+            message['blockHash'],
             module_id,
             message['nonce'],
             message['operatorIds'],

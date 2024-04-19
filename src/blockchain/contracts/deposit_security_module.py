@@ -1,6 +1,7 @@
 import logging
 
 from eth_typing import ChecksumAddress, Hash32
+from web3.contract.contract import ContractFunction
 from web3.types import BlockIdentifier
 
 from blockchain.contracts.base_interface import ContractInterface
@@ -48,7 +49,7 @@ class DepositSecurityModuleContract(ContractInterface):
         nonce: int,
         deposit_call_data: bytes,
         guardian_signatures: list[tuple[str, str]],
-    ):
+    ) -> ContractFunction:
         """
         Calls LIDO.deposit(maxDepositsPerBlock, stakingModuleId, depositCalldata).
 
@@ -101,7 +102,7 @@ class DepositSecurityModuleContract(ContractInterface):
         block_number: int,
         staking_module_id: int,
         guardian_signature: tuple[str, str],
-    ):
+    ) -> ContractFunction:
         """
         Pauses deposits for staking module given that both conditions are satisfied (reverts otherwise):
 
@@ -128,7 +129,7 @@ class DepositSecurityModuleContract(ContractInterface):
         )})
         return tx
 
-    def get_max_deposits(self, block_identifier: BlockIdentifier = 'latest'):
+    def get_max_deposits(self, block_identifier: BlockIdentifier = 'latest') -> int:
         """
         Returns maxDepositsPerBlock
         """
@@ -140,7 +141,7 @@ class DepositSecurityModuleContract(ContractInterface):
         })
         return response
 
-    def version(self, block_identifier: BlockIdentifier = 'latest'):
+    def version(self, block_identifier: BlockIdentifier = 'latest') -> int:
         return 1
 
 
@@ -151,7 +152,7 @@ class DepositSecurityModuleContractV2(DepositSecurityModuleContract):
         self,
         block_number: int,
         guardian_signature: tuple[str, str],
-    ):
+    ) -> ContractFunction:
         """
         Pauses deposits for staking module given that both conditions are satisfied (reverts otherwise):
 
@@ -185,22 +186,25 @@ class DepositSecurityModuleContractV2(DepositSecurityModuleContract):
     def unvet_signing_keys(
         self,
         block_number: int,
+        block_hash: Hash32,
         staking_module_id: int,
         nonce: int,
         operator_ids: list[int],
         vetted_keys_by_operator: list[int],
         guardian_signature: tuple[str, str],
-    ):
+    ) -> ContractFunction:
         tx = self.functions.unvetSigningKeys(
             block_number,
+            block_hash,
             staking_module_id,
             nonce,
             operator_ids,
             vetted_keys_by_operator,
             guardian_signature,
         )
-        logger.info({'msg': 'Build `unvetSigningKeys({}, {}, {}, {}, {})` tx.'.format(
+        logger.info({'msg': 'Build `unvetSigningKeys({}, {}, {}, {}, {}, {})` tx.'.format(
             block_number,
+            block_hash,
             staking_module_id,
             nonce,
             operator_ids,
@@ -209,11 +213,11 @@ class DepositSecurityModuleContractV2(DepositSecurityModuleContract):
         )})
         return tx
 
-    def get_is_deposits_paused(self, block_identifier: BlockIdentifier = 'latest'):
+    def is_deposits_paused(self, block_identifier: BlockIdentifier = 'latest') -> bool:
         """
         Returns if lido deposits are paused
         """
-        response = self.functions.getIsDepositsPaused().call(block_identifier=block_identifier)
+        response = self.functions.isDepositsPaused().call(block_identifier=block_identifier)
         logger.info({
             'msg': f'Call `getIsDepositsPaused()`.',
             'value': response,
@@ -221,7 +225,7 @@ class DepositSecurityModuleContractV2(DepositSecurityModuleContract):
         })
         return response
 
-    def version(self, block_identifier: BlockIdentifier = 'latest'):
+    def version(self, block_identifier: BlockIdentifier = 'latest') -> int:
         response = self.functions.VERSION().call(block_identifier=block_identifier)
         logger.info({
             'msg': f'Call `VERSION()`.',
