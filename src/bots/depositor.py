@@ -2,6 +2,7 @@ import logging
 from collections import defaultdict
 from typing import Optional, Callable
 
+from eth_account import Account
 from eth_typing import Hash32
 from schema import Or, Schema
 from web3.types import BlockData
@@ -10,7 +11,9 @@ import variables
 from blockchain.deposit_strategy.curated_module import CuratedModuleDepositStrategy
 from blockchain.deposit_strategy.interface import ModuleDepositStrategyInterface
 from blockchain.deposit_strategy.prefered_module_to_deposit import get_preferred_to_deposit_modules
+from blockchain.executor import Executor
 from blockchain.typings import Web3
+from blockchain.web3_extentions.bundle import activate_relay
 from cryptography.verify_signature import compute_vs
 from metrics.metrics import (
     ACCOUNT_BALANCE,
@@ -27,6 +30,27 @@ from transport.types import TransportType
 
 
 logger = logging.getLogger(__name__)
+
+
+def run_depositor(w3):
+    if variables.AUCTION_BUNDLER_PRIVATE_KEY and variables.AUCTION_BUNDLER_URIS:
+        logger.info({'msg': 'Add private relays.'})
+        activate_relay(w3, Account.from_key(variables.AUCTION_BUNDLER_PRIVATE_KEY), variables.AUCTION_BUNDLER_URIS)
+    else:
+        logger.info({'msg': 'No flashbots available for this network.'})
+
+    logger.info({'msg': 'Initialize Depositor bot.'})
+    depositor_bot = DepositorBot(w3)
+
+    e = Executor(
+        w3,
+        depositor_bot.execute,
+        5,
+        variables.MAX_CYCLE_LIFETIME_IN_SECONDS,
+    )
+    logger.info({'msg': 'Execute depositor as daemon.'})
+    e.execute_as_daemon()
+
 
 
 class ModuleNotSupportedError(Exception):

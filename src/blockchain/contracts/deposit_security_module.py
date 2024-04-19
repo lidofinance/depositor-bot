@@ -140,6 +140,9 @@ class DepositSecurityModuleContract(ContractInterface):
         })
         return response
 
+    def version(self, block_identifier: BlockIdentifier = 'latest'):
+        return 1
+
 
 class DepositSecurityModuleContractV2(DepositSecurityModuleContract):
     abi_path = './interfaces/DepositSecurityModuleV2.json'
@@ -213,6 +216,15 @@ class DepositSecurityModuleContractV2(DepositSecurityModuleContract):
         response = self.functions.getIsDepositsPaused().call(block_identifier=block_identifier)
         logger.info({
             'msg': f'Call `getIsDepositsPaused()`.',
+            'value': response,
+            'block_identifier': block_identifier.__repr__(),
+        })
+        return response
+
+    def version(self, block_identifier: BlockIdentifier = 'latest'):
+        response = self.functions.VERSION().call(block_identifier=block_identifier)
+        logger.info({
+            'msg': f'Call `VERSION()`.',
             'value': response,
             'block_identifier': block_identifier.__repr__(),
         })

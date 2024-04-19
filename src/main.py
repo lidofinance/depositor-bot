@@ -9,12 +9,12 @@ import variables
 from blockchain.web3_extentions.lido_contracts import LidoContracts
 from blockchain.web3_extentions.requests_metric_middleware import add_requests_metric_middleware
 from blockchain.web3_extentions.transaction import TransactionUtils
-from depositor import run_depositor
+from bots.depositor import run_depositor
+from bots.pauser import run_pauser
+from bots.unvetter import run_unvetter
 from metrics.healthcheck_pulse import start_pulse_server
 from metrics.logging import logging
 from metrics.metrics import BUILD_INFO
-from pauser import run_pauser
-from unvetter import run_unvetter
 
 
 logger = logging.getLogger(__name__)
@@ -26,9 +26,7 @@ class BotModule(StrEnum):
     UNVETTER = 'unvetter'
 
 
-if __name__ == '__main__':
-    bot_name = sys.argv[-1]
-
+def main(bot_name: str):
     if bot_name not in iter(BotModule):
         msg = f'Last arg should be one of {[str(item) for item in BotModule]}, received {BotModule}.'
         logger.error({'msg': msg})
@@ -74,3 +72,7 @@ if __name__ == '__main__':
         run_pauser(w3)
     elif bot_name == BotModule.UNVETTER:
         run_unvetter(w3)
+
+
+if __name__ == '__main__':
+    main(sys.argv[-1])

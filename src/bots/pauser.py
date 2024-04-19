@@ -5,6 +5,7 @@ from schema import Schema, Or
 from web3.types import BlockData
 
 import variables
+from blockchain.executor import Executor
 from blockchain.typings import Web3
 from cryptography.verify_signature import compute_vs
 from metrics.metrics import UNEXPECTED_EXCEPTIONS
@@ -18,6 +19,19 @@ from transport.types import TransportType
 
 
 logger = logging.getLogger(__name__)
+
+
+def run_pauser(w3: Web3):
+    pause = PauserBot(w3)
+    e = Executor(
+        w3,
+        pause.execute,
+        1,
+        variables.MAX_CYCLE_LIFETIME_IN_SECONDS,
+    )
+    logger.info({'msg': 'Execute pauser as daemon.'})
+    e.execute_as_daemon()
+
 
 
 class PauserBot:

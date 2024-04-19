@@ -58,7 +58,7 @@ class LidoContracts(Module):
         ))
 
         try:
-            self.deposit_security_module.functions.VERSION().call()
+            self.deposit_security_module.version()
         except ContractLogicError:
             logger.info({'msg': 'Use deposit security module V1.'})
             self.deposit_security_module = cast(DepositSecurityModuleContract, self.w3.eth.contract(

@@ -5,6 +5,7 @@ from schema import Schema, Or
 from web3.types import BlockData
 
 import variables
+from blockchain.executor import Executor
 from blockchain.typings import Web3
 from cryptography.verify_signature import compute_vs
 from metrics.metrics import UNEXPECTED_EXCEPTIONS
@@ -20,18 +21,29 @@ from transport.types import TransportType
 logger = logging.getLogger(__name__)
 
 
-class UnvetterBot:
+def run_unvetter(w3: Web3):
+    unvetter = UnvetterBot(w3)
+    e = Executor(
+        w3,
+        unvetter.execute,
+        1,
+        variables.MAX_CYCLE_LIFETIME_IN_SECONDS,
+    )
+    logger.info({'msg': 'Execute unvetter as daemon.'})
+    e.execute_as_daemon()
 
-    fully_initialized = False
+
+
+class UnvetterBot:
+    message_storage: MessageStorage
 
     def __init__(self, w3: Web3):
         self.w3 = w3
 
-        if self.w3.lido.deposit_security_module.__class__.__name__ == 'DepositSecurityModuleContractV2':
-            self.finalize_init()
-            fully_initialized = True
+    def prepare_transport_bus(self):
+        if self.message_storage:
+            return
 
-    def finalize_init(self):
         transports = []
 
         if TransportType.RABBIT in variables.MESSAGE_TRANSPORTS:
@@ -62,12 +74,11 @@ class UnvetterBot:
         )
 
     def execute(self, block: BlockData) -> bool:
-        if not self.fully_initialized:
-            if self.w3.lido.deposit_security_module.__class__.__name__ == 'DepositSecurityModuleContractV2':
-                self.finalize_init()
-                self.fully_initialized = True
-            else:
-                return True
+        if self.w3.lido.deposit_security_module.version() == 1:
+            logger.warning({'msg': 'DSM version is not supported.'})
+            return True
+        else:
+            self.prepare_transport_bus()
 
         messages = self.receive_unvet_messages()
         logger.info({'msg': f'Received {len(messages)} unvet messages.'})
@@ -108,8 +119,7 @@ class UnvetterBot:
 
         actual_nonce = self.w3.lido.staking_router.get_staking_module_nonce(module_id)
 
-        if message['nonce'] < actual_nonce:
-            self._clear_outdated_messages_for_module(module_id, actual_nonce)
+        self._clear_outdated_messages_for_module(module_id, actual_nonce)
 
         unvet_tx = self.w3.lido.deposit_security_module.unvet_signing_keys(
             message['blockNumber'],
