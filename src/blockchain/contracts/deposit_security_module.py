@@ -219,7 +219,7 @@ class DepositSecurityModuleContractV2(DepositSecurityModuleContract):
         """
         response = self.functions.isDepositsPaused().call(block_identifier=block_identifier)
         logger.info({
-            'msg': f'Call `getIsDepositsPaused()`.',
+            'msg': f'Call `isDepositsPaused()`.',
             'value': response,
             'block_identifier': block_identifier.__repr__(),
         })

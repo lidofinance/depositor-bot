@@ -1,37 +1,6 @@
 [
   {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "_lido",
-        "type": "address"
-      },
-      {
-        "internalType": "address",
-        "name": "_depositContract",
-        "type": "address"
-      },
-      {
-        "internalType": "address",
-        "name": "_stakingRouter",
-        "type": "address"
-      },
-      {
-        "internalType": "uint256",
-        "name": "_pauseIntentValidityPeriodBlocks",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "_unvetIntentValidityPeriodBlocks",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "_maxOperatorsPerUnvetting",
-        "type": "uint256"
-      }
-    ],
+    "inputs": [],
     "stateMutability": "nonpayable",
     "type": "constructor"
   },
