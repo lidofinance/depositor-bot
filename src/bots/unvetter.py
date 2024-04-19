@@ -1,5 +1,5 @@
 import logging
-from typing import Callable
+from typing import Callable, Optional
 
 from schema import Schema, Or
 from web3.types import BlockData
@@ -33,15 +33,14 @@ def run_unvetter(w3: Web3):
     e.execute_as_daemon()
 
 
-
 class UnvetterBot:
-    message_storage: MessageStorage
+    message_storage: Optional[MessageStorage] = None
 
     def __init__(self, w3: Web3):
         self.w3 = w3
 
     def prepare_transport_bus(self):
-        if self.message_storage:
+        if self.message_storage is not None:
             return
 
         transports = []
@@ -136,5 +135,5 @@ class UnvetterBot:
 
     def _clear_outdated_messages_for_module(self, module_id: int, nonce: int) -> None:
         self.message_storage.get_messages(
-            lambda message: message['stakingModuleId'] != module_id or message['nonce'] < nonce
+            lambda message: message['stakingModuleId'] != module_id or message['nonce'] >= nonce
         )

@@ -54,12 +54,12 @@ def test_unvetter(web3_provider_integration, web3_lido_integration, caplog):
     ub = UnvetterBot(web3_lido_integration)
     ub.execute(latest)
 
-    assert not ub.fully_initialized
+    assert ub.message_storage is None
 
     upgrade_staking_router_to_v2(web3_lido_integration)
 
     ub.execute(latest)
-    assert ub.fully_initialized
+    assert ub.message_storage is not None
 
     web3_lido_integration.lido.deposit_security_module.get_guardians = Mock(return_value=[COUNCIL_ADDRESS])
     ub.message_storage.messages = [get_unvet_message(web3_lido_integration)]
