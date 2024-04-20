@@ -28,6 +28,7 @@ def get_unvet_message(web3) -> UnvetMessage:
 
     return {
         "blockNumber": latest.number,
+        "blockHash": latest.hash.hex(),
         "guardianAddress": COUNCIL_ADDRESS,
         "stakingModuleId": 1,
         "nonce": nonce,
