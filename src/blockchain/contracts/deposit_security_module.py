@@ -189,8 +189,8 @@ class DepositSecurityModuleContractV2(DepositSecurityModuleContract):
         block_hash: Hash32,
         staking_module_id: int,
         nonce: int,
-        operator_ids: list[int],
-        vetted_keys_by_operator: list[int],
+        operator_ids: bytes,
+        vetted_keys_by_operator: bytes,
         guardian_signature: tuple[str, str],
     ) -> ContractFunction:
         tx = self.functions.unvetSigningKeys(

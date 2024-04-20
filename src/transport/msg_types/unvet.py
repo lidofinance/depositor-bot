@@ -5,8 +5,7 @@ from schema import Schema, And
 
 from cryptography.verify_signature import verify_message_with_signature
 from metrics.metrics import UNEXPECTED_EXCEPTIONS
-from transport.msg_types.base import ADDRESS_REGREX, SignatureSchema, Signature, HASH_REGREX
-
+from transport.msg_types.base import ADDRESS_REGREX, SignatureSchema, Signature, HASH_REGREX, BYTES_REGREX
 
 logger = logging.getLogger(__name__)
 
@@ -18,8 +17,8 @@ UnvetMessageSchema = Schema({
     'guardianAddress': And(str, ADDRESS_REGREX),
     'signature': SignatureSchema,
     'stakingModuleId': int,
-    'operatorIds': list[int],
-    'vettedKeysByOperator': list[int],
+    'operatorIds': And(str, BYTES_REGREX),
+    'vettedKeysByOperator': And(str, BYTES_REGREX),
 }, ignore_extra_keys=True)
 
 
@@ -31,8 +30,8 @@ class UnvetMessage(TypedDict):
     signature: Signature
     stakingModuleId: int
     nonce: int
-    operatorIds: list[int]
-    vettedKeysByOperator: list[int]
+    operatorIds: str
+    vettedKeysByOperator: str
 
 
 def get_unvet_messages_sign_filter(unvet_prefix: bytes) -> Callable:

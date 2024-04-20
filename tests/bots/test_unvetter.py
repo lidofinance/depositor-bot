@@ -32,8 +32,8 @@ def get_unvet_message(web3) -> UnvetMessage:
         "guardianAddress": COUNCIL_ADDRESS,
         "stakingModuleId": 1,
         "nonce": nonce,
-        "operatorIds": [1],
-        "vettedKeysByOperator": [1],
+        "operatorIds": '0x1234',
+        "vettedKeysByOperator": '0001',
         "signature": {
             "r": '0x' + signed.r.to_bytes(32, 'big').hex(),
             "s": '0x' + signed.s.to_bytes(32, 'big').hex(),

@@ -16,7 +16,7 @@ from transport.msg_storage import MessageStorage
 from transport.msg_types.ping import PingMessageSchema, to_check_sum_address
 from transport.msg_types.unvet import UnvetMessageSchema, get_unvet_messages_sign_filter, UnvetMessage
 from transport.types import TransportType
-
+from utils.bytes import from_hex_string_to_bytes
 
 logger = logging.getLogger(__name__)
 
@@ -125,8 +125,8 @@ class UnvetterBot:
             message['blockHash'],
             module_id,
             message['nonce'],
-            message['operatorIds'],
-            message['vettedKeysByOperator'],
+            from_hex_string_to_bytes(message['operatorIds']),
+            from_hex_string_to_bytes(message['vettedKeysByOperator']),
             (message['signature']['r'], compute_vs(message['signature']['v'], message['signature']['s']))
         )
 

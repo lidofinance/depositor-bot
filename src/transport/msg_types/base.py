@@ -6,6 +6,7 @@ from schema import Regex, Schema, And
 
 HASH_REGREX = Regex('^0x[0-9,A-F]{64}$', flags=re.IGNORECASE)
 ADDRESS_REGREX = Regex('^0x[0-9,A-F]{40}$', flags=re.IGNORECASE)
+BYTES_REGREX = Regex('^0x[0-9,A-F]*$', flags=re.IGNORECASE)
 
 SignatureSchema = Schema({
     'v': int,
