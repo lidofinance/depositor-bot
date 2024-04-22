@@ -5,8 +5,8 @@ import pytest
 
 from bots.unvetter import UnvetterBot
 from tests.fixtures import upgrade_staking_router_to_v2
-from transport.msg_types.unvet import UnvetMessage
-
+from transport.msg_types.unvet import UnvetMessage, get_unvet_messages_sign_filter
+from utils.bytes import from_hex_string_to_bytes
 
 # WARNING: These accounts, and their private keys, are publicly known.
 COUNCIL_ADDRESS = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8'
@@ -21,13 +21,21 @@ def get_unvet_message(web3) -> UnvetMessage:
     nonce = web3.lido.staking_router.functions.getStakingModuleNonce(1).call()
 
     msg_hash = web3.solidity_keccak(
-        ['bytes32', 'uint256', 'uint256', 'uint256[]', 'uint256[]'],
-        [prefix, block_number, nonce, [1], [1]],
+        ['bytes32', 'uint256', 'bytes32', 'uint256', 'uint256', 'bytes', 'bytes'],
+        [
+            prefix,
+            block_number,
+            latest.hash.hex(),
+            1,
+            nonce,
+            from_hex_string_to_bytes('0x1234'),
+            from_hex_string_to_bytes('0001'),
+        ],
     )
     signed = web3.eth.account._sign_hash(msg_hash, private_key=COUNCIL_PK)
 
-    return {
-        "blockNumber": latest.number,
+    unvet_message = {
+        "blockNumber": block_number,
         "blockHash": latest.hash.hex(),
         "guardianAddress": COUNCIL_ADDRESS,
         "stakingModuleId": 1,
@@ -41,6 +49,10 @@ def get_unvet_message(web3) -> UnvetMessage:
         },
         "type": "unvet"
     }
+
+    assert list(filter(get_unvet_messages_sign_filter(prefix), [unvet_message]))
+
+    return unvet_message
 
 
 @pytest.mark.integration

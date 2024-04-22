@@ -6,6 +6,7 @@ from schema import Schema, And
 from cryptography.verify_signature import verify_message_with_signature
 from metrics.metrics import UNEXPECTED_EXCEPTIONS
 from transport.msg_types.base import ADDRESS_REGREX, SignatureSchema, Signature, HASH_REGREX, BYTES_REGREX
+from utils.bytes import from_hex_string_to_bytes
 
 logger = logging.getLogger(__name__)
 
@@ -43,10 +44,10 @@ def get_unvet_messages_sign_filter(unvet_prefix: bytes) -> Callable:
                 msg['blockHash'],
                 msg['stakingModuleId'],
                 msg['nonce'],
-                msg['operatorIds'],
-                msg['vettedKeysByOperator'],
+                from_hex_string_to_bytes(msg['operatorIds']),
+                from_hex_string_to_bytes(msg['vettedKeysByOperator']),
             ],
-            abi=['bytes32', 'uint256', 'bytes32', 'uint256', 'number[]', 'number[]'],
+            abi=['bytes32', 'uint256', 'bytes32', 'uint256', 'uint256', 'bytes', 'bytes'],
             address=msg['guardianAddress'],
             vrs=(
                 msg['signature']['v'],

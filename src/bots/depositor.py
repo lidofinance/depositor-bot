@@ -45,7 +45,7 @@ def run_depositor(w3):
     e = Executor(
         w3,
         depositor_bot.execute,
-        5,
+        1,
         variables.MAX_CYCLE_LIFETIME_IN_SECONDS,
     )
     logger.info({'msg': 'Execute depositor as daemon.'})
