@@ -16,18 +16,18 @@ class DepositSecurityModuleContract(ContractInterface):
     def get_guardian_quorum(self, block_identifier: BlockIdentifier = 'latest') -> int:
         """Returns number of valid guardian signatures required to vet (depositRoot, nonce) pair."""
         response = self.functions.getGuardianQuorum().call(block_identifier=block_identifier)
-        logger.info({'msg': f'Call `getGuardianQuorum()`.', 'value': response, 'block_identifier': block_identifier.__repr__()})
+        logger.info({'msg': 'Call `getGuardianQuorum()`.', 'value': response, 'block_identifier': repr(block_identifier)})
         return response
 
     def get_guardians(self, block_identifier: BlockIdentifier = 'latest') -> list[ChecksumAddress]:
         """Returns guardian committee member list."""
         response = self.functions.getGuardians().call(block_identifier=block_identifier)
-        logger.info({'msg': f'Call `getGuardians()`.', 'value': response, 'block_identifier': block_identifier.__repr__()})
+        logger.info({'msg': 'Call `getGuardians()`.', 'value': response, 'block_identifier': repr(block_identifier)})
         return response
 
     def get_attest_message_prefix(self, block_identifier: BlockIdentifier = 'latest') -> bytes:
         response = self.functions.ATTEST_MESSAGE_PREFIX().call(block_identifier=block_identifier)
-        logger.info({'msg': f'Call `ATTEST_MESSAGE_PREFIX()`.', 'value': response.hex(), 'block_identifier': block_identifier.__repr__()})
+        logger.info({'msg': 'Call `ATTEST_MESSAGE_PREFIX()`.', 'value': response.hex(), 'block_identifier': repr(block_identifier)})
         return response
 
     def can_deposit(self, staking_module_id: int, block_identifier: BlockIdentifier = 'latest') -> bool:
@@ -37,7 +37,7 @@ class DepositSecurityModuleContract(ContractInterface):
         such attestations will be enough to reach quorum.
         """
         response = self.functions.canDeposit(staking_module_id).call(block_identifier=block_identifier)
-        logger.info({'msg': f'Call `canDeposit({staking_module_id})`.', 'value': response, 'block_identifier': block_identifier.__repr__()})
+        logger.info({'msg': f'Call `canDeposit({staking_module_id})`.', 'value': response, 'block_identifier': repr(block_identifier)})
         return response
 
     def deposit_buffered_ether(
@@ -88,13 +88,13 @@ class DepositSecurityModuleContract(ContractInterface):
 
     def get_pause_message_prefix(self, block_identifier: BlockIdentifier = 'latest') -> bytes:
         response = self.functions.PAUSE_MESSAGE_PREFIX().call(block_identifier=block_identifier)
-        logger.info({'msg': f'Call `PAUSE_MESSAGE_PREFIX()`.', 'value': response.hex(), 'block_identifier': block_identifier.__repr__()})
+        logger.info({'msg': 'Call `PAUSE_MESSAGE_PREFIX()`.', 'value': response.hex(), 'block_identifier': repr(block_identifier)})
         return response
 
     def get_pause_intent_validity_period_blocks(self, block_identifier: BlockIdentifier = 'latest') -> int:
         """Returns current `pauseIntentValidityPeriodBlocks` contract parameter (see `pauseDeposits`)."""
         response = self.functions.getPauseIntentValidityPeriodBlocks().call(block_identifier=block_identifier)
-        logger.info({'msg': f'Call `getPauseIntentValidityPeriodBlocks()`.', 'value': response, 'block_identifier': block_identifier.__repr__()})
+        logger.info({'msg': 'Call `getPauseIntentValidityPeriodBlocks()`.', 'value': response, 'block_identifier': repr(block_identifier)})
         return response
 
     def pause_deposits(
@@ -135,9 +135,9 @@ class DepositSecurityModuleContract(ContractInterface):
         """
         response = self.functions.getMaxDeposits().call(block_identifier=block_identifier)
         logger.info({
-            'msg': f'Call `getMaxDeposits()`.',
+            'msg': 'Call `getMaxDeposits()`.',
             'value': response,
-            'block_identifier': block_identifier.__repr__(),
+            'block_identifier': repr(block_identifier),
         })
         return response
 
@@ -172,15 +172,12 @@ class DepositSecurityModuleContractV2(DepositSecurityModuleContract):
             block_number,
             guardian_signature
         )
-        logger.info({'msg': 'Build `pauseDeposits({}, {})` tx.'.format(
-            block_number,
-            guardian_signature,
-        )})
+        logger.info({'msg': f'Build `pauseDeposits({block_number}, {guardian_signature})` tx.'})
         return tx
 
     def get_unvet_message_prefix(self, block_identifier: BlockIdentifier = 'latest') -> bytes:
         response = self.functions.UNVET_MESSAGE_PREFIX().call(block_identifier=block_identifier)
-        logger.info({'msg': f'Call `UNVET_MESSAGE_PREFIX()`.', 'value': response.hex(), 'block_identifier': block_identifier.__repr__()})
+        logger.info({'msg': 'Call `UNVET_MESSAGE_PREFIX()`.', 'value': response.hex(), 'block_identifier': repr(block_identifier)})
         return response
 
     def unvet_signing_keys(
@@ -219,17 +216,17 @@ class DepositSecurityModuleContractV2(DepositSecurityModuleContract):
         """
         response = self.functions.isDepositsPaused().call(block_identifier=block_identifier)
         logger.info({
-            'msg': f'Call `isDepositsPaused()`.',
+            'msg': 'Call `isDepositsPaused()`.',
             'value': response,
-            'block_identifier': block_identifier.__repr__(),
+            'block_identifier': repr(block_identifier),
         })
         return response
 
     def version(self, block_identifier: BlockIdentifier = 'latest') -> int:
         response = self.functions.VERSION().call(block_identifier=block_identifier)
         logger.info({
-            'msg': f'Call `VERSION()`.',
+            'msg': 'Call `VERSION()`.',
             'value': response,
-            'block_identifier': block_identifier.__repr__(),
+            'block_identifier': repr(block_identifier),
         })
         return response

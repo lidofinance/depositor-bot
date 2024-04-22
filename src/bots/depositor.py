@@ -99,7 +99,7 @@ class DepositorBot:
 
         if not modules_id:
             # Read messages in case if no depositable modules for metrics
-            self.message_storage._receive_messages()
+            self.message_storage.receive_messages()
 
         for module_id in modules_id:
             logger.info({'msg': f'Do deposit to module with id: {module_id}.'})

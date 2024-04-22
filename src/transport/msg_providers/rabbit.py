@@ -60,7 +60,6 @@ class RabbitProvider(BaseMessageProvider):
 
     def _recreate_client(self):
         # Make sure client creating won't be instantly
-        import time
         time.sleep(5)
         logger.error({'msg': 'Trying to reconnect to client.'})
         current_dt = datetime.datetime.now()
@@ -95,5 +94,6 @@ class RabbitProvider(BaseMessageProvider):
         except ValueError as error:
             # ignore not json msg
             logger.warning({'msg': 'Broken message in Kafka', 'value': str(msg), 'error': str(error)})
-        else:
-            return value
+            return None
+
+        return value

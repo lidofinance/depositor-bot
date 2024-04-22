@@ -57,8 +57,8 @@ class KafkaMessageProvider(BaseMessageProvider):
         if msg is not None:
             if not msg.error():
                 return msg.value()
-            else:
-                logger.error({'msg': f'Kafka error', 'error': str(msg.error())})
+
+            logger.error({'msg': 'Kafka error', 'error': str(msg.error())})
 
     def _process_msg(self, msg: str) -> Optional[dict]:
         try:
@@ -66,5 +66,6 @@ class KafkaMessageProvider(BaseMessageProvider):
         except ValueError as error:
             # ignore not json msg
             logger.warning({'msg': 'Broken message in Kafka', 'value': str(msg), 'error': str(error)})
-        else:
-            return value
+            return None
+
+        return value

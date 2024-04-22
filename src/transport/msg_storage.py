@@ -15,7 +15,7 @@ class MessageStorage:
         self._transports = transports
         self._filters = filters
 
-    def _receive_messages(self) -> Iterable[dict]:
+    def receive_messages(self) -> Iterable[dict]:
         """Fetch all messages from transport and filter them"""
         for transport in self._transports:
             messages = transport.get_messages()
@@ -31,7 +31,7 @@ class MessageStorage:
         """
         actualize_rule - is filter that filters all outdated messages
         """
-        self._receive_messages()
+        self.receive_messages()
         self.messages = list(filter(actualize_rule, self.messages))
         return self.messages
 

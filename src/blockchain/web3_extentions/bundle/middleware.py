@@ -32,9 +32,9 @@ def construct_relay_middleware(
         def middleware(method: RPCEndpoint, params: Any) -> RPCResponse:
             if method not in RELAY_METHODS:
                 return make_request(method, params)
-            else:
-                # otherwise intercept it and POST it to all provided relays
-                return relay_provider.make_request(method, params, request_all=True)
+
+            # otherwise intercept it and POST it to all provided relays
+            return relay_provider.make_request(method, params, request_all=True)
 
         return middleware
 

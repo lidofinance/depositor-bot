@@ -106,7 +106,7 @@ class CuratedModuleDepositStrategy(ModuleDepositStrategyInterface):
         gas_fees = []
         last_block: Literal['latest'] | BlockNumber = 'latest'
 
-        for i in range(requests_count):
+        for _ in range(requests_count):
             stats = self.w3.eth.fee_history(self.REQUEST_SIZE, last_block, [])
             last_block = BlockNumber(stats['oldestBlock'] - 2)
             gas_fees = stats['baseFeePerGas'] + gas_fees

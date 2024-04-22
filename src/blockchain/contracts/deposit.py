@@ -17,8 +17,8 @@ class DepositContract(ContractInterface):
         """
         response = self.functions.get_deposit_root().call(block_identifier=block_identifier)
         logger.info({
-            'msg': f'Call `get_deposit_root()`.',
+            'msg': 'Call `get_deposit_root()`.',
             'value': response.hex(),
-            'block_identifier': block_identifier.__repr__(),
+            'block_identifier': repr(block_identifier),
         })
         return response

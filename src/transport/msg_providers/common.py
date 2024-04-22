@@ -19,7 +19,7 @@ class BaseMessageProvider(abc.ABC):
     def get_messages(self) -> List[dict]:
         messages = []
 
-        for i in range(self.MAX_MESSAGES_RECEIVE):
+        for _ in range(self.MAX_MESSAGES_RECEIVE):
             msg = self._receive_message()
 
             if msg is None:
@@ -33,7 +33,7 @@ class BaseMessageProvider(abc.ABC):
         return messages
 
     def _receive_message(self) -> Any:
-        raise NotImplemented("Receive message from transport.")
+        raise NotImplementedError("Receive message from transport.")
 
     def _process_msg(self, msg: Any) -> dict:
         # Overwrite this method to add msg serialization.

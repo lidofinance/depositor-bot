@@ -174,7 +174,7 @@ class Relay(Module):
         # convert to hex
         return [
             {
-                "txs": list(map(lambda x: self.to_hex(x), signed_bundled_transactions)),
+                "txs": list(map(self.to_hex, signed_bundled_transactions)),
                 "blockNumber": hex(target_block_number),
                 "minTimestamp": opts["minTimestamp"] if "minTimestamp" in opts else 0,
                 "maxTimestamp": opts["maxTimestamp"] if "maxTimestamp" in opts else 0,

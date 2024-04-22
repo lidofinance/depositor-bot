@@ -35,21 +35,20 @@ def add_requests_metric_middleware(web3: Web3):
                     domain=urlparse(web3.provider.endpoint_uri).netloc,
                 ).inc()
                 raise
-            else:
-                # https://www.jsonrpc.org/specification#error_object
-                # https://eth.wiki/json-rpc/json-rpc-error-codes-improvement-proposal
-                error = response.get("error")
-                code: int = 0
-                if isinstance(error, dict):
-                    code = error.get("code") or code
 
-                ETH_RPC_REQUESTS.labels(
-                    method=method,
-                    code=code,
-                    domain=urlparse(web3.provider.endpoint_uri).netloc,
-                ).inc()
+            # https://www.jsonrpc.org/specification#error_object
+            # https://eth.wiki/json-rpc/json-rpc-error-codes-improvement-proposal
+            error = response.get("error")
+            code: int = 0
+            if isinstance(error, dict):
+                code = error.get("code") or code
 
-                return response
+            ETH_RPC_REQUESTS.labels(
+                method=method,
+                code=code,
+                domain=urlparse(web3.provider.endpoint_uri).netloc,
+            ).inc()
+            return response
 
         return middleware
 

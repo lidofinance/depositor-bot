@@ -1,5 +1,4 @@
 import logging
-from typing import Optional
 
 from blockchain.typings import Web3
 

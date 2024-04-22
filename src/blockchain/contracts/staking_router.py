@@ -15,9 +15,9 @@ class StakingRouterContract(ContractInterface):
         """Returns the ids of all registered staking modules"""
         response = self.functions.getStakingModuleIds().call(block_identifier=block_identifier)
         logger.info({
-            'msg': f'Call `get_staking_module_ids()`.',
+            'msg': 'Call `get_staking_module_ids()`.',
             'value': response,
-            'block_identifier': block_identifier.__repr__(),
+            'block_identifier': repr(block_identifier),
         })
         return response
 
@@ -30,7 +30,7 @@ class StakingRouterContract(ContractInterface):
         logger.info({
             'msg': f'Call `getStakingModuleIsActive({staking_module_id})`.',
             'value': response,
-            'block_identifier': block_identifier.__repr__(),
+            'block_identifier': repr(block_identifier),
         })
         return response
 
@@ -43,7 +43,7 @@ class StakingRouterContract(ContractInterface):
         logger.info({
             'msg': f'Call `getStakingModuleNonce({staking_module_id})`.',
             'value': response,
-            'block_identifier': block_identifier.__repr__(),
+            'block_identifier': repr(block_identifier),
         })
         return response
 
@@ -60,6 +60,6 @@ class StakingRouterContract(ContractInterface):
         logger.info({
             'msg': f'Call `getStakingModuleMaxDepositsCount({staking_module_id}, {depositable_ether})`.',
             'value': response,
-            'block_identifier': block_identifier.__repr__(),
+            'block_identifier': repr(block_identifier),
         })
         return response

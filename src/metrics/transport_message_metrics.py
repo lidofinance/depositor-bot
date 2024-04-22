@@ -18,17 +18,18 @@ def message_metrics_filter(msg: DepositMessage) -> bool:
         PAUSE_MESSAGES.labels(address, msg.get('stakingModuleId', -1), version).inc()
         return True
 
-    elif msg_type == MessageType.DEPOSIT:
+    if msg_type == MessageType.DEPOSIT:
         DEPOSIT_MESSAGES.labels(address, msg.get('stakingModuleId', -1), version).inc()
         return True
 
-    elif msg_type == MessageType.UNVET:
+    if msg_type == MessageType.UNVET:
         UNVET_MESSAGES.labels(address, msg.get('stakingModuleId', -1), version).inc()
         return True
 
-    elif msg_type == MessageType.PING:
+    if msg_type == MessageType.PING:
         # Filter all ping messages, because we use them only for metrics
         PING_MESSAGES.labels(address, version).inc()
         return False
 
     logger.warning({'msg': 'Received unexpected msg type.', 'value': msg, 'type': msg_type})
+    return False

@@ -50,7 +50,7 @@ class Client:
 
     def _on_close(self, ws_app, *args):
         self.connected = False
-        logging.error("Lost connection to " + self.ws.url)
+        logging.error({'msg': f'Lost connection to {self.ws.url}'})
         self._clean_up()
         self.on_close()
 
@@ -67,11 +67,11 @@ class Client:
         _results = []
         if frame.command == "CONNECTED":
             self.connected = True
-            logging.debug("connected to server " + self.url)
+            logging.debug({'msg': f'connected to server {self.url}'})
             if self._connectCallback is not None:
                 _results.append(self._connectCallback(frame))
-        elif frame.command == "MESSAGE":
 
+        elif frame.command == "MESSAGE":
             subscription = frame.headers['subscription']
 
             if subscription in self.subscriptions:
@@ -110,7 +110,7 @@ class Client:
 
     def _transmit(self, command, headers, body=None):
         out = Frame.marshall(command, headers, body)
-        logging.debug("\n>>> " + out)
+        logging.debug({'msg': f'\n>>> {out}'})
         self.ws.send(out)
 
     def connect(

@@ -76,9 +76,8 @@ class UnvetterBot:
         if self.w3.lido.deposit_security_module.version() == 1:
             logger.warning({'msg': 'DSM version is not supported.'})
             return True
-        else:
-            self.prepare_transport_bus()
 
+        self.prepare_transport_bus()
         messages = self.receive_unvet_messages()
         logger.info({'msg': f'Received {len(messages)} unvet messages.'})
 

@@ -3,7 +3,7 @@ import logging
 from schema import Schema, And
 from web3 import Web3
 
-from transport.msg_types.base import ADDRESS_REGREX, SignatureSchema
+from transport.msg_types.base import ADDRESS_REGREX
 
 
 logger = logging.getLogger(__name__)

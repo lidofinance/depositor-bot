@@ -96,7 +96,7 @@ class PauserBot:
 
     def _send_pause_message(self, message: PauseMessage) -> bool:
         if self.w3.lido.deposit_security_module.__class__.__name__ == 'DepositSecurityModuleContractV2':
-            logger.warning({'msg': f'Handle pause message.', 'value': message})
+            logger.warning({'msg': 'Handle pause message.', 'value': message})
 
             if message.get('stakingModuleId', -1) == -1:
                 return self._send_pause_v2(message)
@@ -106,6 +106,7 @@ class PauserBot:
                 return self._send_pause(message)
 
         logger.error({'msg': 'Unsupported message. Outdated schema.', 'value': message})
+        return True
 
     def _send_pause(self, message: PauseMessage):
         module_id = message['stakingModuleId']
@@ -128,7 +129,7 @@ class PauserBot:
 
     def _send_pause_v2(self, message: PauseMessage):
         if self.w3.lido.deposit_security_module.is_deposits_paused():
-            logger.info({'msg': f'Lido deposits already paused. Skip message.'})
+            logger.info({'msg': 'Lido deposits already paused. Skip message.'})
             self.message_storage.clear()
             return False
 
