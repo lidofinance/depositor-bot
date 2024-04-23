@@ -57,11 +57,14 @@ class LidoContracts(Module):
         ))
 
         if self.staking_router.get_contract_version() == 2:
+            logger.info({'msg': 'Use staking router V2.'})
             self.staking_router = cast(StakingRouterContract, self.w3.eth.contract(
                 address=staking_router_address,
                 ContractFactoryClass=StakingRouterContractV2,
                 decode_tuples=True,
             ))
+        else:
+            logger.info({'msg': 'Use staking router V1.'})
 
     def _load_dsm(self):
         dsm_address = self.lido_locator.deposit_security_module()

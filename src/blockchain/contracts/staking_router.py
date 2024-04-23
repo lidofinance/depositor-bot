@@ -84,5 +84,5 @@ class StakingRouterContract(ContractInterface):
         return response
 
 
-class StakingRouterContractV2(ContractInterface):
+class StakingRouterContractV2(StakingRouterContract):
     abi_path = './interfaces/StakingRouterV2.json'
