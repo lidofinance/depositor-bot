@@ -129,18 +129,6 @@ class DepositSecurityModuleContract(ContractInterface):
         )})
         return tx
 
-    def get_max_deposits(self, block_identifier: BlockIdentifier = 'latest') -> int:
-        """
-        Returns maxDepositsPerBlock
-        """
-        response = self.functions.getMaxDeposits().call(block_identifier=block_identifier)
-        logger.info({
-            'msg': 'Call `getMaxDeposits()`.',
-            'value': response,
-            'block_identifier': repr(block_identifier),
-        })
-        return response
-
     def version(self, block_identifier: BlockIdentifier = 'latest') -> int:
         return 1
 

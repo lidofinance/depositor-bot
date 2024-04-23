@@ -11,13 +11,32 @@ logger = logging.getLogger(__name__)
 class StakingRouterContract(ContractInterface):
     abi_path = './interfaces/StakingRouter.json'
 
+    def get_contract_version(self, block_identifier: BlockIdentifier = 'latest') -> int:
+        response = self.functions.getContractVersion(block_identifier=block_identifier)
+        logger.info({
+            'msg': f'Call `getContractVersion()`.',
+            'value': response,
+            'block_identifier': block_identifier.__repr__(),
+        })
+        return response
+
     def get_staking_module_ids(self, block_identifier: BlockIdentifier = 'latest') -> list[int]:
         """Returns the ids of all registered staking modules"""
         response = self.functions.getStakingModuleIds().call(block_identifier=block_identifier)
         logger.info({
-            'msg': 'Call `get_staking_module_ids()`.',
+            'msg': f'Call `getStakingModuleIds()`.',
             'value': response,
-            'block_identifier': repr(block_identifier),
+            'block_identifier': block_identifier.__repr__(),
+        })
+        return response
+
+    def get_staking_module_digests(self, module_ids: list[int], block_identifier: BlockIdentifier = 'latest') -> list[dict]:
+        """Returns staking module digest for passed staking module ids"""
+        response = self.functions.getStakingModuleDigests(module_ids).call(block_identifier=block_identifier)
+        logger.info({
+            'msg': f'Call `getStakingModuleDigests({module_ids})`.',
+            'value': response,
+            'block_identifier': block_identifier.__repr__(),
         })
         return response
 
@@ -63,3 +82,7 @@ class StakingRouterContract(ContractInterface):
             'block_identifier': repr(block_identifier),
         })
         return response
+
+
+class StakingRouterContractV2(ContractInterface):
+    abi_path = './interfaces/StakingRouterV2.json'

@@ -1,50 +1,36 @@
-import logging
+from typing import Callable
 
 from blockchain.typings import Web3
 
 
-logger = logging.getLogger(__name__)
-
-
 def get_preferred_to_deposit_modules(w3: Web3, whitelist_modules: list[int]) -> list[int]:
-    """
-    Returns preferable module to deposit to make deposits balanced following the rules specified in Staking Router.
-    Order is
-    1. What module can accept bigger deposit? Checks available keys amount
-    2. Check which module accepts more staking allocation
-    """
-    active_modules = get_active_modules(w3, whitelist_modules)
-    modules = [module[1] for module in get_modules_stats(w3, active_modules)]
-    logger.info({'msg': 'Calculate preferred modules.', 'value': modules})
-    return modules
+    module_ids = w3.lido.staking_router.get_staking_module_ids()
+    modules = w3.lido.staking_router.get_staking_module_digests(module_ids)
+
+    modules = list(filter(get_module_depositable_filter(w3, whitelist_modules), modules))
+    modules_ids = prioritize_modules(modules)
+    return modules_ids
 
 
-def get_active_modules(w3: Web3, whitelist_modules: list[int]) -> list[int]:
-    # Get all module ids
-    modules = w3.lido.staking_router.get_staking_module_ids()
+def prioritize_modules(modules: list) -> list[int]:
+    modules = sorted(
+        modules,
+        #      totalDepositedValidators - totalExitedValidators
+        key=lambda module: module[3][1] - module[3][0],
+    )
 
-    return [
-        module for module in modules
-        # Filter not-whitelisted modules
-        if module in whitelist_modules and
-        # Filter not-active modules
-        w3.lido.staking_router.is_staking_module_active(module) and
-        # Filter non-depositable module
-        w3.lido.deposit_security_module.can_deposit(module)
-    ]
+    #       module_ids
+    return [module[2][0] for module in modules]
 
 
-def get_modules_stats(w3: Web3, modules: list[int]) -> list[tuple[int, int]]:
-    depositable_ether = w3.lido.lido.get_depositable_ether()
-    max_deposits = w3.lido.deposit_security_module.get_max_deposits()
-    max_depositable_ether = min(max_deposits * 32 * 10**18, depositable_ether)
+def get_module_depositable_filter(w3: Web3, whitelist_modules: list[int]) -> Callable:
+    def is_module_depositable(module: list) -> bool:
+        module_id = module[2][0]
 
-    module_stats = [(
-            w3.lido.staking_router.get_staking_module_max_deposits_count(module, max_depositable_ether),
-            module,
-        ) for module in modules
-    ]
+        return (
+            module_id in whitelist_modules and
+            w3.lido.staking_router.is_staking_module_active(module_id) and
+            w3.lido.deposit_security_module.can_deposit(module_id)
+        )
 
-    module_stats = sorted(module_stats, reverse=True)
-
-    return module_stats
+    return is_module_depositable

@@ -11,8 +11,7 @@ from blockchain.contracts.deposit import DepositContract
 from blockchain.contracts.deposit_security_module import DepositSecurityModuleContract, DepositSecurityModuleContractV2
 from blockchain.contracts.lido import LidoContract
 from blockchain.contracts.lido_locator import LidoLocatorContract
-from blockchain.contracts.staking_router import StakingRouterContract
-
+from blockchain.contracts.staking_router import StakingRouterContract, StakingRouterContractV2
 
 logger = logging.getLogger(__name__)
 
@@ -45,11 +44,26 @@ class LidoContracts(Module):
             ContractFactoryClass=LidoContract,
         ))
 
+        self._load_staking_router()
+        self._load_dsm()
+
+    def _load_staking_router(self):
+        staking_router_address = self.lido_locator.staking_router()
+
         self.staking_router = cast(StakingRouterContract, self.w3.eth.contract(
-            address=self.lido_locator.staking_router(),
+            address=staking_router_address,
             ContractFactoryClass=StakingRouterContract,
+            decode_tuples=True,
         ))
 
+        if self.staking_router.get_contract_version() == 2:
+            self.staking_router = cast(StakingRouterContract, self.w3.eth.contract(
+                address=staking_router_address,
+                ContractFactoryClass=StakingRouterContractV2,
+                decode_tuples=True,
+            ))
+
+    def _load_dsm(self):
         dsm_address = self.lido_locator.deposit_security_module()
 
         self.deposit_security_module = cast(DepositSecurityModuleContractV2, self.w3.eth.contract(
