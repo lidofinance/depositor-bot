@@ -12,7 +12,7 @@ class StakingRouterContract(ContractInterface):
     abi_path = './interfaces/StakingRouter.json'
 
     def get_contract_version(self, block_identifier: BlockIdentifier = 'latest') -> int:
-        response = self.functions.getContractVersion(block_identifier=block_identifier)
+        response = self.functions.getContractVersion().call(block_identifier=block_identifier)
         logger.info({
             'msg': f'Call `getContractVersion()`.',
             'value': response,
