@@ -48,6 +48,3 @@ HEALTHCHECK --interval=10s --timeout=3s \
 WORKDIR /app/
 
 ENTRYPOINT ["python3"]
-
-#ENTRYPOINT ["python3"]
-#CMD ["src/depositor.py"]
