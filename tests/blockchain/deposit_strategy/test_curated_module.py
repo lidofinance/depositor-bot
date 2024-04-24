@@ -45,7 +45,7 @@ def test_get_possible_deposits_amount(cmds):
 @pytest.mark.unit
 @pytest.mark.parametrize(
     "deposits,expected_range",
-    [(1, (0, 20)), (5, (20, 100)), (10, (50, 1000)), (100, (1000, 1000000))],
+    [(1, (0, 20)), (5, (10, 30)), (10, (20, 50)), (100, (1000, 1000000))],
 )
 def test_calculate_recommended_gas_based_on_deposit_amount(cmds, deposits, expected_range):
     assert expected_range[0] * 10**9 <= cmds._calculate_recommended_gas_based_on_deposit_amount(deposits) <= expected_range[1] * 10**9
