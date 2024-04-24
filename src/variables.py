@@ -38,7 +38,7 @@ MESSAGE_TRANSPORTS = os.getenv('MESSAGE_TRANSPORTS', '').split(',')
 KAFKA_BROKER_ADDRESS_1 = os.getenv('KAFKA_BROKER_ADDRESS_1')
 KAFKA_USERNAME = os.getenv('KAFKA_USERNAME')
 KAFKA_PASSWORD = os.getenv('KAFKA_PASSWORD')
-KAFKA_NETWORK = os.getenv('KAFKA_NETWORK', 'mainnet')  # or goerli
+KAFKA_NETWORK = os.getenv('KAFKA_NETWORK', 'mainnet')
 KAFKA_TOPIC = os.getenv('KAFKA_TOPIC')
 KAFKA_GROUP_PREFIX = os.getenv('KAFKA_GROUP_PREFIX', '')
 
