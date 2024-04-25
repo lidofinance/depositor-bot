@@ -28,7 +28,7 @@ ENV POETRY_VERSION=1.4.2 \
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # install poetry - respects $POETRY_VERSION & $POETRY_HOME
-RUN curl -sSL https://install.python-poetry.org | python -
+RUN pip install --no-cache-dir poetry==$POETRY_VERSION
 
 COPY pyproject.toml poetry.lock ./
 RUN poetry install
