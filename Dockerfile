@@ -4,6 +4,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends -qq \
     gcc=4:10.2.1-1 \
     libffi-dev=3.3-6 \
     g++=4:10.2.1-1 \
+    curl=7.74.0-1.3+deb11u11 \
  && apt-get clean \
  && rm -rf /var/lib/apt/lists/*
 
@@ -46,7 +47,7 @@ EXPOSE $PROMETHEUS_PORT
 USER www-data
 
 HEALTHCHECK --interval=10s --timeout=3s \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:$PULSE_SERVER_PORT/healthcheck || exit 1
+    CMD curl -f http://localhost:$PULSE_SERVER_PORT/healthcheck || exit 1
 
 ENTRYPOINT ["python3"]
 CMD ["src/depositor.py"]
