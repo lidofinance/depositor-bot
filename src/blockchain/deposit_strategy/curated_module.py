@@ -56,7 +56,7 @@ class CuratedModuleDepositStrategy(ModuleDepositStrategyInterface):
         # For 10 keys around 100 gwei. For 20 keys ~ 800 gwei
         # ToDo percentiles for all modules?
         recommended_max_gas = (deposits_amount ** 3 + 100) * 10 ** 8
-        logger.info({'msg': 'Calculate recommended max gas based on possible deposits.'})
+        logger.info({'msg': 'Calculate recommended max gas based on possible deposits.', 'value': recommended_max_gas})
         GAS_FEE.labels('based_on_buffer_fee', self.module_id).set(recommended_max_gas)
         return recommended_max_gas
 
