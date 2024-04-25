@@ -129,6 +129,9 @@ class UnvetterBot:
             (message['signature']['r'], compute_vs(message['signature']['v'], message['signature']['s']))
         )
 
+        if not self.w3.transaction.check(unvet_tx):
+            return False
+
         result = self.w3.transaction.send(unvet_tx, False, 6)
         logger.info({'msg': f'Transaction send. Result is {result}.', 'value': result})
         return result

@@ -123,6 +123,9 @@ class PauserBot:
             (message['signature']['r'], compute_vs(message['signature']['v'], message['signature']['s']))
         )
 
+        if not self.w3.transaction.check(pause_tx):
+            return False
+
         result = self.w3.transaction.send(pause_tx, False, 6)
         logger.info({'msg': f'Transaction send. Result is {result}.', 'value': result})
         return result
