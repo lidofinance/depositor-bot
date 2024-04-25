@@ -3,6 +3,7 @@ from typing import Callable, TypedDict
 
 from schema import Schema, And
 
+from blockchain.typings import Web3
 from cryptography.verify_signature import verify_message_with_signature
 from metrics.metrics import UNEXPECTED_EXCEPTIONS
 from transport.msg_types.base import ADDRESS_REGREX, SignatureSchema, Signature, HASH_REGREX, BYTES_REGREX
@@ -35,8 +36,10 @@ class UnvetMessage(TypedDict):
     vettedKeysByOperator: str
 
 
-def get_unvet_messages_sign_filter(unvet_prefix: bytes) -> Callable:
+def get_unvet_messages_sign_filter(web3: Web3) -> Callable:
     def check_unvet_message(msg: UnvetMessage) -> bool:
+        unvet_prefix = web3.lido.deposit_security_module.get_unvet_message_prefix()
+
         verified = verify_message_with_signature(
             data=[
                 unvet_prefix,

@@ -3,6 +3,7 @@ from typing import Callable, TypedDict
 
 from schema import Schema, And
 
+from blockchain.typings import Web3
 from cryptography.verify_signature import verify_message_with_signature
 from metrics.metrics import UNEXPECTED_EXCEPTIONS
 from transport.msg_types.base import ADDRESS_REGREX, SignatureSchema, Signature
@@ -45,8 +46,10 @@ class PauseMessage(TypedDict):
     stakingModuleId: int
 
 
-def get_pause_messages_sign_filter(pause_prefix: bytes) -> Callable:
+def get_pause_messages_sign_filter(web3: Web3) -> Callable:
     def check_pause_message(msg: PauseMessage) -> bool:
+        pause_prefix = web3.lido.deposit_security_module.get_pause_message_prefix()
+
         verified = verify_message_with_signature(
             data=[pause_prefix, msg['blockNumber'], msg['stakingModuleId']],
             abi=['bytes32', 'uint256', 'uint256'],

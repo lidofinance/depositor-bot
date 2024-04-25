@@ -81,14 +81,12 @@ class DepositorBot:
         if not transports:
             logger.warning({'msg': 'No transports found. Dry mode activated.', 'value': variables.MESSAGE_TRANSPORTS})
 
-        attest_prefix = self.w3.lido.deposit_security_module.get_attest_message_prefix()
-
         self.message_storage = MessageStorage(
             transports,
             filters=[
                 message_metrics_filter,
                 to_check_sum_address,
-                get_deposit_messages_sign_filter(attest_prefix),
+                get_deposit_messages_sign_filter(self.w3),
             ],
         )
 

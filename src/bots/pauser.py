@@ -56,14 +56,12 @@ class PauserBot:
         if not transports:
             logger.warning({'msg': 'No transports found', 'value': variables.MESSAGE_TRANSPORTS})
 
-        pause_prefix = self.w3.lido.deposit_security_module.get_pause_message_prefix()
-
         self.message_storage = MessageStorage(
             transports,
             filters=[
                 message_metrics_filter,
                 to_check_sum_address,
-                get_pause_messages_sign_filter(pause_prefix),
+                get_pause_messages_sign_filter(self.w3),
             ],
         )
 

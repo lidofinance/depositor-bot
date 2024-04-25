@@ -3,6 +3,7 @@ from typing import Callable, TypedDict
 
 from schema import Schema, And
 
+from blockchain.typings import Web3
 from cryptography.verify_signature import verify_message_with_signature
 from metrics.metrics import UNEXPECTED_EXCEPTIONS
 from transport.msg_types.base import HASH_REGREX, ADDRESS_REGREX, SignatureSchema, Signature
@@ -58,9 +59,11 @@ class DepositMessage(TypedDict):
     app: dict
 
 
-def get_deposit_messages_sign_filter(deposit_prefix: bytes) -> Callable:
+def get_deposit_messages_sign_filter(web3: Web3) -> Callable:
     """Returns filter that checks message validity"""
     def check_deposit_messages(msg: DepositMessage) -> bool:
+        deposit_prefix = web3.lido.deposit_security_module.get_attest_message_prefix()
+
         verified = verify_message_with_signature(
             data=[deposit_prefix, msg['blockNumber'], msg['blockHash'], msg['depositRoot'], msg['stakingModuleId'], msg['nonce']],
             abi=['bytes32', 'uint256', 'bytes32', 'bytes32', 'uint256', 'uint256'],
