@@ -134,8 +134,12 @@ class DepositorBot:
 
     def _get_quorum(self, module_id: int) -> Optional[list[DepositMessage]]:
         """Returns quorum messages or None is quorum is not ready"""
-        actualize_filter = self._get_message_actualize_filter(module_id)
+        actualize_filter = self._get_message_actualize_filter()
         messages = self.message_storage.get_messages(actualize_filter)
+
+        module_filter = self._get_module_messages_filter(module_id)
+        messages = list(filter(module_filter, messages))
+
         min_signs_to_deposit = self.w3.lido.deposit_security_module.get_guardian_quorum()
 
         CURRENT_QUORUM_SIZE.labels('required').set(min_signs_to_deposit)
@@ -161,19 +165,14 @@ class DepositorBot:
 
         CURRENT_QUORUM_SIZE.labels('current').set(max_quorum_size)
 
-    def _get_message_actualize_filter(self, module_id: int) -> Callable[[DepositMessage], bool]:
+    def _get_message_actualize_filter(self) -> Callable[[DepositMessage], bool]:
         latest = self.w3.eth.get_block('latest')
-
         deposit_root = '0x' + self.w3.lido.deposit_contract.get_deposit_root().hex()
-        nonce = self.w3.lido.staking_router.get_staking_module_nonce(module_id)
         guardians_list = self.w3.lido.deposit_security_module.get_guardians()
 
         def message_filter(message: DepositMessage) -> bool:
             if message['guardianAddress'] not in guardians_list:
                 UNEXPECTED_EXCEPTIONS.labels('unexpected_guardian_address').inc()
-                return False
-
-            if message['stakingModuleId'] != module_id:
                 return False
 
             if message['blockNumber'] < latest['number'] - 200:
@@ -184,14 +183,24 @@ class DepositorBot:
                 # can't be verified, so skip
                 return True
 
-            if message['nonce'] != nonce:
-                return False
-
             if message['depositRoot'] != deposit_root:
                 return False
 
             return True
 
+        return message_filter
+
+    def _get_module_messages_filter(self, module_id: int) -> Callable[[DepositMessage], bool]:
+        nonce = self.w3.lido.staking_router.get_staking_module_nonce(module_id)
+
+        def message_filter(message: DepositMessage) -> bool:
+            if message['stakingModuleId'] != module_id:
+                return False
+
+            if message['nonce'] < nonce:
+                return False
+
+            return True
         return message_filter
 
     def _build_and_send_deposit_tx(self, quorum: list[DepositMessage]) -> bool:

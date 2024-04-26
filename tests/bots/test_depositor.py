@@ -123,14 +123,14 @@ def setup_deposit_message(depositor_bot, block_data):
 
 @pytest.mark.unit
 def test_depositor_message_actualizer(setup_deposit_message, depositor_bot, deposit_message, block_data):
-    message_filter = depositor_bot._get_message_actualize_filter(1)
+    message_filter = depositor_bot._get_message_actualize_filter()
     assert list(filter(message_filter, [deposit_message]))
 
 
 @pytest.mark.unit
 def test_depositor_message_actualizer_not_guardian(setup_deposit_message, depositor_bot, deposit_message, block_data):
     depositor_bot.w3.lido.deposit_security_module.get_guardians = Mock(return_value=['0x13464Fe06c18848a2E2e913194D64c1970f4326a'])
-    message_filter = depositor_bot._get_message_actualize_filter(1)
+    message_filter = depositor_bot._get_message_actualize_filter()
     assert not list(filter(message_filter, [deposit_message]))
 
 
@@ -139,7 +139,7 @@ def test_depositor_message_actualizer_no_selected_module(setup_deposit_message, 
     second = deposit_message.copy()
     second['stakingModuleId'] = 2
 
-    message_filter = depositor_bot._get_message_actualize_filter(2)
+    message_filter = depositor_bot._get_module_messages_filter(2)
     assert not list(filter(message_filter, [
         deposit_message,
     ]))
@@ -149,7 +149,7 @@ def test_depositor_message_actualizer_no_selected_module(setup_deposit_message, 
 @pytest.mark.unit
 def test_depositor_message_actualizer_outdated(setup_deposit_message, depositor_bot, deposit_message, block_data):
     deposit_message['blockNumber'] = block_data['number'] - 250
-    message_filter = depositor_bot._get_message_actualize_filter(1)
+    message_filter = depositor_bot._get_message_actualize_filter()
     assert not list(filter(message_filter, [deposit_message]))
 
     deposit_message['blockNumber'] = block_data['number'] - 150
@@ -158,6 +158,8 @@ def test_depositor_message_actualizer_outdated(setup_deposit_message, depositor_
 
 @pytest.mark.unit
 def test_depositor_message_actualizer_nonce(setup_deposit_message, depositor_bot, deposit_message, block_data):
+    message_filter = depositor_bot._get_module_messages_filter(1)
+
     deposit_message['nonce'] += 10
     message_filter = depositor_bot._get_message_actualize_filter(1)
     assert not list(filter(message_filter, [deposit_message]))
@@ -165,11 +167,14 @@ def test_depositor_message_actualizer_nonce(setup_deposit_message, depositor_bot
     deposit_message['blockNumber'] = block_data['number'] + 100
     assert list(filter(message_filter, [deposit_message]))
 
+    deposit_message['nonce'] -= 10
+    assert not list(filter(message_filter, [deposit_message]))
+
 
 @pytest.mark.unit
 def test_depositor_message_actualizer_root(setup_deposit_message, depositor_bot, deposit_message, block_data):
     deposit_message['depositRoot'] += '0x55dcf70a7ad7fc6b1a55db6b08b86e9d80736259916fcaef98f4710f0bac687b'
-    message_filter = depositor_bot._get_message_actualize_filter(1)
+    message_filter = depositor_bot._get_message_actualize_filter()
     assert not list(filter(message_filter, [deposit_message]))
 
     deposit_message['blockNumber'] = block_data['number'] + 100
