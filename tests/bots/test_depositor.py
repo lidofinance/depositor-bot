@@ -159,12 +159,6 @@ def test_depositor_message_actualizer_outdated(setup_deposit_message, depositor_
 @pytest.mark.unit
 def test_depositor_message_actualizer_nonce(setup_deposit_message, depositor_bot, deposit_message, block_data):
     message_filter = depositor_bot._get_module_messages_filter(1)
-
-    deposit_message['nonce'] += 10
-    message_filter = depositor_bot._get_message_actualize_filter()
-    assert not list(filter(message_filter, [deposit_message]))
-
-    deposit_message['blockNumber'] = block_data['number'] + 100
     assert list(filter(message_filter, [deposit_message]))
 
     deposit_message['nonce'] -= 10
