@@ -50,42 +50,32 @@ def get_pause_messages_sign_filter(web3: Web3) -> Callable:
     def check_pause_message(msg: PauseMessage) -> bool:
         pause_prefix = web3.lido.deposit_security_module.get_pause_message_prefix()
 
-        verified = verify_message_with_signature(
-            data=[pause_prefix, msg['blockNumber'], msg['stakingModuleId']],
-            abi=['bytes32', 'uint256', 'uint256'],
-            address=msg['guardianAddress'],
-            vrs=(
-                msg['signature']['v'],
-                msg['signature']['r'],
-                msg['signature']['s'],
-            ),
-        )
+        if msg.get('stakingModuleId', -1) != -1:
+            verified = verify_message_with_signature(
+                data=[pause_prefix, msg['blockNumber'], msg['stakingModuleId']],
+                abi=['bytes32', 'uint256', 'uint256'],
+                address=msg['guardianAddress'],
+                vrs=(
+                    msg['signature']['v'],
+                    msg['signature']['r'],
+                    msg['signature']['s'],
+                ),
+            )
+        else:
+            verified = verify_message_with_signature(
+                data=[pause_prefix, msg['blockNumber']],
+                abi=['bytes32', 'uint256'],
+                address=msg['guardianAddress'],
+                vrs=(
+                    msg['signature']['v'],
+                    msg['signature']['r'],
+                    msg['signature']['s'],
+                ),
+            )
 
         if not verified:
             logger.error({'msg': 'Message verification failed.', 'value': msg})
             UNEXPECTED_EXCEPTIONS.labels('pause_message_verification_failed').inc()
-
-        return verified
-
-    return check_pause_message
-
-
-def get_pause_messages_sign_filter_v2(pause_prefix: bytes) -> Callable:
-    def check_pause_message(msg: PauseMessage) -> bool:
-        verified = verify_message_with_signature(
-            data=[pause_prefix, msg['blockNumber']],
-            abi=['bytes32', 'uint256'],
-            address=msg['guardianAddress'],
-            vrs=(
-                msg['signature']['v'],
-                msg['signature']['r'],
-                msg['signature']['s'],
-            ),
-        )
-
-        if not verified:
-            logger.error({'msg': 'Message verification failed.', 'value': msg})
-            UNEXPECTED_EXCEPTIONS.labels('pause_message_verification_failed_v2').inc()
 
         return verified
 
