@@ -187,7 +187,7 @@ class DepositSecurityModuleContractV2(DepositSecurityModuleContract):
             vetted_keys_by_operator,
             guardian_signature,
         )
-        logger.info({'msg': 'Build `unvetSigningKeys({}, {}, {}, {}, {}, {})` tx.'.format(
+        logger.info({'msg': 'Build `unvetSigningKeys({}, {}, {}, {}, {}, {}, {})` tx.'.format(
             block_number,
             block_hash,
             staking_module_id,

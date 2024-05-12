@@ -14,7 +14,7 @@ class StakingRouterContract(ContractInterface):
     def get_contract_version(self, block_identifier: BlockIdentifier = 'latest') -> int:
         response = self.functions.getContractVersion().call(block_identifier=block_identifier)
         logger.info({
-            'msg': f'Call `getContractVersion()`.',
+            'msg': 'Call `getContractVersion()`.',
             'value': response,
             'block_identifier': block_identifier.__repr__(),
         })
@@ -24,7 +24,7 @@ class StakingRouterContract(ContractInterface):
         """Returns the ids of all registered staking modules"""
         response = self.functions.getStakingModuleIds().call(block_identifier=block_identifier)
         logger.info({
-            'msg': f'Call `getStakingModuleIds()`.',
+            'msg': 'Call `getStakingModuleIds()`.',
             'value': response,
             'block_identifier': block_identifier.__repr__(),
         })

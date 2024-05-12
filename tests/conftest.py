@@ -1,8 +1,9 @@
+import pytest
 from eth_account import Account
 from eth_typing import BlockNumber
 from web3.types import BlockData, Wei
 
-from fixtures import *
+import variables
 
 # https://etherscan.io/address/0xC77F8768774E1c9244BEed705C4354f2113CFc09#readContract#F12
 DSM_OWNER = '0x3e40D73EB977Dc6a537aF587D48316feE66E9C8c'

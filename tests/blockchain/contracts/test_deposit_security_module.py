@@ -1,6 +1,5 @@
 import pytest
 
-from tests.fixtures import deposit_security_module_v2
 from tests.utils.contract_utils import check_contract
 from tests.utils.regrex import check_value_re, check_value_type, ADDRESS_REGREX
 

@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "depositor-bot"
-version = "4.2.1"
+version = "5.0.0"
 description = "Bot that collects council signatures, checks blockchain state and signatures and do deposits. Also pause bot send pause tx if there is security warning."
 authors = ["Raman <raman.s@lido.fi>"]
 license = "MIT License"
@@ -19,8 +19,10 @@ websocket-client = "^1.4.1"
 confluent-kafka = "^2.2.0"
 web3 = "^6.10.0"
 
-[tool.poetry.dev-dependencies]
-pytest = "^8.1.1"
+[tool.poetry.group.dev.dependencies]
+ruff = "^0.4.4"
+pytest = "^8.2.0"
+pytest-cov = "^5.0.0"
 
 [tool.pytest.ini_options]
 pythonpath = [

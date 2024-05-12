@@ -11,12 +11,8 @@ on:
 permissions: {}
 
 jobs:
-  # test:
-  #   ...
-
   deploy:
     runs-on: ubuntu-latest
-    # needs: test
     name: Build and deploy
     steps:
       - name: Staging deploy
