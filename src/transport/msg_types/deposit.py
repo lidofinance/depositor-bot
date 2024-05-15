@@ -36,11 +36,11 @@ Deposit msg example
 DepositMessageSchema = Schema(
 	{
 		'type': And(str, lambda t: t in ('deposit',)),
-		'depositRoot': And(str, HASH_REGREX),
+		'depositRoot': And(str, HASH_REGREX.validate),
 		'nonce': int,
 		'blockNumber': int,
-		'blockHash': And(str, HASH_REGREX),
-		'guardianAddress': And(str, ADDRESS_REGREX),
+		'blockHash': And(str, HASH_REGREX.validate),
+		'guardianAddress': And(str, ADDRESS_REGREX.validate),
 		'signature': SignatureSchema,
 		'stakingModuleId': int,
 	},

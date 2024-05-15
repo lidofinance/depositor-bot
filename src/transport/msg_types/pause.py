@@ -31,7 +31,7 @@ PauseMessageSchema = Schema(
 	{
 		'type': And(str, lambda t: t in ('pause',)),
 		'blockNumber': int,
-		'guardianAddress': And(str, ADDRESS_REGREX),
+		'guardianAddress': And(str, ADDRESS_REGREX.validate),
 		'signature': SignatureSchema,
 		# 'stakingModuleId': int
 	},

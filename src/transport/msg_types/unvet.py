@@ -15,12 +15,12 @@ UnvetMessageSchema = Schema(
 	{
 		'type': And(str, lambda t: t in ('unvet',)),
 		'blockNumber': int,
-		'blockHash': And(str, HASH_REGREX),
-		'guardianAddress': And(str, ADDRESS_REGREX),
+		'blockHash': And(str, HASH_REGREX.validate),
+		'guardianAddress': And(str, ADDRESS_REGREX.validate),
 		'signature': SignatureSchema,
 		'stakingModuleId': int,
-		'operatorIds': And(str, HEX_BYTES_REGREX),
-		'vettedKeysByOperator': And(str, HEX_BYTES_REGREX),
+		'operatorIds': And(str, HEX_BYTES_REGREX.validate),
+		'vettedKeysByOperator': And(str, HEX_BYTES_REGREX.validate),
 	},
 	ignore_extra_keys=True,
 )

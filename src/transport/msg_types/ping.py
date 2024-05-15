@@ -11,7 +11,7 @@ PingMessageSchema = Schema(
 	{
 		'type': And(str, lambda t: t in ('ping',)),
 		'blockNumber': int,
-		'guardianAddress': And(str, ADDRESS_REGREX),
+		'guardianAddress': And(str, ADDRESS_REGREX.validate),
 		'stakingModuleIds': [int],
 	},
 	ignore_extra_keys=True,
