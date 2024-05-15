@@ -1,39 +1,40 @@
-from typing import List, Callable, Iterable, TypedDict
+from typing import Callable, Iterable, List, TypedDict
 
 from transport.msg_providers.common import BaseMessageProvider
 
 
 class MessageStorage:
-    messages: List = []
+	messages: List = []
 
-    """Fetches all messages, filter them and storing"""
-    def __init__(self, transports: List[BaseMessageProvider], filters: List[Callable]):
-        """
-            transports - List of objects with working get_messages method.
-            filters - functions that would be applied to messages when they are received. (That would need only one check)
-        """
-        self._transports = transports
-        self._filters = filters
+	"""Fetches all messages, filter them and storing"""
 
-    def receive_messages(self) -> Iterable[dict]:
-        """Fetch all messages from transport and filter them"""
-        for transport in self._transports:
-            messages = transport.get_messages()
+	def __init__(self, transports: List[BaseMessageProvider], filters: List[Callable]):
+		"""
+		transports - List of objects with working get_messages method.
+		filters - functions that would be applied to messages when they are received. (That would need only one check)
+		"""
+		self._transports = transports
+		self._filters = filters
 
-            for _filter in self._filters:
-                messages = filter(_filter, messages)
+	def receive_messages(self) -> Iterable[dict]:
+		"""Fetch all messages from transport and filter them"""
+		for transport in self._transports:
+			messages = transport.get_messages()
 
-            self.messages.extend(messages)
+			for _filter in self._filters:
+				messages = filter(_filter, messages)
 
-        return self.messages
+			self.messages.extend(messages)
 
-    def get_messages(self, actualize_rule: Callable[[TypedDict], bool]) -> List[dict]:
-        """
-        actualize_rule - is filter that filters all outdated messages
-        """
-        self.receive_messages()
-        self.messages = list(filter(actualize_rule, self.messages))
-        return self.messages
+		return self.messages
 
-    def clear(self):
-        self.messages = []
+	def get_messages(self, actualize_rule: Callable[[TypedDict], bool]) -> List[dict]:
+		"""
+		actualize_rule - is filter that filters all outdated messages
+		"""
+		self.receive_messages()
+		self.messages = list(filter(actualize_rule, self.messages))
+		return self.messages
+
+	def clear(self):
+		self.messages = []

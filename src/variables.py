@@ -14,11 +14,11 @@ WEB3_RPC_ENDPOINTS = os.getenv('WEB3_RPC_ENDPOINTS', '').split(',')
 WALLET_PRIVATE_KEY = os.getenv('WALLET_PRIVATE_KEY', None)
 
 if WALLET_PRIVATE_KEY:
-    ACCOUNT = Account.from_key(WALLET_PRIVATE_KEY)
-    logger.info({'msg': 'Load account from private key.', 'value': ACCOUNT.address})
+	ACCOUNT = Account.from_key(WALLET_PRIVATE_KEY)
+	logger.info({'msg': 'Load account from private key.', 'value': ACCOUNT.address})
 else:
-    ACCOUNT = None
-    logger.warning({'msg': 'Account not provided. Run in dry mode.'})
+	ACCOUNT = None
+	logger.warning({'msg': 'Account not provided. Run in dry mode.'})
 
 # App specific
 # LIDO_LOCATOR ADDRESS

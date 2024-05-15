@@ -11,18 +11,18 @@ from .relay import Relay
 
 
 def activate_relay(
-    w3: Web3,
-    signature_account: LocalAccount,
-    endpoint_uris: list[Union[URI, str]] = None,
+	w3: Web3,
+	signature_account: LocalAccount,
+	endpoint_uris: list[Union[URI, str]] = None,
 ):
-    """
-    Injects the flashbots module and middleware to w3.
-    """
+	"""
+	Injects the flashbots module and middleware to w3.
+	"""
 
-    relay_provider = RelayProvider(signature_account, endpoint_uris)
+	relay_provider = RelayProvider(signature_account, endpoint_uris)
 
-    relay_middleware = construct_relay_middleware(relay_provider)
-    w3.middleware_onion.add(relay_middleware)
+	relay_middleware = construct_relay_middleware(relay_provider)
+	w3.middleware_onion.add(relay_middleware)
 
-    # attach modules to add the new namespace commands
-    attach_modules(w3, {"relay": (Relay,)})
+	# attach modules to add the new namespace commands
+	attach_modules(w3, {'relay': (Relay,)})

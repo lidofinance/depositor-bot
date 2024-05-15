@@ -26,6 +26,21 @@ jobs:
         run: |
           poetry install
 
+      - name: Lint with Ruff
+        run: |
+          ruff --output-format=github .
+        continue-on-error: true
+
+      - name: Format with Ruff
+        run: |
+          ruff --output-format=github .
+        continue-on-error: true
+
+      - name: Typecheck with Pyright
+        run: |
+          pyright
+        continue-on-error: true
+
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
 

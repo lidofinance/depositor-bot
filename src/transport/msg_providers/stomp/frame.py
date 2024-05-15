@@ -1,51 +1,53 @@
-Byte = {
-    'LF': '\x0A',
-    'NULL': '\x00'
-}
+from typing import Optional, Callable
+
+Byte = {'LF': '\x0a', 'NULL': '\x00'}
 
 
 class Frame:
-    def __init__(self, command: str, headers: dict, body: str):
-        self.command = command
-        self.headers = headers
-        self.body = '' if body is None else body
+	ack: Optional[Callable]
+	nack: Optional[Callable]
 
-    def __str__(self):
-        lines = [self.command]
+	def __init__(self, command: str, headers: dict, body: Optional[str]):
+		self.command = command
+		self.headers = headers
+		self.body = '' if body is None else body
 
-        skip_content_length = 'content-length' in self.headers
+	def __str__(self):
+		lines = [self.command]
 
-        for name, value in self.headers.items():
-            lines.append(name + ":" + value)
+		skip_content_length = 'content-length' in self.headers
 
-        if self.body and not skip_content_length:
-            lines.append(f"content-length:{len(self.body)}")
+		for name, value in self.headers.items():
+			lines.append(name + ':' + value)
 
-        lines.append(Byte['LF'] + self.body)
-        return Byte['LF'].join(lines)
+		if self.body and not skip_content_length:
+			lines.append(f'content-length:{len(self.body)}')
 
-    @staticmethod
-    def unmarshall_single(data):
-        if data == '\n':
-            return
+		lines.append(Byte['LF'] + self.body)
+		return Byte['LF'].join(lines)
 
-        lines = data.split(Byte['LF'])
+	@staticmethod
+	def unmarshall_single(data):
+		if data == '\n':
+			return
 
-        command = lines[0].strip()
-        headers = {}
+		lines = data.split(Byte['LF'])
 
-        # get all headers
-        i = 1
-        while lines[i] != '':
-            # get key, value from raw header
-            (key, value) = lines[i].split(':')
-            headers[key] = value
-            i += 1
+		command = lines[0].strip()
+		headers = {}
 
-        body = None if lines[i + 1] == Byte['NULL'] else lines[i + 1][:-1]
+		# get all headers
+		i = 1
+		while lines[i] != '':
+			# get key, value from raw header
+			(key, value) = lines[i].split(':')
+			headers[key] = value
+			i += 1
 
-        return Frame(command, headers, body)
+		body = None if lines[i + 1] == Byte['NULL'] else lines[i + 1][:-1]
 
-    @staticmethod
-    def marshall(command, headers, body):
-        return str(Frame(command, headers, body)) + Byte['NULL']
+		return Frame(command, headers, body)
+
+	@staticmethod
+	def marshall(command, headers, body):
+		return str(Frame(command, headers, body)) + Byte['NULL']

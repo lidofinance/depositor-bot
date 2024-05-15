@@ -1,88 +1,73 @@
-from typing import TypedDict, List, Union, Optional
+from typing import List, Optional, TypedDict, Union
 
 from eth_account.signers.local import LocalAccount
 from eth_typing import HexStr
 from hexbytes import HexBytes
-from web3.types import TxParams, Hash32
+from web3.types import Hash32, TxParams
+
 
 # unsigned transaction
-RelayBundleTx = TypedDict(
-    "RelayBundleTx",
-    {
-        "transaction": TxParams,
-        "signer": LocalAccount,
-    },
-)
+class RelayBundleTx(TypedDict):
+	transaction: TxParams
+	signer: LocalAccount
+
 
 # signed transaction
-RelayBundleRawTx = TypedDict(
-    "RelayBundleRawTx",
-    {
-        "signed_transaction": HexBytes,
-    },
-)
+class RelayBundleRawTx(TypedDict):
+	signed_transaction: HexBytes
+
 
 # transaction dict taken from w3.eth.get_block('pending', full_transactions=True)
 RelayBundleDictTx = TypedDict(
-    "RelayBundleDictTx",
-    {
-        "accessList": list,
-        "blockHash": HexBytes,
-        "blockNumber": int,
-        "chainId": str,
-        "from": str,
-        "gas": int,
-        "gasPrice": int,
-        "maxFeePerGas": int,
-        "maxPriorityFeePerGas": int,
-        "hash": HexBytes,
-        "input": str,
-        "nonce": int,
-        "r": HexBytes,
-        "s": HexBytes,
-        "to": str,
-        "transactionIndex": int,
-        "type": str,
-        "v": int,
-        "value": int,
-    },
-    total=False,
+	'RelayBundleDictTx',
+	{
+		'accessList': list,
+		'blockHash': HexBytes,
+		'blockNumber': int,
+		'chainId': str,
+		'from': str,
+		'gas': int,
+		'gasPrice': int,
+		'maxFeePerGas': int,
+		'maxPriorityFeePerGas': int,
+		'hash': HexBytes,
+		'input': str,
+		'nonce': int,
+		'r': HexBytes,
+		's': HexBytes,
+		'to': str,
+		'transactionIndex': int,
+		'type': str,
+		'v': int,
+		'value': int,
+	},
+	total=False,
 )
 
-RelayOpts = TypedDict(
-    "RelayOpts",
-    {
-        "minTimestamp": Optional[int],
-        "maxTimestamp": Optional[int],
-        "revertingTxHashes": Optional[List[str]],
-        "replacementUuid": Optional[str],
-    },
-)
+
+class RelayOpts(TypedDict):
+	minTimestamp: Optional[int]
+	maxTimestamp: Optional[int]
+	revertingTxHashes: Optional[List[str]]
+	replacementUuid: Optional[str]
 
 
 # Type missing from eth_account, not really a part of flashbots web3 per sé
-SignTx = TypedDict(
-    "SignTx",
-    {
-        "nonce": int,
-        "chainId": int,
-        "to": str,
-        "data": str,
-        "value": int,
-        "gas": int,
-        "gasPrice": int,
-    },
-    total=False,
-)
+class SignTx(TypedDict, total=False):
+	nonce: int
+	chainId: int
+	to: str
+	data: str
+	value: int
+	gas: int
+	gasPrice: int
+
 
 # type alias
 TxReceipt = Union[Hash32, HexBytes, HexStr]
 
+
 # response from bundle or private tx submission
-SignedTxAndHash = TypedDict(
-    "SignedTxAndHash",
-    {
-        "signed_transaction": str,
-        "hash": HexBytes,
-    },
-)
+class SignedTxAndHash(TypedDict):
+	signed_transaction: str
+	hash: HexBytes

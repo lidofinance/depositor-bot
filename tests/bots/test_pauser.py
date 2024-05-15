@@ -2,9 +2,9 @@ import logging
 from unittest.mock import Mock
 
 import pytest
-
 import variables
 from bots.pauser import PauserBot
+
 from tests.conftest import DSM_OWNER
 from tests.fixtures import upgrade_staking_router_to_v2
 
@@ -25,19 +25,19 @@ def pause_bot(web3_lido_unit, block_data):
 @pytest.fixture
 def pause_message():
     yield {
-        "blockHash": "0xe41c0212516a899c455203e833903c802338daa3048bc637b623f6fba0a1685c",
-        "blockNumber": 10,
-        "guardianAddress": COUNCIL_ADDRESS,
-        "guardianIndex": 0,
-        "stakingModuleId": 1,
-        "signature": {
-            "_vs": "0xd4933925f5f97a9632b4b1bc621a1c2771d58eaf6eee27dcf915eac8af010537",
-            "r": "0xbaa668505cd496caaf7117dd074338197200175057909ab73a04463656bdb0fa",
-            "recoveryParam": 1,
-            "s": "0x54933925f5f97a9632b4b1bc621a1c2771d58eaf6eee27dcf915eac8af010537",
-            "v": 28
+        'blockHash': '0xe41c0212516a899c455203e833903c802338daa3048bc637b623f6fba0a1685c',
+        'blockNumber': 10,
+        'guardianAddress': COUNCIL_ADDRESS,
+        'guardianIndex': 0,
+        'stakingModuleId': 1,
+        'signature': {
+            '_vs': '0xd4933925f5f97a9632b4b1bc621a1c2771d58eaf6eee27dcf915eac8af010537',
+            'r': '0xbaa668505cd496caaf7117dd074338197200175057909ab73a04463656bdb0fa',
+            'recoveryParam': 1,
+            's': '0x54933925f5f97a9632b4b1bc621a1c2771d58eaf6eee27dcf915eac8af010537',
+            'v': 28,
         },
-        "type": "pause"
+        'type': 'pause',
     }
 
 
@@ -66,16 +66,16 @@ def get_pause_message(web3, module_id):
     signed = web3.eth.account._sign_hash(msg_hash, private_key=COUNCIL_PK)
 
     return {
-        "blockHash": latest.hash.hex(),
-        "blockNumber": latest.number,
-        "guardianAddress": COUNCIL_ADDRESS,
-        "stakingModuleId": module_id,
-        "signature": {
-            "r": '0x' + signed.r.to_bytes(32, 'big').hex(),
-            "s": '0x' + signed.s.to_bytes(32, 'big').hex(),
-            "v": signed.v,
+        'blockHash': latest.hash.hex(),
+        'blockNumber': latest.number,
+        'guardianAddress': COUNCIL_ADDRESS,
+        'stakingModuleId': module_id,
+        'signature': {
+            'r': '0x' + signed.r.to_bytes(32, 'big').hex(),
+            's': '0x' + signed.s.to_bytes(32, 'big').hex(),
+            'v': signed.v,
         },
-        "type": "pause"
+        'type': 'pause',
     }
 
 
@@ -90,15 +90,15 @@ def get_pause_message_v2(web3):
     signed = web3.eth.account._sign_hash(msg_hash, private_key=COUNCIL_PK)
 
     return {
-        "blockHash": latest.hash.hex(),
-        "blockNumber": latest.number,
-        "guardianAddress": COUNCIL_ADDRESS,
-        "signature": {
-            "r": '0x' + signed.r.to_bytes(32, 'big').hex(),
-            "s": '0x' + signed.s.to_bytes(32, 'big').hex(),
-            "v": signed.v,
+        'blockHash': latest.hash.hex(),
+        'blockNumber': latest.number,
+        'guardianAddress': COUNCIL_ADDRESS,
+        'signature': {
+            'r': '0x' + signed.r.to_bytes(32, 'big').hex(),
+            's': '0x' + signed.s.to_bytes(32, 'big').hex(),
+            'v': signed.v,
         },
-        "type": "pause"
+        'type': 'pause',
     }
 
 
@@ -112,7 +112,7 @@ def test_pause_bot_without_messages(pause_bot, block_data):
 
 @pytest.mark.unit
 @pytest.mark.parametrize(
-    "block_range",
+    'block_range',
     [4, pytest.param(6, marks=pytest.mark.xfail)],
 )
 def test_pause_bot_outdate_messages(pause_bot, block_data, pause_message, block_range):
@@ -127,7 +127,7 @@ def test_pause_bot_outdate_messages(pause_bot, block_data, pause_message, block_
 
 @pytest.mark.unit
 @pytest.mark.parametrize(
-    "active_module",
+    'active_module',
     [False, pytest.param(True, marks=pytest.mark.xfail)],
 )
 def test_pause_bot_clean_messages(pause_bot, block_data, pause_message, active_module):
@@ -154,9 +154,9 @@ def test_pause_message_filtered_by_module_id(pause_bot, block_data, pause_messag
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
-    "web3_provider_integration,module_id",
+    'web3_provider_integration,module_id',
     [[19628126, 1], [19628126, 2]],
-    indirect=["web3_provider_integration"],
+    indirect=['web3_provider_integration'],
 )
 def test_pauser_bot(web3_lido_integration, web3_provider_integration, add_account_to_guardian, module_id, caplog):
     caplog.set_level(logging.INFO)
@@ -196,8 +196,10 @@ def test_pauser_bot(web3_lido_integration, web3_provider_integration, add_accoun
     pb.execute(latest)
     assert pb.message_storage.messages
     assert [
-        msg for msg in caplog.messages
-        if 'Build `pauseDeposits(19628129, (\'0xe37ddb5eadce3a4f03274a102c45a21865f9d6fa03f61fdb98466ae0fd677331\', \'0xb1dff99d6b8ad3402c7237341816568bf2831ddbe0bddd111eebd12a59efcb8c\'))` tx.' in msg
+        msg
+        for msg in caplog.messages
+        if ("Build `pauseDeposits(19628129, ('0xe37ddb5eadce3a4f03274a102c45a21865f9d6fa03f61fdb98466ae0fd677331', "
+            "'0xb1dff99d6b8ad3402c7237341816568bf2831ddbe0bddd111eebd12a59efcb8c'))` tx.") in msg
     ]
 
     pb.execute(latest)
