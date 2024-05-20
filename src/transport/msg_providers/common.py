@@ -1,6 +1,6 @@
 import abc
 import logging
-from typing import Any, List
+from typing import Any, List, Optional
 
 from schema import Schema, SchemaError
 
@@ -36,7 +36,7 @@ class BaseMessageProvider(abc.ABC):
 	def _receive_message(self) -> Any:
 		raise NotImplementedError('Receive message from transport.')
 
-	def _process_msg(self, msg: Any) -> dict:
+	def _process_msg(self, msg: Any) -> Optional[dict]:
 		# Overwrite this method to add msg serialization.
 		# Return None if message is not serializable
 		return msg

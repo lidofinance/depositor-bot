@@ -1,3 +1,5 @@
+# pyright: reportTypedDictNotRequiredAccess=false
+
 import logging
 from typing import Callable
 
@@ -133,7 +135,7 @@ class PauserBot:
 			self.message_storage.clear()
 			return False
 
-		pause_tx = self.w3.lido.deposit_security_module.pause_deposits(
+		pause_tx = self.w3.lido.deposit_security_module.pause_deposits_v2(
 			message['blockNumber'], (message['signature']['r'], compute_vs(message['signature']['v'], message['signature']['s']))
 		)
 

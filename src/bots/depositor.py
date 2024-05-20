@@ -1,3 +1,5 @@
+# pyright: reportTypedDictNotRequiredAccess=false
+
 import logging
 from collections import defaultdict
 from typing import Callable, Optional
@@ -8,9 +10,7 @@ from blockchain.deposit_strategy.interface import ModuleDepositStrategyInterface
 from blockchain.deposit_strategy.prefered_module_to_deposit import get_preferred_to_deposit_modules
 from blockchain.executor import Executor
 from blockchain.typings import Web3
-from blockchain.web3_extentions.bundle import activate_relay
 from cryptography.verify_signature import compute_vs
-from eth_account import Account
 from eth_typing import Hash32
 from metrics.metrics import (
 	ACCOUNT_BALANCE,
@@ -31,12 +31,6 @@ logger = logging.getLogger(__name__)
 
 
 def run_depositor(w3):
-	if variables.AUCTION_BUNDLER_PRIVATE_KEY and variables.AUCTION_BUNDLER_URIS:
-		logger.info({'msg': 'Add private relays.'})
-		activate_relay(w3, Account.from_key(variables.AUCTION_BUNDLER_PRIVATE_KEY), variables.AUCTION_BUNDLER_URIS)
-	else:
-		logger.info({'msg': 'No flashbots available for this network.'})
-
 	logger.info({'msg': 'Initialize Depositor bot.'})
 	depositor_bot = DepositorBot(w3)
 
@@ -252,7 +246,7 @@ class DepositorBot:
 		staking_module_id: int,
 		staking_module_nonce: int,
 		payload: bytes,
-		guardian_signs: tuple[tuple[str, str]],
+		guardian_signs: tuple[tuple[str, str], ...],
 	) -> bool:
 		"""Returns transactions success status"""
 		# Prepare transaction and send

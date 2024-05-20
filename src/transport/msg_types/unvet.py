@@ -3,9 +3,10 @@ from typing import Callable, TypedDict
 
 from blockchain.typings import Web3
 from cryptography.verify_signature import verify_message_with_signature
+from eth_typing import Hash32
 from metrics.metrics import UNEXPECTED_EXCEPTIONS
 from schema import And, Schema
-from transport.msg_types.base import ADDRESS_REGREX, HEX_BYTES_REGREX, HASH_REGREX, Signature, SignatureSchema
+from transport.msg_types.base import ADDRESS_REGREX, HASH_REGREX, HEX_BYTES_REGREX, Signature, SignatureSchema
 from utils.bytes import from_hex_string_to_bytes
 
 logger = logging.getLogger(__name__)
@@ -29,7 +30,7 @@ UnvetMessageSchema = Schema(
 class UnvetMessage(TypedDict):
 	type: str
 	blockNumber: int
-	blockHash: str
+	blockHash: Hash32
 	guardianAddress: str
 	signature: Signature
 	stakingModuleId: int

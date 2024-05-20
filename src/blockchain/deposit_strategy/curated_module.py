@@ -1,12 +1,14 @@
+# pyright: reportTypedDictNotRequiredAccess=false
+
 import logging
 from typing import Literal
 
 import numpy
 import variables
 from blockchain.deposit_strategy.interface import ModuleDepositStrategyInterface
+from blockchain.typings import Web3
 from eth_typing import BlockNumber
 from metrics.metrics import DEPOSITABLE_ETHER, GAS_FEE, POSSIBLE_DEPOSITS_AMOUNT
-from web3 import Web3
 from web3.types import Wei
 
 logger = logging.getLogger(__name__)
@@ -25,7 +27,7 @@ class CuratedModuleDepositStrategy(ModuleDepositStrategyInterface):
 
 		# Used for caching
 		self._latest_fetched_block: int = 0
-		self._days_param = None
+		self._days_param: int = 0
 
 	def is_deposited_keys_amount_ok(self) -> bool:
 		possible_deposits_amount = self._get_possible_deposits_amount()
@@ -50,7 +52,7 @@ class CuratedModuleDepositStrategy(ModuleDepositStrategyInterface):
 		POSSIBLE_DEPOSITS_AMOUNT.labels(self.module_id).set(possible_deposits_amount)
 		return possible_deposits_amount
 
-	def _calculate_recommended_gas_based_on_deposit_amount(self, deposits_amount: int) -> Wei:
+	def _calculate_recommended_gas_based_on_deposit_amount(self, deposits_amount: int) -> int:
 		# For one key recommended gas fee will be around 10
 		# For 10 keys around 100 gwei. For 20 keys ~ 800 gwei
 		# ToDo percentiles for all modules?

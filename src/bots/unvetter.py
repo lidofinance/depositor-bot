@@ -88,6 +88,9 @@ class UnvetterBot:
 		return True
 
 	def receive_unvet_messages(self) -> list[UnvetMessage]:
+		if self.message_storage is None:
+			return []
+
 		actualize_filter = self._get_message_actualize_filter()
 		return self.message_storage.get_messages(actualize_filter)
 
@@ -138,4 +141,7 @@ class UnvetterBot:
 		return result
 
 	def _clear_outdated_messages_for_module(self, module_id: int, nonce: int) -> None:
+		if self.message_storage is None:
+			return
+
 		self.message_storage.get_messages(lambda message: message['stakingModuleId'] != module_id or message['nonce'] >= nonce)

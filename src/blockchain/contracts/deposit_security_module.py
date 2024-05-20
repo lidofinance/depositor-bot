@@ -1,10 +1,9 @@
 import logging
 
-from web3.exceptions import ContractLogicError, ABIFunctionNotFound
-
 from blockchain.contracts.base_interface import ContractInterface
 from eth_typing import ChecksumAddress, Hash32
 from web3.contract.contract import ContractFunction
+from web3.exceptions import ABIFunctionNotFound, ContractLogicError
 from web3.types import BlockIdentifier
 
 logger = logging.getLogger(__name__)
@@ -48,7 +47,7 @@ class DepositSecurityModuleContract(ContractInterface):
 		staking_module_id: int,
 		nonce: int,
 		deposit_call_data: bytes,
-		guardian_signatures: list[tuple[str, str]],
+		guardian_signatures: tuple[tuple[str, str], ...],
 	) -> ContractFunction:
 		"""
 		Calls LIDO.deposit(maxDepositsPerBlock, stakingModuleId, depositCalldata).
@@ -141,17 +140,33 @@ class DepositSecurityModuleContract(ContractInterface):
 	def get_unvet_message_prefix(self, block_identifier: BlockIdentifier = 'latest'):
 		raise NotImplementedError('V1 does not implement this method.')
 
-	def unvet_signing_keys(self, block_identifier: BlockIdentifier = 'latest'):
+	def unvet_signing_keys(
+		self,
+		block_number: int,
+		block_hash: Hash32,
+		staking_module_id: int,
+		nonce: int,
+		operator_ids: bytes,
+		vetted_keys_by_operator: bytes,
+		guardian_signature: tuple[str, str],
+	):
 		raise NotImplementedError('V1 does not implement this method.')
 
 	def is_deposits_paused(self, block_identifier: BlockIdentifier = 'latest'):
+		raise NotImplementedError('V1 does not implement this method.')
+
+	def pause_deposits_v2(
+		self,
+		block_number: int,
+		guardian_signature: tuple[str, str],
+	) -> ContractFunction:
 		raise NotImplementedError('V1 does not implement this method.')
 
 
 class DepositSecurityModuleContractV2(DepositSecurityModuleContract):
 	abi_path = './interfaces/DepositSecurityModuleV2.json'
 
-	def pause_deposits(  # Overwrite base pause_deposits
+	def pause_deposits_v2(
 		self,
 		block_number: int,
 		guardian_signature: tuple[str, str],

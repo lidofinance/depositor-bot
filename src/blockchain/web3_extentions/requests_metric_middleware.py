@@ -30,7 +30,7 @@ def add_requests_metric_middleware(web3: Web3):
 				ETH_RPC_REQUESTS.labels(
 					method=method,
 					code=failed.status_code,
-					domain=urlparse(web3.provider.endpoint_uri).netloc,
+					domain=urlparse(web3.provider.endpoint_uri).netloc,  # pyright: ignore
 				).inc()
 				raise
 
@@ -44,7 +44,7 @@ def add_requests_metric_middleware(web3: Web3):
 			ETH_RPC_REQUESTS.labels(
 				method=method,
 				code=code,
-				domain=urlparse(web3.provider.endpoint_uri).netloc,
+				domain=urlparse(web3.provider.endpoint_uri).netloc,  # pyright: ignore
 			).inc()
 			return response
 

@@ -8,8 +8,7 @@ from blockchain.contracts.lido import LidoContract
 from blockchain.contracts.lido_locator import LidoLocatorContract
 from blockchain.contracts.staking_router import StakingRouterContract, StakingRouterContractV2
 from web3 import Web3
-from web3.contract import Contract
-from web3.exceptions import ContractLogicError
+from web3.contract.contract import Contract
 from web3.module import Module
 
 logger = logging.getLogger(__name__)

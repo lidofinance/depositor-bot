@@ -53,22 +53,21 @@ class Client:
 		self._clean_up()
 		self.on_close()
 
-	def _on_error(self, ws_app, error, *args):
+	def _on_error(self, ws, error) -> None:
 		logging.error({'msg': 'Websocket error.', 'error': str(error)})
 
-	def _on_message(self, ws_app, message, *args):
+	def _on_message(self, ws, message) -> None:
 		logging.debug('\n<<< ' + str(message))
 		frame = Frame.unmarshall_single(message)
 
 		if frame is None:
 			return
 
-		_results = []
 		if frame.command == 'CONNECTED':
 			self.connected = True
 			logging.debug({'msg': f'connected to server {self.url}'})
 			if self._connectCallback is not None:
-				_results.append(self._connectCallback(frame))
+				self._connectCallback(frame)
 
 		elif frame.command == 'MESSAGE':
 			subscription = frame.headers['subscription']
@@ -90,22 +89,16 @@ class Client:
 				frame.ack = ack
 				frame.nack = nack
 
-				_results.append(on_receive(frame))
+				on_receive(frame)
 			else:
-				info = 'Unhandled received MESSAGE: ' + str(frame)
-				logging.debug(info)
-				_results.append(info)
+				logging.debug('Unhandled received MESSAGE: ' + str(frame))
 		elif frame.command == 'RECEIPT':
 			pass
 		elif frame.command == 'ERROR':
 			if self.errorCallback is not None:
-				_results.append(self.errorCallback(frame))
+				self.errorCallback(frame)
 		else:
-			info = 'Unhandled received MESSAGE: ' + frame.command
-			logging.error(info)
-			_results.append(info)
-
-		return _results
+			logging.error('Unhandled received MESSAGE: ' + frame.command)
 
 	def _transmit(self, command, headers, body=None):
 		out = Frame.marshall(command, headers, body)
@@ -187,14 +180,14 @@ class Client:
 		del self.subscriptions[channel_id]
 		return self._transmit('UNSUBSCRIBE', {'id': channel_id})
 
-	def ack(self, message_id, subscription, headers):
+	def ack(self, message_id, subscription, headers) -> None:
 		if headers is None:
 			headers = {}
 		headers['message-id'] = message_id
 		headers['subscription'] = subscription
 		return self._transmit('ACK', headers)
 
-	def nack(self, message_id, subscription, headers):
+	def nack(self, message_id, subscription, headers) -> None:
 		if headers is None:
 			headers = {}
 		headers['message-id'] = message_id

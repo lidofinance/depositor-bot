@@ -1,3 +1,5 @@
+# pyright: reportTypedDictNotRequiredAccess=false
+
 import logging
 from time import sleep
 from typing import Any, Callable, Optional
@@ -74,7 +76,7 @@ class Executor:
 					self._next_expected_block = latest_block['number']
 					return latest_block
 
-				time_until_expected_block = (self._next_expected_block - latest_block.number - 1) * SLOT_TIME
+				time_until_expected_block = (self._next_expected_block - latest_block['number'] - 1) * SLOT_TIME
 
 				# If expected block is next
 				if time_until_expected_block == 0:

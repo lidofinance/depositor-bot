@@ -30,7 +30,7 @@ def web3_provider_integration(request):
 	block_num = getattr(request, 'param', None)
 
 	with anvil_fork(
-		os.getenv('ANVIL_PATH'),
+		os.getenv('ANVIL_PATH', ''),
 		variables.WEB3_RPC_ENDPOINTS[0],
 		block_num,
 	):

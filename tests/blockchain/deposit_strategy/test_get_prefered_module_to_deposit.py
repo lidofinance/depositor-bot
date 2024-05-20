@@ -14,46 +14,10 @@ def test_get_preferred_to_deposit_module(web3_lido_unit):
 	web3_lido_unit.lido.staking_router.get_staking_module_digests = Mock(
 		return_value=[
 			(0, 0, (1,), (10, 20, 10)),
-			(
-				0,
-				0,
-				(2,),
-				(
-					0,
-					10,
-					10,
-				),
-			),
-			(
-				0,
-				0,
-				(3,),
-				(
-					3000,
-					4000,
-					10,
-				),
-			),
-			(
-				0,
-				0,
-				(6,),
-				(
-					5,
-					10,
-					10,
-				),
-			),
-			(
-				0,
-				0,
-				(12,),
-				(
-					3000,
-					4000,
-					10,
-				),
-			),
+			(0, 0, (2,), (0, 10, 10)),
+			(0, 0, (3,), (3000, 4000, 10)),
+			(0, 0, (6,), (5, 10, 10)),
+			(0, 0, (12,), (3000, 4000, 10)),
 		]
 	)
 	web3_lido_unit.lido.staking_router.is_staking_module_active = lambda x: not x % 2
