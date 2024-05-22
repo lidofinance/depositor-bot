@@ -14,76 +14,76 @@ COUNCIL_PK = '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d
 
 
 def get_unvet_message(web3) -> UnvetMessage:
-	latest = web3.eth.get_block('latest')
-	block_number = latest.number
+    latest = web3.eth.get_block('latest')
+    block_number = latest.number
 
-	prefix = web3.lido.deposit_security_module.get_unvet_message_prefix()
-	nonce = web3.lido.staking_router.functions.getStakingModuleNonce(1).call()
+    prefix = web3.lido.deposit_security_module.get_unvet_message_prefix()
+    nonce = web3.lido.staking_router.functions.getStakingModuleNonce(1).call()
 
-	msg_hash = web3.solidity_keccak(
-		['bytes32', 'uint256', 'bytes32', 'uint256', 'uint256', 'bytes', 'bytes'],
-		[
-			prefix,
-			block_number,
-			latest.hash.hex(),
-			1,
-			nonce,
-			from_hex_string_to_bytes('0x1234'),
-			from_hex_string_to_bytes('0001'),
-		],
-	)
-	signed = web3.eth.account._sign_hash(msg_hash, private_key=COUNCIL_PK)
+    msg_hash = web3.solidity_keccak(
+        ['bytes32', 'uint256', 'bytes32', 'uint256', 'uint256', 'bytes', 'bytes'],
+        [
+            prefix,
+            block_number,
+            latest.hash.hex(),
+            1,
+            nonce,
+            from_hex_string_to_bytes('0x1234'),
+            from_hex_string_to_bytes('0001'),
+        ],
+    )
+    signed = web3.eth.account._sign_hash(msg_hash, private_key=COUNCIL_PK)
 
-	unvet_message = {
-		'blockNumber': block_number,
-		'blockHash': latest.hash.hex(),
-		'guardianAddress': COUNCIL_ADDRESS,
-		'stakingModuleId': 1,
-		'nonce': nonce,
-		'operatorIds': '0x1234',
-		'vettedKeysByOperator': '0001',
-		'signature': {
-			'r': '0x' + signed.r.to_bytes(32, 'big').hex(),
-			's': '0x' + signed.s.to_bytes(32, 'big').hex(),
-			'v': signed.v,
-		},
-		'type': 'unvet',
-	}
+    unvet_message = {
+        'blockNumber': block_number,
+        'blockHash': latest.hash.hex(),
+        'guardianAddress': COUNCIL_ADDRESS,
+        'stakingModuleId': 1,
+        'nonce': nonce,
+        'operatorIds': '0x1234',
+        'vettedKeysByOperator': '0001',
+        'signature': {
+            'r': '0x' + signed.r.to_bytes(32, 'big').hex(),
+            's': '0x' + signed.s.to_bytes(32, 'big').hex(),
+            'v': signed.v,
+        },
+        'type': 'unvet',
+    }
 
-	assert list(filter(get_unvet_messages_sign_filter(web3), [unvet_message]))
+    assert list(filter(get_unvet_messages_sign_filter(web3), [unvet_message]))
 
-	return unvet_message
+    return unvet_message
 
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
-	'web3_provider_integration',
-	[19628126],
-	indirect=['web3_provider_integration'],
+    'web3_provider_integration',
+    [19628126],
+    indirect=['web3_provider_integration'],
 )
 def test_unvetter(web3_provider_integration, web3_lido_integration, caplog):
-	latest = web3_lido_integration.eth.get_block('latest')
+    latest = web3_lido_integration.eth.get_block('latest')
 
-	ub = UnvetterBot(web3_lido_integration)
-	ub.execute(latest)
+    ub = UnvetterBot(web3_lido_integration)
+    ub.execute(latest)
 
-	assert ub.message_storage is None
+    assert ub.message_storage is None
 
-	upgrade_staking_router_to_v2(web3_lido_integration)
+    upgrade_staking_router_to_v2(web3_lido_integration)
 
-	ub.execute(latest)
-	assert ub.message_storage is not None
+    ub.execute(latest)
+    assert ub.message_storage is not None
 
-	web3_lido_integration.lido.deposit_security_module.get_guardians = Mock(return_value=[COUNCIL_ADDRESS])
-	ub.message_storage.messages = [get_unvet_message(web3_lido_integration)]
+    web3_lido_integration.lido.deposit_security_module.get_guardians = Mock(return_value=[COUNCIL_ADDRESS])
+    ub.message_storage.messages = [get_unvet_message(web3_lido_integration)]
 
-	caplog.set_level(logging.INFO)
+    caplog.set_level(logging.INFO)
 
-	ub.execute(latest)
+    ub.execute(latest)
 
-	assert [msg for msg in caplog.messages if 'Build `unvetSigningKeys(' in msg]
-	assert ub.message_storage.messages
+    assert [msg for msg in caplog.messages if 'Build `unvetSigningKeys(' in msg]
+    assert ub.message_storage.messages
 
-	web3_lido_integration.lido.staking_router.get_staking_module_nonce = Mock(return_value=ub.message_storage.messages[0]['nonce'] + 1)
-	ub.execute(latest)
-	assert not ub.message_storage.messages
+    web3_lido_integration.lido.staking_router.get_staking_module_nonce = Mock(return_value=ub.message_storage.messages[0]['nonce'] + 1)
+    ub.execute(latest)
+    assert not ub.message_storage.messages
