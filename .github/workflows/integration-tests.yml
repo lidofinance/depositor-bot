@@ -1,6 +1,6 @@
 name: Tests and checks
 
-on: 
+on:
   push:
 
 jobs:
@@ -26,22 +26,14 @@ jobs:
         run: |
           poetry install
 
-      - name: Lint with Ruff
-        run: |
-          ruff --output-format=github .
-        continue-on-error: true
-
-      - name: Format with Ruff
-        run: |
-          ruff --output-format=github .
-        continue-on-error: true
-
-      - name: Typecheck with Pyright
-        run: |
-          pyright
-        continue-on-error: true
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
 
       - name: Integration tests with pytest
         run: |
-          poetry run pytest tests -m unit
-
+          poetry run pytest tests -m integration
+        env:
+          WEB3_RPC_ENDPOINTS: ${{ secrets.WEB3_RPC_ENDPOINT }}
+          DEPOSIT_CONTRACT: "0x00000000219ab540356cBB839Cbe05303d7705Fa"
+          LIDO_LOCATOR: "0xC1d0b3DE6792Bf6b4b37EccdcC24e45978Cfd2Eb"
+          ANVIL_PATH: ""
