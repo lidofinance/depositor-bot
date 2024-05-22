@@ -1,3 +1,3 @@
 class TransportType:
-	RABBIT = 'rabbit'
-	KAFKA = 'kafka'
+    RABBIT = 'rabbit'
+    KAFKA = 'kafka'

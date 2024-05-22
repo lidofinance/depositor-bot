@@ -198,8 +198,11 @@ def test_pauser_bot(web3_lido_integration, web3_provider_integration, add_accoun
     assert [
         msg
         for msg in caplog.messages
-        if ("Build `pauseDeposits(19628129, ('0xe37ddb5eadce3a4f03274a102c45a21865f9d6fa03f61fdb98466ae0fd677331', "
-            "'0xb1dff99d6b8ad3402c7237341816568bf2831ddbe0bddd111eebd12a59efcb8c'))` tx.") in msg
+        if (
+            "Build `pauseDeposits(19628129, ('0xe37ddb5eadce3a4f03274a102c45a21865f9d6fa03f61fdb98466ae0fd677331', "
+            "'0xb1dff99d6b8ad3402c7237341816568bf2831ddbe0bddd111eebd12a59efcb8c'))` tx."
+        )
+        in msg
     ]
 
     pb.execute(latest)
