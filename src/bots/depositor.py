@@ -1,11 +1,8 @@
+# pyright: reportTypedDictNotRequiredAccess=false
+
 import logging
 from collections import defaultdict
-from typing import Optional, Callable
-
-from eth_account import Account
-from eth_typing import Hash32
-from schema import Or, Schema
-from web3.types import BlockData
+from typing import Callable, Optional
 
 import variables
 from blockchain.deposit_strategy.curated_module import CuratedModuleDepositStrategy
@@ -13,32 +10,27 @@ from blockchain.deposit_strategy.interface import ModuleDepositStrategyInterface
 from blockchain.deposit_strategy.prefered_module_to_deposit import get_preferred_to_deposit_modules
 from blockchain.executor import Executor
 from blockchain.typings import Web3
-from blockchain.web3_extentions.bundle import activate_relay
 from cryptography.verify_signature import compute_vs
+from eth_typing import Hash32
 from metrics.metrics import (
     ACCOUNT_BALANCE,
     CURRENT_QUORUM_SIZE,
     UNEXPECTED_EXCEPTIONS,
 )
 from metrics.transport_message_metrics import message_metrics_filter
+from schema import Or, Schema
 from transport.msg_providers.kafka import KafkaMessageProvider
-from transport.msg_providers.rabbit import RabbitProvider, MessageType
+from transport.msg_providers.rabbit import MessageType, RabbitProvider
 from transport.msg_storage import MessageStorage
-from transport.msg_types.deposit import DepositMessageSchema, get_deposit_messages_sign_filter, DepositMessage
+from transport.msg_types.deposit import DepositMessage, DepositMessageSchema, get_deposit_messages_sign_filter
 from transport.msg_types.ping import PingMessageSchema, to_check_sum_address
 from transport.types import TransportType
-
+from web3.types import BlockData
 
 logger = logging.getLogger(__name__)
 
 
 def run_depositor(w3):
-    if variables.AUCTION_BUNDLER_PRIVATE_KEY and variables.AUCTION_BUNDLER_URIS:
-        logger.info({'msg': 'Add private relays.'})
-        activate_relay(w3, Account.from_key(variables.AUCTION_BUNDLER_PRIVATE_KEY), variables.AUCTION_BUNDLER_URIS)
-    else:
-        logger.info({'msg': 'No flashbots available for this network.'})
-
     logger.info({'msg': 'Initialize Depositor bot.'})
     depositor_bot = DepositorBot(w3)
 
@@ -50,7 +42,6 @@ def run_depositor(w3):
     )
     logger.info({'msg': 'Execute depositor as daemon.'})
     e.execute_as_daemon()
-
 
 
 class ModuleNotSupportedError(Exception):
@@ -66,17 +57,21 @@ class DepositorBot:
         transports = []
 
         if TransportType.RABBIT in variables.MESSAGE_TRANSPORTS:
-            transports.append(RabbitProvider(
-                client='depositor',
-                routing_keys=[MessageType.PING, MessageType.DEPOSIT],
-                message_schema=Schema(Or(DepositMessageSchema, PingMessageSchema)),
-            ))
+            transports.append(
+                RabbitProvider(
+                    client='depositor',
+                    routing_keys=[MessageType.PING, MessageType.DEPOSIT],
+                    message_schema=Schema(Or(DepositMessageSchema, PingMessageSchema)),
+                )
+            )
 
         if TransportType.KAFKA in variables.MESSAGE_TRANSPORTS:
-            transports.append(KafkaMessageProvider(
-                client=f'{variables.KAFKA_GROUP_PREFIX}deposit',
-                message_schema=Schema(Or(DepositMessageSchema, PingMessageSchema)),
-            ))
+            transports.append(
+                KafkaMessageProvider(
+                    client=f'{variables.KAFKA_GROUP_PREFIX}deposit',
+                    message_schema=Schema(Or(DepositMessageSchema, PingMessageSchema)),
+                )
+            )
 
         if not transports:
             logger.warning({'msg': 'No transports found. Dry mode activated.', 'value': variables.MESSAGE_TRANSPORTS})
@@ -241,10 +236,7 @@ class DepositorBot:
     def _prepare_signs_for_deposit(quorum: list[DepositMessage]) -> tuple[tuple[str, str], ...]:
         sorted_messages = sorted(quorum, key=lambda msg: int(msg['guardianAddress'], 16))
 
-        return tuple(
-            (msg['signature']['r'], compute_vs(msg['signature']['v'], msg['signature']['s']))
-            for msg in sorted_messages
-        )
+        return tuple((msg['signature']['r'], compute_vs(msg['signature']['v'], msg['signature']['s'])) for msg in sorted_messages)
 
     def _send_deposit_tx(
         self,
@@ -254,7 +246,7 @@ class DepositorBot:
         staking_module_id: int,
         staking_module_nonce: int,
         payload: bytes,
-        guardian_signs: tuple[tuple[str, str]]
+        guardian_signs: tuple[tuple[str, str], ...],
     ) -> bool:
         """Returns transactions success status"""
         # Prepare transaction and send

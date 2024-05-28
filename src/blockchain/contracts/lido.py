@@ -1,9 +1,7 @@
 import logging
 
-from web3.types import BlockIdentifier, Wei
-
 from blockchain.contracts.base_interface import ContractInterface
-
+from web3.types import BlockIdentifier, Wei
 
 logger = logging.getLogger(__name__)
 

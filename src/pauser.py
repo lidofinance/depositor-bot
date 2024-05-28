@@ -1,7 +1,6 @@
 from main import main
 from metrics.logging import logging
 
-
 logger = logging.getLogger(__name__)
 
 

@@ -1,13 +1,11 @@
 import logging
 from typing import Callable, TypedDict
 
-from schema import Schema, And
-
 from blockchain.typings import Web3
 from cryptography.verify_signature import verify_message_with_signature
 from metrics.metrics import UNEXPECTED_EXCEPTIONS
-from transport.msg_types.base import ADDRESS_REGREX, SignatureSchema, Signature
-
+from schema import And, Schema
+from transport.msg_types.base import ADDRESS_REGREX, Signature, SignatureSchema
 
 logger = logging.getLogger(__name__)
 
@@ -29,13 +27,16 @@ Pause msg example:
     "type": "pause"
 }
 """
-PauseMessageSchema = Schema({
-    'type': And(str, lambda t: t in ('pause',)),
-    'blockNumber': int,
-    'guardianAddress': And(str, ADDRESS_REGREX),
-    'signature': SignatureSchema,
-    # 'stakingModuleId': int
-}, ignore_extra_keys=True)
+PauseMessageSchema = Schema(
+    {
+        'type': And(str, lambda t: t in ('pause',)),
+        'blockNumber': int,
+        'guardianAddress': And(str, ADDRESS_REGREX.validate),
+        'signature': SignatureSchema,
+        # 'stakingModuleId': int
+    },
+    ignore_extra_keys=True,
+)
 
 
 class PauseMessage(TypedDict):

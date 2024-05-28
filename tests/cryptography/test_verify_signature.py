@@ -1,4 +1,5 @@
 from cryptography.verify_signature import compute_vs, verify_message_with_signature
+
 from tests.fixtures.signature_fixtures import (
     deposit_messages,
     deposit_prefix,

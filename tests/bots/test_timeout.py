@@ -1,7 +1,6 @@
 import time
 
 import pytest
-
 from utils.timeout import TimeoutManager, TimeoutManagerError
 
 

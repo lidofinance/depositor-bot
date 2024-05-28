@@ -1,10 +1,8 @@
 import logging
 
+from blockchain.contracts.base_interface import ContractInterface
 from eth_typing import ChecksumAddress
 from web3.types import BlockIdentifier
-
-from blockchain.contracts.base_interface import ContractInterface
-
 
 logger = logging.getLogger(__name__)
 

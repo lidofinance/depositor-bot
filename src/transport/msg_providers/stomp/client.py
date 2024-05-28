@@ -1,18 +1,17 @@
+import logging
 import time
 from threading import Thread
 from typing import Callable
 
-from .frame import Frame
 import websocket
-import logging
 
+from .frame import Frame
 
 # https://stomp.github.io/stomp-specification-1.1.html#Overview
 VERSIONS = '1.0,1.1'
 
 
 class Client:
-
     def __init__(self, url: str, on_close: Callable):
         self.url = url
         self.ws = websocket.WebSocketApp(self.url)
@@ -40,10 +39,10 @@ class Client:
 
         total_ms = 0
         while self.opened is False:
-            time.sleep(.25)
+            time.sleep(0.25)
             total_ms += 250
-            if 0 < timeout*1000 < total_ms:
-                raise TimeoutError(f"Connection to {self.url} timed out")
+            if 0 < timeout * 1000 < total_ms:
+                raise TimeoutError(f'Connection to {self.url} timed out')
 
     def _on_open(self, ws_app, *args):
         self.opened = True
@@ -54,24 +53,23 @@ class Client:
         self._clean_up()
         self.on_close()
 
-    def _on_error(self, ws_app, error, *args):
+    def _on_error(self, ws, error) -> None:
         logging.error({'msg': 'Websocket error.', 'error': str(error)})
 
-    def _on_message(self, ws_app, message, *args):
-        logging.debug("\n<<< " + str(message))
+    def _on_message(self, ws, message) -> None:
+        logging.debug('\n<<< ' + str(message))
         frame = Frame.unmarshall_single(message)
 
         if frame is None:
             return
 
-        _results = []
-        if frame.command == "CONNECTED":
+        if frame.command == 'CONNECTED':
             self.connected = True
             logging.debug({'msg': f'connected to server {self.url}'})
             if self._connectCallback is not None:
-                _results.append(self._connectCallback(frame))
+                self._connectCallback(frame)
 
-        elif frame.command == "MESSAGE":
+        elif frame.command == 'MESSAGE':
             subscription = frame.headers['subscription']
 
             if subscription in self.subscriptions:
@@ -91,22 +89,16 @@ class Client:
                 frame.ack = ack
                 frame.nack = nack
 
-                _results.append(on_receive(frame))
+                on_receive(frame)
             else:
-                info = "Unhandled received MESSAGE: " + str(frame)
-                logging.debug(info)
-                _results.append(info)
+                logging.debug('Unhandled received MESSAGE: ' + str(frame))
         elif frame.command == 'RECEIPT':
             pass
         elif frame.command == 'ERROR':
             if self.errorCallback is not None:
-                _results.append(self.errorCallback(frame))
+                self.errorCallback(frame)
         else:
-            info = "Unhandled received MESSAGE: " + frame.command
-            logging.error(info)
-            _results.append(info)
-
-        return _results
+            logging.error('Unhandled received MESSAGE: ' + frame.command)
 
     def _transmit(self, command, headers, body=None):
         out = Frame.marshall(command, headers, body)
@@ -123,8 +115,7 @@ class Client:
         error_callback=None,
         timeout=0,
     ):
-
-        logging.debug("Opening web socket...")
+        logging.debug('Opening web socket...')
         self._connect(timeout)
 
         headers = headers if headers is not None else {}
@@ -146,7 +137,7 @@ class Client:
         if headers is None:
             headers = {}
 
-        self._transmit("DISCONNECT", headers)
+        self._transmit('DISCONNECT', headers)
         self.ws.on_close = None
         self.ws.close()
         self._clean_up()
@@ -163,7 +154,7 @@ class Client:
         if body is None:
             body = ''
         headers['destination'] = destination
-        return self._transmit("SEND", headers, body)
+        return self._transmit('SEND', headers, body)
 
     def subscribe(self, destination, callback=None, headers=None):
         if headers is None:
@@ -177,30 +168,28 @@ class Client:
             headers['ack'] = 'auto'
 
         headers['destination'] = destination
-        self.subscriptions[headers["id"]] = callback
-        self._transmit("SUBSCRIBE", headers)
+        self.subscriptions[headers['id']] = callback
+        self._transmit('SUBSCRIBE', headers)
 
         def unsubscribe():
-            self.unsubscribe(headers["id"])
+            self.unsubscribe(headers['id'])
 
-        return headers["id"], unsubscribe
+        return headers['id'], unsubscribe
 
     def unsubscribe(self, channel_id):
         del self.subscriptions[channel_id]
-        return self._transmit("UNSUBSCRIBE", {
-            "id": channel_id
-        })
+        return self._transmit('UNSUBSCRIBE', {'id': channel_id})
 
-    def ack(self, message_id, subscription, headers):
+    def ack(self, message_id, subscription, headers) -> None:
         if headers is None:
             headers = {}
-        headers["message-id"] = message_id
+        headers['message-id'] = message_id
         headers['subscription'] = subscription
-        return self._transmit("ACK", headers)
+        return self._transmit('ACK', headers)
 
-    def nack(self, message_id, subscription, headers):
+    def nack(self, message_id, subscription, headers) -> None:
         if headers is None:
             headers = {}
-        headers["message-id"] = message_id
+        headers['message-id'] = message_id
         headers['subscription'] = subscription
-        return self._transmit("NACK", headers)
+        return self._transmit('NACK', headers)

@@ -6,7 +6,8 @@ class TimeoutManagerError(Exception):
 
 
 class TimeoutManager:
-    """Simple timeout manager """
+    """Simple timeout manager"""
+
     @staticmethod
     def handler(signum, frame):
         raise TimeoutManagerError

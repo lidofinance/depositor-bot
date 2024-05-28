@@ -1,33 +1,36 @@
 import logging
 from typing import Callable, TypedDict
 
-from schema import Schema, And
-
 from blockchain.typings import Web3
 from cryptography.verify_signature import verify_message_with_signature
+from eth_typing import Hash32
 from metrics.metrics import UNEXPECTED_EXCEPTIONS
-from transport.msg_types.base import ADDRESS_REGREX, SignatureSchema, Signature, HASH_REGREX, BYTES_REGREX
+from schema import And, Schema
+from transport.msg_types.base import ADDRESS_REGREX, HASH_REGREX, HEX_BYTES_REGREX, Signature, SignatureSchema
 from utils.bytes import from_hex_string_to_bytes
 
 logger = logging.getLogger(__name__)
 
 
-UnvetMessageSchema = Schema({
-    'type': And(str, lambda t: t in ('unvet',)),
-    'blockNumber': int,
-    'blockHash': And(str, HASH_REGREX),
-    'guardianAddress': And(str, ADDRESS_REGREX),
-    'signature': SignatureSchema,
-    'stakingModuleId': int,
-    'operatorIds': And(str, BYTES_REGREX),
-    'vettedKeysByOperator': And(str, BYTES_REGREX),
-}, ignore_extra_keys=True)
+UnvetMessageSchema = Schema(
+    {
+        'type': And(str, lambda t: t in ('unvet',)),
+        'blockNumber': int,
+        'blockHash': And(str, HASH_REGREX.validate),
+        'guardianAddress': And(str, ADDRESS_REGREX.validate),
+        'signature': SignatureSchema,
+        'stakingModuleId': int,
+        'operatorIds': And(str, HEX_BYTES_REGREX.validate),
+        'vettedKeysByOperator': And(str, HEX_BYTES_REGREX.validate),
+    },
+    ignore_extra_keys=True,
+)
 
 
 class UnvetMessage(TypedDict):
     type: str
     blockNumber: int
-    blockHash: str
+    blockHash: Hash32
     guardianAddress: str
     signature: Signature
     stakingModuleId: int

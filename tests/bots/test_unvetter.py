@@ -2,11 +2,11 @@ import logging
 from unittest.mock import Mock
 
 import pytest
-
 from bots.unvetter import UnvetterBot
-from tests.fixtures import upgrade_staking_router_to_v2
 from transport.msg_types.unvet import UnvetMessage, get_unvet_messages_sign_filter
 from utils.bytes import from_hex_string_to_bytes
+
+from tests.fixtures import upgrade_staking_router_to_v2
 
 # WARNING: These accounts, and their private keys, are publicly known.
 COUNCIL_ADDRESS = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8'
@@ -35,31 +35,31 @@ def get_unvet_message(web3) -> UnvetMessage:
     signed = web3.eth.account._sign_hash(msg_hash, private_key=COUNCIL_PK)
 
     unvet_message = {
-        "blockNumber": block_number,
-        "blockHash": latest.hash.hex(),
-        "guardianAddress": COUNCIL_ADDRESS,
-        "stakingModuleId": 1,
-        "nonce": nonce,
-        "operatorIds": '0x1234',
-        "vettedKeysByOperator": '0001',
-        "signature": {
-            "r": '0x' + signed.r.to_bytes(32, 'big').hex(),
-            "s": '0x' + signed.s.to_bytes(32, 'big').hex(),
-            "v": signed.v,
+        'blockNumber': block_number,
+        'blockHash': latest.hash.hex(),
+        'guardianAddress': COUNCIL_ADDRESS,
+        'stakingModuleId': 1,
+        'nonce': nonce,
+        'operatorIds': '0x1234',
+        'vettedKeysByOperator': '0001',
+        'signature': {
+            'r': '0x' + signed.r.to_bytes(32, 'big').hex(),
+            's': '0x' + signed.s.to_bytes(32, 'big').hex(),
+            'v': signed.v,
         },
-        "type": "unvet"
+        'type': 'unvet',
     }
 
-    assert list(filter(get_unvet_messages_sign_filter(prefix), [unvet_message]))
+    assert list(filter(get_unvet_messages_sign_filter(web3), [unvet_message]))
 
     return unvet_message
 
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
-    "web3_provider_integration",
+    'web3_provider_integration',
     [19628126],
-    indirect=["web3_provider_integration"],
+    indirect=['web3_provider_integration'],
 )
 def test_unvetter(web3_provider_integration, web3_lido_integration, caplog):
     latest = web3_lido_integration.eth.get_block('latest')
@@ -81,10 +81,7 @@ def test_unvetter(web3_provider_integration, web3_lido_integration, caplog):
 
     ub.execute(latest)
 
-    assert [
-        msg for msg in caplog.messages
-        if 'Build `unvetSigningKeys(' in msg
-    ]
+    assert [msg for msg in caplog.messages if 'Build `unvetSigningKeys(' in msg]
     assert ub.message_storage.messages
 
     web3_lido_integration.lido.staking_router.get_staking_module_nonce = Mock(return_value=ub.message_storage.messages[0]['nonce'] + 1)

@@ -1,11 +1,8 @@
 import sys
 from enum import StrEnum
 
-from prometheus_client import start_http_server
-from web3 import Web3
-from web3_multi_provider import FallbackProvider
-
 import variables
+from blockchain.typings import Web3
 from blockchain.web3_extentions.lido_contracts import LidoContracts
 from blockchain.web3_extentions.requests_metric_middleware import add_requests_metric_middleware
 from blockchain.web3_extentions.transaction import TransactionUtils
@@ -15,7 +12,8 @@ from bots.unvetter import run_unvetter
 from metrics.healthcheck_pulse import start_pulse_server
 from metrics.logging import logging
 from metrics.metrics import BUILD_INFO
-
+from prometheus_client import start_http_server
+from web3_multi_provider import FallbackProvider
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +25,7 @@ class BotModule(StrEnum):
 
 
 def main(bot_name: str):
-    if bot_name not in iter(BotModule):
+    if bot_name not in list(BotModule):
         msg = f'Last arg should be one of {[str(item) for item in BotModule]}, received {BotModule}.'
         logger.error({'msg': msg})
         raise ValueError(msg)
@@ -58,10 +56,12 @@ def main(bot_name: str):
     w3 = Web3(FallbackProvider(variables.WEB3_RPC_ENDPOINTS))
 
     logger.info({'msg': 'Initialize Lido contracts.'})
-    w3.attach_modules({
-        'lido': LidoContracts,
-        'transaction': TransactionUtils,
-    })
+    w3.attach_modules(
+        {
+            'lido': LidoContracts,
+            'transaction': TransactionUtils,
+        }
+    )
 
     logger.info({'msg': 'Add metrics to web3 requests.'})
     add_requests_metric_middleware(w3)

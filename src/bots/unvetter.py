@@ -1,22 +1,21 @@
 import logging
 from typing import Callable, Optional
 
-from schema import Schema, Or
-from web3.types import BlockData
-
 import variables
 from blockchain.executor import Executor
 from blockchain.typings import Web3
 from cryptography.verify_signature import compute_vs
 from metrics.metrics import UNEXPECTED_EXCEPTIONS
 from metrics.transport_message_metrics import message_metrics_filter
+from schema import Or, Schema
 from transport.msg_providers.kafka import KafkaMessageProvider
-from transport.msg_providers.rabbit import RabbitProvider, MessageType
+from transport.msg_providers.rabbit import MessageType, RabbitProvider
 from transport.msg_storage import MessageStorage
 from transport.msg_types.ping import PingMessageSchema, to_check_sum_address
-from transport.msg_types.unvet import UnvetMessageSchema, get_unvet_messages_sign_filter, UnvetMessage
+from transport.msg_types.unvet import UnvetMessage, UnvetMessageSchema, get_unvet_messages_sign_filter
 from transport.types import TransportType
 from utils.bytes import from_hex_string_to_bytes
+from web3.types import BlockData
 
 logger = logging.getLogger(__name__)
 
@@ -46,17 +45,21 @@ class UnvetterBot:
         transports = []
 
         if TransportType.RABBIT in variables.MESSAGE_TRANSPORTS:
-            transports.append(RabbitProvider(
-                client='unvetter',
-                routing_keys=[MessageType.UNVET, MessageType.PAUSE],
-                message_schema=Schema(Or(UnvetMessageSchema, PingMessageSchema)),
-            ))
+            transports.append(
+                RabbitProvider(
+                    client='unvetter',
+                    routing_keys=[MessageType.UNVET, MessageType.PAUSE],
+                    message_schema=Schema(Or(UnvetMessageSchema, PingMessageSchema)),
+                )
+            )
 
         if TransportType.KAFKA in variables.MESSAGE_TRANSPORTS:
-            transports.append(KafkaMessageProvider(
-                client=f'{variables.KAFKA_GROUP_PREFIX}unvet',
-                message_schema=Schema(Or(UnvetMessageSchema, PingMessageSchema)),
-            ))
+            transports.append(
+                KafkaMessageProvider(
+                    client=f'{variables.KAFKA_GROUP_PREFIX}unvet',
+                    message_schema=Schema(Or(UnvetMessageSchema, PingMessageSchema)),
+                )
+            )
 
         if not transports:
             logger.warning({'msg': 'No transports found', 'value': variables.MESSAGE_TRANSPORTS})
@@ -85,6 +88,9 @@ class UnvetterBot:
         return True
 
     def receive_unvet_messages(self) -> list[UnvetMessage]:
+        if self.message_storage is None:
+            return []
+
         actualize_filter = self._get_message_actualize_filter()
         return self.message_storage.get_messages(actualize_filter)
 
@@ -124,7 +130,7 @@ class UnvetterBot:
             message['nonce'],
             from_hex_string_to_bytes(message['operatorIds']),
             from_hex_string_to_bytes(message['vettedKeysByOperator']),
-            (message['signature']['r'], compute_vs(message['signature']['v'], message['signature']['s']))
+            (message['signature']['r'], compute_vs(message['signature']['v'], message['signature']['s'])),
         )
 
         if not self.w3.transaction.check(unvet_tx):
@@ -135,6 +141,7 @@ class UnvetterBot:
         return result
 
     def _clear_outdated_messages_for_module(self, module_id: int, nonce: int) -> None:
-        self.message_storage.get_messages(
-            lambda message: message['stakingModuleId'] != module_id or message['nonce'] >= nonce
-        )
+        if self.message_storage is None:
+            return
+
+        self.message_storage.get_messages(lambda message: message['stakingModuleId'] != module_id or message['nonce'] >= nonce)

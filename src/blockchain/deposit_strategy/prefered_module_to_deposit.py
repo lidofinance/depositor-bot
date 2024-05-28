@@ -28,9 +28,9 @@ def get_module_depositable_filter(w3: Web3, whitelist_modules: list[int]) -> Cal
         module_id = module[2][0]
 
         return (
-            module_id in whitelist_modules and
-            w3.lido.staking_router.is_staking_module_active(module_id) and
-            w3.lido.deposit_security_module.can_deposit(module_id)
+            module_id in whitelist_modules
+            and w3.lido.staking_router.is_staking_module_active(module_id)
+            and w3.lido.deposit_security_module.can_deposit(module_id)
         )
 
     return is_module_depositable

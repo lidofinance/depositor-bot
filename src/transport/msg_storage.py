@@ -1,4 +1,4 @@
-from typing import List, Callable, Iterable, TypedDict
+from typing import Any, Callable, Iterable, List
 
 from transport.msg_providers.common import BaseMessageProvider
 
@@ -7,10 +7,11 @@ class MessageStorage:
     messages: List = []
 
     """Fetches all messages, filter them and storing"""
+
     def __init__(self, transports: List[BaseMessageProvider], filters: List[Callable]):
         """
-            transports - List of objects with working get_messages method.
-            filters - functions that would be applied to messages when they are received. (That would need only one check)
+        transports - List of objects with working get_messages method.
+        filters - functions that would be applied to messages when they are received. (That would need only one check)
         """
         self._transports = transports
         self._filters = filters
@@ -27,7 +28,7 @@ class MessageStorage:
 
         return self.messages
 
-    def get_messages(self, actualize_rule: Callable[[TypedDict], bool]) -> List[dict]:
+    def get_messages(self, actualize_rule: Callable[[Any], bool]) -> List[Any]:
         """
         actualize_rule - is filter that filters all outdated messages
         """

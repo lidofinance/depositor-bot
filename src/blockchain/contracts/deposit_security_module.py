@@ -1,11 +1,10 @@
 import logging
 
+from blockchain.contracts.base_interface import ContractInterface
 from eth_typing import ChecksumAddress, Hash32
 from web3.contract.contract import ContractFunction
+from web3.exceptions import ABIFunctionNotFound, ContractLogicError
 from web3.types import BlockIdentifier
-
-from blockchain.contracts.base_interface import ContractInterface
-
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +47,7 @@ class DepositSecurityModuleContract(ContractInterface):
         staking_module_id: int,
         nonce: int,
         deposit_call_data: bytes,
-        guardian_signatures: list[tuple[str, str]],
+        guardian_signatures: tuple[tuple[str, str], ...],
     ) -> ContractFunction:
         """
         Calls LIDO.deposit(maxDepositsPerBlock, stakingModuleId, depositCalldata).
@@ -75,15 +74,12 @@ class DepositSecurityModuleContract(ContractInterface):
             deposit_call_data,
             guardian_signatures,
         )
-        logger.info({'msg': 'Build `depositBufferedEther({}, {}, {}, {}, {}, {}, {})` tx.'.format(
-            block_number,
-            block_hash,
-            deposit_root,
-            staking_module_id,
-            nonce,
-            deposit_call_data,
-            guardian_signatures,
-        )})
+        logger.info(
+            {
+                'msg': f'Build `depositBufferedEther({block_number}, {block_hash}, {deposit_root}, {staking_module_id}, '
+                f'{nonce}, {deposit_call_data}, {guardian_signatures})` tx.'  # noqa
+            }
+        )
         return tx
 
     def get_pause_message_prefix(self, block_identifier: BlockIdentifier = 'latest') -> bytes:
@@ -106,37 +102,73 @@ class DepositSecurityModuleContract(ContractInterface):
         """
         Pauses deposits for staking module given that both conditions are satisfied (reverts otherwise):
 
-            1. The function is called by the guardian with index guardianIndex OR sig
-                is a valid signature by the guardian with index guardianIndex of the data
-                defined below.
+                1. The function is called by the guardian with index guardianIndex OR sig
+                        is a valid signature by the guardian with index guardianIndex of the data
+                        defined below.
 
-            2. block.number - blockNumber <= pauseIntentValidityPeriodBlocks
+                2. block.number - blockNumber <= pauseIntentValidityPeriodBlocks
 
         The signature, if present, must be produced for keccak256 hash of the following
         message (each component taking 32 bytes):
 
         | PAUSE_MESSAGE_PREFIX | blockNumber | stakingModuleId |
         """
-        tx = self.functions.pauseDeposits(
-            block_number,
-            staking_module_id,
-            guardian_signature
-        )
-        logger.info({'msg': 'Build `pauseDeposits({}, {}, {})` tx.'.format(
-            block_number,
-            staking_module_id,
-            guardian_signature,
-        )})
+        tx = self.functions.pauseDeposits(block_number, staking_module_id, guardian_signature)
+        logger.info({'msg': f'Build `pauseDeposits({block_number}, {staking_module_id}, {guardian_signature})` tx.'})
         return tx
 
     def version(self, block_identifier: BlockIdentifier = 'latest') -> int:
-        return 1
+        try:
+            response = self.functions.VERSION().call(block_identifier=block_identifier)
+        except (ContractLogicError, ABIFunctionNotFound):
+            logger.info(
+                {
+                    'msg': 'Call `VERSION()`.',
+                    'value': 'Error: Contract logic error',
+                    'block_identifier': repr(block_identifier),
+                }
+            )
+            return 1
+
+        logger.info(
+            {
+                'msg': 'Call `VERSION()`.',
+                'value': response,
+                'block_identifier': repr(block_identifier),
+            }
+        )
+        return response
+
+    def get_unvet_message_prefix(self, block_identifier: BlockIdentifier = 'latest'):
+        raise NotImplementedError('V1 does not implement this method.')
+
+    def unvet_signing_keys(
+        self,
+        block_number: int,
+        block_hash: Hash32,
+        staking_module_id: int,
+        nonce: int,
+        operator_ids: bytes,
+        vetted_keys_by_operator: bytes,
+        guardian_signature: tuple[str, str],
+    ):
+        raise NotImplementedError('V1 does not implement this method.')
+
+    def is_deposits_paused(self, block_identifier: BlockIdentifier = 'latest'):
+        raise NotImplementedError('V1 does not implement this method.')
+
+    def pause_deposits_v2(
+        self,
+        block_number: int,
+        guardian_signature: tuple[str, str],
+    ) -> ContractFunction:
+        raise NotImplementedError('V1 does not implement this method.')
 
 
 class DepositSecurityModuleContractV2(DepositSecurityModuleContract):
     abi_path = './interfaces/DepositSecurityModuleV2.json'
 
-    def pause_deposits(  # Overwrite base pause_deposits
+    def pause_deposits_v2(
         self,
         block_number: int,
         guardian_signature: tuple[str, str],
@@ -144,11 +176,11 @@ class DepositSecurityModuleContractV2(DepositSecurityModuleContract):
         """
         Pauses deposits for staking module given that both conditions are satisfied (reverts otherwise):
 
-            1. The function is called by the guardian with index guardianIndex OR sig
-                is a valid signature by the guardian with index guardianIndex of the data
-                defined below.
+                1. The function is called by the guardian with index guardianIndex OR sig
+                        is a valid signature by the guardian with index guardianIndex of the data
+                        defined below.
 
-            2. block.number - blockNumber <= pauseIntentValidityPeriodBlocks
+                2. block.number - blockNumber <= pauseIntentValidityPeriodBlocks
 
         The signature, if present, must be produced for keccak256 hash of the following
         message (each component taking 32 bytes):
@@ -156,10 +188,7 @@ class DepositSecurityModuleContractV2(DepositSecurityModuleContract):
         | PAUSE_MESSAGE_PREFIX | blockNumber |
         """
 
-        tx = self.functions.pauseDeposits(
-            block_number,
-            guardian_signature
-        )
+        tx = self.functions.pauseDeposits(block_number, guardian_signature)
         logger.info({'msg': f'Build `pauseDeposits({block_number}, {guardian_signature})` tx.'})
         return tx
 
@@ -187,15 +216,12 @@ class DepositSecurityModuleContractV2(DepositSecurityModuleContract):
             vetted_keys_by_operator,
             guardian_signature,
         )
-        logger.info({'msg': 'Build `unvetSigningKeys({}, {}, {}, {}, {}, {}, {})` tx.'.format(
-            block_number,
-            block_hash,
-            staking_module_id,
-            nonce,
-            operator_ids,
-            vetted_keys_by_operator,
-            guardian_signature,
-        )})
+        logger.info(
+            {
+                'msg': f'Build `unvetSigningKeys({block_number}, {block_hash}, {staking_module_id}, {nonce}, '
+                f'{operator_ids}, {vetted_keys_by_operator}, {guardian_signature})` tx.'  # noqa
+            }
+        )
         return tx
 
     def is_deposits_paused(self, block_identifier: BlockIdentifier = 'latest') -> bool:
@@ -203,18 +229,11 @@ class DepositSecurityModuleContractV2(DepositSecurityModuleContract):
         Returns if lido deposits are paused
         """
         response = self.functions.isDepositsPaused().call(block_identifier=block_identifier)
-        logger.info({
-            'msg': 'Call `isDepositsPaused()`.',
-            'value': response,
-            'block_identifier': repr(block_identifier),
-        })
-        return response
-
-    def version(self, block_identifier: BlockIdentifier = 'latest') -> int:
-        response = self.functions.VERSION().call(block_identifier=block_identifier)
-        logger.info({
-            'msg': 'Call `VERSION()`.',
-            'value': response,
-            'block_identifier': repr(block_identifier),
-        })
+        logger.info(
+            {
+                'msg': 'Call `isDepositsPaused()`.',
+                'value': response,
+                'block_identifier': repr(block_identifier),
+            }
+        )
         return response

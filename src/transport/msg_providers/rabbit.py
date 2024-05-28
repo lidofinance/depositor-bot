@@ -2,14 +2,12 @@ import datetime
 import json
 import logging
 import time
-from typing import Optional, List
-
-from schema import Schema
+from typing import List, Optional
 
 import variables
+from schema import Schema
 from transport.msg_providers.common import BaseMessageProvider
 from transport.msg_providers.stomp.client import Client
-
 
 logger = logging.getLogger(__name__)
 
