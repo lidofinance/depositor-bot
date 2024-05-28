@@ -41,7 +41,7 @@ jobs:
           pyright
         continue-on-error: true
 
-      - name: Integration tests with pytest
+      - name: Unit tests with pytest
         run: |
           poetry run pytest tests -m unit
 
