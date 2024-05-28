@@ -9,8 +9,7 @@ from web3.types import BlockData
 import variables
 from blockchain.deposit_strategy.curated_module import CuratedModuleDepositStrategy
 from blockchain.deposit_strategy.interface import ModuleDepositStrategyInterface
-from blockchain.deposit_strategy.prefered_module_to_deposit import get_preferred_to_deposit_modules
-from blockchain.deposit_strategy.small_module import SmallModuleDepositStrategy
+from blockchain.deposit_strategy.prefered_module_to_deposit import get_preferred_to_deposit_module
 from blockchain.typings import Web3
 from cryptography.verify_signature import compute_vs
 from metrics.metrics import (
@@ -76,9 +75,9 @@ class DepositorBot:
     def execute(self, block: BlockData) -> bool:
         self._check_balance()
 
-        modules_id = get_preferred_to_deposit_modules(self.w3, variables.DEPOSIT_MODULES_WHITELIST)
+        module_id = get_preferred_to_deposit_module(self.w3, variables.DEPOSIT_MODULES_WHITELIST)
 
-        for module_id in modules_id:
+        if module_id:
             logger.info({'msg': f'Do deposit to module with id: {module_id}.'})
             try:
                 self._deposit_to_module(module_id)
@@ -122,11 +121,10 @@ class DepositorBot:
         return False
 
     def _get_module_strategy(self, module_id: int) -> ModuleDepositStrategyInterface:
-        if module_id == 1:
+        if module_id in (1, 2, 3):
             return CuratedModuleDepositStrategy(self.w3, module_id)
 
-        return SmallModuleDepositStrategy(self.w3, module_id)
-        # raise ModuleNotSupportedError(f'Module with id: {module_id} is not supported yet.')
+        raise ModuleNotSupportedError(f'Module with id: {module_id} is not supported yet.')
 
     def _check_module_status(self, module_id: int) -> bool:
         """Returns True if module is ready for deposit"""

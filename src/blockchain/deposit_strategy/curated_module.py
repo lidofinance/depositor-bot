@@ -55,7 +55,7 @@ class CuratedModuleDepositStrategy(ModuleDepositStrategyInterface):
         # For one key recommended gas fee will be around 10
         # For 10 keys around 100 gwei. For 20 keys ~ 800 gwei
         # ToDo percentiles for all modules?
-        recommended_max_gas = (deposits_amount ** 2 + 100) * 10 ** 8
+        recommended_max_gas = (deposits_amount ** 3 + 100) * 10 ** 8
         logger.info({'msg': 'Calculate recommended max gas based on possible deposits.'})
         GAS_FEE.labels('based_on_buffer_fee', self.module_id).set(recommended_max_gas)
         return recommended_max_gas

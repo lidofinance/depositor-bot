@@ -1,4 +1,5 @@
 import logging
+
 from web3.types import Wei, BlockIdentifier
 
 from blockchain.contracts.base_interface import ContractInterface
@@ -14,17 +15,7 @@ class StakingRouterContract(ContractInterface):
         """Returns the ids of all registered staking modules"""
         response = self.functions.getStakingModuleIds().call(block_identifier=block_identifier)
         logger.info({
-            'msg': f'Call `getStakingModuleIds()`.',
-            'value': response,
-            'block_identifier': block_identifier.__repr__(),
-        })
-        return response
-
-    def get_staking_module_digests(self, module_ids: list[int], block_identifier: BlockIdentifier = 'latest') -> list[dict]:
-        """Returns staking module digest for passed staking module ids"""
-        response = self.functions.getStakingModuleDigests(module_ids).call(block_identifier=block_identifier)
-        logger.info({
-            'msg': f'Call `getStakingModuleDigests()`.',
+            'msg': f'Call `get_staking_module_ids()`.',
             'value': response,
             'block_identifier': block_identifier.__repr__(),
         })

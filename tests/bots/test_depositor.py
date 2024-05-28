@@ -50,15 +50,17 @@ def deposit_message():
 
 @pytest.mark.unit
 def test_depositor_one_module_deposited(depositor_bot, block_data):
-    depositor_bot.w3.lido.staking_router.get_staking_module_digests = Mock(return_value=[
-        (0, 0, (1,), (10, 20, 10)),
-        (0, 0, (2,), (0, 10, 10,)),
-    ])
+    modules = list(range(10))
+
+    depositor_bot.w3.lido.lido.get_depositable_ether = Mock(return_value=10 * 32 * 10 ** 18)
+    depositor_bot.w3.lido.staking_router.get_staking_module_ids = Mock(return_value=modules)
+    depositor_bot.w3.lido.staking_router.get_staking_module_max_deposits_count = Mock(return_value=0)
+    depositor_bot.w3.lido.deposit_security_module.get_max_deposits = Mock(return_value=10)
 
     depositor_bot._deposit_to_module = Mock(return_value=True)
     depositor_bot.execute(block_data)
 
-    assert depositor_bot._deposit_to_module.call_count == 2
+    assert depositor_bot._deposit_to_module.call_count == 1
 
 
 @pytest.mark.unit
