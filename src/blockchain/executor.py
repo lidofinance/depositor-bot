@@ -1,21 +1,22 @@
+# pyright: reportTypedDictNotRequiredAccess=false
+
 import logging
 from time import sleep
-from typing import Callable, Any, Optional
-
-from web3.types import BlockData
-from web3_multi_provider import NoActiveProviderError
+from typing import Any, Callable, Optional
 
 from blockchain.constants import SLOT_TIME
 from blockchain.typings import Web3
 from metrics import healthcheck_pulse
 from utils.timeout import TimeoutManager, TimeoutManagerError
-
+from web3.types import BlockData
+from web3_multi_provider import NoActiveProviderError
 
 logger = logging.getLogger(__name__)
 
 
 class Executor:
     """Executes periodically function with block_identifier."""
+
     def __init__(
         self,
         w3: Web3,
@@ -26,7 +27,7 @@ class Executor:
         """
         @param function_to_execute is functions that will be executed every N blocks
         @param blocks_between_execution is amount of EL blocks between function execution.
-               Blocks could be missed, so waiting time could be higher than expected.
+                        Blocks could be missed, so waiting time could be higher than expected.
         """
         self.w3 = w3
 
@@ -38,12 +39,15 @@ class Executor:
         self._next_expected_block = 0
 
     def execute_as_daemon(self) -> None:
-        """Run execution module """
+        """Run execution module"""
         while True:
             self._wait_for_new_block_and_execute()
 
     def _wait_for_new_block_and_execute(self) -> Any:
         healthcheck_pulse.pulse()
+
+        if self.w3.lido.has_contract_address_changed():
+            logger.info({'msg': 'Contract addresses have been updated.'})
 
         latest_block = self._exception_handler(self._wait_until_next_block)
         result = self._exception_handler(self._execute_function, latest_block)
@@ -57,11 +61,13 @@ class Executor:
         return result
 
     def _wait_until_next_block(self) -> BlockData:
-        with TimeoutManager(max(
-            # Wait at least 5 slots before throw exception
-            32 * SLOT_TIME,
-            self.blocks_between_execution * SLOT_TIME * 4
-        )):
+        with TimeoutManager(
+            max(
+                # Wait at least 5 slots before throw exception
+                32 * SLOT_TIME,
+                self.blocks_between_execution * SLOT_TIME * 4,
+            )
+        ):
             while True:
                 latest_block: BlockData = self.w3.eth.get_block('latest')
                 logger.debug({'msg': 'Fetch latest block.', 'value': latest_block})
@@ -70,7 +76,7 @@ class Executor:
                     self._next_expected_block = latest_block['number']
                     return latest_block
 
-                time_until_expected_block = (self._next_expected_block - latest_block.number - 1) * SLOT_TIME
+                time_until_expected_block = (self._next_expected_block - latest_block['number'] - 1) * SLOT_TIME
 
                 # If expected block is next
                 if time_until_expected_block == 0:

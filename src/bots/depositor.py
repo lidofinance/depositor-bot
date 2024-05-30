@@ -1,36 +1,47 @@
+# pyright: reportTypedDictNotRequiredAccess=false
+
 import logging
 from collections import defaultdict
-from typing import Optional, Callable
-
-from eth_typing import Hash32
-from schema import Or, Schema
-from web3.types import BlockData
+from typing import Callable, Optional
 
 import variables
 from blockchain.deposit_strategy.curated_module import CuratedModuleDepositStrategy
 from blockchain.deposit_strategy.interface import ModuleDepositStrategyInterface
-from blockchain.deposit_strategy.prefered_module_to_deposit import get_preferred_to_deposit_module
+from blockchain.deposit_strategy.prefered_module_to_deposit import get_preferred_to_deposit_modules
+from blockchain.executor import Executor
 from blockchain.typings import Web3
 from cryptography.verify_signature import compute_vs
+from eth_typing import Hash32
 from metrics.metrics import (
     ACCOUNT_BALANCE,
     CURRENT_QUORUM_SIZE,
     UNEXPECTED_EXCEPTIONS,
 )
 from metrics.transport_message_metrics import message_metrics_filter
+from schema import Or, Schema
 from transport.msg_providers.kafka import KafkaMessageProvider
-from transport.msg_providers.rabbit import RabbitProvider, MessageType
-from transport.msg_schemas import (
-    DepositMessageSchema,
-    PingMessageSchema,
-    get_deposit_messages_sign_filter,
-    DepositMessage,
-    to_check_sum_address,
-)
+from transport.msg_providers.rabbit import MessageType, RabbitProvider
 from transport.msg_storage import MessageStorage
+from transport.msg_types.deposit import DepositMessage, DepositMessageSchema, get_deposit_messages_sign_filter
+from transport.msg_types.ping import PingMessageSchema, to_check_sum_address
 from transport.types import TransportType
+from web3.types import BlockData
 
 logger = logging.getLogger(__name__)
+
+
+def run_depositor(w3):
+    logger.info({'msg': 'Initialize Depositor bot.'})
+    depositor_bot = DepositorBot(w3)
+
+    e = Executor(
+        w3,
+        depositor_bot.execute,
+        1,
+        variables.MAX_CYCLE_LIFETIME_IN_SECONDS,
+    )
+    logger.info({'msg': 'Execute depositor as daemon.'})
+    e.execute_as_daemon()
 
 
 class ModuleNotSupportedError(Exception):
@@ -46,38 +57,44 @@ class DepositorBot:
         transports = []
 
         if TransportType.RABBIT in variables.MESSAGE_TRANSPORTS:
-            transports.append(RabbitProvider(
-                client='depositor',
-                routing_keys=[MessageType.PING, MessageType.DEPOSIT],
-                message_schema=Schema(Or(DepositMessageSchema, PingMessageSchema)),
-            ))
+            transports.append(
+                RabbitProvider(
+                    client='depositor',
+                    routing_keys=[MessageType.PING, MessageType.DEPOSIT],
+                    message_schema=Schema(Or(DepositMessageSchema, PingMessageSchema)),
+                )
+            )
 
         if TransportType.KAFKA in variables.MESSAGE_TRANSPORTS:
-            transports.append(KafkaMessageProvider(
-                client=f'{variables.KAFKA_GROUP_PREFIX}deposit',
-                message_schema=Schema(Or(DepositMessageSchema, PingMessageSchema)),
-            ))
+            transports.append(
+                KafkaMessageProvider(
+                    client=f'{variables.KAFKA_GROUP_PREFIX}deposit',
+                    message_schema=Schema(Or(DepositMessageSchema, PingMessageSchema)),
+                )
+            )
 
         if not transports:
             logger.warning({'msg': 'No transports found. Dry mode activated.', 'value': variables.MESSAGE_TRANSPORTS})
-
-        attest_prefix = self.w3.lido.deposit_security_module.get_attest_message_prefix()
 
         self.message_storage = MessageStorage(
             transports,
             filters=[
                 message_metrics_filter,
                 to_check_sum_address,
-                get_deposit_messages_sign_filter(attest_prefix),
+                get_deposit_messages_sign_filter(self.w3),
             ],
         )
 
     def execute(self, block: BlockData) -> bool:
         self._check_balance()
 
-        module_id = get_preferred_to_deposit_module(self.w3, variables.DEPOSIT_MODULES_WHITELIST)
+        modules_id = get_preferred_to_deposit_modules(self.w3, variables.DEPOSIT_MODULES_WHITELIST)
 
-        if module_id:
+        if not modules_id:
+            # Read messages in case if no depositable modules for metrics
+            self.message_storage.receive_messages()
+
+        for module_id in modules_id:
             logger.info({'msg': f'Do deposit to module with id: {module_id}.'})
             try:
                 self._deposit_to_module(module_id)
@@ -132,8 +149,12 @@ class DepositorBot:
 
     def _get_quorum(self, module_id: int) -> Optional[list[DepositMessage]]:
         """Returns quorum messages or None is quorum is not ready"""
-        actualize_filter = self._get_message_actualize_filter(module_id)
+        actualize_filter = self._get_message_actualize_filter()
         messages = self.message_storage.get_messages(actualize_filter)
+
+        module_filter = self._get_module_messages_filter(module_id)
+        messages = list(filter(module_filter, messages))
+
         min_signs_to_deposit = self.w3.lido.deposit_security_module.get_guardian_quorum()
 
         CURRENT_QUORUM_SIZE.labels('required').set(min_signs_to_deposit)
@@ -159,19 +180,14 @@ class DepositorBot:
 
         CURRENT_QUORUM_SIZE.labels('current').set(max_quorum_size)
 
-    def _get_message_actualize_filter(self, module_id: int) -> Callable[[DepositMessage], bool]:
+    def _get_message_actualize_filter(self) -> Callable[[DepositMessage], bool]:
         latest = self.w3.eth.get_block('latest')
-
         deposit_root = '0x' + self.w3.lido.deposit_contract.get_deposit_root().hex()
-        nonce = self.w3.lido.staking_router.get_staking_module_nonce(module_id)
         guardians_list = self.w3.lido.deposit_security_module.get_guardians()
 
         def message_filter(message: DepositMessage) -> bool:
             if message['guardianAddress'] not in guardians_list:
                 UNEXPECTED_EXCEPTIONS.labels('unexpected_guardian_address').inc()
-                return False
-
-            if message['stakingModuleId'] != module_id:
                 return False
 
             if message['blockNumber'] < latest['number'] - 200:
@@ -182,10 +198,21 @@ class DepositorBot:
                 # can't be verified, so skip
                 return True
 
-            if message['nonce'] != nonce:
+            if message['depositRoot'] != deposit_root:
                 return False
 
-            if message['depositRoot'] != deposit_root:
+            return True
+
+        return message_filter
+
+    def _get_module_messages_filter(self, module_id: int) -> Callable[[DepositMessage], bool]:
+        nonce = self.w3.lido.staking_router.get_staking_module_nonce(module_id)
+
+        def message_filter(message: DepositMessage) -> bool:
+            if message['stakingModuleId'] != module_id:
+                return False
+
+            if message['nonce'] < nonce:
                 return False
 
             return True
@@ -206,13 +233,10 @@ class DepositorBot:
         )
 
     @staticmethod
-    def _prepare_signs_for_deposit(quorum: list[DepositMessage]) -> tuple[tuple[str, str]]:
+    def _prepare_signs_for_deposit(quorum: list[DepositMessage]) -> tuple[tuple[str, str], ...]:
         sorted_messages = sorted(quorum, key=lambda msg: int(msg['guardianAddress'], 16))
 
-        return tuple(
-            (msg['signature']['r'], compute_vs(msg['signature']['v'], msg['signature']['s']))
-            for msg in sorted_messages
-        )
+        return tuple((msg['signature']['r'], compute_vs(msg['signature']['v'], msg['signature']['s'])) for msg in sorted_messages)
 
     def _send_deposit_tx(
         self,
@@ -222,7 +246,7 @@ class DepositorBot:
         staking_module_id: int,
         staking_module_nonce: int,
         payload: bytes,
-        guardian_signs: tuple[tuple[str, str]]
+        guardian_signs: tuple[tuple[str, str], ...],
     ) -> bool:
         """Returns transactions success status"""
         # Prepare transaction and send

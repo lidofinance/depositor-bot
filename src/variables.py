@@ -2,6 +2,7 @@ import logging
 import os
 
 from eth_account import Account
+from eth_typing import URI
 from web3 import Web3
 
 logger = logging.getLogger(__name__)
@@ -23,13 +24,13 @@ else:
 # App specific
 # LIDO_LOCATOR ADDRESS
 # Mainnet: 0xC1d0b3DE6792Bf6b4b37EccdcC24e45978Cfd2Eb
-# Görli: 0x1eDf09b5023DC86737b59dE68a8130De878984f5
-LIDO_LOCATOR = os.getenv('LIDO_LOCATOR', '0xC1d0b3DE6792Bf6b4b37EccdcC24e45978Cfd2Eb')
+# Holesky: 0x28FAB2059C713A7F9D8c86Db49f9bb0e96Af1ef8
+LIDO_LOCATOR = Web3.to_checksum_address(os.getenv('LIDO_LOCATOR', '0xC1d0b3DE6792Bf6b4b37EccdcC24e45978Cfd2Eb'))
 
 # DEPOSIT_CONTRACT ADDRESS
 # Mainnet: 0x00000000219ab540356cBB839Cbe05303d7705Fa
-# Görli: 0xff50ed3d0ec03aC01D4C79aAd74928BFF48a7b2b
-DEPOSIT_CONTRACT = os.getenv('DEPOSIT_CONTRACT', '0x00000000219ab540356cBB839Cbe05303d7705Fa')
+# Holesky: 0x4242424242424242424242424242424242424242
+DEPOSIT_CONTRACT = Web3.to_checksum_address(os.getenv('DEPOSIT_CONTRACT', '0x00000000219ab540356cBB839Cbe05303d7705Fa'))
 
 # rabbit / kafka / rabbit,kafka
 MESSAGE_TRANSPORTS = os.getenv('MESSAGE_TRANSPORTS', '').split(',')
@@ -56,15 +57,10 @@ MAX_PRIORITY_FEE = Web3.to_wei(*os.getenv('MAX_PRIORITY_FEE', '10 gwei').split('
 MAX_GAS_FEE = Web3.to_wei(*os.getenv('MAX_GAS_FEE', '100 gwei').split(' '))
 CONTRACT_GAS_LIMIT = int(os.getenv('CONTRACT_GAS_LIMIT', 15 * 10**6))
 
-# Deprecated: FLASHBOTS_RPC URL
 # Mainnet: "https://relay.flashbots.net",
-# Görli: "https://relay-goerli.flashbots.net",
-FLASHBOTS_RPC = os.getenv('FLASHBOTS_RPC', '')
-AUCTION_BUNDLER_URIS = os.getenv('AUCTION_BUNDLER_URIS', FLASHBOTS_RPC).split(',')
-
-# Deprecated: FLASHBOT_SIGNATURE
-FLASHBOT_SIGNATURE = os.getenv('FLASHBOT_SIGNATURE', None)
-AUCTION_BUNDLER_PRIVATE_KEY = os.getenv('AUCTION_BUNDLER_PRIVATE_KEY', FLASHBOT_SIGNATURE)
+# Holesky: "https://relay-holesky.flashbots.net",
+RELAY_RPC = URI(os.getenv('RELAY_RPC', os.getenv('FLASHBOTS_RPC', '')))
+AUCTION_BUNDLER_PRIVATE_KEY = os.getenv('AUCTION_BUNDLER_PRIVATE_KEY', os.getenv('FLASHBOT_SIGNATURE', ''))
 
 # Curated module strategy
 GAS_FEE_PERCENTILE_1: int = int(os.getenv('GAS_FEE_PERCENTILE_1', 20))
@@ -76,7 +72,7 @@ MAX_BUFFERED_ETHERS = Web3.to_wei(*os.getenv('MAX_BUFFERED_ETHERS', '5000 ether'
 
 # Metrics
 PROMETHEUS_PORT = int(os.getenv('PROMETHEUS_PORT', '9000'))
-PULSE_SERVER_PORT = int(os.getenv('PULSE_SERVER_PORT', '9010'))
+HEALTHCHECK_SERVER_PORT = int(os.getenv('HEALTHCHECK_SERVER_PORT', os.getenv('PULSE_SERVER_PORT', '9010')))
 MAX_CYCLE_LIFETIME_IN_SECONDS = int(os.getenv('MAX_CYCLE_LIFETIME_IN_SECONDS', '1200'))
 
 # List of ids of staking modules in which the depositor bot will make deposits

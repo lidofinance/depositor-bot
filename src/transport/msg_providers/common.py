@@ -1,15 +1,15 @@
 import abc
 import logging
-from typing import List, Any
+from typing import Any, List, Optional
 
 from schema import Schema, SchemaError
-
 
 logger = logging.getLogger(__name__)
 
 
 class BaseMessageProvider(abc.ABC):
     """Abstract message provider that receives messages and"""
+
     MAX_MESSAGES_RECEIVE = 1000
 
     def __init__(self, client: str, message_schema: Schema):
@@ -19,7 +19,7 @@ class BaseMessageProvider(abc.ABC):
     def get_messages(self) -> List[dict]:
         messages = []
 
-        for i in range(self.MAX_MESSAGES_RECEIVE):
+        for _ in range(self.MAX_MESSAGES_RECEIVE):
             msg = self._receive_message()
 
             if msg is None:
@@ -32,10 +32,11 @@ class BaseMessageProvider(abc.ABC):
 
         return messages
 
+    @abc.abstractmethod
     def _receive_message(self) -> Any:
-        raise NotImplemented("Receive message from transport.")
+        raise NotImplementedError('Receive message from transport.')
 
-    def _process_msg(self, msg: Any) -> dict:
+    def _process_msg(self, msg: Any) -> Optional[dict]:
         # Overwrite this method to add msg serialization.
         # Return None if message is not serializable
         return msg
