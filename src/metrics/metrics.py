@@ -26,6 +26,10 @@ GAS_FEE = Gauge('gas_fee', 'Gas fee', ['type', 'module_id'], namespace=PREFIX)
 
 TX_SEND = Counter('transactions_send', 'Amount of send transaction from bot.', ['status'], namespace=PREFIX)
 
+# Initialize metrics
+TX_SEND.labels('success').inc(0)
+TX_SEND.labels('failure').inc(0)
+
 ACCOUNT_BALANCE = Gauge('account_balance', 'Account balance', namespace=PREFIX)
 
 DEPOSIT_MESSAGES = Gauge(
