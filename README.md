@@ -66,21 +66,22 @@ Unvetting is the proces of decreasing approved depositable signing keys.
 
 ### Additional variables
 
-| Variable                          | Default    | Description                                                                                                              |
-|-----------------------------------|------------|--------------------------------------------------------------------------------------------------------------------------|
-| MIN_PRIORITY_FEE                  | 50 mwei    | Min priority fee that will be used in tx                                                                                 |
-| MAX_PRIORITY_FEE                  | 10 gwei    | Max priority fee that will be used in tx                                                                                 |
-| MAX_GAS_FEE                       | 100 gwei   | Bot will wait for a lower price. Treshold for gas_fee                                                                    |
-| CONTRACT_GAS_LIMIT                | 15000000   | Default transaction gas limit                                                                                            |
-| RELAY_RPC                         | -          | RPC URI                                                                                                                  |
-| AUCTION_BUNDLER_PRIVATE_KEY       | -          | Private key - Used to identify account for relays (should NOT be equal to WALLET private key)                            |
-| GAS_FEE_PERCENTILE_1              | 20         | Percentile for first recommended fee calculation                                                                         |
-| GAS_FEE_PERCENTILE_DAYS_HISTORY_1 | 1          | Percentile for first recommended calculates from N days of the fee history                                               |
-| GAS_PRIORITY_FEE_PERCENTILE       | 25         | Priority transaction will be N percentile from priority fees in last block (min MIN_PRIORITY_FEE - max MAX_PRIORITY_FEE) |
-| MAX_BUFFERED_ETHERS               | 5000 ether | Maximum amount of ETH in the buffer, after which the bot deposits at any gas                                             |
-| PROMETHEUS_PORT                   | 9000       | Port with metrics server                                                                                                 |
-| HEALTHCHECK_SERVER_PORT           | 9010       | Port with bot`s status server                                                                                            |
-| MAX_CYCLE_LIFETIME_IN_SECONDS     | 1200       | Max lifetime of usual cycle. If cycle will not end in this time, bot will crush                                          |
+| Variable                          | Default       | Description                                                                                                              |
+|-----------------------------------|---------------|--------------------------------------------------------------------------------------------------------------------------|
+| MIN_PRIORITY_FEE                  | 50 mwei       | Min priority fee that will be used in tx                                                                                 |
+| MAX_PRIORITY_FEE                  | 10 gwei       | Max priority fee that will be used in tx                                                                                 |
+| MAX_GAS_FEE                       | 100 gwei      | Bot will wait for a lower price. Treshold for gas_fee                                                                    |
+| CONTRACT_GAS_LIMIT                | 15000000      | Default transaction gas limit                                                                                            |
+| RELAY_RPC                         | -             | RPC URI                                                                                                                  |
+| AUCTION_BUNDLER_PRIVATE_KEY       | -             | Private key - Used to identify account for relays (should NOT be equal to WALLET private key)                            |
+| GAS_FEE_PERCENTILE_1              | 20            | Percentile for first recommended fee calculation                                                                         |
+| GAS_FEE_PERCENTILE_DAYS_HISTORY_1 | 1             | Percentile for first recommended calculates from N days of the fee history                                               |
+| GAS_PRIORITY_FEE_PERCENTILE       | 25            | Priority transaction will be N percentile from priority fees in last block (min MIN_PRIORITY_FEE - max MAX_PRIORITY_FEE) |
+| MAX_BUFFERED_ETHERS               | 5000 ether    | Maximum amount of ETH in the buffer, after which the bot deposits at any gas                                             |
+| PROMETHEUS_PORT                   | 9000          | Port with metrics server                                                                                                 |
+| PROMETHEUS_PREFIX                 | depositor_bot | Prefix for the metrics                                                                                                   |
+| HEALTHCHECK_SERVER_PORT           | 9010          | Port with bot`s status server                                                                                            |
+| MAX_CYCLE_LIFETIME_IN_SECONDS     | 1200          | Max lifetime of usual cycle. If cycle will not end in this time, bot will crush                                          |
 
 ## Metrics and logs
 
@@ -132,7 +133,7 @@ export ANVIL_PATH='pathto/anvil'
 To create a new release:
 
 1. Merge all changes to the `main` branch.
-1. After the merge, the `Prepare release draft` action will run automatically. When the action is complete, a release draft is created.
-1. When you need to release, go to Repo → Releases.
-1. Publish the desired release draft manually by clicking the edit button - this release is now the `Latest Published`.
-1. After publication, the action to create a release bump will be triggered automatically.
+2. After the merge, the `Prepare release draft` action will run automatically. When the action is complete, a release draft is created.
+3. When you need to release, go to Repo → Releases.
+4. Publish the desired release draft manually by clicking the edit button - this release is now the `Latest Published`.
+5. After publication, the action to create a release bump will be triggered automatically.
