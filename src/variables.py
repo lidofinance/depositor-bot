@@ -7,7 +7,6 @@ from web3 import Web3
 
 logger = logging.getLogger(__name__)
 
-
 # EL node
 WEB3_RPC_ENDPOINTS = os.getenv('WEB3_RPC_ENDPOINTS', '').split(',')
 
@@ -32,6 +31,9 @@ LIDO_LOCATOR = Web3.to_checksum_address(os.getenv('LIDO_LOCATOR', '0xC1d0b3DE679
 # Holesky: 0x4242424242424242424242424242424242424242
 DEPOSIT_CONTRACT = Web3.to_checksum_address(os.getenv('DEPOSIT_CONTRACT', '0x00000000219ab540356cBB839Cbe05303d7705Fa'))
 
+# Mellow contract address
+MELLOW_CONTRACT = Web3.to_checksum_address(os.getenv('MELLOW_CONTRACT'))
+
 # rabbit / kafka / rabbit,kafka
 MESSAGE_TRANSPORTS = os.getenv('MESSAGE_TRANSPORTS', '').split(',')
 
@@ -55,7 +57,7 @@ MIN_PRIORITY_FEE = Web3.to_wei(*os.getenv('MIN_PRIORITY_FEE', '50 mwei').split('
 MAX_PRIORITY_FEE = Web3.to_wei(*os.getenv('MAX_PRIORITY_FEE', '10 gwei').split(' '))
 
 MAX_GAS_FEE = Web3.to_wei(*os.getenv('MAX_GAS_FEE', '100 gwei').split(' '))
-CONTRACT_GAS_LIMIT = int(os.getenv('CONTRACT_GAS_LIMIT', 15 * 10**6))
+CONTRACT_GAS_LIMIT = int(os.getenv('CONTRACT_GAS_LIMIT', 15 * 10 ** 6))
 
 # Mainnet: "https://relay.flashbots.net",
 # Holesky: "https://relay-holesky.flashbots.net",

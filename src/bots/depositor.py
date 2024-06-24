@@ -250,15 +250,26 @@ class DepositorBot:
     ) -> bool:
         """Returns transactions success status"""
         # Prepare transaction and send
-        deposit_tx = self.w3.lido.deposit_security_module.deposit_buffered_ether(
-            block_number,
-            block_hash,
-            deposit_root,
-            staking_module_id,
-            staking_module_nonce,
-            payload,
-            guardian_signs,
-        )
+        # todo: any error handling?
+        if self.w3.lido.direct_deposit is not None and self.w3.lido.direct_deposit.get_staking_module_id() == staking_module_id:
+            deposit_tx = self.w3.lido.direct_deposit.convert_and_deposit(
+                block_number,
+                block_hash,
+                deposit_root,
+                staking_module_nonce,
+                payload,
+                guardian_signs
+            )
+        else:
+            deposit_tx = self.w3.lido.deposit_security_module.deposit_buffered_ether(
+                block_number,
+                block_hash,
+                deposit_root,
+                staking_module_id,
+                staking_module_nonce,
+                payload,
+                guardian_signs,
+            )
 
         if not self.w3.transaction.check(deposit_tx):
             return False
