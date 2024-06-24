@@ -28,12 +28,12 @@ jobs:
 
       - name: Lint with Ruff
         run: |
-          poetry run ruff --output-format=github .
+          poetry run ruff check --output-format=github .
         continue-on-error: true
 
       - name: Format with Ruff
         run: |
-          poetry run ruff --output-format=github .
+          poetry run ruff check --output-format=github .
         continue-on-error: true
 
       - name: Typecheck with Pyright
