@@ -1,17 +1,20 @@
 # pyright: reportTypedDictNotRequiredAccess=false
-
+import functools
 import logging
 from collections import defaultdict
-from typing import Callable, Optional
+from typing import Callable, Optional, cast
+
+from web3.contract.contract import ContractFunction
 
 import variables
+from blockchain.contracts.staking_module import StakingModuleContract
 from blockchain.deposit_strategy.curated_module import CuratedModuleDepositStrategy
 from blockchain.deposit_strategy.interface import ModuleDepositStrategyInterface
 from blockchain.deposit_strategy.prefered_module_to_deposit import get_preferred_to_deposit_modules
 from blockchain.executor import Executor
 from blockchain.typings import Web3
 from cryptography.verify_signature import compute_vs
-from eth_typing import Hash32
+from eth_typing import Hash32, ChecksumAddress
 from metrics.metrics import (
     ACCOUNT_BALANCE,
     CURRENT_QUORUM_SIZE,
@@ -236,40 +239,23 @@ class DepositorBot:
     def _prepare_signs_for_deposit(quorum: list[DepositMessage]) -> tuple[tuple[str, str], ...]:
         sorted_messages = sorted(quorum, key=lambda msg: int(msg['guardianAddress'], 16))
 
-        return tuple((msg['signature']['r'], compute_vs(msg['signature']['v'], msg['signature']['s'])) for msg in sorted_messages)
+        return tuple((msg['signature']['r'], compute_vs(msg['signature']['v'], msg['signature']['s'])) for msg in
+                     sorted_messages)
 
     def _send_deposit_tx(
-        self,
-        block_number: int,
-        block_hash: Hash32,
-        deposit_root: Hash32,
-        staking_module_id: int,
-        staking_module_nonce: int,
-        payload: bytes,
-        guardian_signs: tuple[tuple[str, str], ...],
+            self,
+            block_number: int,
+            block_hash: Hash32,
+            deposit_root: Hash32,
+            staking_module_id: int,
+            staking_module_nonce: int,
+            payload: bytes,
+            guardian_signs: tuple[tuple[str, str], ...],
     ) -> bool:
         """Returns transactions success status"""
         # Prepare transaction and send
-        # todo: any error handling?
-        if self.w3.lido.direct_deposit is not None and self.w3.lido.direct_deposit.get_staking_module_id() == staking_module_id:
-            deposit_tx = self.w3.lido.direct_deposit.convert_and_deposit(
-                block_number,
-                block_hash,
-                deposit_root,
-                staking_module_nonce,
-                payload,
-                guardian_signs
-            )
-        else:
-            deposit_tx = self.w3.lido.deposit_security_module.deposit_buffered_ether(
-                block_number,
-                block_hash,
-                deposit_root,
-                staking_module_id,
-                staking_module_nonce,
-                payload,
-                guardian_signs,
-            )
+        deposit_tx = self._prepare_transaction(block_number, block_hash, deposit_root, staking_module_id,
+                                               staking_module_nonce, payload, guardian_signs)
 
         if not self.w3.transaction.check(deposit_tx):
             return False
@@ -285,3 +271,53 @@ class DepositorBot:
             self._flashbots_works = True
 
         return success
+
+    @functools.cache
+    def _mellow_staking_module_contract(self, staking_contract_address: ChecksumAddress) -> StakingModuleContract:
+        return cast(
+            StakingModuleContract,
+            self.w3.eth.contract(
+                address=staking_contract_address,
+                ContractFactoryClass=StakingModuleContract,
+            )
+        )
+
+    def _prepare_transaction(self, block_number: int,
+                             block_hash: Hash32,
+                             deposit_root: Hash32,
+                             staking_module_id: int,
+                             staking_module_nonce: int,
+                             payload: bytes,
+                             guardian_signs: tuple[tuple[str, str], ...]) -> ContractFunction:
+        """
+        It either follows a regular flow or builds a direct deposit transaction.
+
+        Conditions to build direct deposit transaction are:
+        1. Env variable is set
+        2. balance in the vault is not 0
+        3. The calls responded without errors
+        """
+        deposit_tx = self.w3.lido.deposit_security_module.deposit_buffered_ether(
+            block_number,
+            block_hash,
+            deposit_root,
+            staking_module_id,
+            staking_module_nonce,
+            payload,
+            guardian_signs,
+        )
+        if self.w3.lido.simple_dvt_staking_strategy is not None:
+            try:
+                vault_address = self.w3.lido.simple_dvt_staking_strategy.vault()
+                balance = self.w3.lido.erc20.balance_of(vault_address)
+                staking_contract_address = self.w3.lido.simple_dvt_staking_strategy.get_staking_module()
+                staking_module_contract: StakingModuleContract = self._mellow_staking_module_contract(
+                    staking_contract_address)
+                if balance != 0 and staking_module_contract.get_staking_module_id() == staking_module_id:
+                    deposit_tx = staking_module_contract.convert_and_deposit(block_number, block_hash, deposit_root,
+                                                                             staking_module_nonce,
+                                                                             payload, guardian_signs)
+            except Exception as e:
+                logger.warning({'msg': 'Failed to build mellow transaction.', 'error': str(e)})
+
+        return deposit_tx

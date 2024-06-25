@@ -32,7 +32,7 @@ LIDO_LOCATOR = Web3.to_checksum_address(os.getenv('LIDO_LOCATOR', '0xC1d0b3DE679
 DEPOSIT_CONTRACT = Web3.to_checksum_address(os.getenv('DEPOSIT_CONTRACT', '0x00000000219ab540356cBB839Cbe05303d7705Fa'))
 
 # Mellow contract address
-MELLOW_CONTRACT = Web3.to_checksum_address(os.getenv('MELLOW_CONTRACT'))
+SIMPLE_DVT_STAKING_STRATEGY_MELLOW_CONTRACT = Web3.to_checksum_address(os.getenv('MELLOW_CONTRACT', '0x1aF071e0ded7889b61aD2619bd852ed2150bb494'))
 
 # rabbit / kafka / rabbit,kafka
 MESSAGE_TRANSPORTS = os.getenv('MESSAGE_TRANSPORTS', '').split(',')

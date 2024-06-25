@@ -7,6 +7,9 @@ from .contracts import (
     staking_router,
     staking_router_v2,
     upgrade_staking_router_to_v2,
+    erc20,
+    simple_dvt_staking_strategy,
+    staking_module
 )
 from .provider import (
     web3_lido_integration,
@@ -26,4 +29,7 @@ __all__ = [
     'web3_lido_unit',
     'web3_provider_integration',
     'web3_lido_integration',
+    'erc20',
+    'simple_dvt_staking_strategy',
+    'staking_module'
 ]
