@@ -306,7 +306,7 @@ class DepositorBot:
             payload,
             guardian_signs,
         )
-        if self.w3.lido.simple_dvt_staking_strategy is not None:
+        if getattr(self.w3.lido, 'simple_dvt_staking_strategy', None) is not None:
             try:
                 vault_address = self.w3.lido.simple_dvt_staking_strategy.vault()
                 balance = self.w3.lido.erc20.balance_of(vault_address)
