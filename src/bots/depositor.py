@@ -4,8 +4,6 @@ import logging
 from collections import defaultdict
 from typing import Callable, Optional, cast
 
-from web3.contract.contract import ContractFunction
-
 import variables
 from blockchain.contracts.staking_module import StakingModuleContract
 from blockchain.deposit_strategy.curated_module import CuratedModuleDepositStrategy
@@ -14,7 +12,7 @@ from blockchain.deposit_strategy.prefered_module_to_deposit import get_preferred
 from blockchain.executor import Executor
 from blockchain.typings import Web3
 from cryptography.verify_signature import compute_vs
-from eth_typing import Hash32, ChecksumAddress
+from eth_typing import ChecksumAddress, Hash32
 from metrics.metrics import (
     ACCOUNT_BALANCE,
     CURRENT_QUORUM_SIZE,
@@ -28,6 +26,7 @@ from transport.msg_storage import MessageStorage
 from transport.msg_types.deposit import DepositMessage, DepositMessageSchema, get_deposit_messages_sign_filter
 from transport.msg_types.ping import PingMessageSchema, to_check_sum_address
 from transport.types import TransportType
+from web3.contract.contract import ContractFunction
 from web3.types import BlockData
 
 logger = logging.getLogger(__name__)
@@ -45,6 +44,17 @@ def run_depositor(w3):
     )
     logger.info({'msg': 'Execute depositor as daemon.'})
     e.execute_as_daemon()
+
+
+@functools.cache
+def _mellow_staking_module_contract(w3: Web3, staking_contract_address: ChecksumAddress) -> StakingModuleContract:
+    return cast(
+        StakingModuleContract,
+        w3.eth.contract(
+            address=staking_contract_address,
+            ContractFactoryClass=StakingModuleContract,
+        )
+    )
 
 
 class ModuleNotSupportedError(Exception):
@@ -272,16 +282,6 @@ class DepositorBot:
 
         return success
 
-    @functools.cache
-    def _mellow_staking_module_contract(self, staking_contract_address: ChecksumAddress) -> StakingModuleContract:
-        return cast(
-            StakingModuleContract,
-            self.w3.eth.contract(
-                address=staking_contract_address,
-                ContractFactoryClass=StakingModuleContract,
-            )
-        )
-
     def _prepare_transaction(self, block_number: int,
                              block_hash: Hash32,
                              deposit_root: Hash32,
@@ -311,12 +311,17 @@ class DepositorBot:
                 vault_address = self.w3.lido.simple_dvt_staking_strategy.vault()
                 balance = self.w3.lido.erc20.balance_of(vault_address)
                 staking_contract_address = self.w3.lido.simple_dvt_staking_strategy.get_staking_module()
-                staking_module_contract: StakingModuleContract = self._mellow_staking_module_contract(
+                staking_module_contract: StakingModuleContract = _mellow_staking_module_contract(
                     staking_contract_address)
                 if balance != 0 and staking_module_contract.get_staking_module_id() == staking_module_id:
-                    deposit_tx = staking_module_contract.convert_and_deposit(block_number, block_hash, deposit_root,
-                                                                             staking_module_nonce,
-                                                                             payload, guardian_signs)
+                    deposit_tx = staking_module_contract.convert_and_deposit(
+                        block_number,
+                        block_hash,
+                        deposit_root,
+                        staking_module_nonce,
+                        payload,
+                        guardian_signs
+                    )
             except Exception as e:
                 logger.warning({'msg': 'Failed to build mellow transaction.', 'error': str(e)})
 

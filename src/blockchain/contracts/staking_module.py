@@ -1,10 +1,9 @@
 import logging
 
+from blockchain.contracts.base_interface import ContractInterface
 from eth_typing import Hash32
 from web3.contract.contract import ContractFunction
 from web3.types import Wei
-
-from blockchain.contracts.base_interface import ContractInterface
 
 logger = logging.getLogger(__name__)
 

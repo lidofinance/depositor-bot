@@ -5,9 +5,9 @@ import variables
 from blockchain.contracts.deposit import DepositContract
 from blockchain.contracts.deposit_security_module import DepositSecurityModuleContract, DepositSecurityModuleContractV2
 from blockchain.contracts.erc20 import ERC20Contract
-from blockchain.contracts.simple_dvt_staking_strategy import SimpleDVTStakingStrategyContract
 from blockchain.contracts.lido import LidoContract
 from blockchain.contracts.lido_locator import LidoLocatorContract
+from blockchain.contracts.simple_dvt_staking_strategy import SimpleDVTStakingStrategyContract
 from blockchain.contracts.staking_module import StakingModuleContract
 from blockchain.contracts.staking_router import StakingRouterContract, StakingRouterContractV2
 from blockchain.typings import Web3
