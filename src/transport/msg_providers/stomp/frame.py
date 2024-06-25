@@ -1,11 +1,13 @@
-Byte = {
-    'LF': '\x0A',
-    'NULL': '\x00'
-}
+from typing import Callable, Optional
+
+Byte = {'LF': '\x0a', 'NULL': '\x00'}
 
 
 class Frame:
-    def __init__(self, command: str, headers: dict, body: str):
+    ack: Optional[Callable]
+    nack: Optional[Callable]
+
+    def __init__(self, command: str, headers: dict, body: Optional[str]):
         self.command = command
         self.headers = headers
         self.body = '' if body is None else body
@@ -16,10 +18,10 @@ class Frame:
         skip_content_length = 'content-length' in self.headers
 
         for name, value in self.headers.items():
-            lines.append(name + ":" + value)
+            lines.append(name + ':' + value)
 
         if self.body and not skip_content_length:
-            lines.append(f"content-length:{len(self.body)}")
+            lines.append(f'content-length:{len(self.body)}')
 
         lines.append(Byte['LF'] + self.body)
         return Byte['LF'].join(lines)

@@ -1,22 +1,27 @@
-import logging
+# pyright: reportTypedDictNotRequiredAccess=false
 
-from eth_account.datastructures import SignedTransaction
-from eth_typing import ChecksumAddress
-from web3.contract import ContractCaller
-from web3.exceptions import ContractLogicError, TransactionNotFound, TimeExhausted
-from web3.module import Module
-from web3.types import BlockData, Wei
+import logging
 
 import variables
 from blockchain.constants import SLOT_TIME
+from blockchain.web3_extentions.private_relay import PrivateRelayClient
+from eth_account.datastructures import SignedTransaction
+from eth_typing import ChecksumAddress
 from metrics.metrics import TX_SEND
+from web3 import Web3
+from web3.contract.contract import ContractFunction
+from web3.exceptions import ContractLogicError, TimeExhausted
+from web3.module import Module
+from web3.types import TxParams, Wei
 
 logger = logging.getLogger(__name__)
 
 
 class TransactionUtils(Module):
+    w3: Web3
+
     @staticmethod
-    def check(transaction: ContractCaller) -> bool:
+    def check(transaction: ContractFunction) -> bool:
         try:
             transaction.call()
         except (ValueError, ContractLogicError) as error:
@@ -28,7 +33,7 @@ class TransactionUtils(Module):
 
     def send(
         self,
-        transaction: ContractCaller,
+        transaction: ContractFunction,
         use_relay: bool,
         timeout_in_blocks: int,
     ) -> bool:
@@ -40,7 +45,7 @@ class TransactionUtils(Module):
             logger.info({'msg': 'Dry mode activated. Sending transaction skipped.'})
             return True
 
-        pending: BlockData = self.w3.eth.get_block('pending')
+        pending = self.w3.eth.get_block('pending')
 
         priority = self._get_priority_fee(
             variables.GAS_PRIORITY_FEE_PERCENTILE,
@@ -50,20 +55,24 @@ class TransactionUtils(Module):
 
         gas_limit = self._estimate_gas(transaction, variables.ACCOUNT.address)
 
-        transaction_dict = transaction.build_transaction({
-            'from': variables.ACCOUNT.address,
-            'gas': gas_limit,
-            'maxFeePerGas': pending['baseFeePerGas'] * 2 + priority,
-            'maxPriorityFeePerGas': priority,
-            "nonce": self.w3.eth.get_transaction_count(variables.ACCOUNT.address),
-        })
+        transaction_dict = transaction.build_transaction(
+            TxParams(
+                {
+                    'from': variables.ACCOUNT.address,
+                    'gas': gas_limit,
+                    'maxFeePerGas': Wei(pending['baseFeePerGas'] * 2 + priority),
+                    'maxPriorityFeePerGas': priority,
+                    'nonce': self.w3.eth.get_transaction_count(variables.ACCOUNT.address),
+                }
+            )
+        )
 
         signed = self.w3.eth.account.sign_transaction(transaction_dict, variables.ACCOUNT._private_key)
 
-        if use_relay and getattr(self.w3, 'relay', None):
-            status = self.relay_send(signed, pending['number'], timeout_in_blocks)
-        else:
+        if not variables.RELAY_RPC or not variables.AUCTION_BUNDLER_PRIVATE_KEY or not use_relay:
             status = self.classic_send(signed, timeout_in_blocks)
+        else:
+            status = self.relay_send(signed, timeout_in_blocks)
 
         if status:
             TX_SEND.labels('success').inc()
@@ -75,7 +84,7 @@ class TransactionUtils(Module):
         return status
 
     @staticmethod
-    def _estimate_gas(transaction: ContractCaller, account_address: ChecksumAddress) -> int:
+    def _estimate_gas(transaction: ContractFunction, account_address: ChecksumAddress) -> int:
         try:
             gas = transaction.estimate_gas({'from': account_address})
         except ContractLogicError as error:
@@ -90,26 +99,17 @@ class TransactionUtils(Module):
             int(gas * 1.3),
         )
 
-    def relay_send(
-        self,
-        signed_tx: SignedTransaction,
-        pending_block_num: int,
-        timeout_in_blocks: int,
-    ) -> bool:
-        for i in range(timeout_in_blocks):
-            result = self.w3.relay.send_bundle(
-                [{"signed_transaction": signed_tx.rawTransaction}],
-                pending_block_num + i
-            )
+    def relay_send(self, signed_tx: SignedTransaction, timeout_in_blocks: int) -> bool:
+        prl = PrivateRelayClient(self.w3, variables.RELAY_RPC, variables.AUCTION_BUNDLER_PRIVATE_KEY)
+        tx_hash = prl.send_private_tx(signed_tx, timeout_in_blocks)
 
-        logger.info({'msg': 'Transaction sent.'})
         try:
-            rec = result.receipts()
-        except TransactionNotFound:
+            tx_receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, (timeout_in_blocks + 1) * SLOT_TIME)
+        except TimeExhausted:
             return False
-        else:
-            logger.info({'msg': 'Sent transaction included in blockchain.', 'value': rec[-1]['transactionHash'].hex()})
-            return True
+
+        logger.info({'msg': 'Sent transaction included in blockchain.', 'value': tx_receipt})
+        return True
 
     def classic_send(self, signed_tx: SignedTransaction, timeout_in_blocks: int) -> bool:
         try:
@@ -127,7 +127,7 @@ class TransactionUtils(Module):
         logger.info({'msg': 'Sent transaction included in blockchain.', 'value': tx_receipt['transactionHash'].hex()})
         return True
 
-    def _get_priority_fee(self, percentile: int, min_priority_fee: Wei, max_priority_fee: Wei):
+    def _get_priority_fee(self, percentile: int, min_priority_fee: Wei, max_priority_fee: Wei) -> Wei:
         return min(
             max(
                 self.w3.eth.fee_history(1, 'latest', reward_percentiles=[percentile])['reward'][0][0],

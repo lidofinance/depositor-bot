@@ -2,14 +2,12 @@ import datetime
 import json
 import logging
 import time
-from typing import Optional, List
-
-from schema import Schema
+from typing import List, Optional
 
 import variables
+from schema import Schema
 from transport.msg_providers.common import BaseMessageProvider
 from transport.msg_providers.stomp.client import Client
-
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +16,7 @@ class MessageType:
     PAUSE = 'pause'
     PING = 'ping'
     DEPOSIT = 'deposit'
+    UNVET = 'unvet'
 
 
 class RabbitProvider(BaseMessageProvider):
@@ -59,7 +58,6 @@ class RabbitProvider(BaseMessageProvider):
 
     def _recreate_client(self):
         # Make sure client creating won't be instantly
-        import time
         time.sleep(5)
         logger.error({'msg': 'Trying to reconnect to client.'})
         current_dt = datetime.datetime.now()
@@ -94,5 +92,6 @@ class RabbitProvider(BaseMessageProvider):
         except ValueError as error:
             # ignore not json msg
             logger.warning({'msg': 'Broken message in Kafka', 'value': str(msg), 'error': str(error)})
-        else:
-            return value
+            return None
+
+        return value

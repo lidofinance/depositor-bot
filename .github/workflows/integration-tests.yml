@@ -1,6 +1,6 @@
-name: Tests and checks
+name: Integration tests
 
-on: 
+on:
   push:
 
 jobs:
@@ -9,45 +9,31 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-      - name: Set up Python 3.10
+      - name: Set up Python 3.11
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10'
+          python-version: '3.11'
 
       - name: Setup poetry
         run: |
           curl -sSL https://install.python-poetry.org/ | python - && echo "$HOME/.poetry/bin" >> $GITHUB_PATH
         env:
-          POETRY_VERSION: 1.4.2
+          POETRY_VERSION: 1.8.2
 
       - name: Install dependencies
         run: |
           poetry install
 
-      - name: Unit Tests with pytest
-        run: |
-          poetry run pytest tests -m unit
-
-      - name: Set up node
-        uses: actions/setup-node@v3.0.0
-        with:
-          node-version: '18.17.1'
-          cache: 'yarn'
-
-      - name: Install dependencies
-        run: yarn install --immutable
-
-      - name: Run chronix
-        run: |
-          yarn chronix start &
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
 
       - name: Integration tests with pytest
         run: |
           poetry run pytest tests -m integration
         env:
-
           WEB3_RPC_ENDPOINTS: ${{ secrets.WEB3_RPC_ENDPOINT }}
           DEPOSIT_CONTRACT: "0x00000000219ab540356cBB839Cbe05303d7705Fa"
           LIDO_LOCATOR: "0xC1d0b3DE6792Bf6b4b37EccdcC24e45978Cfd2Eb"
+          ANVIL_PATH: ""

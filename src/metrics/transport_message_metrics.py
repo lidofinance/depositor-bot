@@ -1,8 +1,8 @@
 import logging
 
-from metrics.metrics import DEPOSIT_MESSAGES, PING_MESSAGES, PAUSE_MESSAGES
+from metrics.metrics import DEPOSIT_MESSAGES, PAUSE_MESSAGES, PING_MESSAGES, UNVET_MESSAGES
 from transport.msg_providers.rabbit import MessageType
-from transport.msg_schemas import DepositMessage
+from transport.msg_types.deposit import DepositMessage
 
 logger = logging.getLogger(__name__)
 
@@ -21,9 +21,14 @@ def message_metrics_filter(msg: DepositMessage) -> bool:
         DEPOSIT_MESSAGES.labels(address, msg.get('stakingModuleId', -1), version).inc()
         return True
 
-    elif msg_type == MessageType.PING:
+    if msg_type == MessageType.UNVET:
+        UNVET_MESSAGES.labels(address, msg.get('stakingModuleId', -1), version).inc()
+        return True
+
+    if msg_type == MessageType.PING:
         # Filter all ping messages, because we use them only for metrics
         PING_MESSAGES.labels(address, version).inc()
         return False
 
     logger.warning({'msg': 'Received unexpected msg type.', 'value': msg, 'type': msg_type})
+    return False

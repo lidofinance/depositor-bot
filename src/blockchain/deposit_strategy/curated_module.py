@@ -1,14 +1,15 @@
+# pyright: reportTypedDictNotRequiredAccess=false
+
 import logging
 from typing import Literal
 
 import numpy
-from eth_typing import BlockNumber
-from web3 import Web3
-from web3.types import Wei
-
 import variables
 from blockchain.deposit_strategy.interface import ModuleDepositStrategyInterface
-from metrics.metrics import GAS_FEE, DEPOSITABLE_ETHER, POSSIBLE_DEPOSITS_AMOUNT
+from blockchain.typings import Web3
+from eth_typing import BlockNumber
+from metrics.metrics import DEPOSITABLE_ETHER, GAS_FEE, POSSIBLE_DEPOSITS_AMOUNT
+from web3.types import Wei
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +27,7 @@ class CuratedModuleDepositStrategy(ModuleDepositStrategyInterface):
 
         # Used for caching
         self._latest_fetched_block: int = 0
-        self._days_param = None
+        self._days_param: int = 0
 
     def is_deposited_keys_amount_ok(self) -> bool:
         possible_deposits_amount = self._get_possible_deposits_amount()
@@ -51,12 +52,12 @@ class CuratedModuleDepositStrategy(ModuleDepositStrategyInterface):
         POSSIBLE_DEPOSITS_AMOUNT.labels(self.module_id).set(possible_deposits_amount)
         return possible_deposits_amount
 
-    def _calculate_recommended_gas_based_on_deposit_amount(self, deposits_amount: int) -> Wei:
+    def _calculate_recommended_gas_based_on_deposit_amount(self, deposits_amount: int) -> int:
         # For one key recommended gas fee will be around 10
         # For 10 keys around 100 gwei. For 20 keys ~ 800 gwei
         # ToDo percentiles for all modules?
-        recommended_max_gas = (deposits_amount ** 3 + 100) * 10 ** 8
-        logger.info({'msg': 'Calculate recommended max gas based on possible deposits.'})
+        recommended_max_gas = (deposits_amount**3 + 100) * 10**8
+        logger.info({'msg': 'Calculate recommended max gas based on possible deposits.', 'value': recommended_max_gas})
         GAS_FEE.labels('based_on_buffer_fee', self.module_id).set(recommended_max_gas)
         return recommended_max_gas
 
@@ -76,7 +77,7 @@ class CuratedModuleDepositStrategy(ModuleDepositStrategyInterface):
 
         current_buffered_ether = self.w3.lido.lido.get_depositable_ether()
         if current_buffered_ether > variables.MAX_BUFFERED_ETHERS:
-            return variables.MAX_GAS_FEE >= current_gas_fee
+            return current_gas_fee <= variables.MAX_GAS_FEE
 
         return recommended_gas_fee >= current_gas_fee
 
@@ -106,11 +107,11 @@ class CuratedModuleDepositStrategy(ModuleDepositStrategyInterface):
         gas_fees = []
         last_block: Literal['latest'] | BlockNumber = 'latest'
 
-        for i in range(requests_count):
+        for _ in range(requests_count):
             stats = self.w3.eth.fee_history(self.REQUEST_SIZE, last_block, [])
             last_block = BlockNumber(stats['oldestBlock'] - 2)
             gas_fees = stats['baseFeePerGas'] + gas_fees
 
-        self._gas_fees = gas_fees[:days * self.BLOCKS_IN_ONE_DAY]
+        self._gas_fees = gas_fees[: days * self.BLOCKS_IN_ONE_DAY]
 
         return self._gas_fees

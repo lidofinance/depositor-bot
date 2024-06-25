@@ -1,5 +1,5 @@
 import logging
-from typing import Callable, Any, Optional
+from typing import Any, Callable, Optional
 
 from blockchain.contracts.base_interface import ContractInterface
 
@@ -15,10 +15,7 @@ def check_contract(
         # get method
         method = contract.__getattribute__(function[0])
         # call method with args
-        if function[1] is not None:
-            response = method(*function[1])
-        else:
-            response = method()
+        response = method(*function[1]) if function[1] is not None else method()
         # check response
         function[2](response)
 

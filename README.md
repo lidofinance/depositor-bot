@@ -8,7 +8,10 @@ Depositor and pauser bots are parts of [Deposit Security Module](https://github.
 Once a sufficient number of messages is collected to constitute a quorum, the bot proceeds to initiate a deposit into the designated staking module. 
 This deposit is executed using the depositBufferedEther function within the "DepositSecurityModule" smart contract.
 
-**The Pauser Bot** obtains pause message from Council Daemon and enacts pause on the specified staking module.
+**The Pauser Bot** obtains pause message from Council Daemon and enacts pause deposits on protocol. Pause can occurs when Lido detects stealing.
+
+**The Unvetting Bot** obtains unvet message from Council Daemon and enacts unvet on the specified node operator.
+Unvetting is the proces of decreasing approved depositable signing keys.
 
 ## Table of Contents
 
@@ -63,21 +66,22 @@ This deposit is executed using the depositBufferedEther function within the "Dep
 
 ### Additional variables
 
-| Variable                          | Default    | Description                                                                                                              |
-|-----------------------------------|------------|--------------------------------------------------------------------------------------------------------------------------|
-| MIN_PRIORITY_FEE                  | 50 mwei    | Min priority fee that will be used in tx                                                                                 |
-| MAX_PRIORITY_FEE                  | 10 gwei    | Max priority fee that will be used in tx                                                                                 |
-| MAX_GAS_FEE                       | 100 gwei   | Bot will wait for a lower price. Treshold for gas_fee                                                                    |
-| CONTRACT_GAS_LIMIT                | 15000000   | Default transaction gas limit                                                                                            |
-| AUCTION_BUNDLER_URIS              | -          | List of relays uris                                                                                                      |
-| AUCTION_BUNDLER_PRIVATE_KEY       | -          | Private key - Used to identify account for relays (should NOT be equal to WALLET private key)                            |
-| GAS_FEE_PERCENTILE_1              | 20         | Percentile for first recommended fee calculation                                                                         |
-| GAS_FEE_PERCENTILE_DAYS_HISTORY_1 | 1          | Percentile for first recommended calculates from N days of the fee history                                               |
-| GAS_PRIORITY_FEE_PERCENTILE       | 25         | Priority transaction will be N percentile from priority fees in last block (min MIN_PRIORITY_FEE - max MAX_PRIORITY_FEE) |
-| MAX_BUFFERED_ETHERS               | 5000 ether | Maximum amount of ETH in the buffer, after which the bot deposits at any gas                                             |
-| PROMETHEUS_PORT                   | 9000       | Port with metrics server                                                                                                 |
-| PULSE_SERVER_PORT                 | 9010       | Port with bot`s status server                                                                                            |
-| MAX_CYCLE_LIFETIME_IN_SECONDS     | 1200       | Max lifetime of usual cycle. If cycle will not end in this time, bot will crush                                          |
+| Variable                          | Default       | Description                                                                                                              |
+|-----------------------------------|---------------|--------------------------------------------------------------------------------------------------------------------------|
+| MIN_PRIORITY_FEE                  | 50 mwei       | Min priority fee that will be used in tx                                                                                 |
+| MAX_PRIORITY_FEE                  | 10 gwei       | Max priority fee that will be used in tx                                                                                 |
+| MAX_GAS_FEE                       | 100 gwei      | Bot will wait for a lower price. Treshold for gas_fee                                                                    |
+| CONTRACT_GAS_LIMIT                | 15000000      | Default transaction gas limit                                                                                            |
+| RELAY_RPC                         | -             | RPC URI                                                                                                                  |
+| AUCTION_BUNDLER_PRIVATE_KEY       | -             | Private key - Used to identify account for relays (should NOT be equal to WALLET private key)                            |
+| GAS_FEE_PERCENTILE_1              | 20            | Percentile for first recommended fee calculation                                                                         |
+| GAS_FEE_PERCENTILE_DAYS_HISTORY_1 | 1             | Percentile for first recommended calculates from N days of the fee history                                               |
+| GAS_PRIORITY_FEE_PERCENTILE       | 25            | Priority transaction will be N percentile from priority fees in last block (min MIN_PRIORITY_FEE - max MAX_PRIORITY_FEE) |
+| MAX_BUFFERED_ETHERS               | 5000 ether    | Maximum amount of ETH in the buffer, after which the bot deposits at any gas                                             |
+| PROMETHEUS_PORT                   | 9000          | Port with metrics server                                                                                                 |
+| PROMETHEUS_PREFIX                 | depositor_bot | Prefix for the metrics                                                                                                   |
+| HEALTHCHECK_SERVER_PORT           | 9010          | Port with bot`s status server                                                                                            |
+| MAX_CYCLE_LIFETIME_IN_SECONDS     | 1200          | Max lifetime of usual cycle. If cycle will not end in this time, bot will crush                                          |
 
 ## Metrics and logs
 
@@ -97,11 +101,11 @@ poetry install
 To run bot
 
 ```bash
-# For depositor bot
-poetry run python src/depositor.py
+poetry run python main depositor
 
-# For pause bot
-poetry run python src/pauser.py
+poetry run python main pauser
+
+poetry run python main unvetter
 ```
 
 ### Tests
@@ -114,14 +118,14 @@ poetry run pytest tests -m unit
 
 #### Run integration tests.
 
-Install Hardhat and run goerli fork
-```bash
-npm install --save-dev hardhat
-npx hardhat node --fork ${{ WEB3_RPC_ENDPOINT }} &
-```
-
+Install Anvil
 ```bash
 poetry run pytest tests -m integration
+```
+
+In case of "command not found: anvil" error, provide `ANVIL_PATH` variable 
+```bash
+export ANVIL_PATH='pathto/anvil'
 ```
 
 ### Release flow
@@ -129,32 +133,7 @@ poetry run pytest tests -m integration
 To create a new release:
 
 1. Merge all changes to the `main` branch.
-1. After the merge, the `Prepare release draft` action will run automatically. When the action is complete, a release draft is created.
-1. When you need to release, go to Repo → Releases.
-1. Publish the desired release draft manually by clicking the edit button - this release is now the `Latest Published`.
-1. After publication, the action to create a release bump will be triggered automatically.
-
-## Annotations to code
-
-Council daemons sends messages to depositor and pauser bot throw kafka or rabbit.
-
-![img.png](static/img.png)
-
-Every 5 blocks Executor instance calls depositor bot. If Depositor returns failed status, executor executes depositor with next block instead of waiting for 5 blocks. 
-
-![img.png](static/img1.png)
-
-Depositor bot makes deposit only if next conditions are ok
-- Gas fee is low enough
-- There are enough buffered eth ready for deposit
-- There are enough messages from Council Daemons to form a quorum
-- Module is active and not paused
-
-![img.png](static/img2.png)
-
-Message filtering process
-1. Filter all invalid messages. (Invalid schema or signature)
-2. Filter all expired messages
-3. Filter all messages with block number less or equal to latest block in depositor bot and with outdated nonce or deposit root.
-
-![img.png](static/img3.png)
+2. After the merge, the `Prepare release draft` action will run automatically. When the action is complete, a release draft is created.
+3. When you need to release, go to Repo → Releases.
+4. Publish the desired release draft manually by clicking the edit button - this release is now the `Latest Published`.
+5. After publication, the action to create a release bump will be triggered automatically.

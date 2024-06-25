@@ -1,0 +1,46 @@
+name: Tests and checks
+
+on: 
+  push:
+
+jobs:
+  tests:
+    name: App tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Setup poetry
+        run: |
+          curl -sSL https://install.python-poetry.org/ | python - && echo "$HOME/.poetry/bin" >> $GITHUB_PATH
+        env:
+          POETRY_VERSION: 1.8.2
+
+      - name: Install dependencies
+        run: |
+          poetry install
+
+      - name: Lint with Ruff
+        run: |
+          poetry run ruff check --output-format=github .
+        continue-on-error: true
+
+      - name: Format with Ruff
+        run: |
+          poetry run ruff check --output-format=github .
+        continue-on-error: true
+
+      - name: Typecheck with Pyright
+        run: |
+          poetry run pyright
+        continue-on-error: true
+
+      - name: Unit tests with pytest
+        run: |
+          poetry run pytest tests -m unit

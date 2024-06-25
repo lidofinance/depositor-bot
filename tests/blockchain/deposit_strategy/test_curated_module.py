@@ -1,10 +1,8 @@
 from unittest.mock import Mock
 
 import pytest
-
 import variables
 from blockchain.deposit_strategy.curated_module import CuratedModuleDepositStrategy
-
 
 MODULE_ID = 1337
 
@@ -44,7 +42,7 @@ def test_get_possible_deposits_amount(cmds):
 
 @pytest.mark.unit
 @pytest.mark.parametrize(
-    "deposits,expected_range",
+    'deposits,expected_range',
     [(1, (0, 20)), (5, (20, 100)), (10, (50, 1000)), (100, (1000, 1000000))],
 )
 def test_calculate_recommended_gas_based_on_deposit_amount(cmds, deposits, expected_range):
@@ -104,5 +102,3 @@ def test_fetch_gas_fee_history(cmds_integration):
     cmds_integration._fetch_gas_fee_history(1)
     assert len(history) == 1 * 24 * 60 * 60 / 12
     cmds_integration.w3.eth.fee_history.assert_not_called()
-
-
