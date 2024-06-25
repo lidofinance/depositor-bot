@@ -64,13 +64,6 @@ class LidoContracts(Module):
                     ContractFactoryClass=SimpleDVTStakingStrategyContract,
                 ),
             )
-            self.erc20: ERC20Contract = cast(
-                ERC20Contract,
-                self.w3.eth.contract(
-                    address=None,
-                    ContractFactoryClass=ERC20Contract,
-                ),
-            )
 
     def _load_staking_router(self):
         staking_router_address = self.lido_locator.staking_router()

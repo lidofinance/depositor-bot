@@ -1,9 +1,8 @@
 import logging
 
 from blockchain.contracts.base_interface import ContractInterface
-from eth_typing import Hash32
+from eth_typing import ChecksumAddress, Hash32
 from web3.contract.contract import ContractFunction
-from web3.types import Wei
 
 logger = logging.getLogger(__name__)
 
@@ -11,9 +10,9 @@ logger = logging.getLogger(__name__)
 class StakingModuleContract(ContractInterface):
     abi_path = './interfaces/StakingModule.json'
 
-    def wseth(self) -> Wei:
-        response = self.functions.wseth().call()
-        logger.info({'msg': 'Call `wseth()`.', 'value': response})
+    def weth(self) -> ChecksumAddress:
+        response = self.functions.weth().call()
+        logger.info({'msg': 'Call `weth()`.', 'value': response})
         return response
 
     def get_staking_module_id(self) -> int:
@@ -22,6 +21,7 @@ class StakingModuleContract(ContractInterface):
         return response
 
     def convert_and_deposit(self,
+                            amount: int,
                             block_number: int,
                             block_hash: Hash32,
                             deposit_root: Hash32,
@@ -29,7 +29,7 @@ class StakingModuleContract(ContractInterface):
                             deposit_call_data: bytes,
                             guardian_signatures: tuple[tuple[str, str], ...]) -> ContractFunction:
         tx = self.functions.convertAndDeposit(
-            None,
+            amount,
             block_number,
             block_hash,
             deposit_root,
@@ -39,7 +39,7 @@ class StakingModuleContract(ContractInterface):
         )
         logger.info(
             {
-                'msg': f'Build `convertAndDeposit({block_number}, {block_hash}, {deposit_root}, '
+                'msg': f'Build `convertAndDeposit({amount}, {block_number}, {block_hash}, {deposit_root}, '
                        f'{nonce}, {deposit_call_data}, {guardian_signatures})` tx.'  # noqa
             }
         )

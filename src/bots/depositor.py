@@ -5,6 +5,7 @@ from collections import defaultdict
 from typing import Callable, Optional, cast
 
 import variables
+from blockchain.contracts.erc20 import ERC20Contract
 from blockchain.contracts.staking_module import StakingModuleContract
 from blockchain.deposit_strategy.curated_module import CuratedModuleDepositStrategy
 from blockchain.deposit_strategy.interface import ModuleDepositStrategyInterface
@@ -54,6 +55,17 @@ def _mellow_staking_module_contract(w3: Web3, staking_contract_address: Checksum
             address=staking_contract_address,
             ContractFactoryClass=StakingModuleContract,
         )
+    )
+
+
+@functools.cache
+def _erc20_contract(w3: Web3, address: ChecksumAddress) -> ERC20Contract:
+    return cast(
+        ERC20Contract,
+        w3.eth.contract(
+            address=address,
+            ContractFactoryClass=ERC20Contract,
+        ),
     )
 
 
@@ -309,19 +321,37 @@ class DepositorBot:
         if getattr(self.w3.lido, 'simple_dvt_staking_strategy', None) is not None:
             try:
                 vault_address = self.w3.lido.simple_dvt_staking_strategy.vault()
-                balance = self.w3.lido.erc20.balance_of(vault_address)
                 staking_contract_address = self.w3.lido.simple_dvt_staking_strategy.get_staking_module()
                 staking_module_contract: StakingModuleContract = _mellow_staking_module_contract(
                     staking_contract_address)
-                if balance != 0 and staking_module_contract.get_staking_module_id() == staking_module_id:
-                    deposit_tx = staking_module_contract.convert_and_deposit(
-                        block_number,
-                        block_hash,
-                        deposit_root,
-                        staking_module_nonce,
-                        payload,
-                        guardian_signs
-                    )
+                if staking_module_contract.get_staking_module_id() != staking_module_id:
+                    logger.debug({'msg': 'While building mellow transaction module check failed.',
+                                  'contract_module': staking_module_contract.get_staking_module_id(),
+                                  'tx_module': staking_module_id})
+                    return deposit_tx
+                weth_contract = _erc20_contract(self.w3, staking_module_contract.weth())
+                balance = weth_contract.balance_of(vault_address)
+                if balance == 0:
+                    logger.debug({'msg': 'Balance is 0 while building mellow transaction.'})
+                    return deposit_tx
+
+                max_deposits_count = min(
+                    self.w3.lido.staking_router.get_staking_module_max_deposits_count(
+                        staking_module_id,
+                        self.w3.lido.lido.get_depositable_ether()
+                    ),
+                    self.w3.lido.deposit_security_module.get_max_deposits()
+                )
+                amount = min(balance, 32 * max_deposits_count)
+                deposit_tx = staking_module_contract.convert_and_deposit(
+                    amount,
+                    block_number,
+                    block_hash,
+                    deposit_root,
+                    staking_module_nonce,
+                    payload,
+                    guardian_signs
+                )
             except Exception as e:
                 logger.warning({'msg': 'Failed to build mellow transaction.', 'error': str(e)})
 
