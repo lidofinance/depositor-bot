@@ -81,3 +81,7 @@ MAX_CYCLE_LIFETIME_IN_SECONDS = int(os.getenv('MAX_CYCLE_LIFETIME_IN_SECONDS', '
 
 # List of ids of staking modules in which the depositor bot will make deposits
 DEPOSIT_MODULES_WHITELIST = [int(module_id) for module_id in os.getenv('DEPOSIT_MODULES_WHITELIST', '1').split(',')]
+
+
+def is_mellow_strategy_set() -> bool:
+    return SIMPLE_DVT_STAKING_STRATEGY_MELLOW_CONTRACT is not None

@@ -4,7 +4,6 @@ from typing import cast
 import variables
 from blockchain.contracts.deposit import DepositContract
 from blockchain.contracts.deposit_security_module import DepositSecurityModuleContract, DepositSecurityModuleContractV2
-from blockchain.contracts.erc20 import ERC20Contract
 from blockchain.contracts.lido import LidoContract
 from blockchain.contracts.lido_locator import LidoLocatorContract
 from blockchain.contracts.simple_dvt_staking_strategy import SimpleDVTStakingStrategyContract
@@ -56,7 +55,7 @@ class LidoContracts(Module):
         self._load_staking_router()
         self._load_dsm()
 
-        if variables.SIMPLE_DVT_STAKING_STRATEGY_MELLOW_CONTRACT is not None:
+        if variables.is_mellow_strategy_set():
             self.simple_dvt_staking_strategy: SimpleDVTStakingStrategyContract = cast(
                 SimpleDVTStakingStrategyContract,
                 self.w3.eth.contract(
