@@ -295,7 +295,7 @@ class DepositorBot:
             payload,
             guardian_signs,
         )
-        if getattr(self.w3.lido, 'simple_dvt_staking_strategy', None) is not None:
+        if variables.is_mellow_strategy_set():
             try:
                 vault_address = self.w3.lido.simple_dvt_staking_strategy.vault()
                 staking_module_contract: StakingModuleContract = self.w3.lido.simple_dvt_staking_strategy.staking_module_contract
