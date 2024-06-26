@@ -84,8 +84,7 @@ class DepositSecurityModuleContract(ContractInterface):
 
     def get_pause_message_prefix(self, block_identifier: BlockIdentifier = 'latest') -> bytes:
         response = self.functions.PAUSE_MESSAGE_PREFIX().call(block_identifier=block_identifier)
-        logger.info({'msg': 'Call `PAUSE_MESSAGE_PREFIX()`.', 'value': response.hex(),
-                     'block_identifier': repr(block_identifier)})
+        logger.info({'msg': 'Call `PAUSE_MESSAGE_PREFIX()`.', 'value': response.hex(), 'block_identifier': repr(block_identifier)})
         return response
 
     def get_pause_intent_validity_period_blocks(self, block_identifier: BlockIdentifier = 'latest') -> int:
