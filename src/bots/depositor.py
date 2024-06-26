@@ -309,16 +309,7 @@ class DepositorBot:
                     logger.debug({'msg': 'Balance is 0 while building mellow transaction.'})
                     return deposit_tx
 
-                max_deposits_count = min(
-                    self.w3.lido.staking_router.get_staking_module_max_deposits_count(
-                        staking_module_id,
-                        self.w3.lido.lido.get_depositable_ether()
-                    ),
-                    self.w3.lido.deposit_security_module.get_max_deposits()
-                )
-                amount = min(balance, 32 * max_deposits_count)
                 deposit_tx = staking_module_contract.convert_and_deposit(
-                    amount,
                     block_number,
                     block_hash,
                     deposit_root,
