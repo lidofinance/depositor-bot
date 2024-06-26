@@ -33,7 +33,7 @@ DEPOSIT_CONTRACT = Web3.to_checksum_address(os.getenv('DEPOSIT_CONTRACT', '0x000
 
 # Mellow contract address
 SIMPLE_DVT_STAKING_STRATEGY_MELLOW_CONTRACT = Web3.to_checksum_address(os.getenv('MELLOW_CONTRACT',
-                                                                                 '0x1aF071e0ded7889b61aD2619bd852ed2150bb494'))
+                                                                                 '0x4720ad6b59fb06c5b97b05e8b8f7538071302f00'))
 
 # rabbit / kafka / rabbit,kafka
 MESSAGE_TRANSPORTS = os.getenv('MESSAGE_TRANSPORTS', '').split(',')
