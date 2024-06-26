@@ -103,23 +103,23 @@ def simple_dvt_staking_strategy(web3_provider_integration):
 
 
 @pytest.fixture
-def erc20(web3_provider_integration):
+def staking_module(web3_provider_integration, simple_dvt_staking_strategy):
     yield cast(
-        ERC20Contract,
+        StakingModuleContract,
         web3_provider_integration.eth.contract(
-            address=None,
-            ContractFactoryClass=ERC20Contract,
+            address=simple_dvt_staking_strategy.get_staking_module(),
+            ContractFactoryClass=StakingModuleContract,
         ),
     )
 
 
 @pytest.fixture
-def staking_module(web3_provider_integration):
+def erc20(web3_provider_integration, staking_module):
     yield cast(
-        StakingModuleContract,
+        ERC20Contract,
         web3_provider_integration.eth.contract(
-            address=None,
-            ContractFactoryClass=StakingModuleContract,
+            address=staking_module.weth(),
+            ContractFactoryClass=ERC20Contract,
         ),
     )
 
