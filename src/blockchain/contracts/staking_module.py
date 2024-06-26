@@ -22,13 +22,15 @@ class StakingModuleContract(ContractInterface):
         logger.info({'msg': 'Call `stakingModuleId()`.', 'value': response, 'block_identifier': repr(block_identifier)})
         return response
 
-    def convert_and_deposit(self,
-                            block_number: int,
-                            block_hash: Hash32,
-                            deposit_root: Hash32,
-                            nonce: int,
-                            deposit_call_data: bytes,
-                            guardian_signatures: tuple[tuple[str, str], ...]) -> ContractFunction:
+    def convert_and_deposit(
+        self,
+        block_number: int,
+        block_hash: Hash32,
+        deposit_root: Hash32,
+        nonce: int,
+        deposit_call_data: bytes,
+        guardian_signatures: tuple[tuple[str, str], ...]
+    ) -> ContractFunction:
         tx = self.functions.convertAndDeposit(
             block_number,
             block_hash,

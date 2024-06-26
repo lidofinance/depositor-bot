@@ -237,18 +237,17 @@ class DepositorBot:
     def _prepare_signs_for_deposit(quorum: list[DepositMessage]) -> tuple[tuple[str, str], ...]:
         sorted_messages = sorted(quorum, key=lambda msg: int(msg['guardianAddress'], 16))
 
-        return tuple((msg['signature']['r'], compute_vs(msg['signature']['v'], msg['signature']['s'])) for msg in
-                     sorted_messages)
+        return tuple((msg['signature']['r'], compute_vs(msg['signature']['v'], msg['signature']['s'])) for msg in sorted_messages)
 
     def _send_deposit_tx(
-            self,
-            block_number: int,
-            block_hash: Hash32,
-            deposit_root: Hash32,
-            staking_module_id: int,
-            staking_module_nonce: int,
-            payload: bytes,
-            guardian_signs: tuple[tuple[str, str], ...],
+        self,
+        block_number: int,
+        block_hash: Hash32,
+        deposit_root: Hash32,
+        staking_module_id: int,
+        staking_module_nonce: int,
+        payload: bytes,
+        guardian_signs: tuple[tuple[str, str], ...],
     ) -> bool:
         """Returns transactions success status"""
         # Prepare transaction and send
@@ -270,14 +269,16 @@ class DepositorBot:
 
         return success
 
-    def _prepare_transaction(self,
-                             block_number: int,
-                             block_hash: Hash32,
-                             deposit_root: Hash32,
-                             staking_module_id: int,
-                             staking_module_nonce: int,
-                             payload: bytes,
-                             guardian_signs: tuple[tuple[str, str], ...]) -> ContractFunction:
+    def _prepare_transaction(
+        self,
+        block_number: int,
+        block_hash: Hash32,
+        deposit_root: Hash32,
+        staking_module_id: int,
+        staking_module_nonce: int,
+        payload: bytes,
+        guardian_signs: tuple[tuple[str, str], ...]
+    ) -> ContractFunction:
         """
         It either follows a regular flow or builds a direct deposit transaction.
 
