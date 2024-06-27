@@ -7,7 +7,6 @@ from web3 import Web3
 
 logger = logging.getLogger(__name__)
 
-
 # EL node
 WEB3_RPC_ENDPOINTS = os.getenv('WEB3_RPC_ENDPOINTS', '').split(',')
 
@@ -55,7 +54,7 @@ MIN_PRIORITY_FEE = Web3.to_wei(*os.getenv('MIN_PRIORITY_FEE', '50 mwei').split('
 MAX_PRIORITY_FEE = Web3.to_wei(*os.getenv('MAX_PRIORITY_FEE', '10 gwei').split(' '))
 
 MAX_GAS_FEE = Web3.to_wei(*os.getenv('MAX_GAS_FEE', '100 gwei').split(' '))
-CONTRACT_GAS_LIMIT = int(os.getenv('CONTRACT_GAS_LIMIT', 15 * 10**6))
+CONTRACT_GAS_LIMIT = int(os.getenv('CONTRACT_GAS_LIMIT', 15 * 10 ** 6))
 
 # Mainnet: "https://relay.flashbots.net",
 # Holesky: "https://relay-holesky.flashbots.net",
@@ -78,3 +77,24 @@ MAX_CYCLE_LIFETIME_IN_SECONDS = int(os.getenv('MAX_CYCLE_LIFETIME_IN_SECONDS', '
 
 # List of ids of staking modules in which the depositor bot will make deposits
 DEPOSIT_MODULES_WHITELIST = [int(module_id) for module_id in os.getenv('DEPOSIT_MODULES_WHITELIST', '1').split(',')]
+
+# All non-private env variables to the logs in main
+PUBLIC_ENV_VARS = {
+    'LIDO_LOCATOR': LIDO_LOCATOR,
+    'DEPOSIT_CONTRACT': DEPOSIT_CONTRACT,
+    'MESSAGE_TRANSPORTS': MESSAGE_TRANSPORTS,
+    'CREATE_TRANSACTIONS': CREATE_TRANSACTIONS,
+    'MIN_PRIORITY_FEE': MIN_PRIORITY_FEE,
+    'MAX_PRIORITY_FEE': MAX_PRIORITY_FEE,
+    'MAX_GAS_FEE': MAX_GAS_FEE,
+    'RELAY_RPC': RELAY_RPC,
+    'GAS_FEE_PERCENTILE_1': GAS_FEE_PERCENTILE_1,
+    'GAS_FEE_PERCENTILE_DAYS_HISTORY_1': GAS_FEE_PERCENTILE_DAYS_HISTORY_1,
+    'GAS_PRIORITY_FEE_PERCENTILE': GAS_PRIORITY_FEE_PERCENTILE,
+    'MAX_BUFFERED_ETHERS': MAX_BUFFERED_ETHERS,
+    'PROMETHEUS_PORT': PROMETHEUS_PORT,
+    'PROMETHEUS_PREFIX': PROMETHEUS_PREFIX,
+    'HEALTHCHECK_SERVER_PORT': HEALTHCHECK_SERVER_PORT,
+    'MAX_CYCLE_LIFETIME_IN_SECONDS': MAX_CYCLE_LIFETIME_IN_SECONDS,
+    'DEPOSIT_MODULES_WHITELIST': DEPOSIT_MODULES_WHITELIST
+}
