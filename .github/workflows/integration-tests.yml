@@ -31,7 +31,7 @@ jobs:
 
       - name: Integration tests with pytest, holesky fork
         run: |
-          poetry run pytest tests -m holesky
+          poetry run pytest tests -m integration_holesky
         env:
           WEB3_RPC_ENDPOINTS: ${{ secrets.HOLESKY_WEB3_RPC_ENDPOINT }}
           DEPOSIT_CONTRACT: "0x4242424242424242424242424242424242424242"

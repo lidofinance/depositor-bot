@@ -33,7 +33,7 @@ pythonpath = [
 markers = [
     "unit",  # offline
     "integration",  # hardhat fork
-    "holesky" # holesky fork
+    "integration_holesky" # holesky fork
 ]
 
 [tool.ruff]
