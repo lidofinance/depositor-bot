@@ -12,12 +12,12 @@ class SimpleDVTStakingStrategyContract(ContractInterface):
     abi_path = './interfaces/SimpleDVTStakingStrategy.json'
 
     def vault(self, block_identifier: BlockIdentifier = 'latest') -> ChecksumAddress:
-        response = self.functions.vault().call()
+        response = self.functions.vault().call(block_identifier=block_identifier)
         logger.info({'msg': 'Call `vault()`.', 'value': response, 'block_identifier': repr(block_identifier)})
         return response
 
     def get_staking_module(self, block_identifier: BlockIdentifier = 'latest') -> ChecksumAddress:
-        response = self.functions.stakingModule().call()
+        response = self.functions.stakingModule().call(block_identifier=block_identifier)
         logger.info({'msg': 'Call `stakingModule()`.', 'value': response, 'block_identifier': repr(block_identifier)})
         return response
 
