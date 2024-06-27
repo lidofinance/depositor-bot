@@ -251,8 +251,15 @@ class DepositorBot:
     ) -> bool:
         """Returns transactions success status"""
         # Prepare transaction and send
-        deposit_tx = self._prepare_transaction(block_number, block_hash, deposit_root, staking_module_id,
-                                               staking_module_nonce, payload, guardian_signs)
+        deposit_tx = self._prepare_transaction(
+            block_number,
+            block_hash,
+            deposit_root,
+            staking_module_id,
+            staking_module_nonce,
+            payload,
+            guardian_signs
+        )
 
         if not self.w3.transaction.check(deposit_tx):
             return False
