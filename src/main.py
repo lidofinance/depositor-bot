@@ -25,7 +25,7 @@ class BotModule(StrEnum):
 
 
 def main(bot_name: str):
-    logger.info(variables.PUBLIC_ENV_VARS)
+    logger.info({'msg': variables.PUBLIC_ENV_VARS})
     if bot_name not in list(BotModule):
         msg = f'Last arg should be one of {[str(item) for item in BotModule]}, received {BotModule}.'
         logger.error({'msg': msg})
@@ -55,6 +55,7 @@ def main(bot_name: str):
 
     logger.info({'msg': 'Connect MultiHTTPProviders.', 'rpc_count': len(variables.WEB3_RPC_ENDPOINTS)})
     w3 = Web3(FallbackProvider(variables.WEB3_RPC_ENDPOINTS))
+    logger.info({'msg': {'chain_id': w3.eth.chain_id}})
 
     logger.info({'msg': 'Initialize Lido contracts.'})
     w3.attach_modules(
