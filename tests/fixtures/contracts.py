@@ -114,7 +114,7 @@ def staking_module(web3_provider_integration, simple_dvt_staking_strategy):
 
 
 @pytest.fixture
-def erc20(web3_provider_integration, staking_module):
+def weth(web3_provider_integration, staking_module):
     yield cast(
         ERC20Contract,
         web3_provider_integration.eth.contract(

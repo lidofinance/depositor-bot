@@ -2,7 +2,7 @@ from .contracts import (
     deposit_contract,
     deposit_security_module,
     deposit_security_module_v2,
-    erc20,
+    weth,
     lido_contract,
     lido_locator,
     simple_dvt_staking_strategy,
@@ -29,7 +29,7 @@ __all__ = [
     'web3_lido_unit',
     'web3_provider_integration',
     'web3_lido_integration',
-    'erc20',
+    'weth',
     'simple_dvt_staking_strategy',
     'staking_module'
 ]
