@@ -138,10 +138,12 @@ class DepositorBot:
         return False
 
     def _get_module_strategy(self, module_id: int) -> ModuleDepositStrategyInterface:
-        if module_id in (1, 2, 3):
-            return CuratedModuleDepositStrategy(self.w3, module_id)
-
-        raise ModuleNotSupportedError(f'Module with id: {module_id} is not supported yet.')
+        # ToDo: uncomment when new strategies appears
+        # if module_id in (1, 2, 3):
+        #     return CuratedModuleDepositStrategy(self.w3, module_id)
+        #
+        # raise ModuleNotSupportedError(f'Module with id: {module_id} is not supported yet.')
+        return CuratedModuleDepositStrategy(self.w3, module_id)
 
     def _check_module_status(self, module_id: int) -> bool:
         """Returns True if module is ready for deposit"""
