@@ -252,7 +252,7 @@ class DepositorBot:
     ) -> bool:
         """Returns transactions success status"""
         # Prepare transaction and send
-        deposit_tx = self._build_transaction(
+        success = self._send_mellow_tx(
             block_number,
             block_hash,
             deposit_root,
@@ -261,20 +261,26 @@ class DepositorBot:
             payload,
             guardian_signs,
         )
+        if not success:
+            deposit_tx = self.w3.lido.deposit_security_module.deposit_buffered_ether(
+                block_number,
+                block_hash,
+                deposit_root,
+                staking_module_id,
+                staking_module_nonce,
+                payload,
+                guardian_signs,
+            )
 
-        if not self.w3.transaction.check(deposit_tx):
-            return False
+            if not self.w3.transaction.check(deposit_tx):
+                return False
 
-        logger.info({'msg': 'Send deposit transaction.', 'with_flashbots': self._flashbots_works})
-        success = self.w3.transaction.send(deposit_tx, self._flashbots_works, 6)
+            logger.info({'msg': 'Send deposit transaction.', 'with_flashbots': self._flashbots_works})
+            success = self.w3.transaction.send(deposit_tx, self._flashbots_works, 6)
 
         logger.info({'msg': f'Tx send. Result is {success}.'})
 
-        if self._flashbots_works and not success:
-            self._flashbots_works = False
-        else:
-            self._flashbots_works = True
-
+        self._flashbots_works = not self._flashbots_works or success
         return success
 
     def _is_mellow_depositable(
@@ -295,7 +301,7 @@ class DepositorBot:
             return False
         return True
 
-    def _build_transaction(
+    def _build_transaction_mellow(
         self,
         block_number: int,
         block_hash: Hash32,
@@ -303,8 +309,8 @@ class DepositorBot:
         staking_module_id: int,
         staking_module_nonce: int,
         payload: bytes,
-        guardian_signs: tuple[tuple[str, str], ...]
-    ) -> ContractFunction:
+        guardian_signs: tuple[tuple[str, str], ...],
+    ) -> Optional[ContractFunction]:
         """
         It either follows a regular flow or builds a direct deposit transaction.
 
@@ -313,28 +319,52 @@ class DepositorBot:
         2. balance in the vault >= VAULT_DIRECT_DEPOSIT_THRESHOLD
         3. The calls responded without errors
         """
-        deposit_tx = self.w3.lido.deposit_security_module.deposit_buffered_ether(
+        if not variables.MELLOW_CONTRACT_ADDRESS:
+            return None
+
+        vault_address = self.w3.lido.simple_dvt_staking_strategy.vault()
+        if not self._is_mellow_depositable(vault_address, staking_module_id):
+            return None
+
+        return self.w3.lido.simple_dvt_staking_strategy.convert_and_deposit(
             block_number,
             block_hash,
             deposit_root,
-            staking_module_id,
             staking_module_nonce,
             payload,
-            guardian_signs,
+            guardian_signs
         )
-        if variables.MELLOW_CONTRACT_ADDRESS:
-            try:
-                vault_address = self.w3.lido.simple_dvt_staking_strategy.vault()
-                if self._is_mellow_depositable(vault_address, staking_module_id):
-                    deposit_tx = self.w3.lido.simple_dvt_staking_strategy.convert_and_deposit(
-                        block_number,
-                        block_hash,
-                        deposit_root,
-                        staking_module_nonce,
-                        payload,
-                        guardian_signs
-                    )
-            except Exception as e:
-                logger.warning({'msg': 'Failed to build mellow transaction.', 'error': str(e)})
 
-        return deposit_tx
+    def _send_mellow_tx(
+        self,
+        block_number: int,
+        block_hash: Hash32,
+        deposit_root: Hash32,
+        staking_module_id: int,
+        staking_module_nonce: int,
+        payload: bytes,
+        guardian_signs: tuple[tuple[str, str], ...],
+    ) -> bool:
+        if not variables.MELLOW_CONTRACT_ADDRESS:
+            return False
+
+        try:
+            mellow_tx = self._build_transaction_mellow(
+                block_number,
+                block_hash,
+                deposit_root,
+                staking_module_id,
+                staking_module_nonce,
+                payload,
+                guardian_signs,
+            )
+            if mellow_tx is None:
+                return False
+            if not self.w3.transaction.check(mellow_tx):
+                return False
+
+            logger.info({'msg': 'Send mellow deposit transaction.', 'with_flashbots': self._flashbots_works})
+            return self.w3.transaction.send(mellow_tx, self._flashbots_works, 6)
+        except Exception as e:
+            logger.info({'msg': 'Error while sending the mellow transaction', 'error': str(e)})
+            return False

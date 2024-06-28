@@ -32,6 +32,8 @@ LIDO_LOCATOR = Web3.to_checksum_address(os.getenv('LIDO_LOCATOR', '0xC1d0b3DE679
 DEPOSIT_CONTRACT = Web3.to_checksum_address(os.getenv('DEPOSIT_CONTRACT', '0x00000000219ab540356cBB839Cbe05303d7705Fa'))
 
 # Mellow contract address
+# Mainnet: TBD
+# Holesky: 0x4720ad6b59fb06c5b97b05e8b8f7538071302f00
 MELLOW_CONTRACT_ADDRESS = os.getenv('MELLOW_CONTRACT_ADDRESS', None)
 # Can be empty string - then skip
 if MELLOW_CONTRACT_ADDRESS:
