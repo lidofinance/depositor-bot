@@ -1,7 +1,7 @@
 import pytest
 
 from tests.utils.contract_utils import check_contract
-from tests.utils.regrex import check_value_re, ADDRESS_REGREX, check_value_type
+from tests.utils.regrex import ADDRESS_REGREX, check_value_re, check_value_type
 
 
 @pytest.mark.integration_holesky

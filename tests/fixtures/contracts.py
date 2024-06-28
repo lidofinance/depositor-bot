@@ -96,7 +96,7 @@ def simple_dvt_staking_strategy(web3_provider_integration):
     yield cast(
         SimpleDVTStakingStrategyContract,
         web3_provider_integration.eth.contract(
-            address=variables.SIMPLE_DVT_STAKING_STRATEGY_MELLOW_CONTRACT,
+            address=variables.MELLOW_CONTRACT_ADDRESS,
             ContractFactoryClass=SimpleDVTStakingStrategyContract,
         ),
     )

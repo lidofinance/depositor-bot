@@ -55,11 +55,11 @@ class LidoContracts(Module):
         self._load_staking_router()
         self._load_dsm()
 
-        if variables.is_mellow_strategy_set():
+        if variables.MELLOW_CONTRACT_ADDRESS:
             self.simple_dvt_staking_strategy: SimpleDVTStakingStrategyContract = cast(
                 SimpleDVTStakingStrategyContract,
                 self.w3.eth.contract(
-                    address=variables.SIMPLE_DVT_STAKING_STRATEGY_MELLOW_CONTRACT,
+                    address=variables.MELLOW_CONTRACT_ADDRESS,
                     ContractFactoryClass=SimpleDVTStakingStrategyContract,
                 ),
             )

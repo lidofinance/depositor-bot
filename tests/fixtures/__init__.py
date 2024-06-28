@@ -2,7 +2,6 @@ from .contracts import (
     deposit_contract,
     deposit_security_module,
     deposit_security_module_v2,
-    weth,
     lido_contract,
     lido_locator,
     simple_dvt_staking_strategy,
@@ -10,6 +9,7 @@ from .contracts import (
     staking_router,
     staking_router_v2,
     upgrade_staking_router_to_v2,
+    weth,
 )
 from .provider import (
     web3_lido_integration,
