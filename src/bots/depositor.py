@@ -50,24 +50,6 @@ class ModuleNotSupportedError(Exception):
     pass
 
 
-def _is_mellow_depositable(
-    staking_module_contract: StakingModuleContract,
-    vault_address: ChecksumAddress,
-    module_id: int
-) -> bool:
-    if staking_module_contract.get_staking_module_id() != module_id:
-        logger.debug({'msg': 'While building mellow transaction module check failed.',
-                      'contract_module': staking_module_contract.get_staking_module_id(),
-                      'tx_module': module_id})
-        return False
-    balance = staking_module_contract.weth_contract.balance_of(vault_address)
-    MELLOW_VAULT_BALANCE.labels(module_id).set(balance)
-    if balance < variables.VAULT_DIRECT_DEPOSIT_THRESHOLD:
-        logger.debug({'msg': f'{balance} is less than VAULT_DIRECT_DEPOSIT_THRESHOLD while building mellow transaction.'})
-        return False
-    return True
-
-
 class DepositorBot:
     _flashbots_works = True
 
@@ -295,6 +277,24 @@ class DepositorBot:
 
         return success
 
+    def _is_mellow_depositable(
+        self,
+        vault_address: ChecksumAddress,
+        module_id: int
+    ) -> bool:
+        staking_module_contract: StakingModuleContract = self.w3.lido.simple_dvt_staking_strategy.staking_module_contract
+        if staking_module_contract.get_staking_module_id() != module_id:
+            logger.debug({'msg': 'While building mellow transaction module check failed.',
+                          'contract_module': staking_module_contract.get_staking_module_id(),
+                          'tx_module': module_id})
+            return False
+        balance = staking_module_contract.weth_contract.balance_of(vault_address)
+        MELLOW_VAULT_BALANCE.labels(module_id).set(balance)
+        if balance < variables.VAULT_DIRECT_DEPOSIT_THRESHOLD:
+            logger.debug({'msg': f'{balance} is less than VAULT_DIRECT_DEPOSIT_THRESHOLD while building mellow transaction.'})
+            return False
+        return True
+
     def _build_transaction(
         self,
         block_number: int,
@@ -309,7 +309,7 @@ class DepositorBot:
         It either follows a regular flow or builds a direct deposit transaction.
 
         Conditions to build direct deposit transaction are:
-        1. Env variable SIMPLE_DVT_STAKING_STRATEGY_MELLOW_CONTRACT is set
+        1. Env variable MELLOW_CONTRACT_ADDRESS is set
         2. balance in the vault >= VAULT_DIRECT_DEPOSIT_THRESHOLD
         3. The calls responded without errors
         """
@@ -324,10 +324,9 @@ class DepositorBot:
         )
         if variables.MELLOW_CONTRACT_ADDRESS:
             try:
-                staking_module_contract: StakingModuleContract = self.w3.lido.simple_dvt_staking_strategy.staking_module_contract
                 vault_address = self.w3.lido.simple_dvt_staking_strategy.vault()
-                if _is_mellow_depositable(staking_module_contract, vault_address, staking_module_id):
-                    deposit_tx = staking_module_contract.convert_and_deposit(
+                if self._is_mellow_depositable(vault_address, staking_module_id):
+                    deposit_tx = self.w3.lido.simple_dvt_staking_strategy.convert_and_deposit(
                         block_number,
                         block_hash,
                         deposit_root,
