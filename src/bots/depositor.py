@@ -312,7 +312,7 @@ class DepositorBot:
         guardian_signs: tuple[tuple[str, str], ...],
     ) -> Optional[ContractFunction]:
         """
-        It either follows a regular flow or builds a direct deposit transaction.
+        Builds direct deposit transaction if possible.
 
         Conditions to build direct deposit transaction are:
         1. Env variable MELLOW_CONTRACT_ADDRESS is set
