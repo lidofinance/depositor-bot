@@ -8,8 +8,7 @@ Depositor and pauser bots are parts of [Deposit Security Module](https://github.
 Once a sufficient number of messages is collected to constitute a quorum, the bot proceeds to initiate a deposit into the designated staking module. 
 This deposit is executed using the depositBufferedEther function within the "DepositSecurityModule" smart contract.
 
-Direct deposit happens when we see that vault has accumulated some threshold and depositor wants to deposit to the preconfigured module.
-If the threshold is passed then depositor bot will call contract to deposit.
+Direct deposit is a mechanism that allows depositors to use side vault facilities for deposits. This process transfers ETH from the vault and facilitates the deposit to specified in side vault staking module, preventing funds from being stuck in the withdrawal queue.
 
 **The Pauser Bot** obtains pause message from Council Daemon and enacts pause deposits on protocol. Pause can occurs when Lido detects stealing.
 
