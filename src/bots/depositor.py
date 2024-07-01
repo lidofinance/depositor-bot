@@ -257,7 +257,7 @@ class DepositorBot:
         success = False
         if self._is_mellow_depositable(staking_module_id):
             try:
-                mellow_tx = self._build_transaction_mellow(
+                mellow_tx = self.w3.lido.simple_dvt_staking_strategy.convert_and_deposit(
                     block_number,
                     block_hash,
                     deposit_root,
@@ -306,54 +306,6 @@ class DepositorBot:
             logger.debug({'msg': f'{balance} is less than VAULT_DIRECT_DEPOSIT_THRESHOLD while building mellow transaction.'})
             return False
         return True
-
-    def _build_transaction_mellow(
-        self,
-        block_number: int,
-        block_hash: Hash32,
-        deposit_root: Hash32,
-        staking_module_nonce: int,
-        payload: bytes,
-        guardian_signs: tuple[tuple[str, str], ...],
-    ) -> ContractFunction:
-        return self.w3.lido.simple_dvt_staking_strategy.convert_and_deposit(
-            block_number,
-            block_hash,
-            deposit_root,
-            staking_module_nonce,
-            payload,
-            guardian_signs
-        )
-
-    def _send_mellow_tx(
-        self,
-        block_number: int,
-        block_hash: Hash32,
-        deposit_root: Hash32,
-        staking_module_id: int,
-        staking_module_nonce: int,
-        payload: bytes,
-        guardian_signs: tuple[tuple[str, str], ...],
-    ) -> bool:
-        try:
-            mellow_tx = self._build_transaction_mellow(
-                block_number,
-                block_hash,
-                deposit_root,
-                staking_module_nonce,
-                payload,
-                guardian_signs,
-            )
-            if mellow_tx is None:
-                return False
-            if not self.w3.transaction.check(mellow_tx):
-                return False
-
-            logger.info({'msg': 'Send mellow deposit transaction.', 'with_flashbots': self._flashbots_works})
-            return self.w3.transaction.send(mellow_tx, self._flashbots_works, 6)
-        except Exception as e:
-            logger.info({'msg': 'Error while sending the mellow transaction', 'error': str(e)})
-            return False
 
     def send_transaction(
         self,
