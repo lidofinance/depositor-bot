@@ -86,3 +86,5 @@ UNEXPECTED_EXCEPTIONS = Counter(
     ['type'],
     namespace=PROMETHEUS_PREFIX,
 )
+
+MODULES = Gauge('modules', 'Modules gauge', ['module_id'], namespace=PROMETHEUS_PREFIX)

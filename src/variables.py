@@ -4,9 +4,9 @@ import os
 from eth_account import Account
 from eth_typing import URI
 from web3 import Web3
+from metrics.metrics import MODULES
 
 logger = logging.getLogger(__name__)
-
 
 # EL node
 WEB3_RPC_ENDPOINTS = os.getenv('WEB3_RPC_ENDPOINTS', '').split(',')
@@ -55,7 +55,7 @@ MIN_PRIORITY_FEE = Web3.to_wei(*os.getenv('MIN_PRIORITY_FEE', '50 mwei').split('
 MAX_PRIORITY_FEE = Web3.to_wei(*os.getenv('MAX_PRIORITY_FEE', '10 gwei').split(' '))
 
 MAX_GAS_FEE = Web3.to_wei(*os.getenv('MAX_GAS_FEE', '100 gwei').split(' '))
-CONTRACT_GAS_LIMIT = int(os.getenv('CONTRACT_GAS_LIMIT', 15 * 10**6))
+CONTRACT_GAS_LIMIT = int(os.getenv('CONTRACT_GAS_LIMIT', 15 * 10 ** 6))
 
 # Mainnet: "https://relay.flashbots.net",
 # Holesky: "https://relay-holesky.flashbots.net",
@@ -78,3 +78,7 @@ MAX_CYCLE_LIFETIME_IN_SECONDS = int(os.getenv('MAX_CYCLE_LIFETIME_IN_SECONDS', '
 
 # List of ids of staking modules in which the depositor bot will make deposits
 DEPOSIT_MODULES_WHITELIST = [int(module_id) for module_id in os.getenv('DEPOSIT_MODULES_WHITELIST', '1').split(',')]
+
+if DEPOSIT_MODULES_WHITELIST:
+    for module_id in DEPOSIT_MODULES_WHITELIST:
+        MODULES.labels(module_id).set(1)
