@@ -3,8 +3,8 @@ import os
 
 from eth_account import Account
 from eth_typing import URI
-from web3 import Web3
 from metrics.metrics import MODULES
+from web3 import Web3
 
 logger = logging.getLogger(__name__)
 
