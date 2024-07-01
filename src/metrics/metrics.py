@@ -3,8 +3,6 @@ from prometheus_client.metrics import Counter, Gauge, Histogram, Info
 import variables
 from variables import PROMETHEUS_PREFIX
 
-METRICS_PREFIX = PROMETHEUS_PREFIX
-
 BUILD_INFO = Gauge(
     'build_info',
     'Build info',
@@ -91,4 +89,3 @@ UNEXPECTED_EXCEPTIONS = Counter(
 
 INFO = Info('info', 'Info metric', namespace=PROMETHEUS_PREFIX)
 INFO.info(variables.PUBLIC_ENV_VARS)
-i.info(variables.PUBLIC_ENV_VARS)
