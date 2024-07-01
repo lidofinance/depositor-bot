@@ -114,5 +114,4 @@ PRIVATE_ENV_VARS = {
     'AUCTION_BUNDLER_PRIVATE_KEY': AUCTION_BUNDLER_PRIVATE_KEY,
 }
 
-intersection = set(PRIVATE_ENV_VARS.keys()).intersection(set(PUBLIC_ENV_VARS.keys()))
-assert len(intersection) == 0
+assert set(PRIVATE_ENV_VARS.keys()).intersection(set(PUBLIC_ENV_VARS.keys()))
