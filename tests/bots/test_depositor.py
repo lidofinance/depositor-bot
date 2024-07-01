@@ -2,6 +2,8 @@ import logging
 from unittest.mock import Mock
 
 import pytest
+from web3 import Web3
+
 import variables
 from bots.depositor import DepositorBot
 
@@ -49,7 +51,7 @@ def deposit_message():
 def test_depositor_one_module_deposited(depositor_bot, block_data):
     modules = list(range(10))
 
-    depositor_bot.w3.lido.lido.get_depositable_ether = Mock(return_value=10 * 32 * 10**18)
+    depositor_bot.w3.lido.lido.get_depositable_ether = Mock(return_value=10 * 32 * 10 ** 18)
     depositor_bot.w3.lido.staking_router.get_staking_module_ids = Mock(return_value=modules)
     depositor_bot.w3.lido.staking_router.get_staking_module_max_deposits_count = Mock(return_value=0)
     depositor_bot.w3.lido.deposit_security_module.get_max_deposits = Mock(return_value=10)
@@ -77,7 +79,7 @@ def test_check_balance_dry(depositor_bot, caplog):
 def test_check_balance(depositor_bot, caplog, set_account):
     caplog.set_level(logging.INFO)
 
-    depositor_bot.w3.eth.get_balance = Mock(return_value=10 * 10**18)
+    depositor_bot.w3.eth.get_balance = Mock(return_value=10 * 10 ** 18)
     depositor_bot._check_balance()
     assert 'Check account balance' in caplog.messages[-1]
 
@@ -246,6 +248,25 @@ def test_send_deposit_tx(depositor_bot):
 
 
 @pytest.mark.unit
+def test_is_mellow_depositable(depositor_bot):
+    variables.MELLOW_CONTRACT_ADDRESS = None
+    assert not depositor_bot._is_mellow_depositable(1)
+
+    variables.MELLOW_CONTRACT_ADDRESS = '0x1'
+    depositor_bot.w3.lido.simple_dvt_staking_strategy.staking_module_contract.get_staking_module_id = Mock(return_value=1)
+    assert not depositor_bot._is_mellow_depositable(2)
+
+    depositor_bot.w3.lido.simple_dvt_staking_strategy.vault = Mock(return_value='0x2')
+    depositor_bot.w3.lido.simple_dvt_staking_strategy.staking_module_contract.weth_contract.balance_of = Mock(
+        return_value=Web3.to_wei(0.5, 'ether'))
+    assert not depositor_bot._is_mellow_depositable(1)
+
+    depositor_bot.w3.lido.simple_dvt_staking_strategy.staking_module_contract.weth_contract.balance_of = Mock(
+        return_value=Web3.to_wei(1.4, 'ether'))
+    assert depositor_bot._is_mellow_depositable(1)
+
+
+@pytest.mark.unit
 def test_get_quorum(depositor_bot, setup_deposit_message):
     deposit_messages = [
         {
@@ -344,7 +365,7 @@ def test_depositor_bot(web3_provider_integration, web3_lido_integration, module_
         web3_lido_integration.lido.lido.functions.submit(web3_lido_integration.eth.accounts[0]).transact(
             {
                 'from': web3_lido_integration.eth.accounts[0],
-                'value': 10000 * 10**18,
+                'value': 10000 * 10 ** 18,
             }
         )
 

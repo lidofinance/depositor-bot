@@ -11,12 +11,12 @@ from blockchain.deposit_strategy.prefered_module_to_deposit import get_preferred
 from blockchain.executor import Executor
 from blockchain.typings import Web3
 from cryptography.verify_signature import compute_vs
-from eth_typing import Hash32, ChecksumAddress
+from eth_typing import Hash32
 from metrics.metrics import (
     ACCOUNT_BALANCE,
     CURRENT_QUORUM_SIZE,
-    UNEXPECTED_EXCEPTIONS,
     MELLOW_VAULT_BALANCE,
+    UNEXPECTED_EXCEPTIONS,
 )
 from metrics.transport_message_metrics import message_metrics_filter
 from schema import Or, Schema
@@ -265,7 +265,7 @@ class DepositorBot:
                     payload,
                     guardian_signs,
                 )
-                success = self.send_transaction(mellow_tx)
+                success = self._send_transaction(mellow_tx)
             except Exception as e:
                 logger.warning({'msg': 'Error while sending the mellow transaction', 'error': str(e)})
         if not success:
@@ -278,7 +278,7 @@ class DepositorBot:
                 payload,
                 guardian_signs,
             )
-            success = self.send_transaction(deposit_tx)
+            success = self._send_transaction(deposit_tx)
 
         logger.info({'msg': f'Tx send. Result is {success}.'})
 
@@ -291,15 +291,13 @@ class DepositorBot:
     ) -> bool:
         if not variables.MELLOW_CONTRACT_ADDRESS:
             return False
-
-        vault_address = self.w3.lido.simple_dvt_staking_strategy.vault()
-
         staking_module_contract: StakingModuleContract = self.w3.lido.simple_dvt_staking_strategy.staking_module_contract
         if staking_module_contract.get_staking_module_id() != module_id:
             logger.debug({'msg': 'While building mellow transaction module check failed.',
                           'contract_module': staking_module_contract.get_staking_module_id(),
                           'tx_module': module_id})
             return False
+        vault_address = self.w3.lido.simple_dvt_staking_strategy.vault()
         balance = staking_module_contract.weth_contract.balance_of(vault_address)
         MELLOW_VAULT_BALANCE.labels(module_id).set(balance)
         if balance < variables.VAULT_DIRECT_DEPOSIT_THRESHOLD:
@@ -307,7 +305,7 @@ class DepositorBot:
             return False
         return True
 
-    def send_transaction(
+    def _send_transaction(
         self,
         tx: ContractFunction
     ) -> bool:

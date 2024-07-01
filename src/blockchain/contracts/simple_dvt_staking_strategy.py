@@ -1,11 +1,10 @@
 import logging
 from typing import cast
 
-from web3.contract.contract import ContractFunction
-
 from blockchain.contracts.base_interface import ContractInterface
 from blockchain.contracts.staking_module import StakingModuleContract
 from eth_typing import BlockIdentifier, ChecksumAddress, Hash32
+from web3.contract.contract import ContractFunction
 
 logger = logging.getLogger(__name__)
 
