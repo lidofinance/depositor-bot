@@ -89,5 +89,5 @@ UNEXPECTED_EXCEPTIONS = Counter(
     namespace=PROMETHEUS_PREFIX,
 )
 
-i = Info('my_build_version', 'Description of info')
+i = Info(PROMETHEUS_PREFIX + '_info', 'Info metric')
 i.info(variables.PUBLIC_ENV_VARS)
