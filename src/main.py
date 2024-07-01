@@ -55,7 +55,7 @@ def main(bot_name: str):
 
     logger.info({'msg': 'Connect MultiHTTPProviders.', 'rpc_count': len(variables.WEB3_RPC_ENDPOINTS)})
     w3 = Web3(FallbackProvider(variables.WEB3_RPC_ENDPOINTS))
-    logger.info({'msg': {'chain_id': w3.eth.chain_id}})
+    logger.info({'msg': 'Current chain_id', 'chain_id': w3.eth.chain_id})
 
     logger.info({'msg': 'Initialize Lido contracts.'})
     w3.attach_modules(
