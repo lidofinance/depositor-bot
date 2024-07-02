@@ -31,6 +31,16 @@ LIDO_LOCATOR = Web3.to_checksum_address(os.getenv('LIDO_LOCATOR', '0xC1d0b3DE679
 # Holesky: 0x4242424242424242424242424242424242424242
 DEPOSIT_CONTRACT = Web3.to_checksum_address(os.getenv('DEPOSIT_CONTRACT', '0x00000000219ab540356cBB839Cbe05303d7705Fa'))
 
+# Mellow contract address
+# Mainnet: TBD
+# Holesky: 0x4720ad6b59fb06c5b97b05e8b8f7538071302f00
+MELLOW_CONTRACT_ADDRESS = os.getenv('MELLOW_CONTRACT_ADDRESS', None)
+# Can be empty string - then skip
+if MELLOW_CONTRACT_ADDRESS:
+    # bot will throw exception if there is unexpected str and it's ok
+    MELLOW_CONTRACT_ADDRESS = Web3.to_checksum_address(MELLOW_CONTRACT_ADDRESS)
+VAULT_DIRECT_DEPOSIT_THRESHOLD = Web3.to_wei(*os.getenv('VAULT_DIRECT_DEPOSIT_THRESHOLD', '1 ether').split(' '))
+
 # rabbit / kafka / rabbit,kafka
 MESSAGE_TRANSPORTS = os.getenv('MESSAGE_TRANSPORTS', '').split(',')
 

@@ -1,7 +1,5 @@
-from prometheus_client.metrics import Counter, Gauge, Histogram, Info
-
-import variables
-from variables import PROMETHEUS_PREFIX
+from prometheus_client.metrics import Counter, Gauge, Histogram
+from variables import DEPOSIT_MODULES_WHITELIST, PROMETHEUS_PREFIX
 
 BUILD_INFO = Gauge(
     'build_info',
@@ -74,6 +72,13 @@ POSSIBLE_DEPOSITS_AMOUNT = Gauge(
     namespace=PROMETHEUS_PREFIX,
 )
 
+MELLOW_VAULT_BALANCE = Gauge(
+    'mellow_vault_balance',
+    'Mellow vault balance.',
+    ['module_id'],
+    namespace=PROMETHEUS_PREFIX,
+)
+
 ETH_RPC_REQUESTS_DURATION = Histogram('eth_rpc_requests_duration', 'Duration of requests to ETH1 RPC', namespace=PROMETHEUS_PREFIX)
 
 ETH_RPC_REQUESTS = Counter(
@@ -86,6 +91,11 @@ UNEXPECTED_EXCEPTIONS = Counter(
     ['type'],
     namespace=PROMETHEUS_PREFIX,
 )
+
+MODULES = Gauge('modules', 'Modules gauge', ['module_id'], namespace=PROMETHEUS_PREFIX)
+
+for module_id in DEPOSIT_MODULES_WHITELIST:
+    MODULES.labels(module_id).set(1)
 
 INFO = Info('info', 'Info metric', namespace=PROMETHEUS_PREFIX)
 INFO.info(variables.PUBLIC_ENV_VARS)
