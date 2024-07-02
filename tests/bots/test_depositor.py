@@ -2,10 +2,9 @@ import logging
 from unittest.mock import Mock
 
 import pytest
-from web3 import Web3
-
 import variables
 from bots.depositor import DepositorBot
+from web3 import Web3
 
 from tests.conftest import DSM_OWNER
 
@@ -268,25 +267,6 @@ def test_send_deposit_tx(depositor_bot):
 
 
 @pytest.mark.unit
-def test_is_mellow_depositable(depositor_bot):
-    variables.MELLOW_CONTRACT_ADDRESS = None
-    assert not depositor_bot._is_mellow_depositable(1)
-
-    variables.MELLOW_CONTRACT_ADDRESS = '0x1'
-    depositor_bot.w3.lido.simple_dvt_staking_strategy.staking_module_contract.get_staking_module_id = Mock(return_value=1)
-    assert not depositor_bot._is_mellow_depositable(2)
-
-    depositor_bot.w3.lido.simple_dvt_staking_strategy.vault = Mock(return_value='0x2')
-    depositor_bot.w3.lido.simple_dvt_staking_strategy.staking_module_contract.weth_contract.balance_of = Mock(
-        return_value=Web3.to_wei(0.5, 'ether'))
-    assert not depositor_bot._is_mellow_depositable(1)
-
-    depositor_bot.w3.lido.simple_dvt_staking_strategy.staking_module_contract.weth_contract.balance_of = Mock(
-        return_value=Web3.to_wei(1.4, 'ether'))
-    assert depositor_bot._is_mellow_depositable(1)
-
-
-@pytest.mark.unit
 def test_get_quorum(depositor_bot, setup_deposit_message):
     deposit_messages = [
         {
@@ -416,6 +396,4 @@ def test_depositor_bot(web3_provider_integration, web3_lido_integration, module_
 def set_mellow_preconditions(depositor_bot: DepositorBot, module_id: int):
     variables.MELLOW_CONTRACT_ADDRESS = '0x1'
     depositor_bot.w3.lido.simple_dvt_staking_strategy.staking_module_contract.get_staking_module_id = Mock(return_value=module_id)
-    depositor_bot.w3.lido.simple_dvt_staking_strategy.vault = Mock(return_value='0x2')
-    depositor_bot.w3.lido.simple_dvt_staking_strategy.staking_module_contract.weth_contract.balance_of = Mock(
-        return_value=variables.VAULT_DIRECT_DEPOSIT_THRESHOLD)
+    depositor_bot.w3.lido.simple_dvt_staking_strategy.vault_balance = Mock(return_value=variables.VAULT_DIRECT_DEPOSIT_THRESHOLD)
