@@ -17,3 +17,11 @@ class LidoContract(ContractInterface):
         response = self.functions.getDepositableEther().call(block_identifier=block_identifier)
         logger.info({'msg': 'Call `getDepositableEther()`.', 'value': response, 'block_identifier': repr(block_identifier)})
         return response
+
+    def get_buffered_ether(self, block_identifier: BlockIdentifier = 'latest') -> Wei:
+        """
+        Returns buffered ether.
+        """
+        response = self.functions.getBufferedEther().call(block_identifier=block_identifier)
+        logger.info({'msg': 'Call `getBufferedEther()`.', 'value': response, 'block_identifier': repr(block_identifier)})
+        return response

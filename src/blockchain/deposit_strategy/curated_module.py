@@ -7,6 +7,7 @@ import numpy
 import variables
 from blockchain.deposit_strategy.interface import ModuleDepositStrategyInterface
 from blockchain.typings import Web3
+from blockchain.web3_extentions.direct_deposit import is_mellow_depositable
 from eth_typing import BlockNumber
 from metrics.metrics import DEPOSITABLE_ETHER, GAS_FEE, POSSIBLE_DEPOSITS_AMOUNT
 from web3.types import Wei
@@ -33,7 +34,12 @@ class CuratedModuleDepositStrategy(ModuleDepositStrategyInterface):
         possible_deposits_amount = self._get_possible_deposits_amount()
 
         if possible_deposits_amount == 0:
-            logger.info({'msg': f'Possible deposits amount is {possible_deposits_amount}. Skip deposit.'})
+            logger.info(
+                {
+                    'msg': f'Possible deposits amount is {possible_deposits_amount}. Skip deposit.',
+                    'module_id': str(self.module_id),
+                }
+            )
             return False
 
         recommended_max_gas = self._calculate_recommended_gas_based_on_deposit_amount(possible_deposits_amount)
@@ -43,6 +49,9 @@ class CuratedModuleDepositStrategy(ModuleDepositStrategyInterface):
 
     def _get_possible_deposits_amount(self) -> int:
         depositable_ether = self.w3.lido.lido.get_depositable_ether()
+        if (is_mellow_depositable(self.w3, self.module_id) and
+            self.w3.lido.lido.get_depositable_ether() > self.w3.lido.withdrawal_queue.unfinalized_st_eth()):
+            depositable_ether += self.w3.lido.simple_dvt_staking_strategy.vault_balance()
         DEPOSITABLE_ETHER.labels(self.module_id).set(depositable_ether)
 
         possible_deposits_amount = self.w3.lido.staking_router.get_staking_module_max_deposits_count(
@@ -56,7 +65,7 @@ class CuratedModuleDepositStrategy(ModuleDepositStrategyInterface):
         # For one key recommended gas fee will be around 10
         # For 10 keys around 100 gwei. For 20 keys ~ 800 gwei
         # ToDo percentiles for all modules?
-        recommended_max_gas = (deposits_amount**3 + 100) * 10**8
+        recommended_max_gas = (deposits_amount ** 3 + 100) * 10 ** 8
         logger.info({'msg': 'Calculate recommended max gas based on possible deposits.', 'value': recommended_max_gas})
         GAS_FEE.labels('based_on_buffer_fee', self.module_id).set(recommended_max_gas)
         return recommended_max_gas

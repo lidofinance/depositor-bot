@@ -5,6 +5,7 @@ from blockchain.contracts.base_interface import ContractInterface
 from blockchain.contracts.staking_module import StakingModuleContract
 from eth_typing import BlockIdentifier, ChecksumAddress, Hash32
 from web3.contract.contract import ContractFunction
+from web3.types import Wei
 
 logger = logging.getLogger(__name__)
 
@@ -56,3 +57,7 @@ class SimpleDVTStakingStrategyContract(ContractInterface):
                 ContractFactoryClass=StakingModuleContract,
             )
         )
+
+    def vault_balance(self) -> Wei:
+        vault_address = self.vault()
+        return self.staking_module_contract.weth_contract.balance_of(vault_address)
