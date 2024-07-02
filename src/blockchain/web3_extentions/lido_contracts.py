@@ -52,15 +52,6 @@ class LidoContracts(Module):
                 ContractFactoryClass=LidoContract,
             ),
         )
-
-        self.withdrawal_queue: WithdrawalQueueContract = cast(
-            WithdrawalQueueContract,
-            self.w3.eth.contract(
-                address=variables.WITHDRAWAL_QUEUE_PROXY_ADDRESS,
-                ContractFactoryClass=WithdrawalQueueContract,
-            ),
-        )
-
         self._load_staking_router()
         self._load_dsm()
 

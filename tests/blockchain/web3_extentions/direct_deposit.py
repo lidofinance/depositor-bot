@@ -1,12 +1,9 @@
-import logging
 from unittest.mock import Mock
 
 import pytest
 import variables
 from blockchain.typings import Web3
 from blockchain.web3_extentions.direct_deposit import is_mellow_depositable
-from blockchain.web3_extentions.transaction import TransactionUtils
-from web3.exceptions import ContractLogicError
 
 
 @pytest.mark.unit
