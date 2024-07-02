@@ -293,15 +293,19 @@ class DepositorBot:
             return False
         staking_module_contract: StakingModuleContract = self.w3.lido.simple_dvt_staking_strategy.staking_module_contract
         if staking_module_contract.get_staking_module_id() != module_id:
-            logger.debug({'msg': 'While building mellow transaction module check failed.',
-                          'contract_module': staking_module_contract.get_staking_module_id(),
-                          'tx_module': module_id})
+            logger.debug(
+                {
+                    'msg': 'While building mellow transaction module check failed.',
+                    'contract_module': staking_module_contract.get_staking_module_id(),
+                    'tx_module': module_id
+                }
+            )
             return False
         vault_address = self.w3.lido.simple_dvt_staking_strategy.vault()
         balance = staking_module_contract.weth_contract.balance_of(vault_address)
         MELLOW_VAULT_BALANCE.labels(module_id).set(balance)
         if balance < variables.VAULT_DIRECT_DEPOSIT_THRESHOLD:
-            logger.debug({'msg': f'{balance} is less than VAULT_DIRECT_DEPOSIT_THRESHOLD while building mellow transaction.'})
+            logger.info({'msg': f'{balance} is less than VAULT_DIRECT_DEPOSIT_THRESHOLD while building mellow transaction.'})
             return False
         return True
 
