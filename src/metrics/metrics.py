@@ -87,6 +87,5 @@ UNEXPECTED_EXCEPTIONS = Counter(
 
 MODULES = Gauge('modules', 'Modules gauge', ['module_id'], namespace=PROMETHEUS_PREFIX)
 
-if DEPOSIT_MODULES_WHITELIST:
-    for module_id in DEPOSIT_MODULES_WHITELIST:
-        MODULES.labels(module_id).set(1)
+for module_id in DEPOSIT_MODULES_WHITELIST:
+    MODULES.labels(module_id).set(1)
