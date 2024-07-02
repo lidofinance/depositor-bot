@@ -2,10 +2,9 @@ import logging
 from typing import cast
 
 from blockchain.contracts.base_interface import ContractInterface
+from blockchain.contracts.withdrawal_queue import WithdrawalQueueContract
 from eth_typing import ChecksumAddress
 from web3.types import BlockIdentifier
-
-from blockchain.contracts.withdrawal_queue import WithdrawalQueueContract
 
 logger = logging.getLogger(__name__)
 

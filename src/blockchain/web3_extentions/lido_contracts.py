@@ -8,7 +8,6 @@ from blockchain.contracts.lido import LidoContract
 from blockchain.contracts.lido_locator import LidoLocatorContract
 from blockchain.contracts.simple_dvt_staking_strategy import SimpleDVTStakingStrategyContract
 from blockchain.contracts.staking_router import StakingRouterContract, StakingRouterContractV2
-from blockchain.contracts.withdrawal_queue import WithdrawalQueueContract
 from web3 import Web3
 from web3.contract.contract import Contract
 from web3.module import Module
