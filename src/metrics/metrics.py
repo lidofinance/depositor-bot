@@ -1,7 +1,5 @@
 from prometheus_client.metrics import Counter, Gauge, Histogram
-from variables import PROMETHEUS_PREFIX
-
-METRICS_PREFIX = PROMETHEUS_PREFIX
+from variables import PROMETHEUS_PREFIX, DEPOSIT_MODULES_WHITELIST
 
 BUILD_INFO = Gauge(
     'build_info',
@@ -93,3 +91,8 @@ UNEXPECTED_EXCEPTIONS = Counter(
     ['type'],
     namespace=PROMETHEUS_PREFIX,
 )
+
+MODULES = Gauge('modules', 'Modules gauge', ['module_id'], namespace=PROMETHEUS_PREFIX)
+
+for module_id in DEPOSIT_MODULES_WHITELIST:
+    MODULES.labels(module_id).set(1)
