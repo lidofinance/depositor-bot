@@ -1,10 +1,10 @@
 # pyright: reportTypedDictNotRequiredAccess=false
-
 import logging
 from collections import defaultdict
 from typing import Callable, Optional
 
 import variables
+from blockchain.contracts.staking_module import StakingModuleContract
 from blockchain.deposit_strategy.curated_module import CuratedModuleDepositStrategy
 from blockchain.deposit_strategy.interface import ModuleDepositStrategyInterface
 from blockchain.deposit_strategy.prefered_module_to_deposit import get_preferred_to_deposit_modules
@@ -15,6 +15,7 @@ from eth_typing import Hash32
 from metrics.metrics import (
     ACCOUNT_BALANCE,
     CURRENT_QUORUM_SIZE,
+    MELLOW_VAULT_BALANCE,
     UNEXPECTED_EXCEPTIONS,
 )
 from metrics.transport_message_metrics import message_metrics_filter
@@ -25,6 +26,7 @@ from transport.msg_storage import MessageStorage
 from transport.msg_types.deposit import DepositMessage, DepositMessageSchema, get_deposit_messages_sign_filter
 from transport.msg_types.ping import PingMessageSchema, to_check_sum_address
 from transport.types import TransportType
+from web3.contract.contract import ContractFunction
 from web3.types import BlockData
 
 logger = logging.getLogger(__name__)
@@ -252,27 +254,66 @@ class DepositorBot:
     ) -> bool:
         """Returns transactions success status"""
         # Prepare transaction and send
-        deposit_tx = self.w3.lido.deposit_security_module.deposit_buffered_ether(
-            block_number,
-            block_hash,
-            deposit_root,
-            staking_module_id,
-            staking_module_nonce,
-            payload,
-            guardian_signs,
-        )
-
-        if not self.w3.transaction.check(deposit_tx):
-            return False
-
-        logger.info({'msg': 'Send deposit transaction.', 'with_flashbots': self._flashbots_works})
-        success = self.w3.transaction.send(deposit_tx, self._flashbots_works, 6)
+        success = False
+        if self._is_mellow_depositable(staking_module_id):
+            try:
+                mellow_tx = self.w3.lido.simple_dvt_staking_strategy.convert_and_deposit(
+                    block_number,
+                    block_hash,
+                    deposit_root,
+                    staking_module_nonce,
+                    payload,
+                    guardian_signs,
+                )
+                success = self._send_transaction(mellow_tx)
+            except Exception as e:
+                logger.warning({'msg': 'Error while sending the mellow transaction', 'error': str(e)})
+        if not success:
+            deposit_tx = self.w3.lido.deposit_security_module.deposit_buffered_ether(
+                block_number,
+                block_hash,
+                deposit_root,
+                staking_module_id,
+                staking_module_nonce,
+                payload,
+                guardian_signs,
+            )
+            success = self._send_transaction(deposit_tx)
 
         logger.info({'msg': f'Tx send. Result is {success}.'})
 
-        if self._flashbots_works and not success:
-            self._flashbots_works = False
-        else:
-            self._flashbots_works = True
-
+        self._flashbots_works = not self._flashbots_works or success
         return success
+
+    def _is_mellow_depositable(
+        self,
+        module_id: int
+    ) -> bool:
+        if not variables.MELLOW_CONTRACT_ADDRESS:
+            return False
+        staking_module_contract: StakingModuleContract = self.w3.lido.simple_dvt_staking_strategy.staking_module_contract
+        if staking_module_contract.get_staking_module_id() != module_id:
+            logger.debug(
+                {
+                    'msg': 'While building mellow transaction module check failed.',
+                    'contract_module': staking_module_contract.get_staking_module_id(),
+                    'tx_module': module_id
+                }
+            )
+            return False
+        vault_address = self.w3.lido.simple_dvt_staking_strategy.vault()
+        balance = staking_module_contract.weth_contract.balance_of(vault_address)
+        MELLOW_VAULT_BALANCE.labels(module_id).set(balance)
+        if balance < variables.VAULT_DIRECT_DEPOSIT_THRESHOLD:
+            logger.info({'msg': f'{balance} is less than VAULT_DIRECT_DEPOSIT_THRESHOLD while building mellow transaction.'})
+            return False
+        return True
+
+    def _send_transaction(
+        self,
+        tx: ContractFunction
+    ) -> bool:
+        if tx is None or not self.w3.transaction.check(tx):
+            return False
+        logger.info({'msg': 'Send mellow deposit transaction.', 'with_flashbots': self._flashbots_works})
+        return self.w3.transaction.send(tx, self._flashbots_works, 6)

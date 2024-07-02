@@ -2,6 +2,8 @@ import logging
 from unittest.mock import Mock
 
 import pytest
+from web3 import Web3
+
 import variables
 from bots.depositor import DepositorBot
 
@@ -49,7 +51,7 @@ def deposit_message():
 def test_depositor_one_module_deposited(depositor_bot, block_data):
     modules = list(range(10))
 
-    depositor_bot.w3.lido.lido.get_depositable_ether = Mock(return_value=10 * 32 * 10**18)
+    depositor_bot.w3.lido.lido.get_depositable_ether = Mock(return_value=10 * 32 * 10 ** 18)
     depositor_bot.w3.lido.staking_router.get_staking_module_ids = Mock(return_value=modules)
     depositor_bot.w3.lido.staking_router.get_staking_module_max_deposits_count = Mock(return_value=0)
     depositor_bot.w3.lido.deposit_security_module.get_max_deposits = Mock(return_value=10)
@@ -77,7 +79,7 @@ def test_check_balance_dry(depositor_bot, caplog):
 def test_check_balance(depositor_bot, caplog, set_account):
     caplog.set_level(logging.INFO)
 
-    depositor_bot.w3.eth.get_balance = Mock(return_value=10 * 10**18)
+    depositor_bot.w3.eth.get_balance = Mock(return_value=10 * 10 ** 18)
     depositor_bot._check_balance()
     assert 'Check account balance' in caplog.messages[-1]
 
@@ -244,6 +246,45 @@ def test_send_deposit_tx(depositor_bot):
     assert not depositor_bot._send_deposit_tx(*params)
     assert depositor_bot._flashbots_works
 
+    depositor_bot.w3.transaction.send = Mock(return_value=True)
+    # not a mellow module test -> fallthrough to general transaction
+    set_mellow_preconditions(depositor_bot, 2)
+    assert depositor_bot._send_deposit_tx(*params)
+    assert depositor_bot._flashbots_works
+    assert not depositor_bot.w3.lido.simple_dvt_staking_strategy.convert_and_deposit.called
+    assert depositor_bot.w3.lido.deposit_security_module.deposit_buffered_ether.called
+
+    set_mellow_preconditions(depositor_bot, 1)
+    assert depositor_bot._send_deposit_tx(*params)
+    assert depositor_bot._flashbots_works
+    assert depositor_bot.w3.lido.simple_dvt_staking_strategy.convert_and_deposit.called
+
+    set_mellow_preconditions(depositor_bot, 1)
+    depositor_bot.w3.lido.simple_dvt_staking_strategy.convert_and_deposit = Mock(side_effect=Exception('error'))
+    assert depositor_bot._send_deposit_tx(*params)
+    assert depositor_bot._flashbots_works
+    assert depositor_bot.w3.lido.simple_dvt_staking_strategy.convert_and_deposit.called
+    assert depositor_bot.w3.lido.deposit_security_module.deposit_buffered_ether.called
+
+
+@pytest.mark.unit
+def test_is_mellow_depositable(depositor_bot):
+    variables.MELLOW_CONTRACT_ADDRESS = None
+    assert not depositor_bot._is_mellow_depositable(1)
+
+    variables.MELLOW_CONTRACT_ADDRESS = '0x1'
+    depositor_bot.w3.lido.simple_dvt_staking_strategy.staking_module_contract.get_staking_module_id = Mock(return_value=1)
+    assert not depositor_bot._is_mellow_depositable(2)
+
+    depositor_bot.w3.lido.simple_dvt_staking_strategy.vault = Mock(return_value='0x2')
+    depositor_bot.w3.lido.simple_dvt_staking_strategy.staking_module_contract.weth_contract.balance_of = Mock(
+        return_value=Web3.to_wei(0.5, 'ether'))
+    assert not depositor_bot._is_mellow_depositable(1)
+
+    depositor_bot.w3.lido.simple_dvt_staking_strategy.staking_module_contract.weth_contract.balance_of = Mock(
+        return_value=Web3.to_wei(1.4, 'ether'))
+    assert depositor_bot._is_mellow_depositable(1)
+
 
 @pytest.mark.unit
 def test_get_quorum(depositor_bot, setup_deposit_message):
@@ -344,7 +385,7 @@ def test_depositor_bot(web3_provider_integration, web3_lido_integration, module_
         web3_lido_integration.lido.lido.functions.submit(web3_lido_integration.eth.accounts[0]).transact(
             {
                 'from': web3_lido_integration.eth.accounts[0],
-                'value': 10000 * 10**18,
+                'value': 10000 * 10 ** 18,
             }
         )
 
@@ -370,3 +411,11 @@ def test_depositor_bot(web3_provider_integration, web3_lido_integration, module_
     db._get_module_strategy = Mock(return_value=Mock(return_value=True))
     assert db.execute(latest)
     assert web3_lido_integration.lido.staking_router.get_staking_module_nonce(module_id) == old_module_nonce + 1
+
+
+def set_mellow_preconditions(depositor_bot: DepositorBot, module_id: int):
+    variables.MELLOW_CONTRACT_ADDRESS = '0x1'
+    depositor_bot.w3.lido.simple_dvt_staking_strategy.staking_module_contract.get_staking_module_id = Mock(return_value=module_id)
+    depositor_bot.w3.lido.simple_dvt_staking_strategy.vault = Mock(return_value='0x2')
+    depositor_bot.w3.lido.simple_dvt_staking_strategy.staking_module_contract.weth_contract.balance_of = Mock(
+        return_value=variables.VAULT_DIRECT_DEPOSIT_THRESHOLD)

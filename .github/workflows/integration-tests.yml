@@ -29,7 +29,18 @@ jobs:
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
 
-      - name: Integration tests with pytest
+      - name: Integration tests with pytest, holesky fork
+        run: |
+          poetry run pytest tests -m integration_holesky
+        env:
+          WEB3_RPC_ENDPOINTS: ${{ secrets.HOLESKY_WEB3_RPC_ENDPOINT }}
+          DEPOSIT_CONTRACT: "0x4242424242424242424242424242424242424242"
+          LIDO_LOCATOR: "0x28FAB2059C713A7F9D8c86Db49f9bb0e96Af1ef8"
+          MELLOW_CONTRACT_ADDRESS: "0x4720ad6b59fb06c5b97b05e8b8f7538071302f00"
+          ANVIL_PATH: ""
+
+      - name: Integration tests with pytest, mainnet fork
+        if: success() || failure()
         run: |
           poetry run pytest tests -m integration
         env:

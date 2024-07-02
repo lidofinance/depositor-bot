@@ -31,8 +31,9 @@ pythonpath = [
     "tests",
 ]
 markers = [
-    "unit", # offline
-    "integration", # hardhat fork
+    "unit",  # offline
+    "integration",  # hardhat fork
+    "integration_holesky" # holesky fork
 ]
 
 [tool.ruff]
