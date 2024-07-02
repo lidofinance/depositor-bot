@@ -3,7 +3,6 @@ import os
 
 from eth_account import Account
 from eth_typing import URI
-from metrics.metrics import MODULES
 from web3 import Web3
 
 logger = logging.getLogger(__name__)
@@ -78,7 +77,3 @@ MAX_CYCLE_LIFETIME_IN_SECONDS = int(os.getenv('MAX_CYCLE_LIFETIME_IN_SECONDS', '
 
 # List of ids of staking modules in which the depositor bot will make deposits
 DEPOSIT_MODULES_WHITELIST = [int(module_id) for module_id in os.getenv('DEPOSIT_MODULES_WHITELIST', '1').split(',')]
-
-if DEPOSIT_MODULES_WHITELIST:
-    for module_id in DEPOSIT_MODULES_WHITELIST:
-        MODULES.labels(module_id).set(1)
