@@ -74,6 +74,13 @@ POSSIBLE_DEPOSITS_AMOUNT = Gauge(
     namespace=PROMETHEUS_PREFIX,
 )
 
+MELLOW_VAULT_BALANCE = Gauge(
+    'mellow_vault_balance',
+    'Mellow vault balance.',
+    ['module_id'],
+    namespace=PROMETHEUS_PREFIX,
+)
+
 ETH_RPC_REQUESTS_DURATION = Histogram('eth_rpc_requests_duration', 'Duration of requests to ETH1 RPC', namespace=PROMETHEUS_PREFIX)
 
 ETH_RPC_REQUESTS = Counter(
