@@ -246,6 +246,26 @@ def test_send_deposit_tx(depositor_bot):
     assert not depositor_bot._send_deposit_tx(*params)
     assert depositor_bot._flashbots_works
 
+    depositor_bot.w3.transaction.send = Mock(return_value=True)
+    # not a mellow module test -> fallthrough to general transaction
+    set_mellow_preconditions(depositor_bot, 2)
+    assert depositor_bot._send_deposit_tx(*params)
+    assert depositor_bot._flashbots_works
+    assert not depositor_bot.w3.lido.simple_dvt_staking_strategy.convert_and_deposit.called
+    assert depositor_bot.w3.lido.deposit_security_module.deposit_buffered_ether.called
+
+    set_mellow_preconditions(depositor_bot, 1)
+    assert depositor_bot._send_deposit_tx(*params)
+    assert depositor_bot._flashbots_works
+    assert depositor_bot.w3.lido.simple_dvt_staking_strategy.convert_and_deposit.called
+
+    set_mellow_preconditions(depositor_bot, 1)
+    depositor_bot.w3.lido.simple_dvt_staking_strategy.convert_and_deposit = Mock(side_effect=Exception('error'))
+    assert depositor_bot._send_deposit_tx(*params)
+    assert depositor_bot._flashbots_works
+    assert depositor_bot.w3.lido.simple_dvt_staking_strategy.convert_and_deposit.called
+    assert depositor_bot.w3.lido.deposit_security_module.deposit_buffered_ether.called
+
 
 @pytest.mark.unit
 def test_is_mellow_depositable(depositor_bot):
@@ -391,3 +411,11 @@ def test_depositor_bot(web3_provider_integration, web3_lido_integration, module_
     db._get_module_strategy = Mock(return_value=Mock(return_value=True))
     assert db.execute(latest)
     assert web3_lido_integration.lido.staking_router.get_staking_module_nonce(module_id) == old_module_nonce + 1
+
+
+def set_mellow_preconditions(depositor_bot: DepositorBot, module_id: int):
+    variables.MELLOW_CONTRACT_ADDRESS = '0x1'
+    depositor_bot.w3.lido.simple_dvt_staking_strategy.staking_module_contract.get_staking_module_id = Mock(return_value=module_id)
+    depositor_bot.w3.lido.simple_dvt_staking_strategy.vault = Mock(return_value='0x2')
+    depositor_bot.w3.lido.simple_dvt_staking_strategy.staking_module_contract.weth_contract.balance_of = Mock(
+        return_value=variables.VAULT_DIRECT_DEPOSIT_THRESHOLD)
