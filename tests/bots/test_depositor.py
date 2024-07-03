@@ -394,5 +394,7 @@ def test_depositor_bot(web3_provider_integration, web3_lido_integration, module_
 
 def set_mellow_preconditions(depositor_bot: DepositorBot, module_id: int):
     variables.MELLOW_CONTRACT_ADDRESS = '0x1'
+    depositor_bot.w3.lido.lido.get_buffered_ether = Mock(return_value=20)
+    depositor_bot.w3.lido.lido_locator.withdrawal_queue_contract.unfinalized_st_eth = Mock(return_value=10)
     depositor_bot.w3.lido.simple_dvt_staking_strategy.staking_module_contract.get_staking_module_id = Mock(return_value=module_id)
     depositor_bot.w3.lido.simple_dvt_staking_strategy.vault_balance = Mock(return_value=variables.VAULT_DIRECT_DEPOSIT_THRESHOLD)

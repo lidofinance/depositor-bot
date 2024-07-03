@@ -37,7 +37,7 @@ class CuratedModuleDepositStrategy(ModuleDepositStrategyInterface):
             logger.info(
                 {
                     'msg': f'Possible deposits amount is {possible_deposits_amount}. Skip deposit.',
-                    'module_id': str(self.module_id),
+                    'module_id': self.module_id,
                 }
             )
             return False
@@ -49,8 +49,7 @@ class CuratedModuleDepositStrategy(ModuleDepositStrategyInterface):
 
     def _get_possible_deposits_amount(self) -> int:
         depositable_ether = self.w3.lido.lido.get_depositable_ether()
-        if (is_mellow_depositable(self.w3, self.module_id) and
-            self.w3.lido.lido.get_buffered_ether() >= self.w3.lido.lido_locator.withdrawal_queue_contract.unfinalized_st_eth()):
+        if is_mellow_depositable(self.w3, self.module_id):
             vault = self.w3.lido.simple_dvt_staking_strategy.vault_balance()
             logger.info({'msg': 'Adding mellow vault balance to the depositable check', 'vault': vault})
             depositable_ether += vault

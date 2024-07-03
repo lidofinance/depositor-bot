@@ -264,7 +264,8 @@ class DepositorBot:
                     payload,
                     guardian_signs,
                 )
-                success = self._send_transaction(mellow_tx, True)
+                success = self._send_transaction(mellow_tx)
+                logger.info({'msg': 'Send mellow deposit transaction.', 'with_flashbots': self._flashbots_works, 'success': success})
             except Exception as e:
                 logger.warning({'msg': 'Error while sending the mellow transaction', 'error': str(e)})
         if not success:
@@ -277,7 +278,8 @@ class DepositorBot:
                 payload,
                 guardian_signs,
             )
-            success = self._send_transaction(deposit_tx, False)
+            success = self._send_transaction(deposit_tx)
+            logger.info({'msg': 'Send deposit transaction.', 'with_flashbots': self._flashbots_works})
 
         logger.info({'msg': f'Tx send. Result is {success}.'})
 
@@ -287,12 +289,7 @@ class DepositorBot:
     def _send_transaction(
         self,
         tx: ContractFunction,
-        is_mellow: bool
     ) -> bool:
         if tx is None or not self.w3.transaction.check(tx):
             return False
-        msg = 'Send deposit transaction.'
-        if is_mellow:
-            msg = 'Send mellow deposit transaction.'
-        logger.info({'msg': msg, 'with_flashbots': self._flashbots_works})
         return self.w3.transaction.send(tx, self._flashbots_works, 6)
