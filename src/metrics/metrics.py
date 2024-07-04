@@ -1,5 +1,5 @@
 from prometheus_client.metrics import Counter, Gauge, Histogram, Info
-from variables import DEPOSIT_MODULES_WHITELIST, PROMETHEUS_PREFIX, PUBLIC_ENV_VARS, CREATE_TRANSACTIONS
+from variables import CREATE_TRANSACTIONS, DEPOSIT_MODULES_WHITELIST, PROMETHEUS_PREFIX, PUBLIC_ENV_VARS
 
 BUILD_INFO = Gauge(
     'build_info',
