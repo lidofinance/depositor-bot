@@ -28,7 +28,7 @@ def main(bot_name: str):
     logger.info(
         {
             'msg': 'Bot env variables',
-            'value': str(variables.PUBLIC_ENV_VARS),
+            'value': variables.PUBLIC_ENV_VARS,
             'bot_name': bot_name
         }
     )
