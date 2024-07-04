@@ -98,4 +98,5 @@ for module_id in DEPOSIT_MODULES_WHITELIST:
     MODULES.labels(module_id).set(1)
 
 INFO = Info('info', 'Info metric', namespace=PROMETHEUS_PREFIX)
-INFO.info(PUBLIC_ENV_VARS)
+CONVERTED_PUBLIC_ENV = {k: str(v) for k, v in PUBLIC_ENV_VARS.items()}
+INFO.info(CONVERTED_PUBLIC_ENV)
