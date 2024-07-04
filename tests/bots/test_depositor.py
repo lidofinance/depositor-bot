@@ -2,10 +2,9 @@ import logging
 from unittest.mock import Mock
 
 import pytest
-from web3 import Web3
-
 import variables
 from bots.depositor import DepositorBot
+from web3 import Web3
 
 from tests.conftest import DSM_OWNER
 
