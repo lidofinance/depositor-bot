@@ -1,5 +1,5 @@
-from prometheus_client.metrics import Counter, Gauge, Histogram
-from variables import PROMETHEUS_PREFIX, DEPOSIT_MODULES_WHITELIST
+from prometheus_client.metrics import Counter, Gauge, Histogram, Info
+from variables import DEPOSIT_MODULES_WHITELIST, PROMETHEUS_PREFIX, PUBLIC_ENV_VARS
 
 BUILD_INFO = Gauge(
     'build_info',
@@ -96,3 +96,6 @@ MODULES = Gauge('modules', 'Modules gauge', ['module_id'], namespace=PROMETHEUS_
 
 for module_id in DEPOSIT_MODULES_WHITELIST:
     MODULES.labels(module_id).set(1)
+
+INFO = Info('info', 'Info metric', namespace=PROMETHEUS_PREFIX)
+INFO.info(PUBLIC_ENV_VARS)
