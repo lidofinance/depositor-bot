@@ -51,7 +51,6 @@ class LidoContracts(Module):
                 ContractFactoryClass=LidoContract,
             ),
         )
-
         self._load_staking_router()
         self._load_dsm()
 
