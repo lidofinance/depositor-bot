@@ -25,7 +25,13 @@ class BotModule(StrEnum):
 
 
 def main(bot_name: str):
-    logger.info({'msg': 'Bot env variables', 'value': str(variables.PUBLIC_ENV_VARS), 'bot_name': bot_name})
+    logger.info(
+        {
+            'msg': 'Bot env variables',
+            'value': str(variables.PUBLIC_ENV_VARS),
+            'bot_name': bot_name
+        }
+    )
     if bot_name not in list(BotModule):
         msg = f'Last arg should be one of {[str(item) for item in BotModule]}, received {BotModule}.'
         logger.error({'msg': msg})
