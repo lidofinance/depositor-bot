@@ -1,5 +1,5 @@
 from prometheus_client.metrics import Counter, Gauge, Histogram, Info
-from variables import DEPOSIT_MODULES_WHITELIST, PROMETHEUS_PREFIX, PUBLIC_ENV_VARS
+from variables import DEPOSIT_MODULES_WHITELIST, PROMETHEUS_PREFIX, PUBLIC_ENV_VARS, CREATE_TRANSACTIONS
 
 BUILD_INFO = Gauge(
     'build_info',
@@ -100,3 +100,11 @@ for module_id in DEPOSIT_MODULES_WHITELIST:
 INFO = Info('info', 'Info metric', namespace=PROMETHEUS_PREFIX)
 CONVERTED_PUBLIC_ENV = {k: str(v) for k, v in PUBLIC_ENV_VARS.items()}
 INFO.info(CONVERTED_PUBLIC_ENV)
+
+IS_DRY_MODE = Gauge(
+    'dry_mode',
+    'If 1 dry mode is enabled, if 0 dry mode is turned off.',
+    [],
+    namespace=PROMETHEUS_PREFIX,
+)
+IS_DRY_MODE.set(int(CREATE_TRANSACTIONS))
