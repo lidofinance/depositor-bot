@@ -5,13 +5,12 @@ from typing import Callable, Optional
 
 import variables
 from blockchain.deposit_strategy.curated_module import CuratedModuleDepositStrategy
+from blockchain.deposit_strategy.direct_deposit import DirectDepositStrategy
 from blockchain.deposit_strategy.interface import ModuleDepositStrategyInterface
 from blockchain.deposit_strategy.prefered_module_to_deposit import get_preferred_to_deposit_modules
 from blockchain.executor import Executor
 from blockchain.typings import Web3
 from blockchain.web3_extentions.direct_deposit import is_mellow_depositable
-from cryptography.verify_signature import compute_vs
-from eth_typing import Hash32
 from metrics.metrics import (
     ACCOUNT_BALANCE,
     CURRENT_QUORUM_SIZE,
@@ -25,7 +24,6 @@ from transport.msg_storage import MessageStorage
 from transport.msg_types.deposit import DepositMessage, DepositMessageSchema, get_deposit_messages_sign_filter
 from transport.msg_types.ping import PingMessageSchema, to_check_sum_address
 from transport.types import TransportType
-from web3.contract.contract import ContractFunction
 from web3.types import BlockData
 
 logger = logging.getLogger(__name__)
@@ -123,17 +121,13 @@ class DepositorBot:
         can_deposit = self.w3.lido.deposit_security_module.can_deposit(module_id)
         logger.info({'msg': 'Can deposit to module.', 'value': can_deposit})
 
-        module_strategy = self._get_module_strategy(module_id)
-
-        gas_is_ok = module_strategy.is_gas_price_ok()
-        logger.info({'msg': 'Calculate gas recommendations.', 'value': gas_is_ok})
-
-        keys_amount_is_profitable = module_strategy.is_deposited_keys_amount_ok()
-        logger.info({'msg': 'Calculations deposit recommendations.', 'value': keys_amount_is_profitable})
-
-        if is_depositable and quorum and can_deposit and gas_is_ok and keys_amount_is_profitable:
+        if is_depositable and quorum and can_deposit:
             logger.info({'msg': 'Checks passed. Prepare deposit tx.'})
-            return self._build_and_send_deposit_tx(quorum)
+            module_strategy = self._get_module_strategy(module_id)
+            success = module_strategy.prepare_and_send(quorum, self._flashbots_works)
+            logger.info({'msg': f'Tx send. Result is {success}.'})
+            self._flashbots_works = not self._flashbots_works or success
+            return success
 
         logger.info({'msg': 'Checks failed. Skip deposit.'})
         return False
@@ -144,6 +138,8 @@ class DepositorBot:
         #     return CuratedModuleDepositStrategy(self.w3, module_id)
         #
         # raise ModuleNotSupportedError(f'Module with id: {module_id} is not supported yet.')
+        if is_mellow_depositable(self.w3, module_id):
+            return DirectDepositStrategy(self.w3, module_id)
         return CuratedModuleDepositStrategy(self.w3, module_id)
 
     def _check_module_status(self, module_id: int) -> bool:
@@ -221,75 +217,3 @@ class DepositorBot:
             return True
 
         return message_filter
-
-    def _build_and_send_deposit_tx(self, quorum: list[DepositMessage]) -> bool:
-        signs = self._prepare_signs_for_deposit(quorum)
-
-        return self._send_deposit_tx(
-            quorum[0]['blockNumber'],
-            Hash32(bytes.fromhex(quorum[0]['blockHash'][2:])),
-            Hash32(bytes.fromhex(quorum[0]['depositRoot'][2:])),
-            quorum[0]['stakingModuleId'],
-            quorum[0]['nonce'],
-            b'',
-            signs,
-        )
-
-    @staticmethod
-    def _prepare_signs_for_deposit(quorum: list[DepositMessage]) -> tuple[tuple[str, str], ...]:
-        sorted_messages = sorted(quorum, key=lambda msg: int(msg['guardianAddress'], 16))
-
-        return tuple((msg['signature']['r'], compute_vs(msg['signature']['v'], msg['signature']['s'])) for msg in sorted_messages)
-
-    def _send_deposit_tx(
-        self,
-        block_number: int,
-        block_hash: Hash32,
-        deposit_root: Hash32,
-        staking_module_id: int,
-        staking_module_nonce: int,
-        payload: bytes,
-        guardian_signs: tuple[tuple[str, str], ...],
-    ) -> bool:
-        """Returns transactions success status"""
-        # Prepare transaction and send
-        success = False
-        if is_mellow_depositable(self.w3, staking_module_id):
-            try:
-                mellow_tx = self.w3.lido.simple_dvt_staking_strategy.convert_and_deposit(
-                    block_number,
-                    block_hash,
-                    deposit_root,
-                    staking_module_nonce,
-                    payload,
-                    guardian_signs,
-                )
-                success = self._send_transaction(mellow_tx)
-                logger.info({'msg': 'Send mellow deposit transaction.', 'with_flashbots': self._flashbots_works, 'success': success})
-            except Exception as e:
-                logger.warning({'msg': 'Error while sending the mellow transaction', 'error': str(e)})
-        if not success:
-            deposit_tx = self.w3.lido.deposit_security_module.deposit_buffered_ether(
-                block_number,
-                block_hash,
-                deposit_root,
-                staking_module_id,
-                staking_module_nonce,
-                payload,
-                guardian_signs,
-            )
-            success = self._send_transaction(deposit_tx)
-            logger.info({'msg': 'Send deposit transaction.', 'with_flashbots': self._flashbots_works})
-
-        logger.info({'msg': f'Tx send. Result is {success}.'})
-
-        self._flashbots_works = not self._flashbots_works or success
-        return success
-
-    def _send_transaction(
-        self,
-        tx: ContractFunction,
-    ) -> bool:
-        if tx is None or not self.w3.transaction.check(tx):
-            return False
-        return self.w3.transaction.send(tx, self._flashbots_works, 6)

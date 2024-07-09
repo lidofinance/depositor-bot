@@ -4,7 +4,6 @@ from unittest.mock import Mock
 import pytest
 import variables
 from bots.depositor import DepositorBot
-from web3 import Web3
 
 from tests.conftest import DSM_OWNER
 
@@ -108,12 +107,9 @@ def test_depositor_deposit_to_module(depositor_bot, is_depositable, quorum, is_g
     depositor_bot._get_quorum = Mock(return_value=quorum)
 
     strategy = Mock()
-    strategy.is_gas_price_ok = Mock(return_value=is_gas_price_ok)
-    strategy.is_deposited_keys_amount_ok = Mock(return_value=is_deposited_keys_amount_ok)
+    strategy.prepare_and_send = Mock(return_value=is_gas_price_ok and is_deposited_keys_amount_ok)
 
     depositor_bot._get_module_strategy = Mock(return_value=strategy)
-    depositor_bot._build_and_send_deposit_tx = Mock(return_value=True)
-
     assert not depositor_bot._deposit_to_module(1)
 
 
@@ -186,84 +182,6 @@ def test_depositor_message_actualizer_root(setup_deposit_message, depositor_bot,
 
     deposit_message['blockNumber'] = block_data['number'] + 100
     assert list(filter(message_filter, [deposit_message]))
-
-
-@pytest.mark.unit
-def test_prepare_signs_for_deposit(deposit_message, depositor_bot):
-    second_council = {
-        'guardianAddress': '0x13464Fe06c18848a2E2e913194D64c1970f4326a',
-        'signature': {
-            'r': '0xc2235eb6983f80d19158f807d5d90d93abec52034ea7184bbf164ba211f00116',
-            's': '0x75354ffc9fb6e7a4b4c01c622661a1d0382ace8c4ff8024626e39ac1a6a613d0',
-            '_vs': '0x75354ffc9fb6e7a4b4c01c622661a1d0382ace8c4ff8024626e39ac1a6a613d0',
-            'recoveryParam': 0,
-            'v': 27,
-        },
-    }
-
-    expected = (
-        (
-            '0xc2235eb6983f80d19158f807d5d90d93abec52034ea7184bbf164ba211f00116',
-            '0x75354ffc9fb6e7a4b4c01c622661a1d0382ace8c4ff8024626e39ac1a6a613d0',
-        ),
-        (
-            '0xc2235eb6983f80d19158f807d5d90d93abec52034ea7184bbf164ba211f00116',
-            '0x75354ffc9fb6e7a4b4c01c622661a1d0382ace8c4ff8024626e39ac1a6a613d0',
-        ),
-    )
-
-    signs = depositor_bot._prepare_signs_for_deposit([second_council, deposit_message])
-    assert signs == expected
-
-    signs = depositor_bot._prepare_signs_for_deposit([deposit_message, second_council])
-    assert signs == expected
-
-
-@pytest.mark.unit
-def test_send_deposit_tx(depositor_bot):
-    depositor_bot.w3.transaction.check = Mock(return_value=False)
-    params = [
-        1,
-        b'',
-        b'',
-        1,
-        1,
-        b'',
-        tuple(),
-    ]
-    assert not depositor_bot._send_deposit_tx(*params)
-
-    depositor_bot.w3.transaction.check = Mock(return_value=True)
-    depositor_bot.w3.transaction.send = Mock(return_value=True)
-    assert depositor_bot._send_deposit_tx(*params)
-    assert depositor_bot._flashbots_works
-
-    depositor_bot.w3.transaction.send = Mock(return_value=False)
-    assert not depositor_bot._send_deposit_tx(*params)
-    assert not depositor_bot._flashbots_works
-
-    assert not depositor_bot._send_deposit_tx(*params)
-    assert depositor_bot._flashbots_works
-
-    depositor_bot.w3.transaction.send = Mock(return_value=True)
-    # not a mellow module test -> fallthrough to general transaction
-    set_mellow_preconditions(depositor_bot, 2)
-    assert depositor_bot._send_deposit_tx(*params)
-    assert depositor_bot._flashbots_works
-    assert not depositor_bot.w3.lido.simple_dvt_staking_strategy.convert_and_deposit.called
-    assert depositor_bot.w3.lido.deposit_security_module.deposit_buffered_ether.called
-
-    set_mellow_preconditions(depositor_bot, 1)
-    assert depositor_bot._send_deposit_tx(*params)
-    assert depositor_bot._flashbots_works
-    assert depositor_bot.w3.lido.simple_dvt_staking_strategy.convert_and_deposit.called
-
-    set_mellow_preconditions(depositor_bot, 1)
-    depositor_bot.w3.lido.simple_dvt_staking_strategy.convert_and_deposit = Mock(side_effect=Exception('error'))
-    assert depositor_bot._send_deposit_tx(*params)
-    assert depositor_bot._flashbots_works
-    assert depositor_bot.w3.lido.simple_dvt_staking_strategy.convert_and_deposit.called
-    assert depositor_bot.w3.lido.deposit_security_module.deposit_buffered_ether.called
 
 
 @pytest.mark.unit
