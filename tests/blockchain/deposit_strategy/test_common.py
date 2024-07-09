@@ -1,5 +1,4 @@
 import pytest
-
 from blockchain.deposit_strategy.interface import ModuleDepositStrategyInterface
 
 

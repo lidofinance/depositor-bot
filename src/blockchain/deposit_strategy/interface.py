@@ -1,10 +1,8 @@
 import logging
 from abc import ABC, abstractmethod
 
-import variables
 from blockchain.typings import Web3
 from cryptography.verify_signature import compute_vs
-from metrics.metrics import GAS_FEE
 from transport.msg_types.deposit import DepositMessage
 from web3.contract.contract import ContractFunction
 

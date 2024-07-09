@@ -1,8 +1,6 @@
 import logging
 from abc import ABC
 
-from web3.contract.contract import ContractFunction
-
 from blockchain.deposit_strategy.curated_module import CuratedModuleDepositStrategy
 from blockchain.deposit_strategy.interface import ModuleDepositStrategyInterface
 from blockchain.typings import Web3
