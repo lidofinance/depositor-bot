@@ -48,7 +48,7 @@ class UnvetterBot:
             transports.append(
                 RabbitProvider(
                     client='unvetter',
-                    routing_keys=[MessageType.UNVET, MessageType.PAUSE],
+                    routing_keys=[MessageType.UNVET, MessageType.PING],
                     message_schema=Schema(Or(UnvetMessageSchema, PingMessageSchema)),
                 )
             )
