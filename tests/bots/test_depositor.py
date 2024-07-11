@@ -3,6 +3,7 @@ from unittest.mock import Mock
 
 import pytest
 import variables
+from blockchain.deposit_strategy.curated_module import CuratedModuleDepositStrategy
 from bots.depositor import DepositorBot
 
 from tests.conftest import DSM_OWNER
@@ -306,7 +307,11 @@ def test_depositor_bot(web3_provider_integration, web3_lido_integration, module_
     assert web3_lido_integration.lido.staking_router.get_staking_module_nonce(module_id) == old_module_nonce
 
     db.message_storage.messages = [deposit_message_1, deposit_message_2, deposit_message_3]
-    db._get_module_strategy = Mock(return_value=Mock(return_value=True))
+    strategy = CuratedModuleDepositStrategy(web3_lido_integration, module_id)
+    db._get_module_strategy = strategy
+
+    strategy.is_gas_price_ok = Mock(return_value=True)
+    strategy.is_deposited_keys_amount_ok = Mock(return_value=True)
     assert db.execute(latest)
     assert web3_lido_integration.lido.staking_router.get_staking_module_nonce(module_id) == old_module_nonce + 1
 
