@@ -308,7 +308,7 @@ def test_depositor_bot(web3_provider_integration, web3_lido_integration, module_
 
     db.message_storage.messages = [deposit_message_1, deposit_message_2, deposit_message_3]
     strategy = CuratedModuleDepositStrategy(web3_lido_integration, module_id)
-    db._get_module_strategy = strategy
+    db._get_module_strategy = Mock(return_value=strategy)
 
     strategy.is_gas_price_ok = Mock(return_value=True)
     strategy.is_deposited_keys_amount_ok = Mock(return_value=True)
