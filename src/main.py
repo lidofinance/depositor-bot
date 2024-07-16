@@ -11,7 +11,6 @@ from bots.pauser import run_pauser
 from bots.unvetter import run_unvetter
 from metrics.healthcheck_pulse import start_pulse_server
 from metrics.logging import logging
-from metrics.metrics import BUILD_INFO
 from prometheus_client import start_http_server
 from web3_multi_provider import FallbackProvider
 
@@ -42,22 +41,6 @@ def main(bot_name: str):
 
     logger.info({'msg': f'Start up metrics service on port: {variables.PROMETHEUS_PORT}.'})
     start_http_server(variables.PROMETHEUS_PORT)
-
-    # Send vars to metrics
-    BUILD_INFO.labels(
-        'Depositor bot',
-        variables.MAX_GAS_FEE,
-        variables.MAX_BUFFERED_ETHERS,
-        variables.CONTRACT_GAS_LIMIT,
-        variables.GAS_FEE_PERCENTILE_1,
-        variables.GAS_FEE_PERCENTILE_DAYS_HISTORY_1,
-        variables.GAS_PRIORITY_FEE_PERCENTILE,
-        variables.MIN_PRIORITY_FEE,
-        variables.MAX_PRIORITY_FEE,
-        variables.ACCOUNT.address if variables.ACCOUNT else '0x0',
-        variables.CREATE_TRANSACTIONS,
-        variables.DEPOSIT_MODULES_WHITELIST,
-    )
 
     logger.info({'msg': 'Connect MultiHTTPProviders.', 'rpc_count': len(variables.WEB3_RPC_ENDPOINTS)})
     w3 = Web3(FallbackProvider(variables.WEB3_RPC_ENDPOINTS))
