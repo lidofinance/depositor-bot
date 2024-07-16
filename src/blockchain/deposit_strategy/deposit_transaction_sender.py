@@ -51,7 +51,7 @@ class AbstractSender(Sender):
         if not success and self._next_sender:
             return self._next_sender.prepare_and_send(module_id, quorum, with_flashbots)
 
-        return False
+        return success
 
     @abstractmethod
     def _prepare(self, quorum: list[DepositMessage], with_flashbots: bool) -> ContractFunction:

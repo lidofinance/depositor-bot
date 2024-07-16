@@ -1,5 +1,3 @@
-import logging
-
 from blockchain.deposit_strategy.interface import ModuleDepositStrategyInterface
 from blockchain.typings import Web3
 from web3.types import Wei
