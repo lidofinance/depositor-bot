@@ -5,7 +5,9 @@ from typing import Callable, Optional
 
 import variables
 from blockchain.deposit_strategy.curated_module import CuratedModuleDepositStrategy
+from blockchain.deposit_strategy.deposit_transaction_sender import DirectDepositSender, DepositSender
 from blockchain.deposit_strategy.direct_deposit import DirectDepositStrategy
+from blockchain.deposit_strategy.gas_price_verifier import GasPriceCalculator
 from blockchain.deposit_strategy.interface import ModuleDepositStrategyInterface
 from blockchain.deposit_strategy.prefered_module_to_deposit import get_preferred_to_deposit_modules
 from blockchain.executor import Executor
@@ -52,6 +54,10 @@ class DepositorBot:
 
     def __init__(self, w3: Web3):
         self.w3 = w3
+        self._gas_price_calculator = GasPriceCalculator(w3)
+        depositor_chain = DirectDepositSender(w3)
+        depositor_chain.set_next(DepositSender(w3))
+        self._send_chain = depositor_chain
 
         transports = []
 
@@ -121,26 +127,21 @@ class DepositorBot:
         can_deposit = self.w3.lido.deposit_security_module.can_deposit(module_id)
         logger.info({'msg': 'Can deposit to module.', 'value': can_deposit})
 
-        if is_depositable and quorum and can_deposit:
+        gas_is_ok = self._gas_price_calculator.is_gas_price_ok(module_id)
+        logger.info({'msg': 'Calculate gas recommendations.', 'value': gas_is_ok})
+        if is_depositable and quorum and can_deposit and gas_is_ok:
             logger.info({'msg': 'Checks passed. Prepare deposit tx.'})
-            module_strategy = self._get_module_strategy(module_id)
-            success = module_strategy.prepare_and_send(quorum, self._flashbots_works)
+            success = self._send_chain.prepare_and_send(
+                module_id,
+                quorum,
+                self._flashbots_works
+            )
             logger.info({'msg': f'Tx send. Result is {success}.'})
             self._flashbots_works = not self._flashbots_works or success
             return success
 
         logger.info({'msg': 'Checks failed. Skip deposit.'})
         return False
-
-    def _get_module_strategy(self, module_id: int) -> ModuleDepositStrategyInterface:
-        # ToDo: uncomment when new strategies appears
-        # if module_id in (1, 2, 3):
-        #     return CuratedModuleDepositStrategy(self.w3, module_id)
-        #
-        # raise ModuleNotSupportedError(f'Module with id: {module_id} is not supported yet.')
-        if is_mellow_depositable(self.w3, module_id):
-            return DirectDepositStrategy(self.w3, module_id)
-        return CuratedModuleDepositStrategy(self.w3, module_id)
 
     def _check_module_status(self, module_id: int) -> bool:
         """Returns True if module is ready for deposit"""
