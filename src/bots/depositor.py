@@ -4,15 +4,11 @@ from collections import defaultdict
 from typing import Callable, Optional
 
 import variables
-from blockchain.deposit_strategy.curated_module import CuratedModuleDepositStrategy
-from blockchain.deposit_strategy.deposit_transaction_sender import DirectDepositSender, DepositSender
-from blockchain.deposit_strategy.direct_deposit import DirectDepositStrategy
+from blockchain.deposit_strategy.deposit_transaction_sender import DepositSender, DirectDepositSender
 from blockchain.deposit_strategy.gas_price_verifier import GasPriceCalculator
-from blockchain.deposit_strategy.interface import ModuleDepositStrategyInterface
 from blockchain.deposit_strategy.prefered_module_to_deposit import get_preferred_to_deposit_modules
 from blockchain.executor import Executor
 from blockchain.typings import Web3
-from blockchain.web3_extentions.direct_deposit import is_mellow_depositable
 from metrics.metrics import (
     ACCOUNT_BALANCE,
     CURRENT_QUORUM_SIZE,

@@ -3,15 +3,14 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 
-from eth_typing import Hash32
-from web3.contract.contract import ContractFunction
-
 from blockchain.deposit_strategy.curated_module import CuratedModuleDepositStrategy
 from blockchain.deposit_strategy.direct_deposit import DirectDepositStrategy
 from blockchain.deposit_strategy.interface import ModuleDepositStrategyInterface
 from blockchain.typings import Web3
 from cryptography.verify_signature import compute_vs
+from eth_typing import Hash32
 from transport.msg_types.deposit import DepositMessage
+from web3.contract.contract import ContractFunction
 
 logger = logging.getLogger(__name__)
 

@@ -4,12 +4,11 @@ import logging
 from typing import Literal
 
 import numpy
-from eth_typing import BlockNumber
-from web3.types import Wei
-
 import variables
 from blockchain.typings import Web3
+from eth_typing import BlockNumber
 from metrics.metrics import GAS_FEE
+from web3.types import Wei
 
 logger = logging.getLogger(__name__)
 

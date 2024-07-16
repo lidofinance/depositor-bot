@@ -1,11 +1,10 @@
 import logging
 from abc import ABC, abstractmethod
 
-from web3.types import Wei
-
 from blockchain.deposit_strategy.gas_price_verifier import GasPriceCalculator, get_pending_base_fee
 from blockchain.typings import Web3
 from metrics.metrics import DEPOSITABLE_ETHER, POSSIBLE_DEPOSITS_AMOUNT
+from web3.types import Wei
 
 logger = logging.getLogger(__name__)
 

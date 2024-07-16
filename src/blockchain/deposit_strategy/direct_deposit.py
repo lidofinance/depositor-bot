@@ -1,12 +1,11 @@
 import logging
 
-from web3.types import Wei
-
 import variables
 from blockchain.contracts.staking_module import StakingModuleContract
 from blockchain.deposit_strategy.interface import ModuleDepositStrategyInterface
 from blockchain.typings import Web3
 from metrics.metrics import MELLOW_VAULT_BALANCE
+from web3.types import Wei
 
 logger = logging.getLogger(__name__)
 

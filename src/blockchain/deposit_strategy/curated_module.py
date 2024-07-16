@@ -1,11 +1,8 @@
 import logging
 
-from web3.types import Wei
-
 from blockchain.deposit_strategy.interface import ModuleDepositStrategyInterface
 from blockchain.typings import Web3
-
-logger = logging.getLogger(__name__)
+from web3.types import Wei
 
 
 class CuratedModuleDepositStrategy(ModuleDepositStrategyInterface):
