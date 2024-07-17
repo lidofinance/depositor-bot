@@ -2,7 +2,7 @@ import logging
 
 import variables
 from blockchain.contracts.staking_module import StakingModuleContract
-from blockchain.deposit_strategy.interface import ModuleDepositStrategyInterface
+from blockchain.deposit_strategy.base_deposit_strategy import BaseDepositStrategy
 from blockchain.typings import Web3
 from metrics.metrics import MELLOW_VAULT_BALANCE
 from web3.types import Wei
@@ -10,7 +10,7 @@ from web3.types import Wei
 logger = logging.getLogger(__name__)
 
 
-class DirectDepositStrategy(ModuleDepositStrategyInterface):
+class MellowDepositStrategy(BaseDepositStrategy):
     """
     Performs deposited keys amount check for direct deposits.
     """
@@ -24,11 +24,11 @@ class DirectDepositStrategy(ModuleDepositStrategyInterface):
     ) -> bool:
         if not variables.MELLOW_CONTRACT_ADDRESS:
             return False
-        buffered = self._w3.lido.lido.get_buffered_ether()
-        unfinalized = self._w3.lido.lido_locator.withdrawal_queue_contract.unfinalized_st_eth()
+        buffered = self.w3.lido.lido.get_buffered_ether()
+        unfinalized = self.w3.lido.lido_locator.withdrawal_queue_contract.unfinalized_st_eth()
         if buffered < unfinalized:
             return False
-        staking_module_contract: StakingModuleContract = self._w3.lido.simple_dvt_staking_strategy.staking_module_contract
+        staking_module_contract: StakingModuleContract = self.w3.lido.simple_dvt_staking_strategy.staking_module_contract
         if staking_module_contract.get_staking_module_id() != module_id:
             logger.debug(
                 {
@@ -38,7 +38,7 @@ class DirectDepositStrategy(ModuleDepositStrategyInterface):
                 }
             )
             return False
-        balance = self._w3.lido.simple_dvt_staking_strategy.vault_balance()
+        balance = self.w3.lido.simple_dvt_staking_strategy.vault_balance()
         MELLOW_VAULT_BALANCE.labels(module_id).set(balance)
         if balance < variables.VAULT_DIRECT_DEPOSIT_THRESHOLD:
             logger.info({'msg': f'{balance} is less than VAULT_DIRECT_DEPOSIT_THRESHOLD while building mellow transaction.'})
@@ -46,12 +46,19 @@ class DirectDepositStrategy(ModuleDepositStrategyInterface):
         logger.debug({'msg': 'Mellow module check succeeded.', 'tx_module': module_id})
         return True
 
-    def _additional_ether(self) -> Wei:
-        return self._w3.lido.simple_dvt_staking_strategy.vault_balance()
+    def _depositable_ether(self) -> Wei:
+        depositable_ether = super()._depositable_ether()
+        additional_ether = self.w3.lido.simple_dvt_staking_strategy.vault_balance()
+        if additional_ether > 0:
+            logger.info({'msg': 'Adding mellow vault balance to the depositable check', 'vault': additional_ether})
+        depositable_ether += additional_ether
+        return depositable_ether
 
-    def is_deposited_keys_amount_ok(self, module_id: int) -> bool:
+    def deposited_keys_amount(self, module_id: int) -> int:
         try:
-            return super().is_deposited_keys_amount_ok(module_id) and self._is_mellow_depositable(module_id)
+            if not self._is_mellow_depositable(module_id):
+                return self.DEPOSITABLE_KEYS_THRESHOLD - 1
+            return super().deposited_keys_amount(module_id)
         except Exception as e:
             logger.warning(
                 {

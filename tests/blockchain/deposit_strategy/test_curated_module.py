@@ -20,10 +20,10 @@ def test_is_deposited_keys_amount_ok(cmds):
     cmds.calculate_recommended_gas_based_on_deposit_amount = Mock(return_value=30)
     cmds.get_pending_base_fee = Mock(return_value=20)
 
-    assert cmds.is_deposited_keys_amount_ok()
+    assert cmds.deposited_keys_amount()
 
     cmds.get_pending_base_fee = Mock(return_value=50)
-    assert not cmds.is_deposited_keys_amount_ok()
+    assert not cmds.deposited_keys_amount()
 
 
 @pytest.mark.unit
@@ -125,7 +125,7 @@ def test_send_deposit_tx(cmds):
     )]
     cmds._prepare_signs_for_deposit = Mock(return_value=tuple())
     cmds.is_gas_price_ok = Mock(return_value=True)
-    cmds.is_deposited_keys_amount_ok = Mock(return_value=True)
+    cmds.deposited_keys_amount = Mock(return_value=True)
     assert not cmds.prepare_and_send(messages, False)
 
     cmds.w3.transaction.check = Mock(return_value=True)

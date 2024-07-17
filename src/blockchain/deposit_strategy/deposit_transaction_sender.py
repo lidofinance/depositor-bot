@@ -3,9 +3,9 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 
-from blockchain.deposit_strategy.curated_module import CuratedModuleDepositStrategy
-from blockchain.deposit_strategy.direct_deposit import DirectDepositStrategy
-from blockchain.deposit_strategy.interface import ModuleDepositStrategyInterface
+from blockchain.deposit_strategy.base_deposit_strategy import BaseDepositStrategy, DepositStrategy
+from blockchain.deposit_strategy.gas_price_calculator import GasPriceCalculator
+from blockchain.deposit_strategy.mellow_deposit import MellowDepositStrategy
 from blockchain.typings import Web3
 from cryptography.verify_signature import compute_vs
 from eth_typing import Hash32
@@ -21,7 +21,13 @@ class Sender(ABC):
         pass
 
     @abstractmethod
-    def prepare_and_send(self, module_id: int, quorum: list[DepositMessage], with_flashbots: bool) -> bool:
+    def prepare_and_send(
+        self,
+        module_id: int,
+        gas_price_calculator: GasPriceCalculator,
+        quorum: list[DepositMessage],
+        with_flashbots: bool,
+    ) -> bool:
         pass
 
 
@@ -32,8 +38,8 @@ class AbstractSender(Sender):
     _next_sender: Sender = None
     _TIMEOUT_IN_BLOCKS = 6
 
-    def __init__(self, w3: Web3, deposit_strategy: ModuleDepositStrategyInterface):
-        self._module_deposit_strategy = deposit_strategy
+    def __init__(self, w3: Web3, deposit_strategy: DepositStrategy):
+        self._deposit_strategy = deposit_strategy
         self._w3 = w3
 
     def set_next(self, sender: Sender) -> Sender:
@@ -46,10 +52,17 @@ class AbstractSender(Sender):
 
         return tuple((msg['signature']['r'], compute_vs(msg['signature']['v'], msg['signature']['s'])) for msg in sorted_messages)
 
-    def prepare_and_send(self, module_id: int, quorum: list[DepositMessage], with_flashbots: bool) -> bool:
-        success = self._module_deposit_strategy.is_deposited_keys_amount_ok(module_id) and self._prepare_and_send(quorum, with_flashbots)
+    def prepare_and_send(
+        self,
+        module_id: int,
+        gas_price_calculator: GasPriceCalculator,
+        quorum: list[DepositMessage],
+        with_flashbots: bool,
+    ) -> bool:
+        success = gas_price_calculator.calculate_deposit_recommendation(self._deposit_strategy, module_id)
+        success = success and self._prepare_and_send(quorum, with_flashbots)
         if not success and self._next_sender:
-            return self._next_sender.prepare_and_send(module_id, quorum, with_flashbots)
+            return self._next_sender.prepare_and_send(module_id, gas_price_calculator, quorum, with_flashbots)
 
         return success
 
@@ -74,7 +87,7 @@ class AbstractSender(Sender):
 class DirectDepositSender(AbstractSender):
 
     def __init__(self, w3: Web3):
-        deposit_strategy = DirectDepositStrategy(w3)
+        deposit_strategy = MellowDepositStrategy(w3)
         super().__init__(w3, deposit_strategy)
 
     def _prepare(self, quorum: list[DepositMessage], with_flashbots: bool) -> ContractFunction:
@@ -114,7 +127,7 @@ class DepositSender(AbstractSender):
     """
 
     def __init__(self, w3: Web3):
-        deposit_strategy = CuratedModuleDepositStrategy(w3)
+        deposit_strategy = BaseDepositStrategy(w3)
         super().__init__(w3, deposit_strategy)
 
     def _prepare(self, quorum: list[DepositMessage], with_flashbots: bool) -> ContractFunction:

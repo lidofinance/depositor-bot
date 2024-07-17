@@ -5,7 +5,7 @@ from typing import Callable, Optional
 
 import variables
 from blockchain.deposit_strategy.deposit_transaction_sender import DepositSender, DirectDepositSender
-from blockchain.deposit_strategy.gas_price_verifier import GasPriceCalculator
+from blockchain.deposit_strategy.gas_price_calculator import GasPriceCalculator
 from blockchain.deposit_strategy.prefered_module_to_deposit import get_preferred_to_deposit_modules
 from blockchain.executor import Executor
 from blockchain.typings import Web3
@@ -129,6 +129,7 @@ class DepositorBot:
             logger.info({'msg': 'Checks passed. Prepare deposit tx.'})
             success = self._send_chain.prepare_and_send(
                 module_id,
+                self._gas_price_calculator,
                 quorum,
                 self._flashbots_works
             )

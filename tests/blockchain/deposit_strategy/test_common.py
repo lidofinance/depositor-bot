@@ -1,5 +1,5 @@
 import pytest
-from blockchain.deposit_strategy.interface import ModuleDepositStrategyInterface
+from blockchain.deposit_strategy.base_deposit_strategy import BaseDepositStrategy
 
 
 @pytest.fixture
@@ -48,8 +48,8 @@ def test_prepare_signs_for_deposit(deposit_message):
         ),
     )
 
-    signs = ModuleDepositStrategyInterface._prepare_signs_for_deposit([second_council, deposit_message])
+    signs = BaseDepositStrategy._prepare_signs_for_deposit([second_council, deposit_message])
     assert signs == expected
 
-    signs = ModuleDepositStrategyInterface._prepare_signs_for_deposit([deposit_message, second_council])
+    signs = BaseDepositStrategy._prepare_signs_for_deposit([deposit_message, second_council])
     assert signs == expected
