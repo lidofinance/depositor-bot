@@ -4,7 +4,7 @@ import logging
 
 import variables
 from blockchain.constants import SLOT_TIME
-from blockchain.web3_extentions.private_relay import PrivateRelayClient
+from blockchain.web3_extentions.private_relay import PrivateRelayClient, PrivateRelayException
 from eth_account.datastructures import SignedTransaction
 from eth_typing import ChecksumAddress
 from metrics.metrics import TX_SEND
@@ -100,16 +100,18 @@ class TransactionUtils(Module):
         )
 
     def relay_send(self, signed_tx: SignedTransaction, timeout_in_blocks: int) -> bool:
-        prl = PrivateRelayClient(self.w3, variables.RELAY_RPC, variables.AUCTION_BUNDLER_PRIVATE_KEY)
-        tx_hash = prl.send_private_tx(signed_tx, timeout_in_blocks)
-
         try:
+            prl = PrivateRelayClient(self.w3, variables.RELAY_RPC, variables.AUCTION_BUNDLER_PRIVATE_KEY)
+            tx_hash = prl.send_private_tx(signed_tx, timeout_in_blocks)
+
             tx_receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, (timeout_in_blocks + 1) * SLOT_TIME)
+            logger.info({'msg': 'Sent transaction included in blockchain.', 'value': tx_receipt})
+            return True
+        except PrivateRelayException as e:
+            logger.warning({'msg': 'Failed to send transaction to the private mempool', 'err': str(e)})
+            return False
         except TimeExhausted:
             return False
-
-        logger.info({'msg': 'Sent transaction included in blockchain.', 'value': tx_receipt})
-        return True
 
     def classic_send(self, signed_tx: SignedTransaction, timeout_in_blocks: int) -> bool:
         try:

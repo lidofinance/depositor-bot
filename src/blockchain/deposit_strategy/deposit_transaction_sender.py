@@ -1,11 +1,7 @@
 from __future__ import annotations
 
 import logging
-from abc import ABC, abstractmethod
 
-from blockchain.deposit_strategy.base_deposit_strategy import BaseDepositStrategy, DepositStrategy
-from blockchain.deposit_strategy.gas_price_calculator import GasPriceCalculator
-from blockchain.deposit_strategy.mellow_deposit import MellowDepositStrategy
 from blockchain.typings import Web3
 from cryptography.verify_signature import compute_vs
 from eth_typing import Hash32
@@ -15,36 +11,14 @@ from web3.contract.contract import ContractFunction
 logger = logging.getLogger(__name__)
 
 
-class Sender(ABC):
-    @abstractmethod
-    def set_next(self, handler: Sender) -> Sender:
-        pass
-
-    @abstractmethod
-    def prepare_and_send(
-        self,
-        module_id: int,
-        gas_price_calculator: GasPriceCalculator,
-        quorum: list[DepositMessage],
-        with_flashbots: bool,
-    ) -> bool:
-        pass
-
-
-class AbstractSender(Sender):
+class Sender:
     """
     Chain senders for deposit transactions.
     """
-    _next_sender: Sender = None
     _TIMEOUT_IN_BLOCKS = 6
 
-    def __init__(self, w3: Web3, deposit_strategy: DepositStrategy):
-        self._deposit_strategy = deposit_strategy
+    def __init__(self, w3: Web3):
         self._w3 = w3
-
-    def set_next(self, sender: Sender) -> Sender:
-        self._next_sender = sender
-        return sender
 
     @staticmethod
     def _prepare_signs_for_deposit(quorum: list[DepositMessage]) -> tuple[tuple[str, str], ...]:
@@ -54,43 +28,14 @@ class AbstractSender(Sender):
 
     def prepare_and_send(
         self,
-        module_id: int,
-        gas_price_calculator: GasPriceCalculator,
         quorum: list[DepositMessage],
         with_flashbots: bool,
+        is_mellow: bool,
     ) -> bool:
-        success = gas_price_calculator.calculate_deposit_recommendation(self._deposit_strategy, module_id)
-        success = success and self._prepare_and_send(quorum, with_flashbots)
-        if not success and self._next_sender:
-            return self._next_sender.prepare_and_send(module_id, gas_price_calculator, quorum, with_flashbots)
-
-        return success
-
-    @abstractmethod
-    def _prepare(self, quorum: list[DepositMessage], with_flashbots: bool) -> ContractFunction:
-        pass
-
-    def _send_transaction(
-        self,
-        tx: ContractFunction,
-        flashbots_works: bool
-    ) -> bool:
-        if tx is None or not self._w3.transaction.check(tx):
-            return False
-        return self._w3.transaction.send(tx, flashbots_works, self._TIMEOUT_IN_BLOCKS)
-
-    def _prepare_and_send(self, quorum: list[DepositMessage], with_flashbots: bool) -> bool:
-        tx = self._prepare(quorum, with_flashbots)
+        tx = self._prepare_mellow_tx(quorum) if is_mellow else self._prepare_general_tx(quorum)
         return self._send_transaction(tx, with_flashbots)
 
-
-class DirectDepositSender(AbstractSender):
-
-    def __init__(self, w3: Web3):
-        deposit_strategy = MellowDepositStrategy(w3)
-        super().__init__(w3, deposit_strategy)
-
-    def _prepare(self, quorum: list[DepositMessage], with_flashbots: bool) -> ContractFunction:
+    def _prepare_mellow_tx(self, quorum: list[DepositMessage]) -> ContractFunction:
         block_number = quorum[0]['blockNumber']
         block_hash = Hash32(bytes.fromhex(quorum[0]['blockHash'][2:]))
         deposit_root = Hash32(bytes.fromhex(quorum[0]['depositRoot'][2:]))
@@ -106,31 +51,7 @@ class DirectDepositSender(AbstractSender):
             guardian_signs,
         )
 
-    def _prepare_and_send(
-        self,
-        quorum: list[DepositMessage],
-        with_flashbots: bool
-    ) -> bool:
-        """
-        Direct deposit overwrites the sending of transaction by swallowing exceptions on transaction sending.
-        """
-        try:
-            return super()._prepare_and_send(quorum, with_flashbots)
-        except Exception as e:
-            logger.warning({'msg': 'Error while sending the mellow transaction', 'error': str(e)})
-            return False
-
-
-class DepositSender(AbstractSender):
-    """
-    Deposit via DSM deposit_buffered_ether
-    """
-
-    def __init__(self, w3: Web3):
-        deposit_strategy = BaseDepositStrategy(w3)
-        super().__init__(w3, deposit_strategy)
-
-    def _prepare(self, quorum: list[DepositMessage], with_flashbots: bool) -> ContractFunction:
+    def _prepare_general_tx(self, quorum: list[DepositMessage]):
         block_number = quorum[0]['blockNumber']
         block_hash = Hash32(bytes.fromhex(quorum[0]['blockHash'][2:]))
         deposit_root = Hash32(bytes.fromhex(quorum[0]['depositRoot'][2:]))
@@ -147,3 +68,12 @@ class DepositSender(AbstractSender):
             payload,
             guardian_signs,
         )
+
+    def _send_transaction(
+        self,
+        tx: ContractFunction,
+        flashbots_works: bool
+    ) -> bool:
+        if tx is None or not self._w3.transaction.check(tx):
+            return False
+        return self._w3.transaction.send(tx, flashbots_works, self._TIMEOUT_IN_BLOCKS)

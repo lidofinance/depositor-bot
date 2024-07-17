@@ -4,7 +4,9 @@ from collections import defaultdict
 from typing import Callable, Optional
 
 import variables
-from blockchain.deposit_strategy.deposit_transaction_sender import DepositSender, DirectDepositSender
+from blockchain.contracts.staking_module import StakingModuleContract
+from blockchain.deposit_strategy.base_deposit_strategy import BaseDepositStrategy, MellowDepositStrategy
+from blockchain.deposit_strategy.deposit_transaction_sender import Sender
 from blockchain.deposit_strategy.gas_price_calculator import GasPriceCalculator
 from blockchain.deposit_strategy.prefered_module_to_deposit import get_preferred_to_deposit_modules
 from blockchain.executor import Executor
@@ -12,6 +14,7 @@ from blockchain.typings import Web3
 from metrics.metrics import (
     ACCOUNT_BALANCE,
     CURRENT_QUORUM_SIZE,
+    MELLOW_VAULT_BALANCE,
     UNEXPECTED_EXCEPTIONS,
 )
 from metrics.transport_message_metrics import message_metrics_filter
@@ -29,7 +32,9 @@ logger = logging.getLogger(__name__)
 
 def run_depositor(w3):
     logger.info({'msg': 'Initialize Depositor bot.'})
-    depositor_bot = DepositorBot(w3)
+    gas_price_calculator = GasPriceCalculator(w3)
+    sender = Sender(w3)
+    depositor_bot = DepositorBot(w3, sender, gas_price_calculator)
 
     e = Executor(
         w3,
@@ -47,13 +52,14 @@ class ModuleNotSupportedError(Exception):
 
 class DepositorBot:
     _flashbots_works = True
+    _mellow_works = True
 
-    def __init__(self, w3: Web3):
+    def __init__(self, w3: Web3, sender: Sender, gas_price_calcaulator: GasPriceCalculator):
         self.w3 = w3
-        self._gas_price_calculator = GasPriceCalculator(w3)
-        depositor_chain = DirectDepositSender(w3)
-        depositor_chain.set_next(DepositSender(w3))
-        self._send_chain = depositor_chain
+        self._gas_price_calculator = gas_price_calcaulator
+        self._sender = sender
+        self._mellow_strategy = MellowDepositStrategy(w3)
+        self._general_strategy = BaseDepositStrategy(w3)
 
         transports = []
 
@@ -104,6 +110,44 @@ class DepositorBot:
 
         return True
 
+    def _is_mellow_depositable(
+        self,
+        module_id: int
+    ) -> bool:
+        if not variables.MELLOW_CONTRACT_ADDRESS:
+            return False
+        try:
+            buffered = self.w3.lido.lido.get_buffered_ether()
+            unfinalized = self.w3.lido.lido_locator.withdrawal_queue_contract.unfinalized_st_eth()
+            if buffered < unfinalized:
+                return False
+            staking_module_contract: StakingModuleContract = self.w3.lido.simple_dvt_staking_strategy.staking_module_contract
+            if staking_module_contract.get_staking_module_id() != module_id:
+                logger.debug(
+                    {
+                        'msg': 'Mellow module check failed.',
+                        'contract_module': staking_module_contract.get_staking_module_id(),
+                        'tx_module': module_id
+                    }
+                )
+                return False
+            balance = self.w3.lido.simple_dvt_staking_strategy.vault_balance()
+            MELLOW_VAULT_BALANCE.labels(module_id).set(balance)
+            if balance < variables.VAULT_DIRECT_DEPOSIT_THRESHOLD:
+                logger.info({'msg': f'{balance} is less than VAULT_DIRECT_DEPOSIT_THRESHOLD while building mellow transaction.'})
+                return False
+            logger.debug({'msg': 'Mellow module check succeeded.', 'tx_module': module_id})
+            return True
+        except Exception as e:
+            logger.warning(
+                {
+                    'msg': 'Failed to check if mellow depositable',
+                    'module_id': module_id,
+                    'err': str(e)
+                }
+            )
+            return False
+
     def _check_balance(self):
         if variables.ACCOUNT:
             balance = self.w3.eth.get_balance(variables.ACCOUNT.address)
@@ -125,20 +169,30 @@ class DepositorBot:
 
         gas_is_ok = self._gas_price_calculator.is_gas_price_ok(module_id)
         logger.info({'msg': 'Calculate gas recommendations.', 'value': gas_is_ok})
-        if is_depositable and quorum and can_deposit and gas_is_ok:
-            logger.info({'msg': 'Checks passed. Prepare deposit tx.'})
-            success = self._send_chain.prepare_and_send(
-                module_id,
-                self._gas_price_calculator,
+
+        strategy, is_mellow = self.select_strategy(module_id)
+        is_deposit_amount_ok = self._gas_price_calculator.calculate_deposit_recommendation(strategy, module_id)
+        logger.info({'msg': 'Calculations deposit recommendations.', 'value': is_deposit_amount_ok})
+
+        if is_depositable and quorum and can_deposit and gas_is_ok and is_deposit_amount_ok:
+            logger.info({'msg': 'Checks passed. Prepare deposit tx.', 'is_mellow': is_mellow})
+            success = self._sender.prepare_and_send(
                 quorum,
-                self._flashbots_works
+                self._flashbots_works,
+                is_mellow,
             )
             logger.info({'msg': f'Tx send. Result is {success}.'})
             self._flashbots_works = not self._flashbots_works or success
+            self._mellow_works = success
             return success
 
         logger.info({'msg': 'Checks failed. Skip deposit.'})
         return False
+
+    def select_strategy(self, module_id) -> tuple[BaseDepositStrategy, bool]:
+        if self._mellow_works and self._is_mellow_depositable(module_id):
+            return self._mellow_strategy, True
+        return self._general_strategy, False
 
     def _check_module_status(self, module_id: int) -> bool:
         """Returns True if module is ready for deposit"""

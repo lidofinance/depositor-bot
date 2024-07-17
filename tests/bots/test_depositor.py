@@ -3,7 +3,6 @@ from unittest.mock import Mock
 
 import pytest
 import variables
-from blockchain.deposit_strategy.curated_module import CuratedModuleDepositStrategy
 from bots.depositor import DepositorBot
 
 from tests.conftest import DSM_OWNER

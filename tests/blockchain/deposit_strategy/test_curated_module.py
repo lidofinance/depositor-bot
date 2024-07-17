@@ -2,7 +2,6 @@ from unittest.mock import Mock
 
 import pytest
 import variables
-from blockchain.deposit_strategy.curated_module import CuratedModuleDepositStrategy
 from transport.msg_types.deposit import DepositMessage
 
 MODULE_ID = 1337

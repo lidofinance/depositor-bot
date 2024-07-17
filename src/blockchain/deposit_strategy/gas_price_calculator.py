@@ -5,7 +5,7 @@ from typing import Literal
 
 import numpy
 import variables
-from blockchain.deposit_strategy.base_deposit_strategy import DepositStrategy
+from blockchain.deposit_strategy.base_deposit_strategy import BaseDepositStrategy
 from blockchain.typings import Web3
 from eth_typing import BlockNumber
 from metrics.metrics import GAS_FEE
@@ -42,7 +42,7 @@ class GasPriceCalculator:
         logger.info({'msg': 'Fetch base_fee_per_gas for pending block.', 'value': base_fee_per_gas})
         return base_fee_per_gas
 
-    def calculate_deposit_recommendation(self, deposit_strategy: DepositStrategy, module_id: int) -> bool:
+    def calculate_deposit_recommendation(self, deposit_strategy: BaseDepositStrategy, module_id: int) -> bool:
         possible_keys = deposit_strategy.deposited_keys_amount(module_id)
         if possible_keys < deposit_strategy.DEPOSITABLE_KEYS_THRESHOLD:
             logger.info(
