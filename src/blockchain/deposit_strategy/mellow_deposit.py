@@ -15,9 +15,6 @@ class MellowDepositStrategy(BaseDepositStrategy):
     Performs deposited keys amount check for direct deposits.
     """
 
-    def __init__(self, w3: Web3):
-        super().__init__(w3)
-
     def _is_mellow_depositable(
         self,
         module_id: int
