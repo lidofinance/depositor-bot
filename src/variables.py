@@ -1,7 +1,9 @@
 import logging
 import os
+from typing import Optional
 
 from eth_account import Account
+from eth_account.signers.local import LocalAccount
 from eth_typing import URI
 from web3 import Web3
 
@@ -13,6 +15,7 @@ WEB3_RPC_ENDPOINTS = os.getenv('WEB3_RPC_ENDPOINTS', '').split(',')
 # Account private key
 WALLET_PRIVATE_KEY = os.getenv('WALLET_PRIVATE_KEY', None)
 
+ACCOUNT: Optional[LocalAccount]
 if WALLET_PRIVATE_KEY:
     ACCOUNT = Account.from_key(WALLET_PRIVATE_KEY)
     logger.info({'msg': 'Load account from private key.', 'value': ACCOUNT.address})
@@ -107,6 +110,7 @@ PUBLIC_ENV_VARS = {
     'HEALTHCHECK_SERVER_PORT': HEALTHCHECK_SERVER_PORT,
     'MAX_CYCLE_LIFETIME_IN_SECONDS': MAX_CYCLE_LIFETIME_IN_SECONDS,
     'DEPOSIT_MODULES_WHITELIST': DEPOSIT_MODULES_WHITELIST,
+    'ACCOUNT': '' if ACCOUNT is None else ACCOUNT.address,
     'MELLOW_CONTRACT_ADDRESS': MELLOW_CONTRACT_ADDRESS,
     'VAULT_DIRECT_DEPOSIT_THRESHOLD': VAULT_DIRECT_DEPOSIT_THRESHOLD,
 }
