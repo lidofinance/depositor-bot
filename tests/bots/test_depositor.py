@@ -3,6 +3,7 @@ from unittest.mock import Mock
 
 import pytest
 import variables
+from blockchain.typings import Web3
 from bots.depositor import DepositorBot
 
 from tests.conftest import DSM_OWNER
@@ -15,12 +16,12 @@ COUNCIL_PK_2 = '0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab36
 
 
 @pytest.fixture
-def depositor_bot(web3_lido_unit, block_data):
+def depositor_bot(web3_lido_unit, deposit_transaction_sender, gas_price_calculator, block_data):
     variables.MESSAGE_TRANSPORTS = ''
     variables.DEPOSIT_MODULES_WHITELIST = [1, 2]
     web3_lido_unit.lido.staking_router.get_staking_module_ids = Mock(return_value=[1, 2])
     web3_lido_unit.eth.get_block = Mock(return_value=block_data)
-    yield DepositorBot(web3_lido_unit)
+    yield DepositorBot(web3_lido_unit, deposit_transaction_sender, gas_price_calculator)
 
 
 @pytest.fixture
@@ -67,6 +68,28 @@ def test_depositor_one_module_deposited(depositor_bot, block_data):
 
 
 @pytest.mark.unit
+def test_is_mellow_depositable(depositor_bot):
+    variables.MELLOW_CONTRACT_ADDRESS = None
+    assert not depositor_bot._is_mellow_depositable(1)
+
+    variables.MELLOW_CONTRACT_ADDRESS = '0x1'
+    depositor_bot.w3.lido.lido.get_buffered_ether = Mock(return_value=Web3.to_wei(1, 'ether'))
+    depositor_bot.w3.lido.lido_locator.withdrawal_queue_contract.unfinalized_st_eth = Mock(return_value=Web3.to_wei(1, 'ether'))
+    depositor_bot.w3.lido.simple_dvt_staking_strategy.staking_module_contract.get_staking_module_id = Mock(return_value=1)
+    assert not depositor_bot._is_mellow_depositable(2)
+
+    depositor_bot.w3.lido.simple_dvt_staking_strategy.vault_balance = Mock(return_value=Web3.to_wei(0.5, 'ether'))
+    assert not depositor_bot._is_mellow_depositable(1)
+
+    depositor_bot.w3.lido.simple_dvt_staking_strategy.vault_balance = Mock(return_value=Web3.to_wei(1.4, 'ether'))
+    assert depositor_bot._is_mellow_depositable(1)
+
+    depositor_bot.w3.lido.lido.get_buffered_ether = Mock(return_value=Web3.to_wei(0.5, 'ether'))
+    depositor_bot.w3.lido.lido_locator.withdrawal_queue_contract.unfinalized_st_eth = Mock(return_value=Web3.to_wei(1, 'ether'))
+    assert not depositor_bot._is_mellow_depositable(1)
+
+
+@pytest.mark.unit
 def test_check_balance_dry(depositor_bot, caplog):
     caplog.set_level(logging.INFO)
     depositor_bot._check_balance()
@@ -105,11 +128,10 @@ def test_depositor_check_module_status(depositor_bot):
 def test_depositor_deposit_to_module(depositor_bot, is_depositable, quorum, is_gas_price_ok, is_deposited_keys_amount_ok):
     depositor_bot._check_module_status = Mock(return_value=is_depositable)
     depositor_bot._get_quorum = Mock(return_value=quorum)
+    depositor_bot._mellow_works = False
+    depositor_bot._gas_price_calculator.is_gas_price_ok = Mock(return_value=is_gas_price_ok)
+    depositor_bot._gas_price_calculator.calculate_deposit_recommendation = Mock(return_value=is_deposited_keys_amount_ok)
 
-    strategy = Mock()
-    strategy.prepare_and_send = Mock(return_value=is_gas_price_ok and is_deposited_keys_amount_ok)
-
-    depositor_bot._get_module_strategy = Mock(return_value=strategy)
     assert not depositor_bot._deposit_to_module(1)
 
 

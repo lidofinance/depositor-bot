@@ -1,14 +1,8 @@
 from unittest.mock import Mock
 
 import pytest
-from blockchain.deposit_strategy.base_deposit_strategy import BaseDepositStrategy
 
 MODULE_ID = 1
-
-
-@pytest.fixture
-def base_deposit_strategy(web3_lido_unit):
-    yield BaseDepositStrategy(web3_lido_unit)
 
 
 @pytest.mark.unit

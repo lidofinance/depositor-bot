@@ -170,7 +170,7 @@ class DepositorBot:
         gas_is_ok = self._gas_price_calculator.is_gas_price_ok(module_id)
         logger.info({'msg': 'Calculate gas recommendations.', 'value': gas_is_ok})
 
-        strategy, is_mellow = self.select_strategy(module_id)
+        strategy, is_mellow = self._select_strategy(module_id)
         is_deposit_amount_ok = self._gas_price_calculator.calculate_deposit_recommendation(strategy, module_id)
         logger.info({'msg': 'Calculations deposit recommendations.', 'value': is_deposit_amount_ok})
 
@@ -189,7 +189,7 @@ class DepositorBot:
         logger.info({'msg': 'Checks failed. Skip deposit.'})
         return False
 
-    def select_strategy(self, module_id) -> tuple[BaseDepositStrategy, bool]:
+    def _select_strategy(self, module_id) -> tuple[BaseDepositStrategy, bool]:
         if self._mellow_works and self._is_mellow_depositable(module_id):
             return self._mellow_strategy, True
         return self._general_strategy, False
