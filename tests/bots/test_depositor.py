@@ -291,7 +291,14 @@ def add_accounts_to_guardian(web3_lido_integration, set_integration_account):
     [[19628126, 1], [19628126, 2]],
     indirect=['web3_provider_integration'],
 )
-def test_depositor_bot(web3_provider_integration, web3_lido_integration, module_id, add_accounts_to_guardian):
+def test_depositor_bot(
+    web3_provider_integration,
+    web3_lido_integration,
+    deposit_transaction_sender_integration,
+    gas_price_calculator_integration,
+    module_id,
+    add_accounts_to_guardian,
+):
     variables.DEPOSIT_MODULES_WHITELIST = [1, 2]
     web3_lido_integration.provider.make_request(
         'anvil_setBalance',
@@ -321,18 +328,14 @@ def test_depositor_bot(web3_provider_integration, web3_lido_integration, module_
 
     web3_lido_integration.provider.make_request('anvil_mine', [1])
 
-    db = DepositorBot(web3_lido_integration)
+    db: DepositorBot = DepositorBot(web3_lido_integration, deposit_transaction_sender_integration, gas_price_calculator_integration)
+    db._mellow_works = False
     db.message_storage.messages = []
     db.execute(latest)
 
     assert web3_lido_integration.lido.staking_router.get_staking_module_nonce(module_id) == old_module_nonce
 
     db.message_storage.messages = [deposit_message_1, deposit_message_2, deposit_message_3]
-    strategy = CuratedModuleDepositStrategy(web3_lido_integration, module_id)
-    db._get_module_strategy = Mock(return_value=strategy)
-
-    strategy.is_gas_price_ok = Mock(return_value=True)
-    strategy.deposited_keys_amount = Mock(return_value=True)
     assert db.execute(latest)
     assert web3_lido_integration.lido.staking_router.get_staking_module_nonce(module_id) == old_module_nonce + 1
 

@@ -15,10 +15,15 @@ def deposit_transaction_sender(web3_lido_unit):
 
 
 @pytest.fixture
+def deposit_transaction_sender_integration(web3_lido_integration):
+    yield Sender(web3_lido_integration)
+
+
+@pytest.fixture
 def gas_price_calculator(web3_lido_unit):
     yield GasPriceCalculator(web3_lido_unit)
 
 
-@pytest.fixture()
+@pytest.fixture
 def gas_price_calculator_integration(web3_lido_integration):
     yield GasPriceCalculator(web3_lido_integration)

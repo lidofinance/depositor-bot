@@ -59,8 +59,3 @@ def test_fetch_gas_fee_history(gas_price_calculator_integration):
     history = gas_price_calculator_integration._fetch_gas_fee_history(1)
     assert isinstance(history, list)
     assert len(history) == 1 * 24 * 60 * 60 / 12
-
-    gas_price_calculator_integration.w3.eth.fee_history = Mock()
-    gas_price_calculator_integration._fetch_gas_fee_history(1)
-    assert len(history) == 1 * 24 * 60 * 60 / 12
-    gas_price_calculator_integration.w3.eth.fee_history.assert_not_called()

@@ -21,6 +21,7 @@ from .strategy import (
     deposit_transaction_sender,
     gas_price_calculator,
     gas_price_calculator_integration,
+    deposit_transaction_sender_integration,
 )
 
 __all__ = [
@@ -42,4 +43,5 @@ __all__ = [
     'deposit_transaction_sender',
     'gas_price_calculator',
     'gas_price_calculator_integration',
+    'deposit_transaction_sender_integration',
 ]
