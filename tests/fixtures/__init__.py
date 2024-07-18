@@ -22,6 +22,7 @@ from .strategy import (
     gas_price_calculator,
     gas_price_calculator_integration,
     deposit_transaction_sender_integration,
+    mellow_deposit_strategy,
 )
 
 __all__ = [
@@ -44,4 +45,5 @@ __all__ = [
     'gas_price_calculator',
     'gas_price_calculator_integration',
     'deposit_transaction_sender_integration',
+    'mellow_deposit_strategy',
 ]
