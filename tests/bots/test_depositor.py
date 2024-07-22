@@ -16,12 +16,19 @@ COUNCIL_PK_2 = '0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab36
 
 
 @pytest.fixture
-def depositor_bot(web3_lido_unit, deposit_transaction_sender, gas_price_calculator, block_data):
+def depositor_bot(
+    web3_lido_unit,
+    deposit_transaction_sender,
+    gas_price_calculator,
+    mellow_deposit_strategy,
+    base_deposit_strategy,
+    block_data,
+):
     variables.MESSAGE_TRANSPORTS = ''
     variables.DEPOSIT_MODULES_WHITELIST = [1, 2]
     web3_lido_unit.lido.staking_router.get_staking_module_ids = Mock(return_value=[1, 2])
     web3_lido_unit.eth.get_block = Mock(return_value=block_data)
-    yield DepositorBot(web3_lido_unit, deposit_transaction_sender, gas_price_calculator)
+    yield DepositorBot(web3_lido_unit, deposit_transaction_sender, mellow_deposit_strategy, base_deposit_strategy, gas_price_calculator)
 
 
 @pytest.fixture
@@ -295,6 +302,8 @@ def test_depositor_bot(
     web3_provider_integration,
     web3_lido_integration,
     deposit_transaction_sender_integration,
+    mellow_deposit_strategy_integration,
+    base_deposit_strategy_integration,
     gas_price_calculator_integration,
     module_id,
     add_accounts_to_guardian,
@@ -328,7 +337,13 @@ def test_depositor_bot(
 
     web3_lido_integration.provider.make_request('anvil_mine', [1])
 
-    db: DepositorBot = DepositorBot(web3_lido_integration, deposit_transaction_sender_integration, gas_price_calculator_integration)
+    db: DepositorBot = DepositorBot(
+        web3_lido_integration,
+        deposit_transaction_sender_integration,
+        gas_price_calculator_integration,
+        mellow_deposit_strategy_integration,
+        base_deposit_strategy_integration,
+    )
     db._mellow_works = False
     db.message_storage.messages = []
     db.execute(latest)
@@ -338,11 +353,3 @@ def test_depositor_bot(
     db.message_storage.messages = [deposit_message_1, deposit_message_2, deposit_message_3]
     assert db.execute(latest)
     assert web3_lido_integration.lido.staking_router.get_staking_module_nonce(module_id) == old_module_nonce + 1
-
-
-def set_mellow_preconditions(depositor_bot: DepositorBot, module_id: int):
-    variables.MELLOW_CONTRACT_ADDRESS = '0x1'
-    depositor_bot.w3.lido.lido.get_buffered_ether = Mock(return_value=20)
-    depositor_bot.w3.lido.lido_locator.withdrawal_queue_contract.unfinalized_st_eth = Mock(return_value=10)
-    depositor_bot.w3.lido.simple_dvt_staking_strategy.staking_module_contract.get_staking_module_id = Mock(return_value=module_id)
-    depositor_bot.w3.lido.simple_dvt_staking_strategy.vault_balance = Mock(return_value=variables.VAULT_DIRECT_DEPOSIT_THRESHOLD)

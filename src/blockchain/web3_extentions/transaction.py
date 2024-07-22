@@ -69,10 +69,14 @@ class TransactionUtils(Module):
 
         signed = self.w3.eth.account.sign_transaction(transaction_dict, variables.ACCOUNT._private_key)
 
+        status = False
         if not variables.RELAY_RPC or not variables.AUCTION_BUNDLER_PRIVATE_KEY or not use_relay:
             status = self.classic_send(signed, timeout_in_blocks)
         else:
-            status = self.relay_send(signed, timeout_in_blocks)
+            try:
+                status = self.relay_send(signed, timeout_in_blocks)
+            except PrivateRelayException as error:
+                logger.error({'msg': 'Private relay error.', 'error': repr(error)})
 
         if status:
             TX_SEND.labels('success').inc()
@@ -100,18 +104,17 @@ class TransactionUtils(Module):
         )
 
     def relay_send(self, signed_tx: SignedTransaction, timeout_in_blocks: int) -> bool:
-        try:
-            prl = PrivateRelayClient(self.w3, variables.RELAY_RPC, variables.AUCTION_BUNDLER_PRIVATE_KEY)
-            tx_hash = prl.send_private_tx(signed_tx, timeout_in_blocks)
+        prl = PrivateRelayClient(self.w3, variables.RELAY_RPC, variables.AUCTION_BUNDLER_PRIVATE_KEY)
+        tx_hash = prl.send_private_tx(signed_tx, timeout_in_blocks)
+        logger.info({'msg': 'Transaction send to private relay.', 'tx_hash': tx_hash})
 
+        try:
             tx_receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, (timeout_in_blocks + 1) * SLOT_TIME)
-            logger.info({'msg': 'Sent transaction included in blockchain.', 'value': tx_receipt})
-            return True
-        except PrivateRelayException as e:
-            logger.warning({'msg': 'Failed to send transaction to the private mempool', 'err': str(e)})
-            return False
         except TimeExhausted:
             return False
+
+        logger.info({'msg': 'Sent transaction included in blockchain.', 'value': tx_receipt})
+        return True
 
     def classic_send(self, signed_tx: SignedTransaction, timeout_in_blocks: int) -> bool:
         try:

@@ -10,8 +10,18 @@ def base_deposit_strategy(web3_lido_unit):
 
 
 @pytest.fixture
+def base_deposit_strategy_integration(web3_lido_integration):
+    yield BaseDepositStrategy(web3_lido_integration)
+
+
+@pytest.fixture
 def mellow_deposit_strategy(web3_lido_unit):
     yield MellowDepositStrategy(web3_lido_unit)
+
+
+@pytest.fixture
+def mellow_deposit_strategy_integration(web3_lido_integration):
+    yield MellowDepositStrategy(web3_lido_integration)
 
 
 @pytest.fixture

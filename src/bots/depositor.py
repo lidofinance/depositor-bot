@@ -54,12 +54,19 @@ class DepositorBot:
     _flashbots_works = True
     _mellow_works = True
 
-    def __init__(self, w3: Web3, sender: Sender, gas_price_calcaulator: GasPriceCalculator):
+    def __init__(
+        self,
+        w3: Web3,
+        sender: Sender,
+        gas_price_calcaulator: GasPriceCalculator,
+        mellow_deposit_strategy: MellowDepositStrategy,
+        base_deposit_strategy: BaseDepositStrategy,
+    ):
         self.w3 = w3
         self._gas_price_calculator = gas_price_calcaulator
         self._sender = sender
-        self._mellow_strategy = MellowDepositStrategy(w3)
-        self._general_strategy = BaseDepositStrategy(w3)
+        self._mellow_strategy = mellow_deposit_strategy
+        self._general_strategy = base_deposit_strategy
 
         transports = []
 
@@ -132,21 +139,21 @@ class DepositorBot:
                 )
                 return False
             balance = self.w3.lido.simple_dvt_staking_strategy.vault_balance()
-            MELLOW_VAULT_BALANCE.labels(module_id).set(balance)
-            if balance < variables.VAULT_DIRECT_DEPOSIT_THRESHOLD:
-                logger.info({'msg': f'{balance} is less than VAULT_DIRECT_DEPOSIT_THRESHOLD while building mellow transaction.'})
-                return False
-            logger.debug({'msg': 'Mellow module check succeeded.', 'tx_module': module_id})
-            return True
         except Exception as e:
             logger.warning(
                 {
                     'msg': 'Failed to check if mellow depositable',
                     'module_id': module_id,
-                    'err': str(e)
+                    'err': repr(e)
                 }
             )
             return False
+        MELLOW_VAULT_BALANCE.labels(module_id).set(balance)
+        if balance < variables.VAULT_DIRECT_DEPOSIT_THRESHOLD:
+            logger.info({'msg': f'{balance} is less than VAULT_DIRECT_DEPOSIT_THRESHOLD while building mellow transaction.'})
+            return False
+        logger.debug({'msg': 'Mellow module check succeeded.', 'tx_module': module_id})
+        return True
 
     def _check_balance(self):
         if variables.ACCOUNT:

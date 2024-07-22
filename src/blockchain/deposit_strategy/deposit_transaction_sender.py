@@ -74,6 +74,4 @@ class Sender:
         tx: ContractFunction,
         flashbots_works: bool
     ) -> bool:
-        if tx is None or not self._w3.transaction.check(tx):
-            return False
-        return self._w3.transaction.send(tx, flashbots_works, self._TIMEOUT_IN_BLOCKS)
+        return self._w3.transaction.check(tx) and self._w3.transaction.send(tx, flashbots_works, self._TIMEOUT_IN_BLOCKS)
