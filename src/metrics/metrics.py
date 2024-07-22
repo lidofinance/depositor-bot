@@ -9,6 +9,13 @@ TX_SEND = Counter('transactions_send', 'Amount of send transaction from bot.', [
 TX_SEND.labels('success').inc(0)
 TX_SEND.labels('failure').inc(0)
 
+MODULE_TX_SEND = Counter(
+    'transactions',
+    'Amount of send transaction from bot with per module distribution.',
+    ['status', 'module_id'],
+    namespace=PROMETHEUS_PREFIX
+)
+
 ACCOUNT_BALANCE = Gauge('account_balance', 'Account balance', namespace=PROMETHEUS_PREFIX)
 
 DEPOSIT_MESSAGES = Gauge(
@@ -41,7 +48,7 @@ CURRENT_QUORUM_SIZE = Gauge(
 DEPOSITABLE_ETHER = Gauge(
     'depositable_ether',
     'Depositable Ether',
-    ['module_id'],
+    [],
     namespace=PROMETHEUS_PREFIX,
 )
 
