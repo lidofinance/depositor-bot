@@ -18,10 +18,12 @@ from .provider import (
 )
 from .strategy import (
     base_deposit_strategy,
+    base_deposit_strategy_integration,
     deposit_transaction_sender,
     gas_price_calculator,
     gas_price_calculator_integration,
     deposit_transaction_sender_integration,
+    mellow_deposit_strategy_integration,
     mellow_deposit_strategy,
 )
 
@@ -41,9 +43,11 @@ __all__ = [
     'simple_dvt_staking_strategy',
     'staking_module',
     'base_deposit_strategy',
+    'base_deposit_strategy_integration',
     'deposit_transaction_sender',
     'gas_price_calculator',
     'gas_price_calculator_integration',
     'deposit_transaction_sender_integration',
     'mellow_deposit_strategy',
+    'mellow_deposit_strategy_integration'
 ]
