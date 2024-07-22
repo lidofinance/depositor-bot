@@ -34,7 +34,9 @@ def run_depositor(w3):
     logger.info({'msg': 'Initialize Depositor bot.'})
     gas_price_calculator = GasPriceCalculator(w3)
     sender = Sender(w3)
-    depositor_bot = DepositorBot(w3, sender, gas_price_calculator)
+    mellow_deposit_strategy = MellowDepositStrategy(w3)
+    base_deposit_strategy = BaseDepositStrategy(w3)
+    depositor_bot = DepositorBot(w3, sender, gas_price_calculator, mellow_deposit_strategy, base_deposit_strategy)
 
     e = Executor(
         w3,
