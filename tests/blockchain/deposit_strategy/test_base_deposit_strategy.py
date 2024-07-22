@@ -6,7 +6,7 @@ MODULE_ID = 1
 
 
 @pytest.mark.unit
-def test_get_possible_deposits_amount(base_deposit_strategy):
+def test_deposited_keys_amount(base_deposit_strategy):
     depositable_eth = 100
     possible_deposits = depositable_eth // 32
 
@@ -21,7 +21,7 @@ def test_get_possible_deposits_amount(base_deposit_strategy):
 
 
 @pytest.mark.unit
-def test_get_possible_deposits_amount_mellow(mellow_deposit_strategy):
+def test_deposited_keys_amount_mellow(mellow_deposit_strategy):
     depositable_eth = 100
     possible_deposits = depositable_eth // 32
     vault_balance = 10
