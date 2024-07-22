@@ -23,11 +23,18 @@ BUILD_INFO = Gauge(
 
 GAS_FEE = Gauge('gas_fee', 'Gas fee', ['type', 'module_id'], namespace=PROMETHEUS_PREFIX)
 
-TX_SEND = Counter('transactions_send', 'Amount of send transaction from bot.', ['status', 'module_id'], namespace=PROMETHEUS_PREFIX)
+TX_SEND = Counter('transactions_send', 'Amount of send transaction from bot.', ['status'], namespace=PROMETHEUS_PREFIX)
 
 # Initialize metrics
 TX_SEND.labels('success').inc(0)
 TX_SEND.labels('failure').inc(0)
+
+MODULE_TX_SEND = Counter(
+    'transactions',
+    'Amount of send transaction from bot with per module distribution.',
+    ['status', 'module_id'],
+    namespace=PROMETHEUS_PREFIX
+)
 
 ACCOUNT_BALANCE = Gauge('account_balance', 'Account balance', namespace=PROMETHEUS_PREFIX)
 

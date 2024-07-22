@@ -15,6 +15,7 @@ from metrics.metrics import (
     ACCOUNT_BALANCE,
     CURRENT_QUORUM_SIZE,
     MELLOW_VAULT_BALANCE,
+    MODULE_TX_SEND,
     UNEXPECTED_EXCEPTIONS,
 )
 from metrics.transport_message_metrics import message_metrics_filter
@@ -185,12 +186,7 @@ class DepositorBot:
 
         if is_depositable and quorum and can_deposit and gas_is_ok and is_deposit_amount_ok:
             logger.info({'msg': 'Checks passed. Prepare deposit tx.', 'is_mellow': is_mellow})
-            success = self._sender.prepare_and_send(
-                quorum,
-                self._flashbots_works,
-                is_mellow,
-            )
-            logger.info({'msg': f'Tx send. Result is {success}.'})
+            success = self.prepare_and_send_tx(quorum, is_mellow, module_id)
             self._flashbots_works = not self._flashbots_works or success
             self._mellow_works = success
             return success
@@ -278,3 +274,14 @@ class DepositorBot:
             return True
 
         return message_filter
+
+    def prepare_and_send_tx(self, quorum: list[DepositMessage], is_mellow: bool, module_id: int) -> bool:
+        success = self._sender.prepare_and_send(
+            quorum,
+            self._flashbots_works,
+            is_mellow,
+        )
+        logger.info({'msg': f'Tx send. Result is {success}.'})
+        label = 'success' if success else 'failure'
+        MODULE_TX_SEND.labels(label, module_id).inc()
+        return success
