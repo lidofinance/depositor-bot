@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 class BaseDepositStrategy:
     """
         Attributes:
-            DEPOSITABLE_KEYS_THRESHOLD If you have at least TRESHOLD keys, you can deposit
+            DEPOSITABLE_KEYS_THRESHOLD: If the Staking Module has at least THRESHOLD amount of depositable keys, deposits are allowed
     """
     DEPOSITABLE_KEYS_THRESHOLD = 1
 
