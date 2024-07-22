@@ -23,7 +23,7 @@ BUILD_INFO = Gauge(
 
 GAS_FEE = Gauge('gas_fee', 'Gas fee', ['type', 'module_id'], namespace=PROMETHEUS_PREFIX)
 
-TX_SEND = Counter('transactions_send', 'Amount of send transaction from bot.', ['status'], namespace=PROMETHEUS_PREFIX)
+TX_SEND = Counter('transactions_send', 'Amount of send transaction from bot.', ['status', 'module_id'], namespace=PROMETHEUS_PREFIX)
 
 # Initialize metrics
 TX_SEND.labels('success').inc(0)
@@ -59,9 +59,8 @@ CURRENT_QUORUM_SIZE = Gauge(
 )
 
 DEPOSITABLE_ETHER = Gauge(
-    'depositable_ether',
-    'Depositable Ether',
-    ['module_id'],
+    name='depositable_ether',
+    documentation='Depositable Ether',
     namespace=PROMETHEUS_PREFIX,
 )
 

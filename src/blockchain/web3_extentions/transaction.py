@@ -1,6 +1,7 @@
 # pyright: reportTypedDictNotRequiredAccess=false
 
 import logging
+from typing import Optional
 
 import variables
 from blockchain.constants import SLOT_TIME
@@ -36,6 +37,7 @@ class TransactionUtils(Module):
         transaction: ContractFunction,
         use_relay: bool,
         timeout_in_blocks: int,
+        module_id: Optional[int] = None,
     ) -> bool:
         if not variables.ACCOUNT:
             logger.info({'msg': 'Account was not provided. Sending transaction skipped.'})
@@ -77,12 +79,17 @@ class TransactionUtils(Module):
                 status = self.relay_send(signed, timeout_in_blocks)
             except PrivateRelayException as error:
                 logger.error({'msg': 'Private relay error.', 'error': repr(error)})
-
         if status:
-            TX_SEND.labels('success').inc()
+            labels = ['success']
+            if module_id is not None:
+                labels.append(module_id)
+            TX_SEND.labels(*labels).inc()
             logger.info({'msg': 'Transaction found in blockchain.'})
         else:
-            TX_SEND.labels('failure').inc()
+            labels = ['failure']
+            if module_id is not None:
+                labels.append(module_id)
+            TX_SEND.labels(*labels).inc()
             logger.warning({'msg': 'Transaction not found in blockchain.'})
 
         return status

@@ -19,7 +19,7 @@ class BaseDepositStrategy:
 
     def _depositable_ether(self, module_id: int) -> Wei:
         depositable_ether = self.w3.lido.lido.get_depositable_ether()
-        DEPOSITABLE_ETHER.labels(module_id).set(depositable_ether)
+        DEPOSITABLE_ETHER.set(depositable_ether)
         return depositable_ether
 
     def deposited_keys_amount(self, module_id: int) -> int:
