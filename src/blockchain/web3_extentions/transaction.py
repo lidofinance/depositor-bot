@@ -77,6 +77,10 @@ class TransactionUtils(Module):
                 status = self.relay_send(signed, timeout_in_blocks)
             except PrivateRelayException as error:
                 logger.error({'msg': 'Private relay error.', 'error': repr(error)})
+<<<<<<< HEAD
+=======
+
+>>>>>>> 7745fac (Separate mellow flow (#235))
         if status:
             TX_SEND.labels('success').inc()
             logger.info({'msg': 'Transaction found in blockchain.'})
