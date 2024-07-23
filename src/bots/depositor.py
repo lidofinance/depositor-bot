@@ -15,7 +15,8 @@ from metrics.metrics import (
     ACCOUNT_BALANCE,
     CURRENT_QUORUM_SIZE,
     MELLOW_VAULT_BALANCE,
-    UNEXPECTED_EXCEPTIONS, MODULE_TX_SEND,
+    MODULE_TX_SEND,
+    UNEXPECTED_EXCEPTIONS,
 )
 from metrics.transport_message_metrics import message_metrics_filter
 from schema import Or, Schema

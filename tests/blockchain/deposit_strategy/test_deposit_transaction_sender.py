@@ -1,7 +1,6 @@
 from unittest.mock import Mock
 
 import pytest
-
 from transport.msg_types.deposit import DepositMessage
 
 MODULE_ID = 1
