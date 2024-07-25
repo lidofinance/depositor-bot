@@ -20,11 +20,11 @@ from .strategy import (
     base_deposit_strategy,
     base_deposit_strategy_integration,
     deposit_transaction_sender,
+    deposit_transaction_sender_integration,
     gas_price_calculator,
     gas_price_calculator_integration,
-    deposit_transaction_sender_integration,
-    mellow_deposit_strategy_integration,
     mellow_deposit_strategy,
+    mellow_deposit_strategy_integration,
 )
 
 __all__ = [

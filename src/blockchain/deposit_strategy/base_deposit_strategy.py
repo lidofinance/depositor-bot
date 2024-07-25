@@ -17,13 +17,13 @@ class BaseDepositStrategy:
     def __init__(self, w3: Web3):
         self.w3 = w3
 
-    def _depositable_ether(self, module_id: int) -> Wei:
+    def _depositable_ether(self) -> Wei:
         depositable_ether = self.w3.lido.lido.get_depositable_ether()
-        DEPOSITABLE_ETHER.labels(module_id).set(depositable_ether)
+        DEPOSITABLE_ETHER.set(depositable_ether)
         return depositable_ether
 
     def deposited_keys_amount(self, module_id: int) -> int:
-        depositable_ether = self._depositable_ether(module_id)
+        depositable_ether = self._depositable_ether()
         possible_deposits_amount = self.w3.lido.staking_router.get_staking_module_max_deposits_count(
             module_id,
             depositable_ether,
@@ -37,8 +37,8 @@ class MellowDepositStrategy(BaseDepositStrategy):
     Performs deposited keys amount check for direct deposits.
     """
 
-    def _depositable_ether(self, module_id: int) -> Wei:
-        depositable_ether = super()._depositable_ether(module_id)
+    def _depositable_ether(self) -> Wei:
+        depositable_ether = super()._depositable_ether()
         additional_ether = self.w3.lido.simple_dvt_staking_strategy.vault_balance()
         if additional_ether > 0:
             logger.info({'msg': 'Adding mellow vault balance to the depositable check', 'vault': additional_ether})
