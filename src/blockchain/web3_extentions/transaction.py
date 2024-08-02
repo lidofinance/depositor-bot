@@ -113,7 +113,7 @@ class TransactionUtils(Module):
         except TimeExhausted:
             return False
 
-        logger.info({'msg': 'Sent transaction included in blockchain.', 'value': tx_receipt})
+        logger.info({'msg': 'Sent transaction included in blockchain.', 'value': repr(tx_receipt)})
         return True
 
     def classic_send(self, signed_tx: SignedTransaction, timeout_in_blocks: int) -> bool:
