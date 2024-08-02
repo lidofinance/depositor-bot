@@ -8,7 +8,7 @@ import variables
 from blockchain.deposit_strategy.base_deposit_strategy import BaseDepositStrategy
 from blockchain.typings import Web3
 from eth_typing import BlockNumber
-from metrics.metrics import GAS_FEE
+from metrics.metrics import GAS_FEE, DEPOSIT_AMOUNT_OK, GAS_OK
 from web3.types import Wei
 
 logger = logging.getLogger(__name__)
@@ -35,7 +35,9 @@ class GasPriceCalculator:
         recommended_gas_fee = self._get_recommended_gas_fee()
         GAS_FEE.labels('recommended_fee', module_id).set(recommended_gas_fee)
         GAS_FEE.labels('max_fee', module_id).set(variables.MAX_GAS_FEE)
-        return recommended_gas_fee >= current_gas_fee
+        success = recommended_gas_fee >= current_gas_fee
+        GAS_OK.labels(module_id).set(int(success))
+        return success
 
     def _get_pending_base_fee(self) -> Wei:
         base_fee_per_gas = self.w3.eth.get_block('pending')['baseFeePerGas']
@@ -61,6 +63,7 @@ class GasPriceCalculator:
         base_fee_per_gas = self._get_pending_base_fee()
         success = recommended_max_gas >= base_fee_per_gas
         logger.info({'msg': 'Calculations deposit recommendations.', 'value': success})
+        DEPOSIT_AMOUNT_OK.labels(module_id).set(int(success))
         return success
 
     @staticmethod

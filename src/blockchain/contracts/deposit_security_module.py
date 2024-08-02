@@ -6,6 +6,8 @@ from web3.contract.contract import ContractFunction
 from web3.exceptions import ABIFunctionNotFound, ContractLogicError
 from web3.types import BlockIdentifier
 
+from metrics.metrics import CAN_DEPOSIT
+
 logger = logging.getLogger(__name__)
 
 
@@ -37,6 +39,7 @@ class DepositSecurityModuleContract(ContractInterface):
         """
         response = self.functions.canDeposit(staking_module_id).call(block_identifier=block_identifier)
         logger.info({'msg': f'Call `canDeposit({staking_module_id})`.', 'value': response, 'block_identifier': repr(block_identifier)})
+        CAN_DEPOSIT.labels(staking_module_id).set(int(response))
         return response
 
     def deposit_buffered_ether(
