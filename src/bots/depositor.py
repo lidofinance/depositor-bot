@@ -1,20 +1,21 @@
 # pyright: reportTypedDictNotRequiredAccess=false
-
 import logging
 from collections import defaultdict
 from typing import Callable, Optional
 
 import variables
-from blockchain.deposit_strategy.curated_module import CuratedModuleDepositStrategy
-from blockchain.deposit_strategy.interface import ModuleDepositStrategyInterface
+from blockchain.contracts.staking_module import StakingModuleContract
+from blockchain.deposit_strategy.base_deposit_strategy import BaseDepositStrategy, MellowDepositStrategy
+from blockchain.deposit_strategy.deposit_transaction_sender import Sender
+from blockchain.deposit_strategy.gas_price_calculator import GasPriceCalculator
 from blockchain.deposit_strategy.prefered_module_to_deposit import get_preferred_to_deposit_modules
 from blockchain.executor import Executor
 from blockchain.typings import Web3
-from cryptography.verify_signature import compute_vs
-from eth_typing import Hash32
 from metrics.metrics import (
     ACCOUNT_BALANCE,
     CURRENT_QUORUM_SIZE,
+    MELLOW_VAULT_BALANCE,
+    MODULE_TX_SEND,
     UNEXPECTED_EXCEPTIONS,
 )
 from metrics.transport_message_metrics import message_metrics_filter
@@ -32,7 +33,11 @@ logger = logging.getLogger(__name__)
 
 def run_depositor(w3):
     logger.info({'msg': 'Initialize Depositor bot.'})
-    depositor_bot = DepositorBot(w3)
+    gas_price_calculator = GasPriceCalculator(w3)
+    sender = Sender(w3)
+    mellow_deposit_strategy = MellowDepositStrategy(w3)
+    base_deposit_strategy = BaseDepositStrategy(w3)
+    depositor_bot = DepositorBot(w3, sender, gas_price_calculator, mellow_deposit_strategy, base_deposit_strategy)
 
     e = Executor(
         w3,
@@ -50,9 +55,21 @@ class ModuleNotSupportedError(Exception):
 
 class DepositorBot:
     _flashbots_works = True
+    _mellow_works = True
 
-    def __init__(self, w3: Web3):
+    def __init__(
+        self,
+        w3: Web3,
+        sender: Sender,
+        gas_price_calcaulator: GasPriceCalculator,
+        mellow_deposit_strategy: MellowDepositStrategy,
+        base_deposit_strategy: BaseDepositStrategy,
+    ):
         self.w3 = w3
+        self._gas_price_calculator = gas_price_calcaulator
+        self._sender = sender
+        self._mellow_strategy = mellow_deposit_strategy
+        self._general_strategy = base_deposit_strategy
 
         transports = []
 
@@ -103,6 +120,44 @@ class DepositorBot:
 
         return True
 
+    def _is_mellow_depositable(
+        self,
+        module_id: int
+    ) -> bool:
+        if not variables.MELLOW_CONTRACT_ADDRESS:
+            return False
+        try:
+            buffered = self.w3.lido.lido.get_buffered_ether()
+            unfinalized = self.w3.lido.lido_locator.withdrawal_queue_contract.unfinalized_st_eth()
+            if buffered < unfinalized:
+                return False
+            staking_module_contract: StakingModuleContract = self.w3.lido.simple_dvt_staking_strategy.staking_module_contract
+            if staking_module_contract.get_staking_module_id() != module_id:
+                logger.debug(
+                    {
+                        'msg': 'Mellow module check failed.',
+                        'contract_module': staking_module_contract.get_staking_module_id(),
+                        'tx_module': module_id
+                    }
+                )
+                return False
+            balance = self.w3.lido.simple_dvt_staking_strategy.vault_balance()
+        except Exception as e:
+            logger.warning(
+                {
+                    'msg': 'Failed to check if mellow depositable',
+                    'module_id': module_id,
+                    'err': repr(e)
+                }
+            )
+            return False
+        MELLOW_VAULT_BALANCE.labels(module_id).set(balance)
+        if balance < variables.VAULT_DIRECT_DEPOSIT_THRESHOLD:
+            logger.info({'msg': f'{balance} is less than VAULT_DIRECT_DEPOSIT_THRESHOLD while building mellow transaction.'})
+            return False
+        logger.debug({'msg': 'Mellow module check succeeded.', 'tx_module': module_id})
+        return True
+
     def _check_balance(self):
         if variables.ACCOUNT:
             balance = self.w3.eth.get_balance(variables.ACCOUNT.address)
@@ -122,26 +177,27 @@ class DepositorBot:
         can_deposit = self.w3.lido.deposit_security_module.can_deposit(module_id)
         logger.info({'msg': 'Can deposit to module.', 'value': can_deposit})
 
-        module_strategy = self._get_module_strategy(module_id)
-
-        gas_is_ok = module_strategy.is_gas_price_ok()
+        gas_is_ok = self._gas_price_calculator.is_gas_price_ok(module_id)
         logger.info({'msg': 'Calculate gas recommendations.', 'value': gas_is_ok})
 
-        keys_amount_is_profitable = module_strategy.is_deposited_keys_amount_ok()
-        logger.info({'msg': 'Calculations deposit recommendations.', 'value': keys_amount_is_profitable})
+        strategy, is_mellow = self._select_strategy(module_id)
+        is_deposit_amount_ok = self._gas_price_calculator.calculate_deposit_recommendation(strategy, module_id)
+        logger.info({'msg': 'Calculations deposit recommendations.', 'value': is_deposit_amount_ok})
 
-        if is_depositable and quorum and can_deposit and gas_is_ok and keys_amount_is_profitable:
-            logger.info({'msg': 'Checks passed. Prepare deposit tx.'})
-            return self._build_and_send_deposit_tx(quorum)
+        if is_depositable and quorum and can_deposit and gas_is_ok and is_deposit_amount_ok:
+            logger.info({'msg': 'Checks passed. Prepare deposit tx.', 'is_mellow': is_mellow})
+            success = self.prepare_and_send_tx(quorum, is_mellow, self._flashbots_works)
+            self._flashbots_works = not self._flashbots_works or success
+            self._mellow_works = success
+            return success
 
         logger.info({'msg': 'Checks failed. Skip deposit.'})
         return False
 
-    def _get_module_strategy(self, module_id: int) -> ModuleDepositStrategyInterface:
-        if module_id in (1, 2, 3):
-            return CuratedModuleDepositStrategy(self.w3, module_id)
-
-        raise ModuleNotSupportedError(f'Module with id: {module_id} is not supported yet.')
+    def _select_strategy(self, module_id) -> tuple[BaseDepositStrategy, bool]:
+        if self._mellow_works and self._is_mellow_depositable(module_id):
+            return self._mellow_strategy, True
+        return self._general_strategy, False
 
     def _check_module_status(self, module_id: int) -> bool:
         """Returns True if module is ready for deposit"""
@@ -219,58 +275,13 @@ class DepositorBot:
 
         return message_filter
 
-    def _build_and_send_deposit_tx(self, quorum: list[DepositMessage]) -> bool:
-        signs = self._prepare_signs_for_deposit(quorum)
-
-        return self._send_deposit_tx(
-            quorum[0]['blockNumber'],
-            Hash32(bytes.fromhex(quorum[0]['blockHash'][2:])),
-            Hash32(bytes.fromhex(quorum[0]['depositRoot'][2:])),
-            quorum[0]['stakingModuleId'],
-            quorum[0]['nonce'],
-            b'',
-            signs,
+    def prepare_and_send_tx(self, quorum: list[DepositMessage], is_mellow: bool, module_id: int) -> bool:
+        success = self._sender.prepare_and_send(
+            quorum,
+            self._flashbots_works,
+            is_mellow,
         )
-
-    @staticmethod
-    def _prepare_signs_for_deposit(quorum: list[DepositMessage]) -> tuple[tuple[str, str], ...]:
-        sorted_messages = sorted(quorum, key=lambda msg: int(msg['guardianAddress'], 16))
-
-        return tuple((msg['signature']['r'], compute_vs(msg['signature']['v'], msg['signature']['s'])) for msg in sorted_messages)
-
-    def _send_deposit_tx(
-        self,
-        block_number: int,
-        block_hash: Hash32,
-        deposit_root: Hash32,
-        staking_module_id: int,
-        staking_module_nonce: int,
-        payload: bytes,
-        guardian_signs: tuple[tuple[str, str], ...],
-    ) -> bool:
-        """Returns transactions success status"""
-        # Prepare transaction and send
-        deposit_tx = self.w3.lido.deposit_security_module.deposit_buffered_ether(
-            block_number,
-            block_hash,
-            deposit_root,
-            staking_module_id,
-            staking_module_nonce,
-            payload,
-            guardian_signs,
-        )
-
-        if not self.w3.transaction.check(deposit_tx):
-            return False
-
-        logger.info({'msg': 'Send deposit transaction.', 'with_flashbots': self._flashbots_works})
-        success = self.w3.transaction.send(deposit_tx, self._flashbots_works, 6)
-
         logger.info({'msg': f'Tx send. Result is {success}.'})
-
-        if self._flashbots_works and not success:
-            self._flashbots_works = False
-        else:
-            self._flashbots_works = True
-
+        label = 'success' if success else 'failure'
+        MODULE_TX_SEND.labels(label, module_id).inc()
         return success

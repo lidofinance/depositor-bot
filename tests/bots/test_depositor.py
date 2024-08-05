@@ -3,6 +3,7 @@ from unittest.mock import Mock
 
 import pytest
 import variables
+from blockchain.typings import Web3
 from bots.depositor import DepositorBot
 
 from tests.conftest import DSM_OWNER
@@ -15,12 +16,19 @@ COUNCIL_PK_2 = '0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab36
 
 
 @pytest.fixture
-def depositor_bot(web3_lido_unit, block_data):
+def depositor_bot(
+    web3_lido_unit,
+    deposit_transaction_sender,
+    gas_price_calculator,
+    mellow_deposit_strategy,
+    base_deposit_strategy,
+    block_data,
+):
     variables.MESSAGE_TRANSPORTS = ''
     variables.DEPOSIT_MODULES_WHITELIST = [1, 2]
     web3_lido_unit.lido.staking_router.get_staking_module_ids = Mock(return_value=[1, 2])
     web3_lido_unit.eth.get_block = Mock(return_value=block_data)
-    yield DepositorBot(web3_lido_unit)
+    yield DepositorBot(web3_lido_unit, deposit_transaction_sender, mellow_deposit_strategy, base_deposit_strategy, gas_price_calculator)
 
 
 @pytest.fixture
@@ -49,7 +57,7 @@ def deposit_message():
 def test_depositor_one_module_deposited(depositor_bot, block_data):
     modules = list(range(10))
 
-    depositor_bot.w3.lido.lido.get_depositable_ether = Mock(return_value=10 * 32 * 10**18)
+    depositor_bot.w3.lido.lido.get_depositable_ether = Mock(return_value=10 * 32 * 10 ** 18)
     depositor_bot.w3.lido.staking_router.get_staking_module_ids = Mock(return_value=modules)
     depositor_bot.w3.lido.staking_router.get_staking_module_max_deposits_count = Mock(return_value=0)
     depositor_bot.w3.lido.deposit_security_module.get_max_deposits = Mock(return_value=10)
@@ -67,6 +75,28 @@ def test_depositor_one_module_deposited(depositor_bot, block_data):
 
 
 @pytest.mark.unit
+def test_is_mellow_depositable(depositor_bot):
+    variables.MELLOW_CONTRACT_ADDRESS = None
+    assert not depositor_bot._is_mellow_depositable(1)
+
+    variables.MELLOW_CONTRACT_ADDRESS = '0x1'
+    depositor_bot.w3.lido.lido.get_buffered_ether = Mock(return_value=Web3.to_wei(1, 'ether'))
+    depositor_bot.w3.lido.lido_locator.withdrawal_queue_contract.unfinalized_st_eth = Mock(return_value=Web3.to_wei(1, 'ether'))
+    depositor_bot.w3.lido.simple_dvt_staking_strategy.staking_module_contract.get_staking_module_id = Mock(return_value=1)
+    assert not depositor_bot._is_mellow_depositable(2)
+
+    depositor_bot.w3.lido.simple_dvt_staking_strategy.vault_balance = Mock(return_value=Web3.to_wei(0.5, 'ether'))
+    assert not depositor_bot._is_mellow_depositable(1)
+
+    depositor_bot.w3.lido.simple_dvt_staking_strategy.vault_balance = Mock(return_value=Web3.to_wei(1.4, 'ether'))
+    assert depositor_bot._is_mellow_depositable(1)
+
+    depositor_bot.w3.lido.lido.get_buffered_ether = Mock(return_value=Web3.to_wei(0.5, 'ether'))
+    depositor_bot.w3.lido.lido_locator.withdrawal_queue_contract.unfinalized_st_eth = Mock(return_value=Web3.to_wei(1, 'ether'))
+    assert not depositor_bot._is_mellow_depositable(1)
+
+
+@pytest.mark.unit
 def test_check_balance_dry(depositor_bot, caplog):
     caplog.set_level(logging.INFO)
     depositor_bot._check_balance()
@@ -77,7 +107,7 @@ def test_check_balance_dry(depositor_bot, caplog):
 def test_check_balance(depositor_bot, caplog, set_account):
     caplog.set_level(logging.INFO)
 
-    depositor_bot.w3.eth.get_balance = Mock(return_value=10 * 10**18)
+    depositor_bot.w3.eth.get_balance = Mock(return_value=10 * 10 ** 18)
     depositor_bot._check_balance()
     assert 'Check account balance' in caplog.messages[-1]
 
@@ -105,13 +135,9 @@ def test_depositor_check_module_status(depositor_bot):
 def test_depositor_deposit_to_module(depositor_bot, is_depositable, quorum, is_gas_price_ok, is_deposited_keys_amount_ok):
     depositor_bot._check_module_status = Mock(return_value=is_depositable)
     depositor_bot._get_quorum = Mock(return_value=quorum)
-
-    strategy = Mock()
-    strategy.is_gas_price_ok = Mock(return_value=is_gas_price_ok)
-    strategy.is_deposited_keys_amount_ok = Mock(return_value=is_deposited_keys_amount_ok)
-
-    depositor_bot._get_module_strategy = Mock(return_value=strategy)
-    depositor_bot._build_and_send_deposit_tx = Mock(return_value=True)
+    depositor_bot._mellow_works = False
+    depositor_bot._gas_price_calculator.is_gas_price_ok = Mock(return_value=is_gas_price_ok)
+    depositor_bot._gas_price_calculator.calculate_deposit_recommendation = Mock(return_value=is_deposited_keys_amount_ok)
 
     assert not depositor_bot._deposit_to_module(1)
 
@@ -185,64 +211,6 @@ def test_depositor_message_actualizer_root(setup_deposit_message, depositor_bot,
 
     deposit_message['blockNumber'] = block_data['number'] + 100
     assert list(filter(message_filter, [deposit_message]))
-
-
-@pytest.mark.unit
-def test_prepare_signs_for_deposit(deposit_message, depositor_bot):
-    second_council = {
-        'guardianAddress': '0x13464Fe06c18848a2E2e913194D64c1970f4326a',
-        'signature': {
-            'r': '0xc2235eb6983f80d19158f807d5d90d93abec52034ea7184bbf164ba211f00116',
-            's': '0x75354ffc9fb6e7a4b4c01c622661a1d0382ace8c4ff8024626e39ac1a6a613d0',
-            '_vs': '0x75354ffc9fb6e7a4b4c01c622661a1d0382ace8c4ff8024626e39ac1a6a613d0',
-            'recoveryParam': 0,
-            'v': 27,
-        },
-    }
-
-    expected = (
-        (
-            '0xc2235eb6983f80d19158f807d5d90d93abec52034ea7184bbf164ba211f00116',
-            '0x75354ffc9fb6e7a4b4c01c622661a1d0382ace8c4ff8024626e39ac1a6a613d0',
-        ),
-        (
-            '0xc2235eb6983f80d19158f807d5d90d93abec52034ea7184bbf164ba211f00116',
-            '0x75354ffc9fb6e7a4b4c01c622661a1d0382ace8c4ff8024626e39ac1a6a613d0',
-        ),
-    )
-
-    signs = depositor_bot._prepare_signs_for_deposit([second_council, deposit_message])
-    assert signs == expected
-
-    signs = depositor_bot._prepare_signs_for_deposit([deposit_message, second_council])
-    assert signs == expected
-
-
-@pytest.mark.unit
-def test_send_deposit_tx(depositor_bot):
-    depositor_bot.w3.transaction.check = Mock(return_value=False)
-    params = [
-        1,
-        b'',
-        b'',
-        1,
-        1,
-        b'',
-        tuple(),
-    ]
-    assert not depositor_bot._send_deposit_tx(*params)
-
-    depositor_bot.w3.transaction.check = Mock(return_value=True)
-    depositor_bot.w3.transaction.send = Mock(return_value=True)
-    assert depositor_bot._send_deposit_tx(*params)
-    assert depositor_bot._flashbots_works
-
-    depositor_bot.w3.transaction.send = Mock(return_value=False)
-    assert not depositor_bot._send_deposit_tx(*params)
-    assert not depositor_bot._flashbots_works
-
-    assert not depositor_bot._send_deposit_tx(*params)
-    assert depositor_bot._flashbots_works
 
 
 @pytest.mark.unit
@@ -330,7 +298,16 @@ def add_accounts_to_guardian(web3_lido_integration, set_integration_account):
     [[19628126, 1], [19628126, 2]],
     indirect=['web3_provider_integration'],
 )
-def test_depositor_bot(web3_provider_integration, web3_lido_integration, module_id, add_accounts_to_guardian):
+def test_depositor_bot(
+    web3_provider_integration,
+    web3_lido_integration,
+    deposit_transaction_sender_integration,
+    mellow_deposit_strategy_integration,
+    base_deposit_strategy_integration,
+    gas_price_calculator_integration,
+    module_id,
+    add_accounts_to_guardian,
+):
     variables.DEPOSIT_MODULES_WHITELIST = [1, 2]
     web3_lido_integration.provider.make_request(
         'anvil_setBalance',
@@ -344,7 +321,7 @@ def test_depositor_bot(web3_provider_integration, web3_lido_integration, module_
         web3_lido_integration.lido.lido.functions.submit(web3_lido_integration.eth.accounts[0]).transact(
             {
                 'from': web3_lido_integration.eth.accounts[0],
-                'value': 10000 * 10**18,
+                'value': 10000 * 10 ** 18,
             }
         )
 
@@ -360,13 +337,19 @@ def test_depositor_bot(web3_provider_integration, web3_lido_integration, module_
 
     web3_lido_integration.provider.make_request('anvil_mine', [1])
 
-    db = DepositorBot(web3_lido_integration)
+    db: DepositorBot = DepositorBot(
+        web3_lido_integration,
+        deposit_transaction_sender_integration,
+        gas_price_calculator_integration,
+        mellow_deposit_strategy_integration,
+        base_deposit_strategy_integration,
+    )
+    db._mellow_works = False
     db.message_storage.messages = []
     db.execute(latest)
 
     assert web3_lido_integration.lido.staking_router.get_staking_module_nonce(module_id) == old_module_nonce
 
     db.message_storage.messages = [deposit_message_1, deposit_message_2, deposit_message_3]
-    db._get_module_strategy = Mock(return_value=Mock(return_value=True))
     assert db.execute(latest)
     assert web3_lido_integration.lido.staking_router.get_staking_module_nonce(module_id) == old_module_nonce + 1

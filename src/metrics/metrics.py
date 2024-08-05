@@ -1,27 +1,5 @@
-from prometheus_client.metrics import Counter, Gauge, Histogram
-from variables import PROMETHEUS_PREFIX
-
-METRICS_PREFIX = PROMETHEUS_PREFIX
-
-BUILD_INFO = Gauge(
-    'build_info',
-    'Build info',
-    [
-        'name',
-        'max_gas_fee',
-        'max_buffered_ethers',
-        'contract_gas_limit',
-        'gas_fee_percentile_1',
-        'gas_fee_percentile_days_history_1',
-        'gas_priority_fee_percentile',
-        'min_priority_fee',
-        'max_priority_fee',
-        'account_address',
-        'create_transactions',
-        'modules_whitelist',
-    ],
-    namespace=PROMETHEUS_PREFIX,
-)
+from prometheus_client.metrics import Counter, Gauge, Histogram, Info
+from variables import DEPOSIT_MODULES_WHITELIST, PROMETHEUS_PREFIX, PUBLIC_ENV_VARS
 
 GAS_FEE = Gauge('gas_fee', 'Gas fee', ['type', 'module_id'], namespace=PROMETHEUS_PREFIX)
 
@@ -30,6 +8,13 @@ TX_SEND = Counter('transactions_send', 'Amount of send transaction from bot.', [
 # Initialize metrics
 TX_SEND.labels('success').inc(0)
 TX_SEND.labels('failure').inc(0)
+
+MODULE_TX_SEND = Counter(
+    'transactions',
+    'Amount of send transaction from bot with per module distribution.',
+    ['status', 'module_id'],
+    namespace=PROMETHEUS_PREFIX
+)
 
 ACCOUNT_BALANCE = Gauge('account_balance', 'Account balance', namespace=PROMETHEUS_PREFIX)
 
@@ -63,13 +48,20 @@ CURRENT_QUORUM_SIZE = Gauge(
 DEPOSITABLE_ETHER = Gauge(
     'depositable_ether',
     'Depositable Ether',
-    ['module_id'],
+    [],
     namespace=PROMETHEUS_PREFIX,
 )
 
 POSSIBLE_DEPOSITS_AMOUNT = Gauge(
     'possible_deposits_amount',
     'Possible deposits amount.',
+    ['module_id'],
+    namespace=PROMETHEUS_PREFIX,
+)
+
+MELLOW_VAULT_BALANCE = Gauge(
+    'mellow_vault_balance',
+    'Mellow vault balance.',
     ['module_id'],
     namespace=PROMETHEUS_PREFIX,
 )
@@ -86,3 +78,12 @@ UNEXPECTED_EXCEPTIONS = Counter(
     ['type'],
     namespace=PROMETHEUS_PREFIX,
 )
+
+MODULES = Gauge('modules', 'Modules gauge', ['module_id'], namespace=PROMETHEUS_PREFIX)
+
+for module_id in DEPOSIT_MODULES_WHITELIST:
+    MODULES.labels(module_id).set(1)
+
+INFO = Info(name='build', documentation='Info metric', namespace=PROMETHEUS_PREFIX)
+CONVERTED_PUBLIC_ENV = {k: str(v) for k, v in PUBLIC_ENV_VARS.items()}
+INFO.info(CONVERTED_PUBLIC_ENV)
