@@ -2,11 +2,10 @@ import logging
 
 from blockchain.contracts.base_interface import ContractInterface
 from eth_typing import ChecksumAddress, Hash32
+from metrics.metrics import CAN_DEPOSIT
 from web3.contract.contract import ContractFunction
 from web3.exceptions import ABIFunctionNotFound, ContractLogicError
 from web3.types import BlockIdentifier
-
-from metrics.metrics import CAN_DEPOSIT
 
 logger = logging.getLogger(__name__)
 

@@ -8,7 +8,7 @@ import variables
 from blockchain.deposit_strategy.base_deposit_strategy import BaseDepositStrategy
 from blockchain.typings import Web3
 from eth_typing import BlockNumber
-from metrics.metrics import GAS_FEE, DEPOSIT_AMOUNT_OK, GAS_OK
+from metrics.metrics import DEPOSIT_AMOUNT_OK, GAS_FEE, GAS_OK
 from web3.types import Wei
 
 logger = logging.getLogger(__name__)

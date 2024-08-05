@@ -14,9 +14,11 @@ from blockchain.typings import Web3
 from metrics.metrics import (
     ACCOUNT_BALANCE,
     CURRENT_QUORUM_SIZE,
+    IS_DEPOSITABLE,
     MELLOW_VAULT_BALANCE,
     MODULE_TX_SEND,
-    UNEXPECTED_EXCEPTIONS, QUORUM, IS_DEPOSITABLE,
+    QUORUM,
+    UNEXPECTED_EXCEPTIONS,
 )
 from metrics.transport_message_metrics import message_metrics_filter
 from schema import Or, Schema
