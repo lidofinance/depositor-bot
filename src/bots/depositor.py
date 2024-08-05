@@ -14,8 +14,10 @@ from blockchain.typings import Web3
 from metrics.metrics import (
     ACCOUNT_BALANCE,
     CURRENT_QUORUM_SIZE,
+    IS_DEPOSITABLE,
     MELLOW_VAULT_BALANCE,
     MODULE_TX_SEND,
+    QUORUM,
     UNEXPECTED_EXCEPTIONS,
 )
 from metrics.transport_message_metrics import message_metrics_filter
@@ -201,7 +203,9 @@ class DepositorBot:
 
     def _check_module_status(self, module_id: int) -> bool:
         """Returns True if module is ready for deposit"""
-        return self.w3.lido.staking_router.is_staking_module_active(module_id)
+        ready = self.w3.lido.staking_router.is_staking_module_active(module_id)
+        IS_DEPOSITABLE.labels(module_id).set(int(ready))
+        return ready
 
     def _get_quorum(self, module_id: int) -> Optional[list[DepositMessage]]:
         """Returns quorum messages or None is quorum is not ready"""
@@ -230,11 +234,13 @@ class DepositorBot:
 
             if quorum_size >= min_signs_to_deposit:
                 CURRENT_QUORUM_SIZE.labels('current').set(quorum_size)
+                QUORUM.labels(module_id).set(1)
                 return list(unified_messages)
 
             max_quorum_size = max(quorum_size, max_quorum_size)
 
         CURRENT_QUORUM_SIZE.labels('current').set(max_quorum_size)
+        QUORUM.labels(module_id).set(0)
 
     def _get_message_actualize_filter(self) -> Callable[[DepositMessage], bool]:
         latest = self.w3.eth.get_block('latest')

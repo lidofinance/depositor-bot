@@ -66,6 +66,41 @@ MELLOW_VAULT_BALANCE = Gauge(
     namespace=PROMETHEUS_PREFIX,
 )
 
+IS_DEPOSITABLE = Gauge(
+    'is_depositable',
+    'Represents is_depositable check.',
+    ['module_id'],
+    namespace=PROMETHEUS_PREFIX,
+)
+
+QUORUM = Gauge(
+    'quorum',
+    'Represents if quorum could be collected.',
+    ['module_id'],
+    namespace=PROMETHEUS_PREFIX,
+)
+
+CAN_DEPOSIT = Gauge(
+    'can_deposit',
+    'Represents can_deposit check.',
+    ['module_id'],
+    namespace=PROMETHEUS_PREFIX,
+)
+
+GAS_OK = Gauge(
+    'is_gas_ok',
+    'Represents is_gas_ok check.',
+    ['module_id'],
+    namespace=PROMETHEUS_PREFIX,
+)
+
+DEPOSIT_AMOUNT_OK = Gauge(
+    'is_deposit_amount_ok',
+    'Represents is_deposit_amount_ok check.',
+    ['module_id'],
+    namespace=PROMETHEUS_PREFIX,
+)
+
 ETH_RPC_REQUESTS_DURATION = Histogram('eth_rpc_requests_duration', 'Duration of requests to ETH1 RPC', namespace=PROMETHEUS_PREFIX)
 
 ETH_RPC_REQUESTS = Counter(
