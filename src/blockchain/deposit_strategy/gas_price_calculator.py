@@ -30,12 +30,12 @@ class GasPriceCalculator:
 
         current_buffered_ether = self.w3.lido.lido.get_depositable_ether()
         if current_buffered_ether > variables.MAX_BUFFERED_ETHERS:
-            return current_gas_fee <= variables.MAX_GAS_FEE
-
-        recommended_gas_fee = self._get_recommended_gas_fee()
-        GAS_FEE.labels('recommended_fee', module_id).set(recommended_gas_fee)
-        GAS_FEE.labels('max_fee', module_id).set(variables.MAX_GAS_FEE)
-        success = recommended_gas_fee >= current_gas_fee
+            success = current_gas_fee <= variables.MAX_GAS_FEE
+        else:
+            recommended_gas_fee = self._get_recommended_gas_fee()
+            GAS_FEE.labels('recommended_fee', module_id).set(recommended_gas_fee)
+            GAS_FEE.labels('max_fee', module_id).set(variables.MAX_GAS_FEE)
+            success = recommended_gas_fee >= current_gas_fee
         GAS_OK.labels(module_id).set(int(success))
         return success
 
@@ -46,6 +46,7 @@ class GasPriceCalculator:
 
     def calculate_deposit_recommendation(self, deposit_strategy: BaseDepositStrategy, module_id: int) -> bool:
         possible_keys = deposit_strategy.deposited_keys_amount(module_id)
+        success = False
         if possible_keys < deposit_strategy.DEPOSITABLE_KEYS_THRESHOLD:
             logger.info(
                 {
@@ -54,15 +55,14 @@ class GasPriceCalculator:
                     'threshold': deposit_strategy.DEPOSITABLE_KEYS_THRESHOLD,
                 }
             )
-            return False
-
-        recommended_max_gas = GasPriceCalculator._calculate_recommended_gas_based_on_deposit_amount(
-            possible_keys,
-            module_id,
-        )
-        base_fee_per_gas = self._get_pending_base_fee()
-        success = recommended_max_gas >= base_fee_per_gas
-        logger.info({'msg': 'Calculations deposit recommendations.', 'value': success})
+        else:
+            recommended_max_gas = GasPriceCalculator._calculate_recommended_gas_based_on_deposit_amount(
+                possible_keys,
+                module_id,
+            )
+            base_fee_per_gas = self._get_pending_base_fee()
+            success = recommended_max_gas >= base_fee_per_gas
+            logger.info({'msg': 'Calculations deposit recommendations.', 'value': success})
         DEPOSIT_AMOUNT_OK.labels(module_id).set(int(success))
         return success
 
