@@ -20,15 +20,13 @@ def depositor_bot(
     web3_lido_unit,
     deposit_transaction_sender,
     gas_price_calculator,
-    mellow_deposit_strategy,
-    base_deposit_strategy,
     block_data,
 ):
     variables.MESSAGE_TRANSPORTS = ''
     variables.DEPOSIT_MODULES_WHITELIST = [1, 2]
     web3_lido_unit.lido.staking_router.get_staking_module_ids = Mock(return_value=[1, 2])
     web3_lido_unit.eth.get_block = Mock(return_value=block_data)
-    yield DepositorBot(web3_lido_unit, deposit_transaction_sender, mellow_deposit_strategy, base_deposit_strategy, gas_price_calculator)
+    yield DepositorBot(web3_lido_unit, deposit_transaction_sender, gas_price_calculator)
 
 
 @pytest.fixture
@@ -72,28 +70,6 @@ def test_depositor_one_module_deposited(depositor_bot, block_data):
     depositor_bot.execute(block_data)
 
     assert depositor_bot._deposit_to_module.call_count == 2
-
-
-@pytest.mark.unit
-def test_is_mellow_depositable(depositor_bot):
-    variables.MELLOW_CONTRACT_ADDRESS = None
-    assert not depositor_bot._is_mellow_depositable(1)
-
-    variables.MELLOW_CONTRACT_ADDRESS = '0x1'
-    depositor_bot.w3.lido.lido.get_buffered_ether = Mock(return_value=Web3.to_wei(1, 'ether'))
-    depositor_bot.w3.lido.lido_locator.withdrawal_queue_contract.unfinalized_st_eth = Mock(return_value=Web3.to_wei(1, 'ether'))
-    depositor_bot.w3.lido.simple_dvt_staking_strategy.staking_module_contract.get_staking_module_id = Mock(return_value=1)
-    assert not depositor_bot._is_mellow_depositable(2)
-
-    depositor_bot.w3.lido.simple_dvt_staking_strategy.vault_balance = Mock(return_value=Web3.to_wei(0.5, 'ether'))
-    assert not depositor_bot._is_mellow_depositable(1)
-
-    depositor_bot.w3.lido.simple_dvt_staking_strategy.vault_balance = Mock(return_value=Web3.to_wei(1.4, 'ether'))
-    assert depositor_bot._is_mellow_depositable(1)
-
-    depositor_bot.w3.lido.lido.get_buffered_ether = Mock(return_value=Web3.to_wei(0.5, 'ether'))
-    depositor_bot.w3.lido.lido_locator.withdrawal_queue_contract.unfinalized_st_eth = Mock(return_value=Web3.to_wei(1, 'ether'))
-    assert not depositor_bot._is_mellow_depositable(1)
 
 
 @pytest.mark.unit

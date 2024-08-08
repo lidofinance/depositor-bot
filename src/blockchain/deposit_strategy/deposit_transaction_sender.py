@@ -46,14 +46,15 @@ class Sender:
         quorum: list[DepositMessage],
         with_flashbots: bool,
     ) -> bool:
-        if not self._sender_checks(module_id):
+        if self._sender_checks(module_id):
+            tx = self._prepare_tx(quorum)
+            if tx and self._send_transaction(tx, with_flashbots):
+                return True
+
+        if self._next_sender is not None:
             return self._next_sender.prepare_and_send(module_id, quorum, with_flashbots)
 
-        tx = self._prepare_tx(quorum)
-        if tx is None or not self._send_transaction(tx, with_flashbots):
-            return self._next_sender.prepare_and_send(module_id, quorum, with_flashbots)
-
-        return True
+        return False
 
     def _prepare_tx(self, quorum: list[DepositMessage]) -> Optional[ContractFunction]:
         block_number = quorum[0]['blockNumber']

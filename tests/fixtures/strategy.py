@@ -1,6 +1,6 @@
 import pytest
 from blockchain.deposit_strategy.base_deposit_strategy import BaseDepositStrategy, MellowDepositStrategy
-from blockchain.deposit_strategy.deposit_transaction_sender import Sender
+from blockchain.deposit_strategy.deposit_transaction_sender import Sender, MellowSender
 from blockchain.deposit_strategy.gas_price_calculator import GasPriceCalculator
 
 
@@ -25,16 +25,6 @@ def mellow_deposit_strategy_integration(web3_lido_integration):
 
 
 @pytest.fixture
-def deposit_transaction_sender(web3_lido_unit):
-    yield Sender(web3_lido_unit)
-
-
-@pytest.fixture
-def deposit_transaction_sender_integration(web3_lido_integration):
-    yield Sender(web3_lido_integration)
-
-
-@pytest.fixture
 def gas_price_calculator(web3_lido_unit):
     yield GasPriceCalculator(web3_lido_unit)
 
@@ -42,3 +32,27 @@ def gas_price_calculator(web3_lido_unit):
 @pytest.fixture
 def gas_price_calculator_integration(web3_lido_integration):
     yield GasPriceCalculator(web3_lido_integration)
+
+
+@pytest.fixture
+def deposit_transaction_sender(web3_lido_unit, gas_price_calculator, base_deposit_strategy) -> Sender:
+    yield Sender(web3_lido_unit, gas_price_calculator, base_deposit_strategy)
+
+
+@pytest.fixture
+def deposit_transaction_sender_integration(web3_lido_integration, gas_price_calculator_integration, base_deposit_strategy_integration):
+    yield Sender(web3_lido_integration, gas_price_calculator_integration, base_deposit_strategy_integration)
+
+
+@pytest.fixture
+def deposit_transaction_mellow_sender(web3_lido_unit, gas_price_calculator, mellow_deposit_strategy) -> MellowSender:
+    yield MellowSender(web3_lido_unit, gas_price_calculator, mellow_deposit_strategy)
+
+
+@pytest.fixture
+def deposit_transaction_mellow_sender_integration(
+    web3_lido_integration,
+    gas_price_calculator,
+    mellow_deposit_strategy_integration,
+) -> MellowSender:
+    yield MellowSender(web3_lido_integration, gas_price_calculator, mellow_deposit_strategy_integration)
