@@ -317,10 +317,7 @@ def test_depositor_bot(
         web3_lido_integration,
         deposit_transaction_sender_integration,
         gas_price_calculator_integration,
-        mellow_deposit_strategy_integration,
-        base_deposit_strategy_integration,
     )
-    db._mellow_works = False
     db.message_storage.messages = []
     db.execute(latest)
 
