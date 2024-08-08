@@ -117,10 +117,11 @@ class DepositorBot:
             logger.info({'msg': f'Do deposit to module with id: {module_id}.'})
             try:
                 sent = self._deposit_to_module(module_id)
-                if sent:
-                    break
             except ModuleNotSupportedError as error:
                 logger.warning({'msg': 'Module not supported exception.', 'error': str(error)})
+            else:
+                if sent:
+                    break
 
         return True
 
