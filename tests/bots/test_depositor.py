@@ -71,7 +71,7 @@ def test_depositor_one_module_deposited(depositor_bot, block_data):
     depositor_bot._deposit_to_module = Mock(return_value=True)
     depositor_bot.execute(block_data)
 
-    assert depositor_bot._deposit_to_module.call_count == 2
+    assert depositor_bot._deposit_to_module.call_count == 1
 
 
 @pytest.mark.unit
