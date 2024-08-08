@@ -141,7 +141,7 @@ class DepositorBot:
 
         if is_depositable and quorum and can_deposit and gas_is_ok:
             logger.info({'msg': 'Checks passed. Prepare deposit tx.'})
-            success = self.prepare_and_send_tx(quorum, self._flashbots_works)
+            success = self.prepare_and_send_tx(quorum, module_id)
             self._flashbots_works = not self._flashbots_works or success
             return success
 
