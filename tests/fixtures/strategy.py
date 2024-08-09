@@ -40,8 +40,15 @@ def deposit_transaction_sender(web3_lido_unit, gas_price_calculator, base_deposi
 
 
 @pytest.fixture
-def deposit_transaction_sender_integration(web3_lido_integration, gas_price_calculator_integration, base_deposit_strategy_integration):
-    yield Sender(web3_lido_integration, gas_price_calculator_integration, base_deposit_strategy_integration)
+def deposit_transaction_sender_integration(
+    web3_lido_integration,
+    gas_price_calculator_integration,
+    base_deposit_strategy_integration,
+    deposit_transaction_mellow_sender_integration,
+):
+    general_sender = Sender(web3_lido_integration, gas_price_calculator_integration, base_deposit_strategy_integration)
+    general_sender.add_sender(deposit_transaction_mellow_sender_integration)
+    yield general_sender
 
 
 @pytest.fixture

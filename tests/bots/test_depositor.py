@@ -282,6 +282,8 @@ def test_depositor_bot_non_mellow_deposits(
     module_id,
     add_accounts_to_guardian,
 ):
+    # Disable mellow integration
+    variables.MELLOW_CONTRACT_ADDRESS = None
     # Define the whitelist of deposit modules
     variables.DEPOSIT_MODULES_WHITELIST = [1, 2]
 
