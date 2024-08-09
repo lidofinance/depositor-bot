@@ -44,3 +44,17 @@ class MellowDepositStrategy(BaseDepositStrategy):
             logger.info({'msg': 'Adding mellow vault balance to the depositable check', 'vault': additional_ether})
         depositable_ether += additional_ether
         return depositable_ether
+
+    def deposited_keys_amount(self, module_id: int) -> int:
+        depositable_ether = self._depositable_ether()
+        possible_deposits_amount_assumption = self.w3.lido.staking_router.get_staking_module_max_deposits_count(
+            module_id,
+            depositable_ether,
+        )
+        possible_deposited_eth = 32 * possible_deposits_amount_assumption
+        possible_deposits_amount = self.w3.lido.staking_router.get_staking_module_max_deposits_count(
+            module_id,
+            possible_deposited_eth,
+        )
+        POSSIBLE_DEPOSITS_AMOUNT.labels(module_id).set(possible_deposits_amount)
+        return possible_deposits_amount if possible_deposits_amount_assumption == possible_deposits_amount else 0

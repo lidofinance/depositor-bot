@@ -32,7 +32,11 @@ def test_deposited_keys_amount_mellow(mellow_deposit_strategy):
     mellow_deposit_strategy.w3.lido.staking_router.get_staking_module_max_deposits_count = Mock(return_value=possible_deposits)
 
     assert mellow_deposit_strategy.deposited_keys_amount(MODULE_ID) == possible_deposits
-    mellow_deposit_strategy.w3.lido.staking_router.get_staking_module_max_deposits_count.assert_called_once_with(
+    mellow_deposit_strategy.w3.lido.staking_router.get_staking_module_max_deposits_count.assert_any_call(
         MODULE_ID,
         depositable_eth + vault_balance,
+    )
+    mellow_deposit_strategy.w3.lido.staking_router.get_staking_module_max_deposits_count.assert_any_call(
+        MODULE_ID,
+        32 * possible_deposits,
     )
