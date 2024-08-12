@@ -122,6 +122,50 @@ class DepositorBot:
 
         return True
 
+    def _is_mellow_depositable(
+        self,
+        module_id: int
+    ) -> bool:
+        if not variables.MELLOW_CONTRACT_ADDRESS:
+            return False
+        try:
+            buffered = self.w3.lido.lido.get_buffered_ether()
+            unfinalized = self.w3.lido.lido_locator.withdrawal_queue_contract.unfinalized_st_eth()
+            if buffered < unfinalized:
+                return False
+            staking_module_contract: StakingModuleContract = self.w3.lido.simple_dvt_staking_strategy.staking_module_contract
+            if staking_module_contract.get_staking_module_id() != module_id:
+                logger.debug(
+                    {
+                        'msg': 'Mellow module check failed.',
+                        'contract_module': staking_module_contract.get_staking_module_id(),
+                        'tx_module': module_id,
+                    }
+                )
+                return False
+            balance = self.w3.lido.simple_dvt_staking_strategy.vault_balance()
+        except Exception as e:
+            logger.warning(
+                {
+                    'msg': 'Failed to check if mellow depositable.',
+                    'module_id': module_id,
+                    'err': repr(e),
+                }
+            )
+            return False
+        MELLOW_VAULT_BALANCE.labels(module_id).set(balance)
+        if balance < variables.VAULT_DIRECT_DEPOSIT_THRESHOLD:
+            logger.info(
+                {
+                    'msg': f'{balance} is less than VAULT_DIRECT_DEPOSIT_THRESHOLD while building mellow transaction.',
+                    'balance': balance,
+                    'threshold': variables.VAULT_DIRECT_DEPOSIT_THRESHOLD,
+                }
+            )
+            return False
+        logger.debug({'msg': 'Mellow module check succeeded.', 'tx_module': module_id})
+        return True
+
     def _check_balance(self):
         if variables.ACCOUNT:
             balance = self.w3.eth.get_balance(variables.ACCOUNT.address)
@@ -159,16 +203,16 @@ class DepositorBot:
         logger.info({'msg': 'Checks failed. Skip deposit.'})
         return False
 
+    def _select_strategy(self, module_id) -> tuple[BaseDepositStrategy, bool]:
+        if self._is_mellow_depositable(module_id):
+            return self._mellow_strategy, True
+        return self._general_strategy, False
+
     def _check_module_status(self, module_id: int) -> bool:
         """Returns True if module is ready for deposit"""
         ready = self.w3.lido.staking_router.is_staking_module_active(module_id)
         IS_DEPOSITABLE.labels(module_id).set(int(ready))
         return ready
-
-    def _select_strategy(self, module_id) -> tuple[BaseDepositStrategy, bool]:
-        if self._is_mellow_depositable(module_id):
-            return self._mellow_strategy, True
-        return self._general_strategy, False
 
     def _get_quorum(self, module_id: int) -> Optional[list[DepositMessage]]:
         """Returns quorum messages or None is quorum is not ready"""

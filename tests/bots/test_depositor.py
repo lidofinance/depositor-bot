@@ -75,13 +75,6 @@ def test_depositor_one_module_deposited(depositor_bot, block_data):
 
 
 @pytest.mark.unit
-def test_check_balance_dry(depositor_bot, caplog):
-    caplog.set_level(logging.INFO)
-    depositor_bot._check_balance()
-    assert 'No account provided. Dry mode.' in caplog.messages[-1]
-
-
-@pytest.mark.unit
 def test_is_mellow_depositable(depositor_bot):
     variables.MELLOW_CONTRACT_ADDRESS = None
     assert not depositor_bot._is_mellow_depositable(1)
@@ -101,6 +94,13 @@ def test_is_mellow_depositable(depositor_bot):
     depositor_bot.w3.lido.lido.get_buffered_ether = Mock(return_value=Web3.to_wei(0.5, 'ether'))
     depositor_bot.w3.lido.lido_locator.withdrawal_queue_contract.unfinalized_st_eth = Mock(return_value=Web3.to_wei(1, 'ether'))
     assert not depositor_bot._is_mellow_depositable(1)
+
+
+@pytest.mark.unit
+def test_check_balance_dry(depositor_bot, caplog):
+    caplog.set_level(logging.INFO)
+    depositor_bot._check_balance()
+    assert 'No account provided. Dry mode.' in caplog.messages[-1]
 
 
 @pytest.mark.unit
