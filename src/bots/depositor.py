@@ -14,10 +14,8 @@ from blockchain.typings import Web3
 from metrics.metrics import (
     ACCOUNT_BALANCE,
     CURRENT_QUORUM_SIZE,
-    IS_DEPOSITABLE,
     MELLOW_VAULT_BALANCE,
     MODULE_TX_SEND,
-    QUORUM,
     UNEXPECTED_EXCEPTIONS,
 )
 from metrics.transport_message_metrics import message_metrics_filter
@@ -35,8 +33,8 @@ logger = logging.getLogger(__name__)
 
 def run_depositor(w3):
     logger.info({'msg': 'Initialize Depositor bot.'})
-    sender = Sender(w3)
     gas_price_calculator = GasPriceCalculator(w3)
+    sender = Sender(w3)
     mellow_deposit_strategy = MellowDepositStrategy(w3)
     base_deposit_strategy = BaseDepositStrategy(w3)
     depositor_bot = DepositorBot(w3, sender, gas_price_calculator, mellow_deposit_strategy, base_deposit_strategy)
@@ -68,8 +66,8 @@ class DepositorBot:
         base_deposit_strategy: BaseDepositStrategy,
     ):
         self.w3 = w3
-        self._sender = sender
         self._gas_price_calculator = gas_price_calcaulator
+        self._sender = sender
         self._mellow_strategy = mellow_deposit_strategy
         self._general_strategy = base_deposit_strategy
 
@@ -139,7 +137,7 @@ class DepositorBot:
                     {
                         'msg': 'Mellow module check failed.',
                         'contract_module': staking_module_contract.get_staking_module_id(),
-                        'tx_module': module_id,
+                        'tx_module': module_id
                     }
                 )
                 return False
@@ -147,21 +145,15 @@ class DepositorBot:
         except Exception as e:
             logger.warning(
                 {
-                    'msg': 'Failed to check if mellow depositable.',
+                    'msg': 'Failed to check if mellow depositable',
                     'module_id': module_id,
-                    'err': repr(e),
+                    'err': repr(e)
                 }
             )
             return False
         MELLOW_VAULT_BALANCE.labels(module_id).set(balance)
         if balance < variables.VAULT_DIRECT_DEPOSIT_THRESHOLD:
-            logger.info(
-                {
-                    'msg': f'{balance} is less than VAULT_DIRECT_DEPOSIT_THRESHOLD while building mellow transaction.',
-                    'balance': balance,
-                    'threshold': variables.VAULT_DIRECT_DEPOSIT_THRESHOLD,
-                }
-            )
+            logger.info({'msg': f'{balance} is less than VAULT_DIRECT_DEPOSIT_THRESHOLD while building mellow transaction.'})
             return False
         logger.debug({'msg': 'Mellow module check succeeded.', 'tx_module': module_id})
         return True
@@ -194,25 +186,22 @@ class DepositorBot:
 
         if is_depositable and quorum and can_deposit and gas_is_ok and is_deposit_amount_ok:
             logger.info({'msg': 'Checks passed. Prepare deposit tx.', 'is_mellow': is_mellow})
-            success = self.prepare_and_send_tx(module_id, quorum, is_mellow)
-            if not success and is_mellow:
-                success = self.prepare_and_send_tx(module_id, quorum, False)
+            success = self.prepare_and_send_tx(quorum, is_mellow, self._flashbots_works)
             self._flashbots_works = not self._flashbots_works or success
+            self._mellow_works = success
             return success
 
         logger.info({'msg': 'Checks failed. Skip deposit.'})
         return False
 
     def _select_strategy(self, module_id) -> tuple[BaseDepositStrategy, bool]:
-        if self._is_mellow_depositable(module_id):
+        if self._mellow_works and self._is_mellow_depositable(module_id):
             return self._mellow_strategy, True
         return self._general_strategy, False
 
     def _check_module_status(self, module_id: int) -> bool:
         """Returns True if module is ready for deposit"""
-        ready = self.w3.lido.staking_router.is_staking_module_active(module_id)
-        IS_DEPOSITABLE.labels(module_id).set(int(ready))
-        return ready
+        return self.w3.lido.staking_router.is_staking_module_active(module_id)
 
     def _get_quorum(self, module_id: int) -> Optional[list[DepositMessage]]:
         """Returns quorum messages or None is quorum is not ready"""
@@ -241,13 +230,11 @@ class DepositorBot:
 
             if quorum_size >= min_signs_to_deposit:
                 CURRENT_QUORUM_SIZE.labels('current').set(quorum_size)
-                QUORUM.labels(module_id).set(1)
                 return list(unified_messages)
 
             max_quorum_size = max(quorum_size, max_quorum_size)
 
         CURRENT_QUORUM_SIZE.labels('current').set(max_quorum_size)
-        QUORUM.labels(module_id).set(0)
 
     def _get_message_actualize_filter(self) -> Callable[[DepositMessage], bool]:
         latest = self.w3.eth.get_block('latest')
@@ -288,24 +275,13 @@ class DepositorBot:
 
         return message_filter
 
-    def prepare_and_send_tx(self, module_id: int, quorum: list[DepositMessage], is_mellow: bool) -> bool:
-        if is_mellow:
-            try:
-                success = self._sender.prepare_and_send(
-                    quorum,
-                    is_mellow,
-                    self._flashbots_works,
-                )
-            except Exception as e:
-                success = False
-                logger.warning({'msg': 'Error while sending mellow transaction', 'err': repr(e)})
-        else:
-            success = self._sender.prepare_and_send(
-                quorum,
-                is_mellow,
-                self._flashbots_works,
-            )
+    def prepare_and_send_tx(self, quorum: list[DepositMessage], is_mellow: bool, module_id: int) -> bool:
+        success = self._sender.prepare_and_send(
+            quorum,
+            self._flashbots_works,
+            is_mellow,
+        )
         logger.info({'msg': f'Tx send. Result is {success}.'})
         label = 'success' if success else 'failure'
-        MODULE_TX_SEND.labels(label, module_id, int(is_mellow)).inc()
+        MODULE_TX_SEND.labels(label, module_id).inc()
         return success

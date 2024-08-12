@@ -1,14 +1,13 @@
 from unittest.mock import Mock
 
 import pytest
-from blockchain.deposit_strategy.deposit_transaction_sender import Sender
 from transport.msg_types.deposit import DepositMessage
 
 MODULE_ID = 1
 
 
 @pytest.mark.unit
-def test_send_deposit_tx_not_mellow(deposit_transaction_sender: Sender):
+def test_send_deposit_tx_not_mellow(deposit_transaction_sender):
     deposit_transaction_sender._w3.transaction.check = Mock(return_value=False)
     messages = [DepositMessage(
         type='deposit',
