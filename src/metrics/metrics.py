@@ -12,7 +12,7 @@ TX_SEND.labels('failure').inc(0)
 MODULE_TX_SEND = Counter(
     'transactions',
     'Amount of send transaction from bot with per module distribution.',
-    ['status', 'module_id'],
+    ['status', 'module_id', 'is_mellow'],
     namespace=PROMETHEUS_PREFIX
 )
 
@@ -55,7 +55,7 @@ DEPOSITABLE_ETHER = Gauge(
 POSSIBLE_DEPOSITS_AMOUNT = Gauge(
     'possible_deposits_amount',
     'Possible deposits amount.',
-    ['module_id'],
+    ['module_id', 'is_mellow'],
     namespace=PROMETHEUS_PREFIX,
 )
 

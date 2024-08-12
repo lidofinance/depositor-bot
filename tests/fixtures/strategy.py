@@ -25,12 +25,12 @@ def mellow_deposit_strategy_integration(web3_lido_integration):
 
 
 @pytest.fixture
-def deposit_transaction_sender(web3_lido_unit):
+def deposit_transaction_sender(web3_lido_unit) -> Sender:
     yield Sender(web3_lido_unit)
 
 
 @pytest.fixture
-def deposit_transaction_sender_integration(web3_lido_integration):
+def deposit_transaction_sender_integration(web3_lido_integration) -> Sender:
     yield Sender(web3_lido_integration)
 
 
