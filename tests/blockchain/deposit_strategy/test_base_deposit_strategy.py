@@ -1,6 +1,7 @@
 from unittest.mock import Mock
 
 import pytest
+from web3 import Web3
 
 MODULE_ID = 1
 
@@ -38,5 +39,5 @@ def test_deposited_keys_amount_mellow(mellow_deposit_strategy):
     )
     mellow_deposit_strategy.w3.lido.staking_router.get_staking_module_max_deposits_count.assert_any_call(
         MODULE_ID,
-        32 * possible_deposits,
+        Web3.to_wei(32 * possible_deposits, 'ether'),
     )

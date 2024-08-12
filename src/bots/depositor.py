@@ -4,8 +4,9 @@ from collections import defaultdict
 from typing import Callable, Optional
 
 import variables
+from blockchain.contracts.staking_module import StakingModuleContract
 from blockchain.deposit_strategy.base_deposit_strategy import BaseDepositStrategy, MellowDepositStrategy
-from blockchain.deposit_strategy.deposit_transaction_sender import Sender, MellowSender
+from blockchain.deposit_strategy.deposit_transaction_sender import Sender
 from blockchain.deposit_strategy.gas_price_calculator import GasPriceCalculator
 from blockchain.deposit_strategy.prefered_module_to_deposit import get_preferred_to_deposit_modules
 from blockchain.executor import Executor
@@ -14,6 +15,7 @@ from metrics.metrics import (
     ACCOUNT_BALANCE,
     CURRENT_QUORUM_SIZE,
     IS_DEPOSITABLE,
+    MELLOW_VAULT_BALANCE,
     MODULE_TX_SEND,
     QUORUM,
     UNEXPECTED_EXCEPTIONS,
@@ -33,12 +35,11 @@ logger = logging.getLogger(__name__)
 
 def run_depositor(w3):
     logger.info({'msg': 'Initialize Depositor bot.'})
+    sender = Sender(w3)
     gas_price_calculator = GasPriceCalculator(w3)
     mellow_deposit_strategy = MellowDepositStrategy(w3)
     base_deposit_strategy = BaseDepositStrategy(w3)
-    sender = MellowSender(w3, gas_price_calculator, mellow_deposit_strategy)
-    sender.add_sender(Sender(w3, gas_price_calculator, base_deposit_strategy))
-    depositor_bot = DepositorBot(w3, sender, gas_price_calculator)
+    depositor_bot = DepositorBot(w3, sender, gas_price_calculator, mellow_deposit_strategy, base_deposit_strategy)
 
     e = Executor(
         w3,
@@ -63,10 +64,14 @@ class DepositorBot:
         w3: Web3,
         sender: Sender,
         gas_price_calcaulator: GasPriceCalculator,
+        mellow_deposit_strategy: MellowDepositStrategy,
+        base_deposit_strategy: BaseDepositStrategy,
     ):
         self.w3 = w3
+        self._sender = sender
         self._gas_price_calculator = gas_price_calcaulator
-        self._sender_chain = sender
+        self._mellow_strategy = mellow_deposit_strategy
+        self._general_strategy = base_deposit_strategy
 
         transports = []
 
@@ -139,9 +144,15 @@ class DepositorBot:
         gas_is_ok = self._gas_price_calculator.is_gas_price_ok(module_id)
         logger.info({'msg': 'Calculate gas recommendations.', 'value': gas_is_ok})
 
-        if is_depositable and quorum and can_deposit and gas_is_ok:
-            logger.info({'msg': 'Checks passed. Prepare deposit tx.'})
-            success = self.prepare_and_send_tx(quorum, module_id)
+        strategy, is_mellow = self._select_strategy(module_id)
+        is_deposit_amount_ok = self._gas_price_calculator.calculate_deposit_recommendation(strategy, module_id)
+        logger.info({'msg': 'Calculations deposit recommendations.', 'value': is_deposit_amount_ok})
+
+        if is_depositable and quorum and can_deposit and gas_is_ok and is_deposit_amount_ok:
+            logger.info({'msg': 'Checks passed. Prepare deposit tx.', 'is_mellow': is_mellow})
+            success = self.prepare_and_send_tx(module_id, quorum, is_mellow)
+            if not success and is_mellow:
+                success = self.prepare_and_send_tx(module_id, quorum, False)
             self._flashbots_works = not self._flashbots_works or success
             return success
 
@@ -153,6 +164,11 @@ class DepositorBot:
         ready = self.w3.lido.staking_router.is_staking_module_active(module_id)
         IS_DEPOSITABLE.labels(module_id).set(int(ready))
         return ready
+
+    def _select_strategy(self, module_id) -> tuple[BaseDepositStrategy, bool]:
+        if self._is_mellow_depositable(module_id):
+            return self._mellow_strategy, True
+        return self._general_strategy, False
 
     def _get_quorum(self, module_id: int) -> Optional[list[DepositMessage]]:
         """Returns quorum messages or None is quorum is not ready"""
@@ -228,13 +244,68 @@ class DepositorBot:
 
         return message_filter
 
-    def prepare_and_send_tx(self, quorum: list[DepositMessage], module_id: int) -> bool:
-        success = self._sender_chain.prepare_and_send(
-            module_id,
-            quorum,
-            self._flashbots_works,
-        )
+    def prepare_and_send_tx(self, module_id: int, quorum: list[DepositMessage], is_mellow: bool) -> bool:
+        if is_mellow:
+            try:
+                success = self._sender.prepare_and_send(
+                    quorum,
+                    is_mellow,
+                    self._flashbots_works,
+                )
+            except Exception as e:
+                success = False
+                logger.warning({'msg': 'Error while sending mellow transaction', 'err': repr(e)})
+        else:
+            success = self._sender.prepare_and_send(
+                quorum,
+                is_mellow,
+                self._flashbots_works,
+            )
         logger.info({'msg': f'Tx send. Result is {success}.'})
         label = 'success' if success else 'failure'
-        MODULE_TX_SEND.labels(label, module_id).inc()
+        MODULE_TX_SEND.labels(label, module_id, is_mellow).inc()
         return success
+
+    def _is_mellow_depositable(
+        self,
+        module_id: int
+    ) -> bool:
+        if not variables.MELLOW_CONTRACT_ADDRESS:
+            return False
+        try:
+            buffered = self.w3.lido.lido.get_buffered_ether()
+            unfinalized = self.w3.lido.lido_locator.withdrawal_queue_contract.unfinalized_st_eth()
+            if buffered < unfinalized:
+                return False
+            staking_module_contract: StakingModuleContract = self.w3.lido.simple_dvt_staking_strategy.staking_module_contract
+            if staking_module_contract.get_staking_module_id() != module_id:
+                logger.debug(
+                    {
+                        'msg': 'Mellow module check failed.',
+                        'contract_module': staking_module_contract.get_staking_module_id(),
+                        'tx_module': module_id,
+                    }
+                )
+                return False
+            balance = self.w3.lido.simple_dvt_staking_strategy.vault_balance()
+        except Exception as e:
+            logger.warning(
+                {
+                    'msg': 'Failed to check if mellow depositable.',
+                    'module_id': module_id,
+                    'err': repr(e),
+                }
+            )
+            return False
+        MELLOW_VAULT_BALANCE.labels(module_id).set(balance)
+        if balance < variables.VAULT_DIRECT_DEPOSIT_THRESHOLD:
+            logger.info(
+                {
+                    'msg': f'{balance} is less than VAULT_DIRECT_DEPOSIT_THRESHOLD while building mellow transaction.',
+                    'balance': balance,
+                    'threshold': variables.VAULT_DIRECT_DEPOSIT_THRESHOLD,
+                }
+            )
+            return False
+        logger.debug({'msg': 'Mellow module check succeeded.', 'tx_module': module_id})
+        return True
