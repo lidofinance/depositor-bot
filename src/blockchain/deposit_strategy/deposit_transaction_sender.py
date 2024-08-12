@@ -29,8 +29,8 @@ class Sender:
     def prepare_and_send(
         self,
         quorum: list[DepositMessage],
-        with_flashbots: bool,
         is_mellow: bool,
+        with_flashbots: bool,
     ) -> bool:
         tx = self._prepare_mellow_tx(quorum) if is_mellow else self._prepare_general_tx(quorum)
         return self._send_transaction(tx, with_flashbots)
