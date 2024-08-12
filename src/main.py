@@ -11,6 +11,7 @@ from bots.pauser import run_pauser
 from bots.unvetter import run_unvetter
 from metrics.healthcheck_pulse import start_pulse_server
 from metrics.logging import logging
+from metrics.metrics import BUILD_INFO
 from prometheus_client import start_http_server
 from web3_multi_provider import FallbackProvider
 
@@ -24,13 +25,6 @@ class BotModule(StrEnum):
 
 
 def main(bot_name: str):
-    logger.info(
-        {
-            'msg': 'Bot env variables',
-            'value': variables.PUBLIC_ENV_VARS,
-            'bot_name': bot_name
-        }
-    )
     if bot_name not in list(BotModule):
         msg = f'Last arg should be one of {[str(item) for item in BotModule]}, received {BotModule}.'
         logger.error({'msg': msg})
@@ -42,9 +36,24 @@ def main(bot_name: str):
     logger.info({'msg': f'Start up metrics service on port: {variables.PROMETHEUS_PORT}.'})
     start_http_server(variables.PROMETHEUS_PORT)
 
+    # Send vars to metrics
+    BUILD_INFO.labels(
+        'Depositor bot',
+        variables.MAX_GAS_FEE,
+        variables.MAX_BUFFERED_ETHERS,
+        variables.CONTRACT_GAS_LIMIT,
+        variables.GAS_FEE_PERCENTILE_1,
+        variables.GAS_FEE_PERCENTILE_DAYS_HISTORY_1,
+        variables.GAS_PRIORITY_FEE_PERCENTILE,
+        variables.MIN_PRIORITY_FEE,
+        variables.MAX_PRIORITY_FEE,
+        variables.ACCOUNT.address if variables.ACCOUNT else '0x0',
+        variables.CREATE_TRANSACTIONS,
+        variables.DEPOSIT_MODULES_WHITELIST,
+    )
+
     logger.info({'msg': 'Connect MultiHTTPProviders.', 'rpc_count': len(variables.WEB3_RPC_ENDPOINTS)})
     w3 = Web3(FallbackProvider(variables.WEB3_RPC_ENDPOINTS))
-    logger.info({'msg': 'Current chain_id', 'chain_id': w3.eth.chain_id})
 
     logger.info({'msg': 'Initialize Lido contracts.'})
     w3.attach_modules(

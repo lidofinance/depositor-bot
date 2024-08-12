@@ -6,7 +6,6 @@ from blockchain.contracts.deposit import DepositContract
 from blockchain.contracts.deposit_security_module import DepositSecurityModuleContract, DepositSecurityModuleContractV2
 from blockchain.contracts.lido import LidoContract
 from blockchain.contracts.lido_locator import LidoLocatorContract
-from blockchain.contracts.simple_dvt_staking_strategy import SimpleDVTStakingStrategyContract
 from blockchain.contracts.staking_router import StakingRouterContract, StakingRouterContractV2
 from web3 import Web3
 from web3.contract.contract import Contract
@@ -51,17 +50,9 @@ class LidoContracts(Module):
                 ContractFactoryClass=LidoContract,
             ),
         )
+
         self._load_staking_router()
         self._load_dsm()
-
-        if variables.MELLOW_CONTRACT_ADDRESS:
-            self.simple_dvt_staking_strategy: SimpleDVTStakingStrategyContract = cast(
-                SimpleDVTStakingStrategyContract,
-                self.w3.eth.contract(
-                    address=variables.MELLOW_CONTRACT_ADDRESS,
-                    ContractFactoryClass=SimpleDVTStakingStrategyContract,
-                ),
-            )
 
     def _load_staking_router(self):
         staking_router_address = self.lido_locator.staking_router()

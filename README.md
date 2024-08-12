@@ -8,8 +8,6 @@ Depositor and pauser bots are parts of [Deposit Security Module](https://github.
 Once a sufficient number of messages is collected to constitute a quorum, the bot proceeds to initiate a deposit into the designated staking module. 
 This deposit is executed using the depositBufferedEther function within the "DepositSecurityModule" smart contract.
 
-Direct deposit is a mechanism that allows depositors to use side vault facilities for deposits. This process transfers ETH from the vault and facilitates the deposit to specified in side vault staking module, preventing funds from being stuck in the withdrawal queue.
-
 **The Pauser Bot** obtains pause message from Council Daemon and enacts pause deposits on protocol. Pause can occurs when Lido detects stealing.
 
 **The Unvetting Bot** obtains unvet message from Council Daemon and enacts unvet on the specified node operator.
@@ -84,8 +82,6 @@ Unvetting is the proces of decreasing approved depositable signing keys.
 | PROMETHEUS_PREFIX                 | depositor_bot | Prefix for the metrics                                                                                                   |
 | HEALTHCHECK_SERVER_PORT           | 9010          | Port with bot`s status server                                                                                            |
 | MAX_CYCLE_LIFETIME_IN_SECONDS     | 1200          | Max lifetime of usual cycle. If cycle will not end in this time, bot will crush                                          |
-| MELLOW_CONTRACT_ADDRESS           | None          | If variable is set then deposit can go to predifined module                                                              |
-| VAULT_DIRECT_DEPOSIT_THRESHOLD    | 1 ether       | If mellow vault has VAULT_DIRECT_DEPOSIT_THRESHOLD ethers then direct deposit will be sent                               |
 
 ## Metrics and logs
 
@@ -123,13 +119,11 @@ poetry run pytest tests -m unit
 #### Run integration tests.
 
 Install Anvil
-
 ```bash
 poetry run pytest tests -m integration
 ```
 
-In case of "command not found: anvil" error, provide `ANVIL_PATH` variable
-
+In case of "command not found: anvil" error, provide `ANVIL_PATH` variable 
 ```bash
 export ANVIL_PATH='pathto/anvil'
 ```

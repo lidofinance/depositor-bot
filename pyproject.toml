@@ -10,7 +10,7 @@ include = [
 ]
 
 [tool.poetry.dependencies]
-python = ">=3.10,<3.13"
+python = ">=3.10,<3.12"
 numpy = "1.26.4"
 prometheus-client = "0.20.0"
 web3-multi-provider = "^0.6.0"
@@ -27,13 +27,12 @@ pyright = "^1.1.362"
 
 [tool.pytest.ini_options]
 pythonpath = [
-    "src",
-    "tests",
+  "src",
+  "tests",
 ]
 markers = [
     "unit",  # offline
     "integration",  # hardhat fork
-    "integration_holesky" # holesky fork
 ]
 
 [tool.ruff]

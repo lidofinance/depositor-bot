@@ -39,7 +39,7 @@ class PrivateRelayClient:
         try:
             response = self._handle_post_request('eth_sendPrivateTransaction', req_params)
         except Exception as error:
-            raise PrivateRelayException(*error.args) from error
+            raise PrivateRelayException from error
 
         if 'result' not in response:
             raise PrivateRelayException(response.get('error', response))
