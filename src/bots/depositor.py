@@ -307,5 +307,5 @@ class DepositorBot:
             )
         logger.info({'msg': f'Tx send. Result is {success}.'})
         label = 'success' if success else 'failure'
-        MODULE_TX_SEND.labels(label, module_id, is_mellow).inc()
+        MODULE_TX_SEND.labels(label, module_id, 1 if is_mellow else 0).inc()
         return success
