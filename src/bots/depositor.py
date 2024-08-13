@@ -190,7 +190,13 @@ class DepositorBot:
 
         strategy, is_mellow = self._select_strategy(module_id)
         is_deposit_amount_ok = self._gas_price_calculator.calculate_deposit_recommendation(strategy, module_id)
-        logger.info({'msg': 'Calculations deposit recommendations.', 'value': is_deposit_amount_ok})
+        logger.info({'msg': 'Calculations deposit recommendations.', 'value': is_deposit_amount_ok, 'is_mellow': is_mellow})
+
+        if is_mellow and not is_deposit_amount_ok:
+            strategy = self._general_strategy
+            is_mellow = False
+            is_deposit_amount_ok = self._gas_price_calculator.calculate_deposit_recommendation(strategy, module_id)
+            logger.info({'msg': 'Calculations deposit recommendations.', 'value': is_deposit_amount_ok, 'is_mellow': is_mellow})
 
         if is_depositable and quorum and can_deposit and gas_is_ok and is_deposit_amount_ok:
             logger.info({'msg': 'Checks passed. Prepare deposit tx.', 'is_mellow': is_mellow})
