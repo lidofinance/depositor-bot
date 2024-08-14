@@ -12,7 +12,7 @@ from tests.fork import anvil_fork
 
 # -- Unit fixtures --
 @pytest.fixture
-def web3_lido_unit():
+def web3_lido_unit() -> Web3:
     web3 = Web3()
     web3.lido = Mock()
     web3.attach_modules(
@@ -26,7 +26,7 @@ def web3_lido_unit():
 
 # -- Integration fixtures --
 @pytest.fixture
-def web3_provider_integration(request):
+def web3_provider_integration(request) -> Web3:
     block_num = getattr(request, 'param', None)
 
     with anvil_fork(
@@ -34,12 +34,11 @@ def web3_provider_integration(request):
         variables.WEB3_RPC_ENDPOINTS[0],
         block_num,
     ):
-        w3 = Web3(HTTPProvider('http://127.0.0.1:8545', request_kwargs={'timeout': 3600}))
-        yield w3
+        yield Web3(HTTPProvider('http://127.0.0.1:8545', request_kwargs={'timeout': 3600}))
 
 
 @pytest.fixture
-def web3_lido_integration(web3_provider_integration):
+def web3_lido_integration(web3_provider_integration: Web3) -> Web3:
     web3_provider_integration.attach_modules(
         {
             'lido': LidoContracts,
