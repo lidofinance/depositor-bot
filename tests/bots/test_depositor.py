@@ -370,3 +370,84 @@ def test_depositor_bot_non_mellow_deposits(
     db.message_storage.messages = deposit_messages
     assert db.execute(latest)
     assert web3_lido_integration.lido.staking_router.get_staking_module_nonce(module_id) == old_module_nonce + 1
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    'web3_provider_integration,module_id',
+    [[19628126, 1], [19628126, 2]],
+    indirect=['web3_provider_integration'],
+)
+def test_depositor_bot_mellow_deposits(
+    web3_provider_integration,
+    web3_lido_integration,
+    deposit_transaction_sender_integration,
+    mellow_deposit_strategy_integration,
+    base_deposit_strategy_integration,
+    gas_price_calculator_integration,
+    module_id,
+    add_accounts_to_guardian,
+):
+    # Disable mellow integration
+    variables.MELLOW_CONTRACT_ADDRESS = '0x078b1C03d14652bfeeDFadf7985fdf2D8a2e8108'
+    # Define the whitelist of deposit modules
+    variables.DEPOSIT_MODULES_WHITELIST = [1, 2]
+
+    # Set the balance for the first account
+    web3_lido_integration.provider.make_request(
+        'anvil_setBalance',
+        [
+            web3_lido_integration.eth.accounts[0],
+            '0x500000000000000000000000',
+        ],
+    )
+
+    # Submit multiple transactions
+    for _ in range(15):
+        web3_lido_integration.lido.lido.functions.submit(web3_lido_integration.eth.accounts[0]).transact(
+            {
+                'from': web3_lido_integration.eth.accounts[0],
+                'value': 10000 * 10 ** 18,
+            }
+        )
+
+    # Set the maximum number of deposits
+    web3_lido_integration.lido.deposit_security_module.functions.setMaxDeposits(100).transact({'from': DSM_OWNER})
+
+    # Get the latest block
+    latest = web3_lido_integration.eth.get_block('latest')
+
+    # Get the current nonce for the staking module
+    old_module_nonce = web3_lido_integration.lido.staking_router.get_staking_module_nonce(module_id)
+
+    # Create deposit messages
+    deposit_messages = [
+        get_deposit_message(web3_lido_integration, COUNCIL_ADDRESS_1, COUNCIL_PK_1, module_id),
+        get_deposit_message(web3_lido_integration, COUNCIL_ADDRESS_1, COUNCIL_PK_1, module_id),
+        get_deposit_message(web3_lido_integration, COUNCIL_ADDRESS_2, COUNCIL_PK_2, module_id),
+    ]
+
+    # Mine a new block
+    web3_lido_integration.provider.make_request('anvil_mine', [1])
+
+    # Initialize the DepositorBot
+    db: DepositorBot = DepositorBot(
+        web3_lido_integration,
+        deposit_transaction_sender_integration,
+        gas_price_calculator_integration,
+        mellow_deposit_strategy_integration,
+        base_deposit_strategy_integration,
+    )
+
+    # Clear the message storage and execute the bot without any messages
+    db.message_storage.messages = []
+    db.execute(latest)
+
+    # Assert that the staking module nonce has not changed
+    assert web3_lido_integration.lido.staking_router.get_staking_module_nonce(module_id) == old_module_nonce
+
+    # Execute the bot with deposit messages and assert that the nonce has increased by 1
+    db.message_storage.messages = deposit_messages
+    assert db.execute(latest)
+    assert web3_lido_integration.lido.staking_router.get_staking_module_nonce(module_id) == old_module_nonce + 1
+
