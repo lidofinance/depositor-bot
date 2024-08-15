@@ -14,7 +14,7 @@ def setup_environment():
 
 
 # 20529904 - is the block with mellow tx
-# 20526731 - is the block with the fallback to regular tx
+# 20529995 - is the block with the fallback to regular tx
 @pytest.mark.integration
 @pytest.mark.parametrize(
     'web3_provider_integration,module_id',
