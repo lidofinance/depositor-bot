@@ -6,7 +6,7 @@ import variables
 from blockchain.typings import Web3
 from bots.depositor import DepositorBot
 
-from tests.conftest import DSM_OWNER, COUNCIL_ADDRESS_1, COUNCIL_PK_1, COUNCIL_PK_2, COUNCIL_ADDRESS_2
+from tests.conftest import COUNCIL_ADDRESS_1, COUNCIL_ADDRESS_2, COUNCIL_PK_1, COUNCIL_PK_2, DSM_OWNER
 from tests.utils.protocol_utils import get_deposit_message
 
 
