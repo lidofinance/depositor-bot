@@ -2,6 +2,7 @@ import logging
 from typing import Any, List, Tuple
 
 from eth_account import Account
+from eth_account.account import VRS
 from web3 import Web3
 
 logger = logging.getLogger(__name__)
@@ -24,7 +25,25 @@ def compute_vs(v: int, s: str) -> str:
     return '0x' + _vs.hex()
 
 
-def verify_message_with_signature(data: List[Any], abi: List[str], address: str, vrs: Tuple[int, str, str]) -> bool:
+# Solidity function
+#
+# function recover(bytes32 hash, bytes32 r, bytes32 vs) internal pure returns (address) {
+#        bytes32 s;
+#        uint8 v;
+#        assembly {
+#            s := and(vs, 0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff)
+#            v := add(shr(255, vs), 27)
+#        }
+#        return recover(hash, v, r, s);
+#    }
+def recover_vs(vs: str) -> tuple[VRS, VRS]:
+    _vs = int.from_bytes(bytearray.fromhex(vs[2:]))
+    s = _vs & 0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+    v = (_vs >> 255) + 27
+    return v, s
+
+
+def verify_message_with_signature(data: List[Any], abi: List[str], address: str, vrs: Tuple[VRS, VRS, VRS]) -> bool:
     """
     Check that message was correctly signed by provided address holder.
     """

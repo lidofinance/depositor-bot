@@ -2,7 +2,7 @@ import logging
 from typing import Callable, TypedDict
 
 from blockchain.typings import Web3
-from cryptography.verify_signature import verify_message_with_signature
+from cryptography.verify_signature import recover_vs, verify_message_with_signature
 from eth_typing import Hash32
 from metrics.metrics import UNEXPECTED_EXCEPTIONS
 from schema import And, Schema
@@ -10,7 +10,6 @@ from transport.msg_types.base import ADDRESS_REGREX, HASH_REGREX, HEX_BYTES_REGR
 from utils.bytes import from_hex_string_to_bytes
 
 logger = logging.getLogger(__name__)
-
 
 UnvetMessageSchema = Schema(
     {
@@ -43,6 +42,15 @@ def get_unvet_messages_sign_filter(web3: Web3) -> Callable:
     def check_unvet_message(msg: UnvetMessage) -> bool:
         unvet_prefix = web3.lido.deposit_security_module.get_unvet_message_prefix()
 
+        vs = msg['signature']['_vs']
+        if vs is not None:
+            r = msg['signature']['r']
+            v, s = recover_vs(vs)
+        else:
+            v = msg['signature']['v']
+            r = msg['signature']['r']
+            s = msg['signature']['s']
+
         verified = verify_message_with_signature(
             data=[
                 unvet_prefix,
@@ -55,11 +63,7 @@ def get_unvet_messages_sign_filter(web3: Web3) -> Callable:
             ],
             abi=['bytes32', 'uint256', 'bytes32', 'uint256', 'uint256', 'bytes', 'bytes'],
             address=msg['guardianAddress'],
-            vrs=(
-                msg['signature']['v'],
-                msg['signature']['r'],
-                msg['signature']['s'],
-            ),
+            vrs=(v, r, s),
         )
 
         if not verified:
