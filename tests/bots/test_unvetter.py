@@ -3,6 +3,7 @@ from unittest.mock import Mock
 
 import pytest
 from bots.unvetter import UnvetterBot
+from cryptography.verify_signature import compute_vs
 from transport.msg_types.unvet import UnvetMessage, get_unvet_messages_sign_filter
 from utils.bytes import from_hex_string_to_bytes
 
@@ -46,6 +47,7 @@ def get_unvet_message(web3) -> UnvetMessage:
             'r': '0x' + signed.r.to_bytes(32, 'big').hex(),
             's': '0x' + signed.s.to_bytes(32, 'big').hex(),
             'v': signed.v,
+            '_vs': compute_vs(signed.v, '0x' + signed.s.to_bytes(32, 'big').hex())
         },
         'type': 'unvet',
     }
