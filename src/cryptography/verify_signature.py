@@ -37,6 +37,10 @@ def compute_vs(v: int, s: str) -> str:
 #        return recover(hash, v, r, s);
 #    }
 def recover_vs(vs: str) -> tuple[VRS, VRS]:
+    """
+    Recovers v and s parameters of the signature from _vs field
+    """
+    # cut 0x
     _vs = int.from_bytes(bytearray.fromhex(vs[2:]))
     s = _vs & 0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
     v = (_vs >> 255) + 27

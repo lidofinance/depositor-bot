@@ -11,9 +11,9 @@ HEX_BYTES_REGREX = Regex('^0x[0-9,A-F]*$', flags=re.IGNORECASE)
 # v and s to be removed in future in favor of short signatures
 SignatureSchema = Schema(
     {
-        Optional('v'): VRS,
-        'r': And(VRS, HASH_REGREX.validate),
-        Optional('s'): And(VRS, HASH_REGREX.validate),
+        Optional('v'): int,
+        'r': And(str, HASH_REGREX.validate),
+        Optional('s'): And(str, HASH_REGREX.validate),
         '_vs': And(str, HASH_REGREX.validate),
     },
     ignore_extra_keys=True,
