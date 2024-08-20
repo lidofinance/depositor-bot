@@ -9,7 +9,7 @@ from tests.utils.protocol_utils import get_deposit_message
 
 # this fixture must be executed before others
 @pytest.fixture(autouse=True)
-def setup_environment():
+def setup_mellow_env():
     variables.MELLOW_CONTRACT_ADDRESS = '0x078b1C03d14652bfeeDFadf7985fdf2D8a2e8108'
 
 
