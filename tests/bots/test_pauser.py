@@ -7,6 +7,7 @@ from bots.pauser import PauserBot
 
 from tests.conftest import DSM_OWNER
 from tests.fixtures import upgrade_staking_router_to_v2
+from tests.utils.signature import compute_vs
 
 # WARNING: These accounts, and their private keys, are publicly known.
 COUNCIL_ADDRESS = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8'
@@ -74,6 +75,7 @@ def get_pause_message(web3, module_id):
             'r': '0x' + signed.r.to_bytes(32, 'big').hex(),
             's': '0x' + signed.s.to_bytes(32, 'big').hex(),
             'v': signed.v,
+            '_vs': compute_vs(signed.v, '0x' + signed.s.to_bytes(32, 'big').hex())
         },
         'type': 'pause',
     }
@@ -199,10 +201,10 @@ def test_pauser_bot(web3_lido_integration, web3_provider_integration, add_accoun
         msg
         for msg in caplog.messages
         if (
-            "Build `pauseDeposits(19628129, ('0xe37ddb5eadce3a4f03274a102c45a21865f9d6fa03f61fdb98466ae0fd677331', "
-            "'0xb1dff99d6b8ad3402c7237341816568bf2831ddbe0bddd111eebd12a59efcb8c'))` tx."
-        )
-        in msg
+               "Build `pauseDeposits(19628129, ('0xe37ddb5eadce3a4f03274a102c45a21865f9d6fa03f61fdb98466ae0fd677331', "
+               "'0xb1dff99d6b8ad3402c7237341816568bf2831ddbe0bddd111eebd12a59efcb8c'))` tx."
+           )
+           in msg
     ]
 
     pb.execute(latest)
