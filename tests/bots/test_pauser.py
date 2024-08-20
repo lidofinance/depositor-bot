@@ -99,6 +99,7 @@ def get_pause_message_v2(web3):
             'r': '0x' + signed.r.to_bytes(32, 'big').hex(),
             's': '0x' + signed.s.to_bytes(32, 'big').hex(),
             'v': signed.v,
+            '_vs': compute_vs(signed.v, '0x' + signed.s.to_bytes(32, 'big').hex())
         },
         'type': 'pause',
     }
