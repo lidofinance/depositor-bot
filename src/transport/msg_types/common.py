@@ -17,38 +17,30 @@ def get_messages_sign_filter(web3: Web3) -> Callable:
     """Returns filter that checks message validity"""
 
     def check_messages(msg: DepositMessage | PauseMessage | UnvetMessage) -> bool:
-        prefix = _message_prefix(web3, msg)
         v, r, s = _vrs(msg)
+        data, abi = _verification_data(web3, msg)
 
-        data, abi = _verification_data(prefix, msg)
-
-        verified = verify_message_with_signature(
+        is_valid = verify_message_with_signature(
             data=data,
             abi=abi,
             address=msg['guardianAddress'],
             vrs=(v, r, s),
         )
 
-        if not verified:
+        if not is_valid:
             label_name = _select_label(msg)
             logger.error({'msg': 'Message verification failed.', 'value': msg})
             UNEXPECTED_EXCEPTIONS.labels(label_name).inc()
 
-        return verified
+        return is_valid
 
     return check_messages
 
 
 def _vrs(msg: DepositMessage | PauseMessage | UnvetMessage) -> tuple[VRS, VRS, VRS]:
     vs = msg['signature']['_vs']
-    if '_vs' in msg['signature']:
-        r = msg['signature']['r']
-        v, s = recover_vs(vs)
-    else:
-        v = msg['signature']['v']
-        r = msg['signature']['r']
-        s = msg['signature']['s']
-
+    r = msg['signature']['r']
+    v, s = recover_vs(vs)
     return v, r, s
 
 
@@ -64,25 +56,16 @@ def _select_label(msg: DepositMessage | PauseMessage | UnvetMessage) -> str:
         raise ValueError('Unsupported message type')
 
 
-def _message_prefix(web3: Web3, msg: DepositMessage | PauseMessage | UnvetMessage) -> bytes:
+def _verification_data(web3: Web3, msg: DepositMessage | PauseMessage | UnvetMessage) -> tuple[List[Any], List[str]]:
     t = msg['type']
     if t == 'pause':
-        return web3.lido.deposit_security_module.get_pause_message_prefix()
-    elif t == 'unvet':
-        return web3.lido.deposit_security_module.get_unvet_message_prefix()
-    elif t == 'deposit':
-        return web3.lido.deposit_security_module.get_attest_message_prefix()
-    else:
-        raise ValueError('Unsupported message type')
-
-
-def _verification_data(prefix: bytes, msg: DepositMessage | PauseMessage | UnvetMessage) -> tuple[List[Any], List[str]]:
-    t = msg['type']
-    if t == 'pause':
+        prefix = web3.lido.deposit_security_module.get_pause_message_prefix()
         return _verification_data_pause(prefix, msg)
     elif t == 'unvet':
+        prefix = web3.lido.deposit_security_module.get_unvet_message_prefix()
         return _verification_data_unvet(prefix, msg)
     elif t == 'deposit':
+        prefix = web3.lido.deposit_security_module.get_attest_message_prefix()
         return _verification_data_deposit(prefix, msg)
     else:
         raise ValueError('Unsupported message type')

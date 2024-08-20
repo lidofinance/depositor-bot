@@ -5,9 +5,9 @@ import pytest
 import variables
 from blockchain.typings import Web3
 from bots.depositor import DepositorBot
+from cryptography.verify_signature import compute_vs
 
 from tests.conftest import DSM_OWNER
-from tests.utils.signature import compute_vs
 
 COUNCIL_ADDRESS_1 = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8'
 COUNCIL_PK_1 = '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d'
@@ -58,7 +58,7 @@ def deposit_message():
 def test_depositor_one_module_deposited(depositor_bot, block_data):
     modules = list(range(10))
 
-    depositor_bot.w3.lido.lido.get_depositable_ether = Mock(return_value=10 * 32 * 10 ** 18)
+    depositor_bot.w3.lido.lido.get_depositable_ether = Mock(return_value=10 * 32 * 10**18)
     depositor_bot.w3.lido.staking_router.get_staking_module_ids = Mock(return_value=modules)
     depositor_bot.w3.lido.staking_router.get_staking_module_max_deposits_count = Mock(return_value=0)
     depositor_bot.w3.lido.deposit_security_module.get_max_deposits = Mock(return_value=10)
@@ -108,7 +108,7 @@ def test_check_balance_dry(depositor_bot, caplog):
 def test_check_balance(depositor_bot, caplog, set_account):
     caplog.set_level(logging.INFO)
 
-    depositor_bot.w3.eth.get_balance = Mock(return_value=10 * 10 ** 18)
+    depositor_bot.w3.eth.get_balance = Mock(return_value=10 * 10**18)
     depositor_bot._check_balance()
     assert 'Check account balance' in caplog.messages[-1]
 
@@ -276,7 +276,7 @@ def get_deposit_message(web3, account_address, pk, module_id):
             'r': '0x' + signed.r.to_bytes(32, 'big').hex(),
             's': '0x' + signed.s.to_bytes(32, 'big').hex(),
             'v': signed.v,
-            '_vs': compute_vs(signed.v, '0x' + signed.s.to_bytes(32, 'big').hex())
+            '_vs': compute_vs(signed.v, '0x' + signed.s.to_bytes(32, 'big').hex()),
         },
     }
 
@@ -329,7 +329,7 @@ def test_depositor_bot_non_mellow_deposits(
         web3_lido_integration.lido.lido.functions.submit(web3_lido_integration.eth.accounts[0]).transact(
             {
                 'from': web3_lido_integration.eth.accounts[0],
-                'value': 10000 * 10 ** 18,
+                'value': 10000 * 10**18,
             }
         )
 

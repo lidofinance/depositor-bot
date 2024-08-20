@@ -1,4 +1,4 @@
-from cryptography.verify_signature import recover_vs, verify_message_with_signature
+from cryptography.verify_signature import compute_vs, recover_vs, verify_message_with_signature
 from transport.msg_types.common import _vrs
 from transport.msg_types.deposit import DepositMessageSchema
 
@@ -6,7 +6,11 @@ from tests.fixtures.signature_fixtures import (
     deposit_messages,
     deposit_prefix,
 )
-from tests.utils.signature import compute_vs
+
+
+def test_deposit_schema():
+    for dm in deposit_messages:
+        assert DepositMessageSchema.is_valid(dm)
 
 
 def test_recover_vs():
