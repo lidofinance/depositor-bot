@@ -1,11 +1,11 @@
 from cryptography.verify_signature import verify_message_with_signature
+from transport.msg_types.common import _vrs
+from transport.msg_types.deposit import DepositMessageSchema
 
 from tests.fixtures.signature_fixtures import (
     deposit_messages,
     deposit_prefix,
 )
-from transport.msg_types.common import _vrs
-from transport.msg_types.deposit import DepositMessageSchema
 
 
 def test_deposit_messages_sign_check():
