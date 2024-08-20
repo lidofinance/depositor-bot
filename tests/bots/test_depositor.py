@@ -7,6 +7,7 @@ from blockchain.typings import Web3
 from bots.depositor import DepositorBot
 
 from tests.conftest import DSM_OWNER
+from tests.utils.signature import compute_vs
 
 COUNCIL_ADDRESS_1 = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8'
 COUNCIL_PK_1 = '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d'
@@ -275,6 +276,7 @@ def get_deposit_message(web3, account_address, pk, module_id):
             'r': '0x' + signed.r.to_bytes(32, 'big').hex(),
             's': '0x' + signed.s.to_bytes(32, 'big').hex(),
             'v': signed.v,
+            '_vs': compute_vs(signed.v, '0x' + signed.s.to_bytes(32, 'big').hex())
         },
     }
 
