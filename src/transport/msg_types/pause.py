@@ -1,10 +1,8 @@
 import logging
-from typing import Callable, TypedDict
+from typing import TypedDict
 
-from blockchain.typings import Web3
-from cryptography.verify_signature import recover_vs, verify_message_with_signature
-from metrics.metrics import UNEXPECTED_EXCEPTIONS
 from schema import And, Schema
+
 from transport.msg_types.base import ADDRESS_REGREX, Signature, SignatureSchema
 
 logger = logging.getLogger(__name__)
@@ -44,39 +42,3 @@ class PauseMessage(TypedDict):
     guardianAddress: str
     signature: Signature
     stakingModuleId: int
-
-
-def get_pause_messages_sign_filter(web3: Web3) -> Callable:
-    def check_pause_message(msg: PauseMessage) -> bool:
-        pause_prefix = web3.lido.deposit_security_module.get_pause_message_prefix()
-
-        if msg.get('stakingModuleId', -1) != -1:
-            data = [pause_prefix, msg['blockNumber'], msg['stakingModuleId']]
-            abi = ['bytes32', 'uint256', 'uint256']
-        else:
-            data = [pause_prefix, msg['blockNumber']]
-            abi = ['bytes32', 'uint256']
-
-        vs = msg['signature']['_vs']
-        if vs is not None:
-            r = msg['signature']['r']
-            v, s = recover_vs(vs)
-        else:
-            v = msg['signature']['v']
-            r = msg['signature']['r']
-            s = msg['signature']['s']
-
-        verified = verify_message_with_signature(
-            data=data,
-            abi=abi,
-            address=msg['guardianAddress'],
-            vrs=(v, r, s),
-        )
-
-        if not verified:
-            logger.error({'msg': 'Message verification failed.', 'value': msg})
-            UNEXPECTED_EXCEPTIONS.labels('pause_message_verification_failed').inc()
-
-        return verified
-
-    return check_pause_message

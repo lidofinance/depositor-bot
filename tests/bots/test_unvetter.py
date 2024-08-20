@@ -4,7 +4,8 @@ from unittest.mock import Mock
 import pytest
 from bots.unvetter import UnvetterBot
 from cryptography.verify_signature import compute_vs
-from transport.msg_types.unvet import UnvetMessage, get_unvet_messages_sign_filter
+from transport.msg_types.common import get_messages_sign_filter
+from transport.msg_types.unvet import UnvetMessage
 from utils.bytes import from_hex_string_to_bytes
 
 from tests.fixtures import upgrade_staking_router_to_v2
@@ -52,7 +53,7 @@ def get_unvet_message(web3) -> UnvetMessage:
         'type': 'unvet',
     }
 
-    assert list(filter(get_unvet_messages_sign_filter(web3), [unvet_message]))
+    assert list(filter(get_messages_sign_filter(web3), [unvet_message]))
 
     return unvet_message
 
