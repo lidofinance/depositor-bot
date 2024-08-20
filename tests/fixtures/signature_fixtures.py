@@ -1,3 +1,5 @@
+from transport.msg_types.deposit import DepositMessageSchema
+
 deposit_prefix = '0x1670745baff8f26a6c2e451bc4eedecf0009a8271dcf5d224e8ab295f22b0863'
 
 deposit_messages = [
@@ -91,3 +93,8 @@ deposit_messages = [
         'stakingModuleId': 2,
     },
 ]
+
+
+def test_deposit_schema():
+    for dm in deposit_messages:
+        assert DepositMessageSchema.is_valid(dm)
