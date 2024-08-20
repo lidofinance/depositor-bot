@@ -3,12 +3,12 @@ from unittest.mock import Mock
 
 import pytest
 from bots.unvetter import UnvetterBot
-from tests.utils.signature import compute_vs
 from transport.msg_types.common import get_messages_sign_filter
 from transport.msg_types.unvet import UnvetMessage
 from utils.bytes import from_hex_string_to_bytes
 
 from tests.fixtures import upgrade_staking_router_to_v2
+from tests.utils.signature import compute_vs
 
 # WARNING: These accounts, and their private keys, are publicly known.
 COUNCIL_ADDRESS = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8'

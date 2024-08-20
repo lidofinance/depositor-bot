@@ -3,9 +3,6 @@ import logging
 from collections import defaultdict
 from typing import Callable, Optional
 
-from schema import Or, Schema
-from web3.types import BlockData
-
 import variables
 from blockchain.contracts.staking_module import StakingModuleContract
 from blockchain.deposit_strategy.base_deposit_strategy import BaseDepositStrategy, MellowDepositStrategy
@@ -24,6 +21,7 @@ from metrics.metrics import (
     UNEXPECTED_EXCEPTIONS,
 )
 from metrics.transport_message_metrics import message_metrics_filter
+from schema import Or, Schema
 from transport.msg_providers.kafka import KafkaMessageProvider
 from transport.msg_providers.rabbit import MessageType, RabbitProvider
 from transport.msg_storage import MessageStorage
@@ -31,6 +29,7 @@ from transport.msg_types.common import get_messages_sign_filter
 from transport.msg_types.deposit import DepositMessage, DepositMessageSchema
 from transport.msg_types.ping import PingMessageSchema, to_check_sum_address
 from transport.types import TransportType
+from web3.types import BlockData
 
 logger = logging.getLogger(__name__)
 

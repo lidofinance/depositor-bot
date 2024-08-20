@@ -3,7 +3,6 @@ from typing import TypedDict
 
 from eth_typing import Hash32
 from schema import And, Schema
-
 from transport.msg_types.base import ADDRESS_REGREX, HASH_REGREX, HEX_BYTES_REGREX, Signature, SignatureSchema
 
 logger = logging.getLogger(__name__)

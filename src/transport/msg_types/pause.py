@@ -2,7 +2,6 @@ import logging
 from typing import TypedDict
 
 from schema import And, Schema
-
 from transport.msg_types.base import ADDRESS_REGREX, Signature, SignatureSchema
 
 logger = logging.getLogger(__name__)

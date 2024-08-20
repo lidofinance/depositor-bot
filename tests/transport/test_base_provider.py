@@ -1,8 +1,7 @@
 from typing import Any
 
 import pytest
-from schema import Schema, Or
-
+from schema import Or, Schema
 from transport.msg_providers.common import BaseMessageProvider
 from transport.msg_types.deposit import DepositMessageSchema
 

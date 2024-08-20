@@ -1,10 +1,9 @@
 import logging
-from typing import Callable, List, Any
-
-from eth_account.account import VRS
+from typing import Any, Callable, List
 
 from blockchain.typings import Web3
-from cryptography.verify_signature import verify_message_with_signature, recover_vs
+from cryptography.verify_signature import recover_vs, verify_message_with_signature
+from eth_account.account import VRS
 from metrics.metrics import UNEXPECTED_EXCEPTIONS
 from transport.msg_types.deposit import DepositMessage
 from transport.msg_types.pause import PauseMessage

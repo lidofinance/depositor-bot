@@ -1,5 +1,4 @@
 import pytest
-
 from transport.msg_types.deposit import DepositMessageSchema
 from transport.msg_types.ping import to_check_sum_address
 
