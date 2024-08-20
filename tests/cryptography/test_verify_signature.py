@@ -1,9 +1,10 @@
-from cryptography.verify_signature import compute_vs, verify_message_with_signature
+from cryptography.verify_signature import verify_message_with_signature
 
 from tests.fixtures.signature_fixtures import (
     deposit_messages,
     deposit_prefix,
 )
+from tests.utils.signature import compute_vs
 
 
 def test_valid_deposit_signature():

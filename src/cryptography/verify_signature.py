@@ -7,22 +7,7 @@ from web3 import Web3
 
 logger = logging.getLogger(__name__)
 
-
-def compute_vs(v: int, s: str) -> str:
-    """Returns aggregated _vs value."""
-    if v < 27:
-        if v in [0, 1]:
-            v += 27
-        else:
-            msg = 'Signature invalid v byte.'
-            logger.error({'msg': 'Signature invalid v byte.', 'data': str(v)})
-            raise ValueError(msg)
-
-    _vs = bytearray.fromhex(s[2:])
-    if not v % 2:
-        _vs[0] |= 0x80
-
-    return '0x' + _vs.hex()
+V_OFFSET = 27
 
 
 # Solidity function
@@ -43,7 +28,7 @@ def recover_vs(vs: str) -> tuple[VRS, VRS]:
     # cut 0x
     _vs = int.from_bytes(bytearray.fromhex(vs[2:]))
     s = _vs & 0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
-    v = (_vs >> 255) + 27
+    v = (_vs >> 255) + V_OFFSET
     return v, s
 
 

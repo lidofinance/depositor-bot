@@ -3,7 +3,7 @@ from unittest.mock import Mock
 
 import pytest
 from bots.unvetter import UnvetterBot
-from cryptography.verify_signature import compute_vs
+from tests.utils.signature import compute_vs
 from transport.msg_types.common import get_messages_sign_filter
 from transport.msg_types.unvet import UnvetMessage
 from utils.bytes import from_hex_string_to_bytes

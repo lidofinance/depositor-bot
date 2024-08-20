@@ -7,7 +7,6 @@ from web3.types import BlockData
 import variables
 from blockchain.executor import Executor
 from blockchain.typings import Web3
-from cryptography.verify_signature import compute_vs
 from metrics.metrics import UNEXPECTED_EXCEPTIONS
 from metrics.transport_message_metrics import message_metrics_filter
 from transport.msg_providers.kafka import KafkaMessageProvider
@@ -132,7 +131,7 @@ class UnvetterBot:
             message['nonce'],
             from_hex_string_to_bytes(message['operatorIds']),
             from_hex_string_to_bytes(message['vettedKeysByOperator']),
-            (message['signature']['r'], compute_vs(message['signature']['v'], message['signature']['s'])),
+            (message['signature']['r'], message['signature']['_vs']),
         )
 
         if not self.w3.transaction.check(unvet_tx):
