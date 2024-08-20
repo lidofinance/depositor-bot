@@ -41,13 +41,14 @@ def get_messages_sign_filter(web3: Web3) -> Callable:
 
 def _vrs(msg: DepositMessage | PauseMessage | UnvetMessage) -> tuple[VRS, VRS, VRS]:
     vs = msg['signature']['_vs']
-    if vs is None:
+    if '_vs' in msg['signature']:
+        r = msg['signature']['r']
+        v, s = recover_vs(vs)
+    else:
         v = msg['signature']['v']
         r = msg['signature']['r']
         s = msg['signature']['s']
-    else:
-        r = msg['signature']['r']
-        v, s = recover_vs(vs)
+
     return v, r, s
 
 
