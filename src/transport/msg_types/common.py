@@ -5,6 +5,7 @@ from blockchain.typings import Web3
 from cryptography.verify_signature import recover_vs, verify_message_with_signature
 from eth_account.account import VRS
 from metrics.metrics import UNEXPECTED_EXCEPTIONS
+from transport.msg_providers.rabbit import MessageType
 from transport.msg_types.deposit import DepositMessage
 from transport.msg_types.pause import PauseMessage
 from transport.msg_types.unvet import UnvetMessage
@@ -46,11 +47,11 @@ def _vrs(msg: DepositMessage | PauseMessage | UnvetMessage) -> tuple[VRS, VRS, V
 
 def _select_label(msg: DepositMessage | PauseMessage | UnvetMessage) -> str:
     t = msg['type']
-    if t == 'pause':
+    if t == MessageType.PAUSE:
         return 'pause_message_verification_failed'
-    elif t == 'unvet':
-        return 'get_unvet_messages_sign_filter'
-    elif t == 'deposit':
+    elif t == MessageType.UNVET:
+        return 'unvet_message_verification_failed'
+    elif t == MessageType.DEPOSIT:
         return 'deposit_message_verification_failed'
     else:
         raise ValueError('Unsupported message type')
@@ -58,13 +59,13 @@ def _select_label(msg: DepositMessage | PauseMessage | UnvetMessage) -> str:
 
 def _verification_data(web3: Web3, msg: DepositMessage | PauseMessage | UnvetMessage) -> tuple[List[Any], List[str]]:
     t = msg['type']
-    if t == 'pause':
+    if t == MessageType.PAUSE:
         prefix = web3.lido.deposit_security_module.get_pause_message_prefix()
         return _verification_data_pause(prefix, msg)
-    elif t == 'unvet':
+    elif t == MessageType.UNVET:
         prefix = web3.lido.deposit_security_module.get_unvet_message_prefix()
         return _verification_data_unvet(prefix, msg)
-    elif t == 'deposit':
+    elif t == MessageType.DEPOSIT:
         prefix = web3.lido.deposit_security_module.get_attest_message_prefix()
         return _verification_data_deposit(prefix, msg)
     else:

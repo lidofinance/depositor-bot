@@ -35,6 +35,7 @@ def recover_vs(vs: str) -> tuple[VRS, VRS]:
 def compute_vs(v: int, s: str) -> str:
     """Returns aggregated _vs value."""
     if v < V_OFFSET and v not in [0, 1]:
+        logger.error({'msg': 'Signature invalid v byte.', 'data': str(v)})
         raise ValueError('Signature invalid v byte.')
     if v < V_OFFSET:
         v += V_OFFSET
