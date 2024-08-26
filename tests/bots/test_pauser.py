@@ -4,6 +4,7 @@ from unittest.mock import Mock
 import pytest
 import variables
 from bots.pauser import PauserBot
+from cryptography.verify_signature import compute_vs
 
 from tests.conftest import DSM_OWNER
 from tests.fixtures import upgrade_staking_router_to_v2
@@ -74,6 +75,7 @@ def get_pause_message(web3, module_id):
             'r': '0x' + signed.r.to_bytes(32, 'big').hex(),
             's': '0x' + signed.s.to_bytes(32, 'big').hex(),
             'v': signed.v,
+            '_vs': compute_vs(signed.v, '0x' + signed.s.to_bytes(32, 'big').hex()),
         },
         'type': 'pause',
     }
@@ -97,6 +99,7 @@ def get_pause_message_v2(web3):
             'r': '0x' + signed.r.to_bytes(32, 'big').hex(),
             's': '0x' + signed.s.to_bytes(32, 'big').hex(),
             'v': signed.v,
+            '_vs': compute_vs(signed.v, '0x' + signed.s.to_bytes(32, 'big').hex()),
         },
         'type': 'pause',
     }

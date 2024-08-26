@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 
 from blockchain.typings import Web3
-from cryptography.verify_signature import compute_vs
 from eth_typing import Hash32
 from transport.msg_types.deposit import DepositMessage
 from web3.contract.contract import ContractFunction
@@ -24,7 +23,7 @@ class Sender:
     def _prepare_signs_for_deposit(quorum: list[DepositMessage]) -> tuple[tuple[str, str], ...]:
         sorted_messages = sorted(quorum, key=lambda msg: int(msg['guardianAddress'], 16))
 
-        return tuple((msg['signature']['r'], compute_vs(msg['signature']['v'], msg['signature']['s'])) for msg in sorted_messages)
+        return tuple((msg['signature']['r'], msg['signature']['_vs']) for msg in sorted_messages)
 
     def prepare_and_send(
         self,
