@@ -9,13 +9,13 @@ from blockchain.typings import Web3
 from metrics.metrics import UNEXPECTED_EXCEPTIONS
 from metrics.transport_message_metrics import message_metrics_filter
 from schema import Or, Schema
-
-from transport.msg_providers.data_bus import DataBusSinks, DataBusProvider
+from transport.msg_providers.data_bus import DataBusProvider, DataBusSinks
 from transport.msg_providers.kafka import KafkaMessageProvider
 from transport.msg_providers.rabbit import MessageType, RabbitProvider
 from transport.msg_storage import MessageStorage
 from transport.msg_types.common import get_messages_sign_filter
 from transport.msg_types.pause import PauseMessage, PauseMessageSchema
+from transport.msg_types.ping import PingMessageDataBusSchema, PingMessageSchema, to_check_sum_address
 from transport.types import TransportType
 from web3.types import BlockData
 
@@ -61,7 +61,7 @@ class PauserBot:
             transports.append(
                 DataBusProvider(
                     message_schema=Schema(Or(PauseMessageSchema, PingMessageDataBusSchema)),
-                    sinks=[DataBusSinks.PAUSE_V2, DataBusSinks.PING_V1]
+                    sinks=[DataBusSinks.PAUSE_V2, DataBusSinks.PING_V1],
                 )
             )
 
