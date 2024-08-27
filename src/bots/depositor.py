@@ -22,11 +22,13 @@ from metrics.metrics import (
 )
 from metrics.transport_message_metrics import message_metrics_filter
 from schema import Or, Schema
+
+from transport.msg_providers.data_bus import DataBusProvider, DataBusSinks
 from transport.msg_providers.kafka import KafkaMessageProvider
 from transport.msg_providers.rabbit import MessageType, RabbitProvider
 from transport.msg_storage import MessageStorage
 from transport.msg_types.deposit import DepositMessage, DepositMessageSchema, get_deposit_messages_sign_filter
-from transport.msg_types.ping import PingMessageSchema, to_check_sum_address
+from transport.msg_types.ping import PingMessageSchema, to_check_sum_address, PingMessageDataBusSchema
 from transport.types import TransportType
 from web3.types import BlockData
 
@@ -89,6 +91,14 @@ class DepositorBot:
                 KafkaMessageProvider(
                     client=f'{variables.KAFKA_GROUP_PREFIX}deposit',
                     message_schema=Schema(Or(DepositMessageSchema, PingMessageSchema)),
+                )
+            )
+
+        if TransportType.DATA_BUS in variables.MESSAGE_TRANSPORTS:
+            transports.append(
+                DataBusProvider(
+                    message_schema=Schema(Or(DepositMessageSchema, PingMessageDataBusSchema)),
+                    sinks=[DataBusSinks.DEPOSIT_V1, DataBusSinks.PING_V1]
                 )
             )
 

@@ -60,6 +60,15 @@ RABBIT_MQ_URL = os.getenv('RABBIT_MQ_URL', 'ws://127.0.0.1:15674/ws')
 RABBIT_MQ_USERNAME = os.getenv('RABBIT_MQ_USERNAME', 'guest')
 RABBIT_MQ_PASSWORD = os.getenv('RABBIT_MQ_PASSWORD', 'guest')
 
+# data bus
+# gnosis nodes
+WEB3_RPC_GNOSIS_ENDPOINTS = os.getenv('WEB3_RPC_GNOSIS_ENDPOINTS', '').split(',')
+
+DATA_BUS_ADDRESS = os.getenv('DATA_BUS_ADDRESS', None)
+if DATA_BUS_ADDRESS:
+    # bot will throw exception if there is unexpected str and it's ok
+    DATA_BUS_ADDRESS = Web3.to_checksum_address(DATA_BUS_ADDRESS)
+
 # Transactions settings
 CREATE_TRANSACTIONS = os.getenv('CREATE_TRANSACTIONS') == 'true'
 

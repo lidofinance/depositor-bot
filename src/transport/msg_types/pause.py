@@ -9,7 +9,6 @@ from transport.msg_types.base import ADDRESS_REGREX, Signature, SignatureSchema
 
 logger = logging.getLogger(__name__)
 
-
 """
 Pause msg example:
 {
@@ -45,6 +44,13 @@ class PauseMessage(TypedDict):
     guardianAddress: str
     signature: Signature
     stakingModuleId: int
+
+
+class PauseMessageV3(TypedDict):
+    type: str
+    blockNumber: int
+    guardianAddress: str
+    signature: Signature
 
 
 def get_pause_messages_sign_filter(web3: Web3) -> Callable:
