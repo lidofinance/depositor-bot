@@ -3,7 +3,7 @@ from web3 import Web3
 from web3._utils.events import get_event_data
 from web3.types import FilterParams
 
-from transport.msg_providers.data_bus import MESSAGE
+from transport.msg_providers.data_bus import _MESSAGE
 
 
 # Started with config: {
@@ -27,7 +27,7 @@ def test_data_bus_provider():
     )
 
     logs = w3.eth.get_logs(filter_params)
-    message_contract = w3.eth.contract(abi=[MESSAGE])
+    message_contract = w3.eth.contract(abi=[_MESSAGE])
 
     for log in logs:
         e = get_event_data(w3.codec, message_contract.events.Message().abi, log)

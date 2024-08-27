@@ -142,7 +142,7 @@ class PauseV3Parser(LogParser):
 
     def _create_message(self, parsed_data: tuple, guardian: str) -> dict:
         block_number, signature, app = parsed_data
-        return PauseMessageV3(
+        return PauseMessage(
             type='pause',
             blockNumber=block_number,
             guardianAddress=guardian,

@@ -46,13 +46,6 @@ class PauseMessage(TypedDict):
     stakingModuleId: int
 
 
-class PauseMessageV3(TypedDict):
-    type: str
-    blockNumber: int
-    guardianAddress: str
-    signature: Signature
-
-
 def get_pause_messages_sign_filter(web3: Web3) -> Callable:
     def check_pause_message(msg: PauseMessage) -> bool:
         pause_prefix = web3.lido.deposit_security_module.get_pause_message_prefix()

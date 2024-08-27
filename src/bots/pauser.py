@@ -10,11 +10,13 @@ from cryptography.verify_signature import compute_vs
 from metrics.metrics import UNEXPECTED_EXCEPTIONS
 from metrics.transport_message_metrics import message_metrics_filter
 from schema import Or, Schema
+
+from transport.msg_providers.data_bus import DataBusSinks, DataBusProvider
 from transport.msg_providers.kafka import KafkaMessageProvider
 from transport.msg_providers.rabbit import MessageType, RabbitProvider
 from transport.msg_storage import MessageStorage
 from transport.msg_types.pause import PauseMessage, PauseMessageSchema, get_pause_messages_sign_filter
-from transport.msg_types.ping import PingMessageSchema, to_check_sum_address
+from transport.msg_types.ping import PingMessageSchema, to_check_sum_address, PingMessageDataBusSchema
 from transport.types import TransportType
 from web3.types import BlockData
 
@@ -53,6 +55,14 @@ class PauserBot:
                 KafkaMessageProvider(
                     client=f'{variables.KAFKA_GROUP_PREFIX}pause',
                     message_schema=Schema(Or(PauseMessageSchema, PingMessageSchema)),
+                )
+            )
+
+        if TransportType.DATA_BUS in variables.MESSAGE_TRANSPORTS:
+            transports.append(
+                DataBusProvider(
+                    message_schema=Schema(Or(PauseMessageSchema, PingMessageDataBusSchema)),
+                    sinks=[DataBusSinks.PAUSE_V2, DataBusSinks.PING_V1]
                 )
             )
 
