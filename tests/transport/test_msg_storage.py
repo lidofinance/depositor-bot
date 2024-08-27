@@ -4,7 +4,8 @@ from transport.msg_types.ping import to_check_sum_address
 
 
 class Transport:
-    def get_messages(self):
+    @staticmethod
+    def get_messages():
         return [
             {'guardianAddress': '0x5fd0ddbc3351d009eb3f88de7cd081a614c519f1'},
             {'guardianAddress': '0x3dc4cF780F2599B528F37dedB34449Fb65Ef7d4A'},

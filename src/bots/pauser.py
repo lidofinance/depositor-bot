@@ -6,14 +6,14 @@ from typing import Callable
 import variables
 from blockchain.executor import Executor
 from blockchain.typings import Web3
-from cryptography.verify_signature import compute_vs
 from metrics.metrics import UNEXPECTED_EXCEPTIONS
 from metrics.transport_message_metrics import message_metrics_filter
 from schema import Or, Schema
 from transport.msg_providers.kafka import KafkaMessageProvider
 from transport.msg_providers.rabbit import MessageType, RabbitProvider
 from transport.msg_storage import MessageStorage
-from transport.msg_types.pause import PauseMessage, PauseMessageSchema, get_pause_messages_sign_filter
+from transport.msg_types.common import get_messages_sign_filter
+from transport.msg_types.pause import PauseMessage, PauseMessageSchema
 from transport.msg_types.ping import PingMessageSchema, to_check_sum_address
 from transport.types import TransportType
 from web3.types import BlockData
@@ -64,7 +64,7 @@ class PauserBot:
             filters=[
                 message_metrics_filter,
                 to_check_sum_address,
-                get_pause_messages_sign_filter(self.w3),
+                get_messages_sign_filter(self.w3),
             ],
         )
 
@@ -119,7 +119,7 @@ class PauserBot:
             return False
 
         pause_tx = self.w3.lido.deposit_security_module.pause_deposits(
-            message['blockNumber'], module_id, (message['signature']['r'], compute_vs(message['signature']['v'], message['signature']['s']))
+            message['blockNumber'], module_id, (message['signature']['r'], message['signature']['_vs'])
         )
 
         if not self.w3.transaction.check(pause_tx):
@@ -136,7 +136,7 @@ class PauserBot:
             return False
 
         pause_tx = self.w3.lido.deposit_security_module.pause_deposits_v2(
-            message['blockNumber'], (message['signature']['r'], compute_vs(message['signature']['v'], message['signature']['s']))
+            message['blockNumber'], (message['signature']['r'], message['signature']['_vs'])
         )
 
         result = self.w3.transaction.send(pause_tx, False, 6)

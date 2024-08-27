@@ -25,7 +25,8 @@ from schema import Or, Schema
 from transport.msg_providers.kafka import KafkaMessageProvider
 from transport.msg_providers.rabbit import MessageType, RabbitProvider
 from transport.msg_storage import MessageStorage
-from transport.msg_types.deposit import DepositMessage, DepositMessageSchema, get_deposit_messages_sign_filter
+from transport.msg_types.common import get_messages_sign_filter
+from transport.msg_types.deposit import DepositMessage, DepositMessageSchema
 from transport.msg_types.ping import PingMessageSchema, to_check_sum_address
 from transport.types import TransportType
 from web3.types import BlockData
@@ -100,7 +101,7 @@ class DepositorBot:
             filters=[
                 message_metrics_filter,
                 to_check_sum_address,
-                get_deposit_messages_sign_filter(self.w3),
+                get_messages_sign_filter(self.w3),
             ],
         )
 

@@ -5,6 +5,7 @@ import pytest
 import variables
 from blockchain.typings import Web3
 from bots.depositor import DepositorBot
+from cryptography.verify_signature import compute_vs
 
 from tests.conftest import COUNCIL_ADDRESS_1, COUNCIL_ADDRESS_2, COUNCIL_PK_1, COUNCIL_PK_2, DSM_OWNER
 from tests.utils.protocol_utils import get_deposit_message
@@ -52,7 +53,7 @@ def deposit_message():
 def test_depositor_one_module_deposited(depositor_bot, block_data):
     modules = list(range(10))
 
-    depositor_bot.w3.lido.lido.get_depositable_ether = Mock(return_value=10 * 32 * 10 ** 18)
+    depositor_bot.w3.lido.lido.get_depositable_ether = Mock(return_value=10 * 32 * 10**18)
     depositor_bot.w3.lido.staking_router.get_staking_module_ids = Mock(return_value=modules)
     depositor_bot.w3.lido.staking_router.get_staking_module_max_deposits_count = Mock(return_value=0)
     depositor_bot.w3.lido.deposit_security_module.get_max_deposits = Mock(return_value=10)
@@ -102,7 +103,7 @@ def test_check_balance_dry(depositor_bot, caplog):
 def test_check_balance(depositor_bot, caplog, set_account):
     caplog.set_level(logging.INFO)
 
-    depositor_bot.w3.eth.get_balance = Mock(return_value=10 * 10 ** 18)
+    depositor_bot.w3.eth.get_balance = Mock(return_value=10 * 10**18)
     depositor_bot._check_balance()
     assert 'Check account balance' in caplog.messages[-1]
 
@@ -241,6 +242,53 @@ def test_get_quorum(depositor_bot, setup_deposit_message):
     assert deposit_messages[3] in quorum
 
 
+def get_deposit_message(web3, account_address, pk, module_id):
+    latest = web3.eth.get_block('latest')
+
+    prefix = web3.lido.deposit_security_module.get_attest_message_prefix()
+    block_number = latest.number
+    deposit_root = '0x' + web3.lido.deposit_contract.get_deposit_root().hex()
+    nonce = web3.lido.staking_router.get_staking_module_nonce(module_id)
+
+    # | ATTEST_MESSAGE_PREFIX | blockNumber | blockHash | depositRoot | stakingModuleId | nonce |
+
+    msg_hash = web3.solidity_keccak(
+        ['bytes32', 'uint256', 'bytes32', 'bytes32', 'uint256', 'uint256'],
+        [prefix, block_number, latest.hash.hex(), deposit_root, module_id, nonce],
+    )
+    signed = web3.eth.account._sign_hash(msg_hash, private_key=pk)
+
+    msg = {
+        'type': 'deposit',
+        'depositRoot': deposit_root,
+        'nonce': nonce,
+        'blockNumber': latest.number,
+        'blockHash': latest.hash.hex(),
+        'guardianAddress': account_address,
+        'guardianIndex': 8,
+        'stakingModuleId': module_id,
+        'signature': {
+            'r': '0x' + signed.r.to_bytes(32, 'big').hex(),
+            's': '0x' + signed.s.to_bytes(32, 'big').hex(),
+            'v': signed.v,
+            '_vs': compute_vs(signed.v, '0x' + signed.s.to_bytes(32, 'big').hex()),
+        },
+    }
+
+    return msg
+
+
+@pytest.fixture
+def add_accounts_to_guardian(web3_lido_integration, set_integration_account):
+    web3_lido_integration.provider.make_request('anvil_impersonateAccount', [DSM_OWNER])
+    web3_lido_integration.provider.make_request('anvil_setBalance', [DSM_OWNER, '0x500000000000000000000000'])
+
+    web3_lido_integration.lido.deposit_security_module.functions.addGuardian(COUNCIL_ADDRESS_1, 2).transact({'from': DSM_OWNER})
+    web3_lido_integration.lido.deposit_security_module.functions.addGuardian(COUNCIL_ADDRESS_2, 2).transact({'from': DSM_OWNER})
+
+    yield web3_lido_integration
+
+
 @pytest.mark.integration
 @pytest.mark.parametrize(
     'web3_provider_integration,module_id',
@@ -276,7 +324,7 @@ def test_depositor_bot_non_mellow_deposits(
         web3_lido_integration.lido.lido.functions.submit(web3_lido_integration.eth.accounts[0]).transact(
             {
                 'from': web3_lido_integration.eth.accounts[0],
-                'value': 10000 * 10 ** 18,
+                'value': 10000 * 10**18,
             }
         )
 

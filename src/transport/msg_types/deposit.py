@@ -1,14 +1,10 @@
 import logging
-from typing import Callable, TypedDict
+from typing import TypedDict
 
-from blockchain.typings import Web3
-from cryptography.verify_signature import verify_message_with_signature
-from metrics.metrics import UNEXPECTED_EXCEPTIONS
 from schema import And, Schema
 from transport.msg_types.base import ADDRESS_REGREX, HASH_REGREX, Signature, SignatureSchema
 
 logger = logging.getLogger(__name__)
-
 
 """
 Deposit msg example
@@ -58,29 +54,3 @@ class DepositMessage(TypedDict):
     signature: Signature
     stakingModuleId: int
     app: dict
-
-
-def get_deposit_messages_sign_filter(web3: Web3) -> Callable:
-    """Returns filter that checks message validity"""
-
-    def check_deposit_messages(msg: DepositMessage) -> bool:
-        deposit_prefix = web3.lido.deposit_security_module.get_attest_message_prefix()
-
-        verified = verify_message_with_signature(
-            data=[deposit_prefix, msg['blockNumber'], msg['blockHash'], msg['depositRoot'], msg['stakingModuleId'], msg['nonce']],
-            abi=['bytes32', 'uint256', 'bytes32', 'bytes32', 'uint256', 'uint256'],
-            address=msg['guardianAddress'],
-            vrs=(
-                msg['signature']['v'],
-                msg['signature']['r'],
-                msg['signature']['s'],
-            ),
-        )
-
-        if not verified:
-            logger.error({'msg': 'Message verification failed.', 'value': msg})
-            UNEXPECTED_EXCEPTIONS.labels('deposit_message_verification_failed').inc()
-
-        return verified
-
-    return check_deposit_messages
