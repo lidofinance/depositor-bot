@@ -1,16 +1,15 @@
 import pytest
+from transport.msg_providers.data_bus import _MESSAGE
 from web3 import Web3
 from web3._utils.events import get_event_data
 from web3.types import FilterParams
-
-from transport.msg_providers.data_bus import _MESSAGE
 
 
 # Started with config: {
 #  NODE_HOST: 'http://127.0.0.1:8888',
 #  DATA_BUS_ADDRESS: '0x5FbDB2315678afecb367f032d93F642f64180aa3'
 # }
-@pytest.mark.unit
+@pytest.mark.integration_manual
 def test_data_bus_provider():
     host = 'http://127.0.0.1:8888'
     contract = '0x5FbDB2315678afecb367f032d93F642f64180aa3'
@@ -32,9 +31,8 @@ def test_data_bus_provider():
     for log in logs:
         e = get_event_data(w3.codec, message_contract.events.Message().abi, log)
         unparsed_event = e['args']['data']
-        guardian = e['args']['sender']
-        d = w3.codec.decode(
-            ['(bytes32,uint256,uint256,bytes32,bytes,uint256,(bytes32))'], unparsed_event)
+        _ = e['args']['sender']
+        d = w3.codec.decode(['(bytes32,uint256,uint256,bytes32,bytes,uint256,(bytes32))'], unparsed_event)
         depositRoot, nonce, blockNumber, blockHash, signature, stakingModuleId, app = d[0]
         print('nonce', nonce)
         print('blockNumber', blockNumber)
