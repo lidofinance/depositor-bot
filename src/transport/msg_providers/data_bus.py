@@ -4,6 +4,8 @@ from enum import Enum
 from typing import List, Optional
 
 import variables
+from eth_account.account import VRS
+from eth_typing import HexStr
 from schema import Schema
 from transport.msg_providers.common import BaseMessageProvider
 from transport.msg_types.deposit import DepositMessage
@@ -28,6 +30,13 @@ _MESSAGE = {
     'name': 'Message',
     'type': 'event',
 }
+
+
+def signature_to_r_vs(signature: bytes) -> tuple[VRS, VRS]:
+    # 0 byte - 0x
+    r = signature[1:33]
+    _vs = signature[33:]
+    return HexStr('0x' + r.hex()), HexStr('0x' + _vs.hex())
 
 
 class LogParser(abc.ABC):
@@ -67,15 +76,19 @@ class DepositParser(LogParser):
 
     def _create_message(self, parsed_data: tuple, guardian: str) -> dict:
         deposit_root, nonce, block_number, block_hash, signature, staking_module_id, app = parsed_data
+        r, _vs = signature_to_r_vs(signature)
         return DepositMessage(
             type='deposit',
-            depositRoot=deposit_root,
+            depositRoot='0x' + deposit_root.hex(),
             nonce=nonce,
             blockNumber=block_number,
-            blockHash=block_hash,
+            blockHash='0x' + block_hash.hex(),
             guardianAddress=guardian,
             stakingModuleId=staking_module_id,
-            signature={'_vs': signature},
+            signature={
+                'r': r,
+                '_vs': _vs,
+            },
             app={'version': app[0]},
         )
 
@@ -90,13 +103,17 @@ class UnvetParser(LogParser):
 
     def _create_message(self, parsed_data: tuple, guardian: str) -> dict:
         nonce, block_number, block_hash, staking_module_id, signature, operator_ids, vetted_keys_by_operator, app = parsed_data
+        r, _vs = signature_to_r_vs(signature)
         return UnvetMessage(
             type='unvet',
             nonce=nonce,
             blockHash=block_hash,
             guardianAddress=guardian,
             stakingModuleId=staking_module_id,
-            signature={'_vs': signature},
+            signature={
+                'r': '0x' + r.hex(),
+                '_vs': '0x' + _vs.hex(),
+            },
             operatorIds=operator_ids,
             vettedKeysByOperator=vetted_keys_by_operator,
         )
@@ -128,12 +145,16 @@ class PauseV2Parser(LogParser):
 
     def _create_message(self, parsed_data: tuple, guardian: str) -> dict:
         deposit_root, nonce, block_number, block_hash, signature, staking_module_id, app = parsed_data
+        r, _vs = signature_to_r_vs(signature)
         return PauseMessage(
             type='pause',
             blockNumber=block_number,
             guardianAddress=guardian,
             stakingModuleId=staking_module_id,
-            signature={'_vs': signature},
+            signature={
+                'r': r,
+                '_vs': _vs,
+            },
         )
 
 
@@ -146,11 +167,15 @@ class PauseV3Parser(LogParser):
 
     def _create_message(self, parsed_data: tuple, guardian: str) -> dict:
         block_number, signature, app = parsed_data
+        r, _vs = signature_to_r_vs(signature)
         return PauseMessage(
             type='pause',
             blockNumber=block_number,
             guardianAddress=guardian,
-            signature={'_vs': signature},
+            signature={
+                'r': r,
+                '_vs': _vs,
+            },
         )
 
 
