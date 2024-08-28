@@ -12,6 +12,7 @@ from transport.msg_types.deposit import DepositMessage
 from transport.msg_types.pause import PauseMessage
 from transport.msg_types.ping import PingMessageDataBus
 from transport.msg_types.unvet import UnvetMessage
+from utils.bytes import bytes_to_hex_string
 from web3 import Web3
 from web3._utils.events import get_event_data
 from web3.exceptions import BlockNotFound
@@ -36,7 +37,7 @@ def signature_to_r_vs(signature: bytes) -> tuple[VRS, VRS]:
     # 0 byte - 0x
     r = signature[1:33]
     _vs = signature[33:]
-    return HexStr('0x' + r.hex()), HexStr('0x' + _vs.hex())
+    return HexStr(bytes_to_hex_string(r)), HexStr(bytes_to_hex_string(_vs))
 
 
 class LogParser(abc.ABC):
@@ -79,10 +80,10 @@ class DepositParser(LogParser):
         r, _vs = signature_to_r_vs(signature)
         return DepositMessage(
             type='deposit',
-            depositRoot='0x' + deposit_root.hex(),
+            depositRoot=bytes_to_hex_string(deposit_root),
             nonce=nonce,
             blockNumber=block_number,
-            blockHash='0x' + block_hash.hex(),
+            blockHash=bytes_to_hex_string(block_hash),
             guardianAddress=guardian,
             stakingModuleId=staking_module_id,
             signature={
@@ -107,12 +108,12 @@ class UnvetParser(LogParser):
         return UnvetMessage(
             type='unvet',
             nonce=nonce,
-            blockHash=block_hash,
+            blockHash=bytes_to_hex_string(block_hash),
             guardianAddress=guardian,
             stakingModuleId=staking_module_id,
             signature={
-                'r': '0x' + r.hex(),
-                '_vs': '0x' + _vs.hex(),
+                'r': r,
+                '_vs': _vs,
             },
             operatorIds=operator_ids,
             vettedKeysByOperator=vetted_keys_by_operator,
