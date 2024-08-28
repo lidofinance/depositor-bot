@@ -220,7 +220,7 @@ class DataBusProvider(BaseMessageProvider):
             filter_params = FilterParams(
                 fromBlock=from_block,
                 address=variables.DATA_BUS_ADDRESS,
-                topics=self._topics,
+                topics=[self._topics],
             )
 
             logs = self._w3.eth.get_logs(filter_params)
