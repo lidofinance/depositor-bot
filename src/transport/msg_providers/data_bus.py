@@ -45,7 +45,7 @@ class LogParser(abc.ABC):
             e = get_event_data(self._w3.codec, self._message_abi, log)
             unparsed_event = e['args']['data']
             guardian = e['args']['sender']
-            decoded_data = self._w3.codec.decode(self._schema, unparsed_event)[0]
+            decoded_data = self._w3.codec.decode([self._schema], unparsed_event)[0]
             return self._create_message(decoded_data, guardian)
         except Exception as error:
             logger.debug(
@@ -215,7 +215,7 @@ class DataBusProvider(BaseMessageProvider):
     def _fetch_logs_into_queue(self):
         try:
             latest_block_number = self._w3.eth.block_number
-            from_block = latest_block_number - self._STANDARD_OFFSET if self._latest_block == -1 else self._latest_block
+            from_block = max(0, latest_block_number - self._STANDARD_OFFSET) if self._latest_block == -1 else self._latest_block
 
             filter_params = FilterParams(
                 fromBlock=from_block,
