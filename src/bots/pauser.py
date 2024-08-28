@@ -61,7 +61,7 @@ class PauserBot:
             transports.append(
                 DataBusProvider(
                     message_schema=Schema(Or(PauseMessageSchema, PingMessageDataBusSchema)),
-                    sinks=[DataBusSinks.PAUSE_V2, DataBusSinks.PING_V1],
+                    sinks=[DataBusSinks.PAUSE_V2, DataBusSinks.PAUSE_V3, DataBusSinks.PING_V1],
                 )
             )
 
