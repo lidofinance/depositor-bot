@@ -18,6 +18,7 @@ from transport.msg_types.pause import PauseMessage, PauseMessageSchema
 from transport.msg_types.ping import PingMessageDataBusSchema, PingMessageSchema, to_check_sum_address
 from transport.types import TransportType
 from web3.types import BlockData
+from web3_multi_provider import FallbackProvider
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +61,7 @@ class PauserBot:
         if TransportType.DATA_BUS in variables.MESSAGE_TRANSPORTS:
             transports.append(
                 DataBusProvider(
+                    w3=Web3(FallbackProvider(variables.WEB3_RPC_GNOSIS_ENDPOINTS)),
                     message_schema=Schema(Or(PauseMessageSchema, PingMessageDataBusSchema)),
                     sinks=[DataBusSinks.PAUSE_V2, DataBusSinks.PAUSE_V3, DataBusSinks.PING_V1],
                 )

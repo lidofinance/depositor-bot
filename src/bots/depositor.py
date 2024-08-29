@@ -22,16 +22,16 @@ from metrics.metrics import (
 )
 from metrics.transport_message_metrics import message_metrics_filter
 from schema import Or, Schema
-
 from transport.msg_providers.data_bus import DataBusProvider, DataBusSinks
 from transport.msg_providers.kafka import KafkaMessageProvider
 from transport.msg_providers.rabbit import MessageType, RabbitProvider
 from transport.msg_storage import MessageStorage
 from transport.msg_types.common import get_messages_sign_filter
 from transport.msg_types.deposit import DepositMessage, DepositMessageSchema
-from transport.msg_types.ping import PingMessageSchema, to_check_sum_address, PingMessageDataBusSchema
+from transport.msg_types.ping import PingMessageDataBusSchema, PingMessageSchema, to_check_sum_address
 from transport.types import TransportType
 from web3.types import BlockData
+from web3_multi_provider import FallbackProvider
 
 logger = logging.getLogger(__name__)
 
@@ -98,8 +98,9 @@ class DepositorBot:
         if TransportType.DATA_BUS in variables.MESSAGE_TRANSPORTS:
             transports.append(
                 DataBusProvider(
+                    w3=Web3(FallbackProvider(variables.WEB3_RPC_GNOSIS_ENDPOINTS)),
                     message_schema=Schema(Or(DepositMessageSchema, PingMessageDataBusSchema)),
-                    sinks=[DataBusSinks.DEPOSIT_V1, DataBusSinks.PING_V1]
+                    sinks=[DataBusSinks.DEPOSIT_V1, DataBusSinks.PING_V1],
                 )
             )
 
@@ -133,10 +134,7 @@ class DepositorBot:
 
         return True
 
-    def _is_mellow_depositable(
-        self,
-        module_id: int
-    ) -> bool:
+    def _is_mellow_depositable(self, module_id: int) -> bool:
         if not variables.MELLOW_CONTRACT_ADDRESS:
             return False
         try:

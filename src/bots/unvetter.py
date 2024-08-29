@@ -7,17 +7,17 @@ from blockchain.typings import Web3
 from metrics.metrics import UNEXPECTED_EXCEPTIONS
 from metrics.transport_message_metrics import message_metrics_filter
 from schema import Or, Schema
-
 from transport.msg_providers.data_bus import DataBusProvider, DataBusSinks
 from transport.msg_providers.kafka import KafkaMessageProvider
 from transport.msg_providers.rabbit import MessageType, RabbitProvider
 from transport.msg_storage import MessageStorage
 from transport.msg_types.common import get_messages_sign_filter
-from transport.msg_types.ping import PingMessageSchema, to_check_sum_address, PingMessageDataBusSchema
+from transport.msg_types.ping import PingMessageDataBusSchema, PingMessageSchema, to_check_sum_address
 from transport.msg_types.unvet import UnvetMessage, UnvetMessageSchema
 from transport.types import TransportType
 from utils.bytes import from_hex_string_to_bytes
 from web3.types import BlockData
+from web3_multi_provider import FallbackProvider
 
 logger = logging.getLogger(__name__)
 
@@ -66,8 +66,9 @@ class UnvetterBot:
         if TransportType.DATA_BUS in variables.MESSAGE_TRANSPORTS:
             transports.append(
                 DataBusProvider(
+                    w3=Web3(FallbackProvider(variables.WEB3_RPC_GNOSIS_ENDPOINTS)),
                     message_schema=Schema(Or(UnvetMessageSchema, PingMessageDataBusSchema)),
-                    sinks=[DataBusSinks.UNVET_V1, DataBusSinks.PING_V1]
+                    sinks=[DataBusSinks.UNVET_V1, DataBusSinks.PING_V1],
                 )
             )
 

@@ -19,7 +19,6 @@ from web3 import Web3
 from web3._utils.events import get_event_data
 from web3.exceptions import BlockNotFound
 from web3.types import FilterParams, LogReceipt
-from web3_multi_provider import FallbackProvider
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +32,12 @@ _MESSAGE = {
     'name': 'Message',
     'type': 'event',
 }
+
+UNVET_V1_DATA_SCHEMA = '(uint256,uint256,bytes32,uint256,bytes,bytes32,bytes32,(bytes32))'
+PING_V1_DATA_SCHEMA = '(uint256,(bytes32))'
+DEPOSIT_V1_DATA_SCHEMA = '(bytes32,uint256,uint256,bytes32,bytes,uint256,(bytes32))'
+PAUSE_V2_DATA_SCHEMA = '(bytes32,uint256,uint256,bytes32,bytes,uint256,(bytes32))'
+PAUSE_V3_DATA_SCHEMA = '(uint256,bytes,(bytes32))'
 
 
 def signature_to_r_vs(signature: bytes) -> tuple[VRS, VRS]:
@@ -53,29 +58,18 @@ class LogParser(abc.ABC):
         pass
 
     def parse(self, log: LogReceipt) -> Optional[dict]:
-        try:
-            e = get_event_data(self._w3.codec, self._message_abi, log)
-            unparsed_event = e['args']['data']
-            guardian = e['args']['sender']
-            decoded_data = self._w3.codec.decode([self._schema], unparsed_event)[0]
-            return self._create_message(decoded_data, guardian)
-        except Exception as error:
-            logger.debug(
-                {
-                    'msg': 'Failed to parse log',
-                    'log': log,
-                    'error': str(error),
-                    'parser': type(self).__name__,
-                }
-            )
-            return None
+        e = get_event_data(self._w3.codec, self._message_abi, log)
+        unparsed_event = e['args']['data']
+        guardian = e['args']['sender']
+        decoded_data = self._w3.codec.decode([self._schema], unparsed_event)[0]
+        return self._create_message(decoded_data, guardian)
 
 
 # event MessageDepositV1(address indexed guardianAddress, (bytes32 depositRoot, uint256 nonce, uint256 blockNumber, bytes32 blockHash,
 # bytes signature, uint256 stakingModuleId, (bytes32 version) app) data)",
 class DepositParser(LogParser):
     def __init__(self, w3: Web3):
-        super().__init__(w3, '(bytes32,uint256,uint256,bytes32,bytes,uint256,(bytes32))')
+        super().__init__(w3, DEPOSIT_V1_DATA_SCHEMA)
 
     def _create_message(self, parsed_data: tuple, guardian: str) -> dict:
         deposit_root, nonce, block_number, block_hash, signature, staking_module_id, app = parsed_data
@@ -102,7 +96,7 @@ class DepositParser(LogParser):
 
 class UnvetParser(LogParser):
     def __init__(self, w3: Web3):
-        super().__init__(w3, '(uint256,uint256,bytes32,uint256,bytes,bytes32,bytes32,(bytes32))')
+        super().__init__(w3, UNVET_V1_DATA_SCHEMA)
 
     def _create_message(self, parsed_data: tuple, guardian: str) -> dict:
         nonce, block_number, block_hash, staking_module_id, signature, operator_ids, vetted_keys_by_operator, app = parsed_data
@@ -127,7 +121,7 @@ class UnvetParser(LogParser):
 
 class PingParser(LogParser):
     def __init__(self, w3: Web3):
-        super().__init__(w3, '(uint256,(bytes32))')
+        super().__init__(w3, PING_V1_DATA_SCHEMA)
 
     def _create_message(self, parsed_data: tuple, guardian: str) -> dict:
         block_number, app = parsed_data
@@ -144,7 +138,7 @@ class PingParser(LogParser):
 
 class PauseV2Parser(LogParser):
     def __init__(self, w3: Web3):
-        super().__init__(w3, '(bytes32,uint256,uint256,bytes32,bytes,uint256,(bytes32))')
+        super().__init__(w3, PAUSE_V2_DATA_SCHEMA)
 
     def _create_message(self, parsed_data: tuple, guardian: str) -> dict:
         deposit_root, nonce, block_number, block_hash, signature, staking_module_id, app = parsed_data
@@ -166,7 +160,7 @@ class PauseV2Parser(LogParser):
 
 class PauseV3Parser(LogParser):
     def __init__(self, w3: Web3):
-        super().__init__(w3, '(uint256,bytes,(bytes32))')
+        super().__init__(w3, PAUSE_V3_DATA_SCHEMA)
 
     def _create_message(self, parsed_data: tuple, guardian: str) -> dict:
         block_number, signature, app = parsed_data
@@ -183,11 +177,11 @@ class PauseV3Parser(LogParser):
 
 
 class DataBusSinks(str, Enum):
-    DEPOSIT_V1 = 'MessageDepositV1(address,(bytes32,uint256,uint256,bytes32,bytes,uint256,(bytes32)))'
-    PAUSE_V2 = 'MessagePauseV2(address,(bytes32,uint256,uint256,bytes32,bytes,uint256,(bytes32)))'
-    PAUSE_V3 = 'MessagePauseV3(address,(uint256,bytes,(bytes32)))'
-    PING_V1 = 'MessagePingV1(address,(uint256,(bytes32)))'
-    UNVET_V1 = 'MessageUnvetV1(address,(uint256,uint256,bytes32,uint256,bytes,bytes32,bytes32,(bytes32)))'
+    DEPOSIT_V1 = f'MessageDepositV1(address,{DEPOSIT_V1_DATA_SCHEMA})'
+    PAUSE_V2 = f'MessagePauseV2(address,{PAUSE_V2_DATA_SCHEMA})'
+    PAUSE_V3 = f'MessagePauseV3(address,{PAUSE_V3_DATA_SCHEMA})'
+    PING_V1 = f'MessagePingV1(address,{PING_V1_DATA_SCHEMA})'
+    UNVET_V1 = f'MessageUnvetV1(address,{UNVET_V1_DATA_SCHEMA})'
 
 
 def _construct_parsers(w3: Web3, sinks: List[DataBusSinks]) -> List[LogParser]:
@@ -211,7 +205,7 @@ def _construct_parsers(w3: Web3, sinks: List[DataBusSinks]) -> List[LogParser]:
 
 
 class DataBusProvider(BaseMessageProvider):
-    def __init__(self, message_schema: Schema, sinks: [DataBusSinks]):
+    def __init__(self, w3: Web3, message_schema: Schema, sinks: [DataBusSinks]):
         super().__init__('', message_schema)
         if len(sinks) == 0:
             raise ValueError('There must be at least a single sink for Data Bus provider')
@@ -225,7 +219,7 @@ class DataBusProvider(BaseMessageProvider):
 
         logger.info('Data bus client initialized.')
 
-        self._w3 = Web3(FallbackProvider(variables.WEB3_RPC_GNOSIS_ENDPOINTS))
+        self._w3 = w3
         self._topics = [self._w3.keccak(text=sink) for sink in sinks]
         self._parsers: List[LogParser] = _construct_parsers(self._w3, sinks)
 
