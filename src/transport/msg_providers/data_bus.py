@@ -1,5 +1,6 @@
 import abc
 import logging
+from collections import deque
 from enum import Enum
 from typing import List, Optional
 
@@ -219,7 +220,7 @@ class DataBusProvider(BaseMessageProvider):
 
         self._STANDARD_OFFSET = 256
         self._latest_block = -1
-        self._queue: List[LogReceipt] = []
+        self._queue: deque = deque()
 
         logger.info('Data bus client initialized.')
 
