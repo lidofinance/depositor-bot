@@ -18,7 +18,7 @@ from utils.bytes import bytes_to_hex_string
 from web3 import Web3
 from web3._utils.events import get_event_data
 from web3.exceptions import BlockNotFound
-from web3.types import FilterParams, LogReceipt
+from web3.types import EventData, FilterParams, LogReceipt
 
 logger = logging.getLogger(__name__)
 
@@ -57,8 +57,11 @@ class LogParser(abc.ABC):
     def _create_message(self, parsed_data: dict, guardian: str) -> dict:
         pass
 
+    def _decode_event(self, log: LogReceipt) -> EventData:
+        return get_event_data(self._w3.codec, self._message_abi, log)
+
     def parse(self, log: LogReceipt) -> Optional[dict]:
-        e = get_event_data(self._w3.codec, self._message_abi, log)
+        e = self._decode_event(log)
         unparsed_event = e['args']['data']
         guardian = e['args']['sender']
         decoded_data = self._w3.codec.decode([self._schema], unparsed_event)[0]
