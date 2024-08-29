@@ -9,6 +9,7 @@ from eth_account.account import VRS
 from eth_typing import HexStr
 from schema import Schema
 from transport.msg_providers.common import BaseMessageProvider
+from transport.msg_providers.rabbit import MessageType
 from transport.msg_types.deposit import DepositMessage
 from transport.msg_types.pause import PauseMessage
 from transport.msg_types.ping import PingMessageDataBus
@@ -80,7 +81,7 @@ class DepositParser(LogParser):
         deposit_root, nonce, block_number, block_hash, signature, staking_module_id, app = parsed_data
         r, _vs = signature_to_r_vs(signature)
         return DepositMessage(
-            type='deposit',
+            type=MessageType.DEPOSIT,
             depositRoot=bytes_to_hex_string(deposit_root),
             nonce=nonce,
             blockNumber=block_number,
@@ -107,7 +108,7 @@ class UnvetParser(LogParser):
         nonce, block_number, block_hash, staking_module_id, signature, operator_ids, vetted_keys_by_operator, app = parsed_data
         r, _vs = signature_to_r_vs(signature)
         return UnvetMessage(
-            type='unvet',
+            type=MessageType.UNVET,
             nonce=nonce,
             blockHash=bytes_to_hex_string(block_hash),
             guardianAddress=guardian,
@@ -131,7 +132,7 @@ class PingParser(LogParser):
     def _create_message(self, parsed_data: tuple, guardian: str) -> dict:
         block_number, app = parsed_data
         return PingMessageDataBus(
-            type='ping',
+            type=MessageType.PING,
             blockNumber=block_number,
             guardianAddress=guardian,
         )
@@ -149,7 +150,7 @@ class PauseV2Parser(LogParser):
         deposit_root, nonce, block_number, block_hash, signature, staking_module_id, app = parsed_data
         r, _vs = signature_to_r_vs(signature)
         return PauseMessage(
-            type='pause',
+            type=MessageType.PAUSE,
             blockNumber=block_number,
             guardianAddress=guardian,
             stakingModuleId=staking_module_id,
@@ -171,7 +172,7 @@ class PauseV3Parser(LogParser):
         block_number, signature, app = parsed_data
         r, _vs = signature_to_r_vs(signature)
         return PauseMessage(
-            type='pause',
+            type=MessageType.PAUSE,
             blockNumber=block_number,
             guardianAddress=guardian,
             signature={
