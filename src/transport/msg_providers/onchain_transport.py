@@ -1,12 +1,11 @@
 import abc
 import logging
 from collections import deque
-from enum import Enum
+from enum import StrEnum
 from typing import List, Optional
 
-import variables
 from eth_account.account import VRS
-from eth_typing import HexStr
+from eth_typing import ChecksumAddress, HexStr
 from schema import Schema
 from transport.msg_providers.common import BaseMessageProvider
 from transport.msg_providers.rabbit import MessageType
@@ -22,7 +21,7 @@ from web3.types import EventData, FilterParams, LogReceipt
 
 logger = logging.getLogger(__name__)
 
-_MESSAGE = {
+MESSAGE_EVENT_ABI = {
     'anonymous': True,
     'inputs': [
         {'indexed': True, 'name': 'eventId', 'type': 'bytes32'},
@@ -47,11 +46,11 @@ def signature_to_r_vs(signature: bytes) -> tuple[VRS, VRS]:
     return HexStr(bytes_to_hex_string(r)), HexStr(bytes_to_hex_string(_vs))
 
 
-class LogParser(abc.ABC):
+class EventParser(abc.ABC):
     def __init__(self, w3: Web3, schema: str):
         self._w3 = w3
         self._schema = schema
-        self._message_abi = w3.eth.contract(abi=[_MESSAGE]).events.Message().abi
+        self._message_abi = w3.eth.contract(abi=[MESSAGE_EVENT_ABI]).events.Message().abi
 
     @abc.abstractmethod
     def _create_message(self, parsed_data: dict, guardian: str) -> dict:
@@ -70,7 +69,7 @@ class LogParser(abc.ABC):
 
 # event MessageDepositV1(address indexed guardianAddress, (bytes32 depositRoot, uint256 nonce, uint256 blockNumber, bytes32 blockHash,
 # bytes signature, uint256 stakingModuleId, (bytes32 version) app) data)",
-class DepositParser(LogParser):
+class DepositParser(EventParser):
     def __init__(self, w3: Web3):
         super().__init__(w3, DEPOSIT_V1_DATA_SCHEMA)
 
@@ -97,7 +96,7 @@ class DepositParser(LogParser):
 # bytes signature, bytes32 operatorIds, bytes32 vettedKeysByOperator, (bytes32 version) app) data)",
 
 
-class UnvetParser(LogParser):
+class UnvetParser(EventParser):
     def __init__(self, w3: Web3):
         super().__init__(w3, UNVET_V1_DATA_SCHEMA)
 
@@ -122,7 +121,7 @@ class UnvetParser(LogParser):
 # event MessagePingV1(address indexed guardianAddress, (uint256 blockNumber, (bytes32 version) app) data)",
 
 
-class PingParser(LogParser):
+class PingParser(EventParser):
     def __init__(self, w3: Web3):
         super().__init__(w3, PING_V1_DATA_SCHEMA)
 
@@ -139,7 +138,7 @@ class PingParser(LogParser):
 # bytes signature, uint256 stakingModuleId, (bytes32 version) app) data)",
 
 
-class PauseV2Parser(LogParser):
+class PauseV2Parser(EventParser):
     def __init__(self, w3: Web3):
         super().__init__(w3, PAUSE_V2_DATA_SCHEMA)
 
@@ -161,7 +160,7 @@ class PauseV2Parser(LogParser):
 # event MessagePauseV3(address indexed guardianAddress, (uint256 blockNumber, bytes signature, (bytes32 version) app) data)",
 
 
-class PauseV3Parser(LogParser):
+class PauseV3Parser(EventParser):
     def __init__(self, w3: Web3):
         super().__init__(w3, PAUSE_V3_DATA_SCHEMA)
 
@@ -179,7 +178,7 @@ class PauseV3Parser(LogParser):
         )
 
 
-class DataBusSinks(str, Enum):
+class OnchainTransportSinks(StrEnum):
     DEPOSIT_V1 = f'MessageDepositV1(address,{DEPOSIT_V1_DATA_SCHEMA})'
     PAUSE_V2 = f'MessagePauseV2(address,{PAUSE_V2_DATA_SCHEMA})'
     PAUSE_V3 = f'MessagePauseV3(address,{PAUSE_V3_DATA_SCHEMA})'
@@ -187,36 +186,14 @@ class DataBusSinks(str, Enum):
     UNVET_V1 = f'MessageUnvetV1(address,{UNVET_V1_DATA_SCHEMA})'
 
 
-def _construct_parsers(w3: Web3, sinks: List[DataBusSinks]) -> List[LogParser]:
-    parser_mapping = {
-        DataBusSinks.DEPOSIT_V1: DepositParser,
-        DataBusSinks.PAUSE_V2: PauseV2Parser,
-        DataBusSinks.PAUSE_V3: PauseV3Parser,
-        DataBusSinks.PING_V1: PingParser,
-        DataBusSinks.UNVET_V1: UnvetParser,
-    }
+class OnchainTransportProvider(BaseMessageProvider):
+    STANDARD_OFFSET: int = 256
 
-    parsers = []
-    for sink in sinks:
-        parser_class = parser_mapping.get(sink)
-        if parser_class:
-            parsers.append(parser_class(w3))
-        else:
-            raise ValueError(f'Invalid sink in Data Bus sinks: {sink}')
-
-    return parsers
-
-
-class DataBusProvider(BaseMessageProvider):
-    def __init__(self, w3: Web3, message_schema: Schema, sinks: [DataBusSinks]):
+    def __init__(self, w3: Web3, onchain_address: ChecksumAddress, message_schema: Schema, sinks: list[OnchainTransportSinks]):
         super().__init__('', message_schema)
-        if len(sinks) == 0:
-            raise ValueError('There must be at least a single sink for Data Bus provider')
-
+        self._onchain_address = onchain_address
         if not sinks:
-            raise ValueError('There must be at least one sink for Data Bus provider')
-
-        self._STANDARD_OFFSET = 256
+            raise ValueError('There must be at least a single sink for Data Bus provider')
         self._latest_block = -1
         self._queue: deque = deque()
 
@@ -224,12 +201,28 @@ class DataBusProvider(BaseMessageProvider):
 
         self._w3 = w3
         self._topics = [self._w3.keccak(text=sink) for sink in sinks]
-        self._parsers: List[LogParser] = _construct_parsers(self._w3, sinks)
+        self._parsers: List[EventParser] = self._construct_parsers(sinks)
+
+    def _construct_parsers(self, sinks: List[OnchainTransportSinks]) -> List[EventParser]:
+        parser_mapping = {
+            OnchainTransportSinks.DEPOSIT_V1: DepositParser,
+            OnchainTransportSinks.PAUSE_V2: PauseV2Parser,
+            OnchainTransportSinks.PAUSE_V3: PauseV3Parser,
+            OnchainTransportSinks.PING_V1: PingParser,
+            OnchainTransportSinks.UNVET_V1: UnvetParser,
+        }
+
+        parsers = []
+        for sink in sinks:
+            parser_class = parser_mapping.get(sink)
+            if parser_class:
+                parsers.append(parser_class(self._w3))
+            else:
+                raise ValueError(f'Invalid sink in Data Bus sinks: {sink}')
+
+        return parsers
 
     def _receive_message(self) -> Optional[LogReceipt]:
-        if not self._w3.is_connected():
-            raise ConnectionError('Connection Data Bus was lost.')
-
         if not self._queue:
             self._fetch_logs_into_queue()
         try:
@@ -240,11 +233,11 @@ class DataBusProvider(BaseMessageProvider):
     def _fetch_logs_into_queue(self):
         try:
             latest_block_number = self._w3.eth.block_number
-            from_block = max(0, latest_block_number - self._STANDARD_OFFSET) if self._latest_block == -1 else self._latest_block
+            from_block = max(0, latest_block_number - self.STANDARD_OFFSET) if self._latest_block == -1 else self._latest_block
 
             filter_params = FilterParams(
                 fromBlock=from_block,
-                address=variables.DATA_BUS_ADDRESS,
+                address=self._onchain_address,
                 topics=[self._topics],
             )
 

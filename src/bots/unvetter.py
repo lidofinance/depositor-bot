@@ -7,8 +7,8 @@ from blockchain.typings import Web3
 from metrics.metrics import UNEXPECTED_EXCEPTIONS
 from metrics.transport_message_metrics import message_metrics_filter
 from schema import Or, Schema
-from transport.msg_providers.data_bus import DataBusProvider, DataBusSinks
 from transport.msg_providers.kafka import KafkaMessageProvider
+from transport.msg_providers.onchain_transport import OnchainTransportProvider, OnchainTransportSinks
 from transport.msg_providers.rabbit import MessageType, RabbitProvider
 from transport.msg_storage import MessageStorage
 from transport.msg_types.common import get_messages_sign_filter
@@ -63,12 +63,13 @@ class UnvetterBot:
                 )
             )
 
-        if TransportType.DATA_BUS in variables.MESSAGE_TRANSPORTS:
+        if TransportType.ONCHAIN_TRANSPORT in variables.MESSAGE_TRANSPORTS:
             transports.append(
-                DataBusProvider(
-                    w3=Web3(FallbackProvider(variables.WEB3_RPC_GNOSIS_ENDPOINTS)),
+                OnchainTransportProvider(
+                    w3=Web3(FallbackProvider(variables.ONCHAIN_TRANSPORT_RPC_ENDPOINTS)),
+                    onchain_address=variables.ONCHAIN_TRANSPORT_ADDRESS,
                     message_schema=Schema(Or(UnvetMessageSchema, PingMessageSchema)),
-                    sinks=[DataBusSinks.UNVET_V1, DataBusSinks.PING_V1],
+                    sinks=[OnchainTransportSinks.UNVET_V1, OnchainTransportSinks.PING_V1],
                 )
             )
 

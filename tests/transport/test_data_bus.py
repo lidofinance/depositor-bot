@@ -2,8 +2,14 @@ from unittest.mock import Mock
 
 import pytest
 import variables
+from eth_typing import ChecksumAddress, HexAddress, HexStr
 from schema import Or, Schema
-from transport.msg_providers.data_bus import DEPOSIT_V1_DATA_SCHEMA, PING_V1_DATA_SCHEMA, DataBusProvider, DataBusSinks
+from transport.msg_providers.onchain_transport import (
+    DEPOSIT_V1_DATA_SCHEMA,
+    PING_V1_DATA_SCHEMA,
+    OnchainTransportProvider,
+    OnchainTransportSinks,
+)
 from transport.msg_types.deposit import DepositMessageSchema
 from transport.msg_types.ping import PingMessageSchema
 from web3 import Web3
@@ -22,12 +28,13 @@ def test_data_bus_provider():
     """
     Utilise this function for an adhoc testing of data bus transport
     """
-    variables.WEB3_RPC_GNOSIS_ENDPOINTS = ['http://127.0.0.1:8888']
-    variables.DATA_BUS_ADDRESS = '0x5FbDB2315678afecb367f032d93F642f64180aa3'
-    provider = DataBusProvider(
-        w3=Web3(FallbackProvider(variables.WEB3_RPC_GNOSIS_ENDPOINTS)),
+    variables.ONCHAIN_TRANSPORT_RPC_ENDPOINTS = ['http://127.0.0.1:8888']
+    variables.ONCHAIN_TRANSPORT_ADDRESS = ChecksumAddress(HexAddress(HexStr('0x5FbDB2315678afecb367f032d93F642f64180aa3')))
+    provider = OnchainTransportProvider(
+        w3=Web3(FallbackProvider(variables.ONCHAIN_TRANSPORT_RPC_ENDPOINTS)),
+        onchain_address=variables.ONCHAIN_TRANSPORT_ADDRESS,
         message_schema=Schema(Or(DepositMessageSchema, PingMessageSchema)),
-        sinks=[DataBusSinks.DEPOSIT_V1, DataBusSinks.PING_V1],
+        sinks=[OnchainTransportSinks.DEPOSIT_V1, OnchainTransportSinks.PING_V1],
     )
     messages = provider.get_messages()
     for mes in messages:
@@ -62,10 +69,11 @@ def test_data_bus_mock_responses(web3_lido_unit):
     web3_lido_unit.eth.get_logs = Mock(side_effect=[receipts, None])
     web3_lido_unit.is_connected = Mock(return_value=True)
     web3_lido_unit.eth.get_block_number = Mock(return_value=1)
-    provider = DataBusProvider(
+    provider = OnchainTransportProvider(
         w3=web3_lido_unit,
+        onchain_address=variables.ONCHAIN_TRANSPORT_ADDRESS,
         message_schema=Schema(Or(DepositMessageSchema, PingMessageSchema)),
-        sinks=[DataBusSinks.DEPOSIT_V1, DataBusSinks.PING_V1],
+        sinks=[OnchainTransportSinks.DEPOSIT_V1, OnchainTransportSinks.PING_V1],
     )
 
     for parser in provider._parsers:

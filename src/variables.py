@@ -62,12 +62,12 @@ RABBIT_MQ_PASSWORD = os.getenv('RABBIT_MQ_PASSWORD', 'guest')
 
 # data bus
 # gnosis nodes
-WEB3_RPC_GNOSIS_ENDPOINTS = os.getenv('WEB3_RPC_GNOSIS_ENDPOINTS', '').split(',')
+ONCHAIN_TRANSPORT_RPC_ENDPOINTS = os.getenv('ONCHAIN_TRANSPORT_RPC_ENDPOINTS', '').split(',')
 
-DATA_BUS_ADDRESS = os.getenv('DATA_BUS_ADDRESS', None)
-if DATA_BUS_ADDRESS:
+ONCHAIN_TRANSPORT_ADDRESS = os.getenv('ONCHAIN_TRANSPORT_ADDRESS', None)
+if ONCHAIN_TRANSPORT_ADDRESS:
     # bot will throw exception if there is unexpected str and it's ok
-    DATA_BUS_ADDRESS = Web3.to_checksum_address(DATA_BUS_ADDRESS)
+    ONCHAIN_TRANSPORT_ADDRESS = Web3.to_checksum_address(ONCHAIN_TRANSPORT_ADDRESS)
 
 # Transactions settings
 CREATE_TRANSACTIONS = os.getenv('CREATE_TRANSACTIONS') == 'true'
@@ -76,7 +76,7 @@ MIN_PRIORITY_FEE = Web3.to_wei(*os.getenv('MIN_PRIORITY_FEE', '50 mwei').split('
 MAX_PRIORITY_FEE = Web3.to_wei(*os.getenv('MAX_PRIORITY_FEE', '10 gwei').split(' '))
 
 MAX_GAS_FEE = Web3.to_wei(*os.getenv('MAX_GAS_FEE', '100 gwei').split(' '))
-CONTRACT_GAS_LIMIT = int(os.getenv('CONTRACT_GAS_LIMIT', 15 * 10 ** 6))
+CONTRACT_GAS_LIMIT = int(os.getenv('CONTRACT_GAS_LIMIT', 15 * 10**6))
 
 # Mainnet: "https://relay.flashbots.net",
 # Holesky: "https://relay-holesky.flashbots.net",
