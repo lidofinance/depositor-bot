@@ -69,7 +69,7 @@ def test_data_bus_mock_responses(web3_lido_unit):
     )
 
     for parser in provider._parsers:
-        parser._decode_event = Mock(side_effect=receipts)
+        parser._decode_event = Mock(side_effect=lambda x: x)
 
     messages = provider.get_messages()
     for mes in messages:

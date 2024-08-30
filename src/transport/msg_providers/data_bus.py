@@ -233,7 +233,7 @@ class DataBusProvider(BaseMessageProvider):
         if not self._queue:
             self._fetch_logs_into_queue()
         try:
-            return self._queue.pop()
+            return self._queue.popleft()
         except IndexError:
             return None
 
