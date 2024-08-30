@@ -5,7 +5,7 @@ import variables
 from schema import Or, Schema
 from transport.msg_providers.data_bus import DEPOSIT_V1_DATA_SCHEMA, PING_V1_DATA_SCHEMA, DataBusProvider, DataBusSinks
 from transport.msg_types.deposit import DepositMessageSchema
-from transport.msg_types.ping import PingMessageDataBusSchema
+from transport.msg_types.ping import PingMessageSchema
 from web3 import Web3
 from web3.types import EventData
 from web3_multi_provider import FallbackProvider
@@ -26,7 +26,7 @@ def test_data_bus_provider():
     variables.DATA_BUS_ADDRESS = '0x5FbDB2315678afecb367f032d93F642f64180aa3'
     provider = DataBusProvider(
         w3=Web3(FallbackProvider(variables.WEB3_RPC_GNOSIS_ENDPOINTS)),
-        message_schema=Schema(Or(DepositMessageSchema, PingMessageDataBusSchema)),
+        message_schema=Schema(Or(DepositMessageSchema, PingMessageSchema)),
         sinks=[DataBusSinks.DEPOSIT_V1, DataBusSinks.PING_V1],
     )
     messages = provider.get_messages()
@@ -64,7 +64,7 @@ def test_data_bus_mock_responses(web3_lido_unit):
     web3_lido_unit.eth.get_block_number = Mock(return_value=1)
     provider = DataBusProvider(
         w3=web3_lido_unit,
-        message_schema=Schema(Or(DepositMessageSchema, PingMessageDataBusSchema)),
+        message_schema=Schema(Or(DepositMessageSchema, PingMessageSchema)),
         sinks=[DataBusSinks.DEPOSIT_V1, DataBusSinks.PING_V1],
     )
 

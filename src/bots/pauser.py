@@ -15,7 +15,7 @@ from transport.msg_providers.rabbit import MessageType, RabbitProvider
 from transport.msg_storage import MessageStorage
 from transport.msg_types.common import get_messages_sign_filter
 from transport.msg_types.pause import PauseMessage, PauseMessageSchema
-from transport.msg_types.ping import PingMessageDataBusSchema, PingMessageSchema, to_check_sum_address
+from transport.msg_types.ping import PingMessageSchema, to_check_sum_address
 from transport.types import TransportType
 from web3.types import BlockData
 from web3_multi_provider import FallbackProvider
@@ -62,7 +62,7 @@ class PauserBot:
             transports.append(
                 DataBusProvider(
                     w3=Web3(FallbackProvider(variables.WEB3_RPC_GNOSIS_ENDPOINTS)),
-                    message_schema=Schema(Or(PauseMessageSchema, PingMessageDataBusSchema)),
+                    message_schema=Schema(Or(PauseMessageSchema, PingMessageSchema)),
                     sinks=[DataBusSinks.PAUSE_V2, DataBusSinks.PAUSE_V3, DataBusSinks.PING_V1],
                 )
             )

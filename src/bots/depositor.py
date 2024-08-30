@@ -28,7 +28,7 @@ from transport.msg_providers.rabbit import MessageType, RabbitProvider
 from transport.msg_storage import MessageStorage
 from transport.msg_types.common import get_messages_sign_filter
 from transport.msg_types.deposit import DepositMessage, DepositMessageSchema
-from transport.msg_types.ping import PingMessageDataBusSchema, PingMessageSchema, to_check_sum_address
+from transport.msg_types.ping import PingMessageSchema, to_check_sum_address
 from transport.types import TransportType
 from web3.types import BlockData
 from web3_multi_provider import FallbackProvider
@@ -99,7 +99,7 @@ class DepositorBot:
             transports.append(
                 DataBusProvider(
                     w3=Web3(FallbackProvider(variables.WEB3_RPC_GNOSIS_ENDPOINTS)),
-                    message_schema=Schema(Or(DepositMessageSchema, PingMessageDataBusSchema)),
+                    message_schema=Schema(Or(DepositMessageSchema, PingMessageSchema)),
                     sinks=[DataBusSinks.DEPOSIT_V1, DataBusSinks.PING_V1],
                 )
             )

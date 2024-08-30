@@ -12,7 +12,7 @@ from transport.msg_providers.kafka import KafkaMessageProvider
 from transport.msg_providers.rabbit import MessageType, RabbitProvider
 from transport.msg_storage import MessageStorage
 from transport.msg_types.common import get_messages_sign_filter
-from transport.msg_types.ping import PingMessageDataBusSchema, PingMessageSchema, to_check_sum_address
+from transport.msg_types.ping import PingMessageSchema, to_check_sum_address
 from transport.msg_types.unvet import UnvetMessage, UnvetMessageSchema
 from transport.types import TransportType
 from utils.bytes import from_hex_string_to_bytes
@@ -67,7 +67,7 @@ class UnvetterBot:
             transports.append(
                 DataBusProvider(
                     w3=Web3(FallbackProvider(variables.WEB3_RPC_GNOSIS_ENDPOINTS)),
-                    message_schema=Schema(Or(UnvetMessageSchema, PingMessageDataBusSchema)),
+                    message_schema=Schema(Or(UnvetMessageSchema, PingMessageSchema)),
                     sinks=[DataBusSinks.UNVET_V1, DataBusSinks.PING_V1],
                 )
             )
