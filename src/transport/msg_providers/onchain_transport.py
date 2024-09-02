@@ -46,8 +46,7 @@ PAUSE_V3_DATA_SCHEMA = '(uint256,bytes,(bytes32))'
 
 def signature_to_r_vs(signature: bytes) -> tuple[VRS, VRS]:
     # 0 byte - 0x
-    r = signature[1:33]
-    _vs = signature[33:]
+    r, _vs = signature[:32], signature[32:]
     return HexStr(bytes_to_hex_string(r)), HexStr(bytes_to_hex_string(_vs))
 
 
