@@ -81,7 +81,6 @@ class DepositorBot:
         if TransportType.RABBIT in variables.MESSAGE_TRANSPORTS:
             transports.append(
                 RabbitProvider(
-                    client='depositor',
                     routing_keys=[MessageType.PING, MessageType.DEPOSIT],
                     message_schema=Schema(Or(DepositMessageSchema, PingMessageSchema)),
                 )

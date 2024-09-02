@@ -46,7 +46,7 @@ class KafkaMessageProvider(BaseMessageProvider):
         logger.info({'msg': f'Subscribe to "{kafka_topic}".'})
         self.kafka.subscribe([kafka_topic])
 
-        super().__init__(client, message_schema)
+        super().__init__(message_schema)
 
     def __del__(self):
         self.kafka.close()

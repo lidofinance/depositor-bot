@@ -12,9 +12,8 @@ class BaseMessageProvider(abc.ABC):
 
     MAX_MESSAGES_RECEIVE = 1000
 
-    def __init__(self, client: str, message_schema: Schema):
+    def __init__(self, message_schema: Schema):
         self.message_schema = message_schema
-        self.client = client
 
     def get_messages(self) -> List[dict]:
         messages = []

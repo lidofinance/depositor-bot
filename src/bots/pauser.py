@@ -44,7 +44,6 @@ class PauserBot:
         if TransportType.RABBIT in variables.MESSAGE_TRANSPORTS:
             transports.append(
                 RabbitProvider(
-                    client='pauser',
                     routing_keys=[MessageType.PING, MessageType.PAUSE],
                     message_schema=Schema(Or(PauseMessageSchema, PingMessageSchema)),
                 )

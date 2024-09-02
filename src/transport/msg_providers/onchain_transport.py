@@ -21,6 +21,11 @@ from web3.types import EventData, FilterParams, LogReceipt
 
 logger = logging.getLogger(__name__)
 
+# event Message(
+#     bytes32 indexed eventId,
+#     address indexed sender,
+#     bytes data
+# ) anonymous;
 MESSAGE_EVENT_ABI = {
     'anonymous': True,
     'inputs': [
@@ -190,7 +195,7 @@ class OnchainTransportProvider(BaseMessageProvider):
     STANDARD_OFFSET: int = 256
 
     def __init__(self, w3: Web3, onchain_address: ChecksumAddress, message_schema: Schema, sinks: list[OnchainTransportSinks]):
-        super().__init__('', message_schema)
+        super().__init__(message_schema)
         self._onchain_address = onchain_address
         if not sinks:
             raise ValueError('There must be at least a single sink for Data Bus provider')
@@ -231,16 +236,16 @@ class OnchainTransportProvider(BaseMessageProvider):
             return None
 
     def _fetch_logs_into_queue(self):
+        latest_block_number = self._w3.eth.block_number
+        from_block = max(0, latest_block_number - self.STANDARD_OFFSET) if self._latest_block == -1 else self._latest_block
+
+        filter_params = FilterParams(
+            fromBlock=from_block,
+            toBlock=latest_block_number,
+            address=self._onchain_address,
+            topics=[self._topics],
+        )
         try:
-            latest_block_number = self._w3.eth.block_number
-            from_block = max(0, latest_block_number - self.STANDARD_OFFSET) if self._latest_block == -1 else self._latest_block
-
-            filter_params = FilterParams(
-                fromBlock=from_block,
-                address=self._onchain_address,
-                topics=[self._topics],
-            )
-
             logs = self._w3.eth.get_logs(filter_params)
             if logs:
                 self._queue.extend(logs)

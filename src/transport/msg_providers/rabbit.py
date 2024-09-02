@@ -24,8 +24,8 @@ class RabbitProvider(BaseMessageProvider):
     last_reconnect_dt = datetime.datetime.now()
     connection = True
 
-    def __init__(self, client: str, message_schema: Schema, routing_keys: List[str]):
-        super().__init__(client, message_schema)
+    def __init__(self, message_schema: Schema, routing_keys: List[str]):
+        super().__init__(message_schema)
 
         logger.info({'msg': 'Rabbit initialize.'})
         self.routing_keys = routing_keys
