@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import Optional
+from typing import Any, List, Optional
 
 from confluent_kafka import Consumer as BaseConsumer
 from schema import Schema
@@ -53,12 +53,18 @@ class KafkaMessageProvider(BaseMessageProvider):
 
     def _receive_message(self) -> Optional[dict]:
         msg = self.kafka.poll(timeout=1)
+        if msg is None:
+            return None
 
-        if msg is not None:
-            if not msg.error():
-                return msg.value()
-
+        if msg.error():
             logger.error({'msg': 'Kafka error', 'error': str(msg.error())})
+            return None
+
+        return msg.value()
+
+    def _fetch_messages(self) -> List[Any]:
+        msg = self._receive_message()
+        return [] if msg is None else [msg]
 
     def _process_msg(self, msg: str) -> Optional[dict]:
         try:

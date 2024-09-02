@@ -2,7 +2,7 @@ import abc
 import logging
 from collections import deque
 from enum import StrEnum
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from eth_account.account import VRS
 from eth_typing import ChecksumAddress, HexStr
@@ -45,7 +45,6 @@ PAUSE_V3_DATA_SCHEMA = '(uint256,bytes,(bytes32))'
 
 
 def signature_to_r_vs(signature: bytes) -> tuple[VRS, VRS]:
-    # 0 byte - 0x
     r, _vs = signature[:32], signature[32:]
     return HexStr(bytes_to_hex_string(r)), HexStr(bytes_to_hex_string(_vs))
 
@@ -226,15 +225,7 @@ class OnchainTransportProvider(BaseMessageProvider):
 
         return parsers
 
-    def _receive_message(self) -> Optional[LogReceipt]:
-        if not self._queue:
-            self._fetch_logs_into_queue()
-        try:
-            return self._queue.popleft()
-        except IndexError:
-            return None
-
-    def _fetch_logs_into_queue(self):
+    def _fetch_messages(self) -> List[Any]:
         latest_block_number = self._w3.eth.block_number
         from_block = max(0, latest_block_number - self.STANDARD_OFFSET) if self._latest_block == -1 else self._latest_block
 
@@ -247,9 +238,8 @@ class OnchainTransportProvider(BaseMessageProvider):
         try:
             logs = self._w3.eth.get_logs(filter_params)
             if logs:
-                self._queue.extend(logs)
                 self._latest_block = latest_block_number
-
+            return logs
         except BlockNotFound as e:
             logger.error(
                 {
@@ -257,6 +247,7 @@ class OnchainTransportProvider(BaseMessageProvider):
                     'err': repr(e),
                 }
             )
+            return []
         except Exception as e:
             logger.error(
                 {
@@ -264,6 +255,7 @@ class OnchainTransportProvider(BaseMessageProvider):
                     'err': repr(e),
                 }
             )
+            return []
 
     def _process_msg(self, log: LogReceipt) -> Optional[dict]:
         for parser in self._parsers:

@@ -1,5 +1,6 @@
 import abc
 import logging
+from collections import deque
 from typing import Any, List, Optional
 
 from schema import Schema, SchemaError
@@ -14,12 +15,13 @@ class BaseMessageProvider(abc.ABC):
 
     def __init__(self, message_schema: Schema):
         self.message_schema = message_schema
+        self._queue: deque[Any] = deque([])
 
     def get_messages(self) -> List[dict]:
         messages = []
 
         for _ in range(self.MAX_MESSAGES_RECEIVE):
-            msg = self._receive_message()
+            msg = self._fetch_message()
 
             if msg is None:
                 break
@@ -31,8 +33,15 @@ class BaseMessageProvider(abc.ABC):
 
         return messages
 
+    def _fetch_message(self) -> Optional[Any]:
+        if not self._queue:
+            messages = self._fetch_messages()
+            if messages:
+                self._queue.extend(messages)
+        return None if not self._queue else self._queue.popleft()
+
     @abc.abstractmethod
-    def _receive_message(self) -> Any:
+    def _fetch_messages(self) -> List[Any]:
         raise NotImplementedError('Receive message from transport.')
 
     def _process_msg(self, msg: Any) -> Optional[dict]:

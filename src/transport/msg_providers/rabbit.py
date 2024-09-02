@@ -2,7 +2,7 @@ import datetime
 import json
 import logging
 import time
-from typing import List, Optional
+from typing import Any, List, Optional
 
 import variables
 from schema import Schema
@@ -82,6 +82,10 @@ class RabbitProvider(BaseMessageProvider):
             return self._queue.pop()
         except IndexError:
             return None
+
+    def _fetch_messages(self) -> List[Any]:
+        msg = self._receive_message()
+        return [] if msg is None else [msg]
 
     def _receive_message_from_queue(self, body):
         self._queue.append(body)
