@@ -4,6 +4,7 @@ from collections import deque
 from enum import StrEnum
 from typing import Any, List, Optional
 
+from cryptography.verify_signature import compute_vs
 from eth_account.account import VRS
 from eth_typing import ChecksumAddress, HexStr
 from schema import Schema
@@ -45,8 +46,9 @@ PAUSE_V3_DATA_SCHEMA = '(uint256,bytes,(bytes32))'
 
 
 def signature_to_r_vs(signature: bytes) -> tuple[VRS, VRS]:
-    r, _vs = signature[:32], signature[32:]
-    return HexStr(bytes_to_hex_string(r)), HexStr(bytes_to_hex_string(_vs))
+    r, s, v = signature[:32], signature[32:64], signature[64:]
+    _vs = compute_vs(v, HexStr(s))
+    return HexStr(bytes_to_hex_string(r)), HexStr(_vs)
 
 
 class EventParser(abc.ABC):
@@ -231,7 +233,6 @@ class OnchainTransportProvider(BaseMessageProvider):
 
         filter_params = FilterParams(
             fromBlock=from_block,
-            toBlock=latest_block_number,
             address=self._onchain_address,
             topics=[self._topics],
         )
