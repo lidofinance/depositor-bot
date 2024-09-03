@@ -37,7 +37,10 @@ PauseMessageSchema = Schema(
 
 class PauseMessage(TypedDict):
     type: str
+    depositRoot: str
+    nonce: int
     blockNumber: int
     guardianAddress: str
     signature: Signature
     stakingModuleId: int
+    app: dict

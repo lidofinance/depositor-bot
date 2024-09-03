@@ -43,6 +43,7 @@ jobs:
         run: |
           poetry run pytest tests -m integration_chiado
         env:
+          WEB3_RPC_ENDPOINTS: "https://gnosis-chiado-rpc.publicnode.com"
           ONCHAIN_TRANSPORT_RPC_ENDPOINTS: "https://gnosis-chiado-rpc.publicnode.com"
           ONCHAIN_TRANSPORT_ADDRESS: "0x42E1DEfC18388E3AA1fCADa851499A11405cf37f"
           DEPOSIT_CONTRACT: "0x4242424242424242424242424242424242424242"

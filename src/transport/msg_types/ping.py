@@ -17,10 +17,11 @@ PingMessageSchema = Schema(
 )
 
 
-class PingMessageDataBus(TypedDict):
+class PingMessage(TypedDict):
     type: str
     blockNumber: int
     guardianAddress: str
+    app: dict
 
 
 def to_check_sum_address(msg: dict):

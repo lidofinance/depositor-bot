@@ -32,3 +32,4 @@ class UnvetMessage(TypedDict):
     nonce: int
     operatorIds: str
     vettedKeysByOperator: str
+    app: dict

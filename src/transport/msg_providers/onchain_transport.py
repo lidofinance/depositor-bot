@@ -12,7 +12,7 @@ from transport.msg_providers.common import BaseMessageProvider
 from transport.msg_providers.rabbit import MessageType
 from transport.msg_types.deposit import DepositMessage
 from transport.msg_types.pause import PauseMessage
-from transport.msg_types.ping import PingMessageDataBus
+from transport.msg_types.ping import PingMessage
 from transport.msg_types.unvet import UnvetMessage
 from utils.bytes import bytes_to_hex_string
 from web3 import Web3
@@ -46,8 +46,8 @@ PAUSE_V3_DATA_SCHEMA = '(uint256,bytes,(bytes32))'
 
 
 def signature_to_r_vs(signature: bytes) -> tuple[VRS, VRS]:
-    r, s, v = signature[:32], signature[32:64], signature[64:]
-    _vs = compute_vs(v, HexStr(s))
+    r, s, v = signature[:32], signature[32:64], int.from_bytes(signature[64:])
+    _vs = compute_vs(v, HexStr(bytes_to_hex_string(s)))
     return HexStr(bytes_to_hex_string(r)), HexStr(_vs)
 
 
@@ -132,7 +132,7 @@ class PingParser(EventParser):
 
     def _create_message(self, parsed_data: tuple, guardian: str) -> dict:
         block_number, app = parsed_data
-        return PingMessageDataBus(
+        return PingMessage(
             type=MessageType.PING,
             blockNumber=block_number,
             guardianAddress=guardian,

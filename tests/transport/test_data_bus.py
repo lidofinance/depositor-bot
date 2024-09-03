@@ -1,22 +1,22 @@
+from typing import cast
 from unittest.mock import Mock
 
 import pytest
 import variables
+from blockchain.contracts.data_bus import DataBusContract
 from eth_typing import ChecksumAddress, HexAddress, HexStr
 from schema import Or, Schema
+from transport.msg_providers.onchain_sender import OnchainTransportSender
 from transport.msg_providers.onchain_transport import (
     DEPOSIT_V1_DATA_SCHEMA,
     PING_V1_DATA_SCHEMA,
     OnchainTransportProvider,
     OnchainTransportSinks,
 )
-from transport.msg_types.deposit import DepositMessageSchema
+from transport.msg_types.deposit import DepositMessage, DepositMessageSchema
 from transport.msg_types.ping import PingMessageSchema
 from web3 import Web3
 from web3.types import EventData
-from web3_multi_provider import FallbackProvider
-
-_DEFAULT_GUARDIAN = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266'
 
 
 # Started with config: {
@@ -24,23 +24,47 @@ _DEFAULT_GUARDIAN = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266'
 #  DATA_BUS_ADDRESS: '0x5FbDB2315678afecb367f032d93F642f64180aa3'
 # }
 @pytest.mark.integration_chiado
-def test_data_bus_provider():
+def test_data_bus_provider(web3_transaction_integration):
     """
     Utilise this function for an adhoc testing of data bus transport
     """
     variables.ONCHAIN_TRANSPORT_RPC_ENDPOINTS = ['https://gnosis-chiado-rpc.publicnode.com']
     variables.ONCHAIN_TRANSPORT_ADDRESS = ChecksumAddress(HexAddress(HexStr('0x42E1DEfC18388E3AA1fCADa851499A11405cf37f')))
+    data_bus_contract = cast(
+        DataBusContract,
+        web3_transaction_integration.eth.contract(
+            address=variables.ONCHAIN_TRANSPORT_ADDRESS,
+            ContractFactoryClass=DataBusContract,
+        ),
+    )
+
+    onchain_sender = OnchainTransportSender(w3=web3_transaction_integration, data_bus_contract=data_bus_contract)
+    onchain_sender.send_deposit(
+        deposit_mes=DepositMessage(
+            type='deposit',
+            depositRoot='0x0000000000000000000000000000000000000000000000000000000000000000',
+            nonce=40,
+            blockNumber=2,
+            blockHash='0x42eef33d13c4440627c3fab6e3abee85af796ae6f77dcade628b183640b519d0',
+            guardianAddress=_DEFAULT_GUARDIAN,
+            stakingModuleId=1,
+            app={'version': (1).to_bytes(32)},
+        )
+    )
+    web3_transaction_integration.provider.make_request('anvil_mine', [10])
     provider = OnchainTransportProvider(
-        w3=Web3(FallbackProvider(variables.ONCHAIN_TRANSPORT_RPC_ENDPOINTS)),
+        w3=web3_transaction_integration,
         onchain_address=variables.ONCHAIN_TRANSPORT_ADDRESS,
         message_schema=Schema(Or(DepositMessageSchema, PingMessageSchema)),
         sinks=[OnchainTransportSinks.DEPOSIT_V1, OnchainTransportSinks.PING_V1],
     )
     messages = provider.get_messages()
-    # todo: doesn't work on chiado now, because of the limit in 50k blocks
-    # assert messages
+    assert messages
     for mes in messages:
         print(mes)
+
+
+_DEFAULT_GUARDIAN = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266'
 
 
 @pytest.mark.unit

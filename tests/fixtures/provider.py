@@ -46,3 +46,13 @@ def web3_lido_integration(web3_provider_integration: Web3) -> Web3:
         }
     )
     yield web3_provider_integration
+
+
+@pytest.fixture
+def web3_transaction_integration(web3_provider_integration: Web3) -> Web3:
+    web3_provider_integration.attach_modules(
+        {
+            'transaction': TransactionUtils,
+        }
+    )
+    yield web3_provider_integration
