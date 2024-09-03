@@ -23,13 +23,13 @@ _DEFAULT_GUARDIAN = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266'
 #  NODE_HOST: 'http://127.0.0.1:8888',
 #  DATA_BUS_ADDRESS: '0x5FbDB2315678afecb367f032d93F642f64180aa3'
 # }
-@pytest.mark.integration_manual
+@pytest.mark.integration_chiado
 def test_data_bus_provider():
     """
     Utilise this function for an adhoc testing of data bus transport
     """
-    variables.ONCHAIN_TRANSPORT_RPC_ENDPOINTS = ['http://127.0.0.1:8888']
-    variables.ONCHAIN_TRANSPORT_ADDRESS = ChecksumAddress(HexAddress(HexStr('0x5FbDB2315678afecb367f032d93F642f64180aa3')))
+    variables.ONCHAIN_TRANSPORT_RPC_ENDPOINTS = ['https://gnosis-chiado-rpc.publicnode.com']
+    variables.ONCHAIN_TRANSPORT_ADDRESS = ChecksumAddress(HexAddress(HexStr('0x42E1DEfC18388E3AA1fCADa851499A11405cf37f')))
     provider = OnchainTransportProvider(
         w3=Web3(FallbackProvider(variables.ONCHAIN_TRANSPORT_RPC_ENDPOINTS)),
         onchain_address=variables.ONCHAIN_TRANSPORT_ADDRESS,
@@ -37,30 +37,10 @@ def test_data_bus_provider():
         sinks=[OnchainTransportSinks.DEPOSIT_V1, OnchainTransportSinks.PING_V1],
     )
     messages = provider.get_messages()
+    # todo: doesn't work on chiado now, because of the limit in 50k blocks
+    # assert messages
     for mes in messages:
         print(mes)
-    # contract_address = Web3.to_checksum_address(contract)
-    # from_block = 0
-    # message_event_topic = w3.keccak(text='MessageDepositV1(address,(bytes32,uint256,uint256,bytes32,bytes,uint256,(bytes32)))')
-
-    # filter_params = FilterParams(
-    #    fromBlock=from_block,
-    #    address=contract_address,
-    #    topics=[message_event_topic],
-    # )
-
-    # logs = w3.eth.get_logs(filter_params)
-    # message_contract = w3.eth.contract(abi=[_MESSAGE])
-
-    # for log in logs:
-    #    e = get_event_data(w3.codec, message_contract.events.Message().abi, log)
-    #    unparsed_event = e['args']['data']
-    #    _ = e['args']['sender']
-    #    d = w3.codec.decode(['(bytes32,uint256,uint256,bytes32,bytes,uint256,(bytes32))'], unparsed_event)
-    #    depositRoot, nonce, blockNumber, blockHash, signature, stakingModuleId, app = d[0]
-    #    print('nonce', nonce)
-    #    print('blockNumber', blockNumber)
-    #    print('stakingModuleId', stakingModuleId)
 
 
 @pytest.mark.unit
