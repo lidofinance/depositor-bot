@@ -230,9 +230,12 @@ class OnchainTransportProvider(BaseMessageProvider):
     def _fetch_messages(self) -> List[Any]:
         latest_block_number = self._w3.eth.block_number
         from_block = max(0, latest_block_number - self.STANDARD_OFFSET) if self._latest_block == -1 else self._latest_block
-
+        # If block distance is 0, then skip fetching to avoid looping on a single block
+        if from_block == latest_block_number:
+            return []
         filter_params = FilterParams(
             fromBlock=from_block,
+            toBlock=latest_block_number,
             address=self._onchain_address,
             topics=[self._topics],
         )
