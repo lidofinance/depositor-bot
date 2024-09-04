@@ -14,7 +14,8 @@ from transport.msg_providers.onchain_transport import (
     OnchainTransportSinks,
 )
 from transport.msg_types.deposit import DepositMessage, DepositMessageSchema
-from transport.msg_types.ping import PingMessageSchema
+from transport.msg_types.ping import PingMessage, PingMessageSchema
+from transport.msg_types.unvet import UnvetMessage
 from web3 import Web3
 from web3.types import EventData
 
@@ -48,6 +49,27 @@ def test_data_bus_provider(web3_transaction_integration):
             blockHash='0x42eef33d13c4440627c3fab6e3abee85af796ae6f77dcade628b183640b519d0',
             guardianAddress=_DEFAULT_GUARDIAN,
             stakingModuleId=1,
+            app={'version': (1).to_bytes(32)},
+        )
+    )
+    onchain_sender.send_ping(
+        ping_mes=PingMessage(
+            type='ping',
+            blockNumber=2,
+            guardianAddress=_DEFAULT_GUARDIAN,
+            app={'version': (1).to_bytes(32)},
+        )
+    )
+    onchain_sender.send_unvet(
+        unvet_mes=UnvetMessage(
+            type='unvet',
+            blockNumber=2,
+            blockHash='0x42eef33d13c4440627c3fab6e3abee85af796ae6f77dcade628b183640b519d0',
+            guardianAddress=_DEFAULT_GUARDIAN,
+            stakingModuleId=1,
+            nonce=32,
+            operatorIds=bytes(32),
+            vettedKeysByOperator=bytes(32),
             app={'version': (1).to_bytes(32)},
         )
     )
