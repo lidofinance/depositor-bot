@@ -14,5 +14,5 @@ class DataBusContract(ContractInterface):
         Build send message transaction to Data Bus contract
         """
         tx = self.functions.send_message(event_id, mes)
-        logger.info({'msg': 'Build `send_message(...)` tx.'})
+        logger.info({'msg': f'Build `send_message({event_id.hex()}, {mes.hex()})` tx.'})
         return tx

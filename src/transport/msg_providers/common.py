@@ -1,6 +1,6 @@
 import abc
 import logging
-from typing import Any, List, Optional
+from typing import Any, Optional
 
 from schema import Schema, SchemaError
 
@@ -15,7 +15,7 @@ class BaseMessageProvider(abc.ABC):
     def __init__(self, message_schema: Schema):
         self.message_schema = message_schema
 
-    def get_messages(self) -> List[dict]:
+    def get_messages(self) -> list[dict]:
         """
         Fetches new messages, processes them, and filters out only the valid ones.
 
@@ -25,7 +25,7 @@ class BaseMessageProvider(abc.ABC):
         return [msg for msg in (self._process_msg(m) for m in self._fetch_messages()) if msg and self._is_valid(msg)]
 
     @abc.abstractmethod
-    def _fetch_messages(self) -> List[Any]:
+    def _fetch_messages(self) -> list[Any]:
         raise NotImplementedError('Receive message from transport.')
 
     def _process_msg(self, msg: Any) -> Optional[dict]:

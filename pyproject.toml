@@ -35,7 +35,7 @@ markers = [
     "unit", # offline
     "integration", # hardhat fork
     "integration_holesky", # holesky fork
-    "integration_chiado" # chiado(gnosis testnet) run only
+    "integration_chiado", # chiado(gnosis testnet) run only
 ]
 
 [tool.ruff]
