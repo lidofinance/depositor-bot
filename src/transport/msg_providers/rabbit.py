@@ -74,6 +74,17 @@ class RabbitProvider(BaseMessageProvider):
     def __del__(self):
         self.client.disconnect()
 
+    def _fetch_messages(self) -> List[Any]:
+        messages = []
+
+        for _ in range(self.MAX_MESSAGES_RECEIVE):
+            msg = self._receive_message()
+            if msg is None:
+                break
+            messages.append(msg)
+
+        return messages
+
     def _receive_message(self) -> Optional[dict]:
         if not self.connection:
             raise ConnectionError('Connection RabbitMQ was lost.')
@@ -82,10 +93,6 @@ class RabbitProvider(BaseMessageProvider):
             return self._queue.pop()
         except IndexError:
             return None
-
-    def _fetch_messages(self) -> List[Any]:
-        msg = self._receive_message()
-        return [] if msg is None else [msg]
 
     def _receive_message_from_queue(self, body):
         self._queue.append(body)

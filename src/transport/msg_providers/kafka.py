@@ -51,7 +51,7 @@ class KafkaMessageProvider(BaseMessageProvider):
     def __del__(self):
         self.kafka.close()
 
-    def _receive_message(self) -> Optional[dict]:
+    def _receive_message(self) -> Optional[str]:
         msg = self.kafka.poll(timeout=1)
         if msg is None:
             return None
@@ -63,8 +63,15 @@ class KafkaMessageProvider(BaseMessageProvider):
         return msg.value()
 
     def _fetch_messages(self) -> List[Any]:
-        msg = self._receive_message()
-        return [] if msg is None else [msg]
+        messages = []
+
+        for _ in range(self.MAX_MESSAGES_RECEIVE):
+            msg = self._receive_message()
+            if msg is None:
+                break
+            messages.append(msg)
+
+        return messages
 
     def _process_msg(self, msg: str) -> Optional[dict]:
         try:
