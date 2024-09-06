@@ -7,7 +7,6 @@ from blockchain.typings import Web3
 from metrics.metrics import UNEXPECTED_EXCEPTIONS
 from metrics.transport_message_metrics import message_metrics_filter
 from schema import Or, Schema
-from transport.msg_providers.kafka import KafkaMessageProvider
 from transport.msg_providers.onchain_transport import OnchainTransportProvider, OnchainTransportSinks
 from transport.msg_providers.rabbit import MessageType, RabbitProvider
 from transport.msg_storage import MessageStorage
@@ -50,14 +49,6 @@ class UnvetterBot:
             transports.append(
                 RabbitProvider(
                     routing_keys=[MessageType.UNVET, MessageType.PING],
-                    message_schema=Schema(Or(UnvetMessageSchema, PingMessageSchema)),
-                )
-            )
-
-        if TransportType.KAFKA in variables.MESSAGE_TRANSPORTS:
-            transports.append(
-                KafkaMessageProvider(
-                    client=f'{variables.KAFKA_GROUP_PREFIX}unvet',
                     message_schema=Schema(Or(UnvetMessageSchema, PingMessageSchema)),
                 )
             )

@@ -6,7 +6,6 @@ import variables
 from blockchain.contracts.data_bus import DataBusContract
 from eth_typing import ChecksumAddress, HexAddress, HexStr
 from schema import Or, Schema
-from transport.msg_providers.onchain_sender import OnchainTransportSender
 from transport.msg_providers.onchain_transport import (
     DEPOSIT_V1_DATA_SCHEMA,
     PING_V1_DATA_SCHEMA,
@@ -18,6 +17,8 @@ from transport.msg_types.ping import PingMessage, PingMessageSchema
 from transport.msg_types.unvet import UnvetMessage
 from web3 import Web3
 from web3.types import EventData
+
+from tests.transport.onchain_sender import OnchainTransportSender
 
 
 # Started with config: {
@@ -106,8 +107,6 @@ def test_data_bus_mock_responses(web3_lido_unit):
         parser._decode_event = Mock(side_effect=lambda x: x)
 
     messages = provider.get_messages()
-    for mes in messages:
-        print(mes)
     assert len(messages) == len(receipts)
 
 

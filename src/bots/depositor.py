@@ -22,7 +22,6 @@ from metrics.metrics import (
 )
 from metrics.transport_message_metrics import message_metrics_filter
 from schema import Or, Schema
-from transport.msg_providers.kafka import KafkaMessageProvider
 from transport.msg_providers.onchain_transport import OnchainTransportProvider, OnchainTransportSinks
 from transport.msg_providers.rabbit import MessageType, RabbitProvider
 from transport.msg_storage import MessageStorage
@@ -82,14 +81,6 @@ class DepositorBot:
             transports.append(
                 RabbitProvider(
                     routing_keys=[MessageType.PING, MessageType.DEPOSIT],
-                    message_schema=Schema(Or(DepositMessageSchema, PingMessageSchema)),
-                )
-            )
-
-        if TransportType.KAFKA in variables.MESSAGE_TRANSPORTS:
-            transports.append(
-                KafkaMessageProvider(
-                    client=f'{variables.KAFKA_GROUP_PREFIX}deposit',
                     message_schema=Schema(Or(DepositMessageSchema, PingMessageSchema)),
                 )
             )

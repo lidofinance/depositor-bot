@@ -1,5 +1,3 @@
-from typing import Any, List
-
 import pytest
 from schema import Or, Schema
 from transport.msg_providers.common import BaseMessageProvider
@@ -9,7 +7,7 @@ from transport.msg_types.deposit import DepositMessageSchema
 class FakeMessageProvider(BaseMessageProvider):
     MAX_MESSAGES_RECEIVE = 1
 
-    def _fetch_messages(self) -> List[Any]:
+    def _fetch_messages(self) -> list:
         return [
             {
                 'type': 'deposit',

@@ -43,4 +43,3 @@ class PauseMessage(TypedDict):
     guardianAddress: str
     signature: Signature
     stakingModuleId: int
-    app: dict

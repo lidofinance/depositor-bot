@@ -36,7 +36,7 @@ class OnchainTransportSender:
             deposit_mes['blockNumber'],
             deposit_mes['blockHash'],
             deposit_mes['stakingModuleId'],
-            (deposit_mes['app']['version'],),
+            ((1).to_bytes(32),),
         )
         mes = self._w3.codec.encode(
             types=[DEPOSIT_V1_DATA_SCHEMA],
@@ -53,7 +53,7 @@ class OnchainTransportSender:
             pause_mes['blockNumber'],
             pause_mes['blockHash'],
             pause_mes['stakingModuleId'],
-            (pause_mes['app']['version'],),
+            ((1).to_bytes(32),),
         )
         mes = self._w3.codec.encode(
             types=[PAUSE_V2_DATA_SCHEMA],
@@ -64,7 +64,7 @@ class OnchainTransportSender:
 
     def send_pause_v3(self, pause_mes: PauseMessage):
         pause_topic = self._w3.keccak(text=OnchainTransportSinks.PAUSE_V3)
-        block_number, version = pause_mes['blockNumber'], pause_mes['app']['version']
+        block_number, version = pause_mes['blockNumber'], (1).to_bytes(32)
         mes = self._w3.codec.encode(types=[PAUSE_V3_DATA_SCHEMA], args=[(block_number, self._DEFAULT_SIGNATURE, (version,))])
         tx = self._data_bus.functions.sendMessage(pause_topic, mes)
         return tx.transact()
@@ -78,7 +78,7 @@ class OnchainTransportSender:
             unvet_mes['stakingModuleId'],
             unvet_mes['operatorIds'],
             unvet_mes['vettedKeysByOperator'],
-            unvet_mes['app']['version'],
+            (1).to_bytes(32),
         )
         mes = self._w3.codec.encode(
             types=[UNVET_V1_DATA_SCHEMA],
@@ -89,7 +89,7 @@ class OnchainTransportSender:
 
     def send_ping(self, ping_mes: PingMessage):
         ping_topic = self._w3.keccak(text=OnchainTransportSinks.PING_V1)
-        block_number, version = ping_mes['blockNumber'], ping_mes['app']['version']
+        block_number, version = ping_mes['blockNumber'], (1).to_bytes(32)
         mes = self._w3.codec.encode(types=[PING_V1_DATA_SCHEMA], args=[(block_number, (version,))])
         tx = self._data_bus.functions.sendMessage(ping_topic, mes)
         return tx.transact()

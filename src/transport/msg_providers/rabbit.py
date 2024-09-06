@@ -2,7 +2,7 @@ import datetime
 import json
 import logging
 import time
-from typing import Any, List, Optional
+from typing import List, Optional
 
 import variables
 from schema import Schema
@@ -74,7 +74,7 @@ class RabbitProvider(BaseMessageProvider):
     def __del__(self):
         self.client.disconnect()
 
-    def _fetch_messages(self) -> List[Any]:
+    def _fetch_messages(self) -> list:
         messages = []
 
         for _ in range(self.MAX_MESSAGES_RECEIVE):
@@ -102,7 +102,7 @@ class RabbitProvider(BaseMessageProvider):
             value = json.loads(msg)
         except ValueError as error:
             # ignore not json msg
-            logger.warning({'msg': 'Broken message in Kafka', 'value': str(msg), 'error': str(error)})
+            logger.warning({'msg': 'Broken message in Rabbit', 'value': str(msg), 'error': str(error)})
             return None
 
         return value

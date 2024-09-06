@@ -1,8 +1,7 @@
 import abc
 import logging
-from collections import deque
 from enum import StrEnum
-from typing import Any, List, Optional
+from typing import List, Optional
 
 from cryptography.verify_signature import compute_vs
 from eth_account.account import VRS
@@ -93,7 +92,6 @@ class DepositParser(EventParser):
                 'r': r,
                 '_vs': _vs,
             },
-            app={'version': app[0]},
         )
 
 
@@ -200,7 +198,6 @@ class OnchainTransportProvider(BaseMessageProvider):
         if not sinks:
             raise ValueError('There must be at least a single sink for Data Bus provider')
         self._latest_block = -1
-        self._queue: deque = deque()
 
         logger.info('Data bus client initialized.')
 
@@ -227,7 +224,7 @@ class OnchainTransportProvider(BaseMessageProvider):
 
         return parsers
 
-    def _fetch_messages(self) -> List[Any]:
+    def _fetch_messages(self) -> list:
         latest_block_number = self._w3.eth.block_number
         from_block = max(0, latest_block_number - self.STANDARD_OFFSET) if self._latest_block == -1 else self._latest_block
         # If block distance is 0, then skip fetching to avoid looping on a single block

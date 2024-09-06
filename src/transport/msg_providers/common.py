@@ -1,6 +1,6 @@
 import abc
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from schema import Schema, SchemaError
 
@@ -22,13 +22,14 @@ class BaseMessageProvider(abc.ABC):
         Returns:
             List[Dict]: A list of processed and valid messages.
         """
-        return [msg for msg in (self._process_msg(m) for m in self._fetch_messages()) if msg and self._is_valid(msg)]
+        processed = [self._process_msg(m) for m in self._fetch_messages()]
+        return [msg for msg in processed if msg and self._is_valid(msg)]
 
     @abc.abstractmethod
-    def _fetch_messages(self) -> list[Any]:
+    def _fetch_messages(self) -> list:
         raise NotImplementedError('Receive message from transport.')
 
-    def _process_msg(self, msg: Any) -> Optional[dict]:
+    def _process_msg(self, msg: Any) -> dict | None:
         # Overwrite this method to add msg serialization.
         # Return None if message is not serializable
         return msg

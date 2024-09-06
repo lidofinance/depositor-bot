@@ -53,4 +53,3 @@ class DepositMessage(TypedDict):
     guardianAddress: str
     signature: Signature
     stakingModuleId: int
-    app: dict
