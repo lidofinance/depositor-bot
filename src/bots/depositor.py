@@ -123,10 +123,7 @@ class DepositorBot:
 
         return True
 
-    def _is_mellow_depositable(
-        self,
-        module_id: int
-    ) -> bool:
+    def _is_mellow_depositable(self, module_id: int) -> bool:
         if not variables.MELLOW_CONTRACT_ADDRESS:
             return False
         try:
@@ -186,9 +183,6 @@ class DepositorBot:
         can_deposit = self.w3.lido.deposit_security_module.can_deposit(module_id)
         logger.info({'msg': 'Can deposit to module.', 'value': can_deposit})
 
-        gas_is_ok = self._gas_price_calculator.is_gas_price_ok(module_id)
-        logger.info({'msg': 'Calculate gas recommendations.', 'value': gas_is_ok})
-
         strategy, is_mellow = self._select_strategy(module_id)
         is_deposit_amount_ok = self._gas_price_calculator.calculate_deposit_recommendation(strategy, module_id)
         logger.info({'msg': 'Calculations deposit recommendations.', 'value': is_deposit_amount_ok, 'is_mellow': is_mellow})
@@ -199,7 +193,7 @@ class DepositorBot:
             is_deposit_amount_ok = self._gas_price_calculator.calculate_deposit_recommendation(strategy, module_id)
             logger.info({'msg': 'Calculations deposit recommendations.', 'value': is_deposit_amount_ok, 'is_mellow': is_mellow})
 
-        if is_depositable and quorum and can_deposit and gas_is_ok and is_deposit_amount_ok:
+        if is_depositable and quorum and can_deposit and is_deposit_amount_ok:
             logger.info({'msg': 'Checks passed. Prepare deposit tx.', 'is_mellow': is_mellow})
             success = self.prepare_and_send_tx(module_id, quorum, is_mellow)
             if not success and is_mellow:

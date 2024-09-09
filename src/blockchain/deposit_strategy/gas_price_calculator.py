@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 class GasPriceCalculator:
     _BLOCKS_IN_ONE_DAY = 24 * 60 * 60 // 12
     _REQUEST_SIZE = 1024
+    _PER_KEY_PRICE_ASSUMPTION = Web3.to_wei(100, 'gwei')
 
     def __init__(self, w3: Web3):
         self.w3 = w3
@@ -28,8 +29,8 @@ class GasPriceCalculator:
         current_gas_fee = self._get_pending_base_fee()
         GAS_FEE.labels('current_fee', module_id).set(current_gas_fee)
 
-        current_buffered_ether = self.w3.lido.lido.get_depositable_ether()
-        if current_buffered_ether > variables.MAX_BUFFERED_ETHERS:
+        depositable_ether = self.w3.lido.lido.get_depositable_ether()
+        if depositable_ether > variables.MAX_BUFFERED_ETHERS:
             success = current_gas_fee <= variables.MAX_GAS_FEE
         else:
             recommended_gas_fee = self._get_recommended_gas_fee()
@@ -45,6 +46,9 @@ class GasPriceCalculator:
         return base_fee_per_gas
 
     def calculate_deposit_recommendation(self, deposit_strategy: BaseDepositStrategy, module_id: int) -> bool:
+        is_gas_ok = self.is_gas_price_ok(module_id)
+        logger.info({'msg': 'Calculate gas recommendations.', 'value': is_gas_ok})
+
         possible_keys = deposit_strategy.deposited_keys_amount(module_id)
         success = False
         if possible_keys < deposit_strategy.DEPOSITABLE_KEYS_THRESHOLD:
@@ -62,15 +66,20 @@ class GasPriceCalculator:
             )
             base_fee_per_gas = self._get_pending_base_fee()
             success = recommended_max_gas >= base_fee_per_gas
+            if not is_gas_ok or not success:
+                aprx_waiting_time = (pecentice_current - percentile_from_envs) * percentail_in_days  # noqa
+                possible_income = aprx_waiting_time * self.w3.lido.lido.get_depositable_ether() * 0.03
+                gas_price_diff = self._get_pending_base_fee() - self._get_recommended_gas_fee()
+                success = is_gas_ok = possible_income >= gas_price_diff + recommended_max_gas
         DEPOSIT_AMOUNT_OK.labels(module_id).set(int(success))
-        return success
+        return is_gas_ok and success
 
     @staticmethod
     def _calculate_recommended_gas_based_on_deposit_amount(deposits_amount: int, module_id: int) -> int:
         # For one key recommended gas fee will be around 10
         # For 10 keys around 100 gwei. For 20 keys ~ 800 gwei
         # ToDo percentiles for all modules?
-        recommended_max_gas = (deposits_amount ** 3 + 100) * 10 ** 8
+        recommended_max_gas = (deposits_amount**3 + 100) * 10**8
         logger.info({'msg': 'Calculate recommended max gas based on possible deposits.', 'value': recommended_max_gas})
         GAS_FEE.labels('based_on_buffer_fee', module_id).set(recommended_max_gas)
         return recommended_max_gas
