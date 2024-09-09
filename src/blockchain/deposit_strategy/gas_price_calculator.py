@@ -67,9 +67,9 @@ class GasPriceCalculator:
             base_fee_per_gas = self._get_pending_base_fee()
             success = recommended_max_gas >= base_fee_per_gas
             if not is_gas_ok or not success:
-                aprx_waiting_time = (pecentice_current - percentile_from_envs) * percentail_in_days  # noqa
-                possible_income = aprx_waiting_time * self.w3.lido.lido.get_depositable_ether() * 0.03
                 gas_price_diff = self._get_pending_base_fee() - self._get_recommended_gas_fee()
+                aprx_waiting_time = gas_price_diff * percentail_in_days  # noqa
+                possible_income = aprx_waiting_time * self.w3.lido.lido.get_depositable_ether() * 0.03
                 success = is_gas_ok = possible_income >= gas_price_diff + recommended_max_gas
         DEPOSIT_AMOUNT_OK.labels(module_id).set(int(success))
         return is_gas_ok and success
