@@ -11,7 +11,6 @@ from transport.msg_types.deposit import DepositMessage
 from transport.msg_types.pause import PauseMessage
 from transport.msg_types.ping import PingMessage
 from transport.msg_types.unvet import UnvetMessage
-from utils.bytes import from_hex_string_to_bytes
 from web3 import Web3
 
 
@@ -20,9 +19,7 @@ class OnchainTransportSender:
     Is used in tests to create sequence of the events emitted from the DataBus contract
     """
 
-    _DEFAULT_SIGNATURE = from_hex_string_to_bytes(
-        '0x0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000'
-    )
+    _DEFAULT_SIGNATURE = ((0).to_bytes(32), (0).to_bytes(32))
 
     def __init__(self, w3: Web3, data_bus_contract: DataBusContract):
         self._w3 = w3
@@ -40,16 +37,14 @@ class OnchainTransportSender:
         )
         mes = self._w3.codec.encode(
             types=[DEPOSIT_V1_DATA_SCHEMA],
-            args=[(deposit_root, nonce, block_number, block_hash, self._DEFAULT_SIGNATURE, staking_module_id, app)],
+            args=[(block_number, block_hash, deposit_root, staking_module_id, nonce, self._DEFAULT_SIGNATURE, app)],
         )
         tx = self._data_bus.functions.sendMessage(deposit_topic, mes)
         return tx.transact()
 
     def send_pause_v2(self, pause_mes: PauseMessage):
         pause_topic = self._w3.keccak(text=OnchainTransportSinks.PAUSE_V2)
-        deposit_root, nonce, block_number, block_hash, staking_module_id, app = (
-            pause_mes['depositRoot'],
-            pause_mes['nonce'],
+        block_number, block_hash, staking_module_id, app = (
             pause_mes['blockNumber'],
             pause_mes['blockHash'],
             pause_mes['stakingModuleId'],
@@ -57,15 +52,15 @@ class OnchainTransportSender:
         )
         mes = self._w3.codec.encode(
             types=[PAUSE_V2_DATA_SCHEMA],
-            args=[(deposit_root, nonce, block_number, block_hash, self._DEFAULT_SIGNATURE, staking_module_id, app)],
+            args=[(block_number, block_hash, self._DEFAULT_SIGNATURE, staking_module_id, app)],
         )
         tx = self._data_bus.functions.sendMessage(pause_topic, mes)
         return tx.transact()
 
     def send_pause_v3(self, pause_mes: PauseMessage):
         pause_topic = self._w3.keccak(text=OnchainTransportSinks.PAUSE_V3)
-        block_number, version = pause_mes['blockNumber'], (1).to_bytes(32)
-        mes = self._w3.codec.encode(types=[PAUSE_V3_DATA_SCHEMA], args=[(block_number, self._DEFAULT_SIGNATURE, (version,))])
+        block_number, block_hash, version = pause_mes['blockNumber'], pause_mes['blockHash'], (1).to_bytes(32)
+        mes = self._w3.codec.encode(types=[PAUSE_V3_DATA_SCHEMA], args=[(block_number, block_hash, self._DEFAULT_SIGNATURE, (version,))])
         tx = self._data_bus.functions.sendMessage(pause_topic, mes)
         return tx.transact()
 
@@ -82,7 +77,7 @@ class OnchainTransportSender:
         )
         mes = self._w3.codec.encode(
             types=[UNVET_V1_DATA_SCHEMA],
-            args=[(nonce, block_number, block_hash, staking_module_id, self._DEFAULT_SIGNATURE, operator_ids, vetted_keys, (version,))],
+            args=[(block_number, block_hash, staking_module_id, nonce, operator_ids, vetted_keys, self._DEFAULT_SIGNATURE, (version,))],
         )
         tx = self._data_bus.functions.sendMessage(unvet_topic, mes)
         return tx.transact()

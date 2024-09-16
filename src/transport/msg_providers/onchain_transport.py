@@ -37,11 +37,11 @@ MESSAGE_EVENT_ABI = {
     'type': 'event',
 }
 
-UNVET_V1_DATA_SCHEMA = '(uint256,uint256,bytes32,uint256,bytes,bytes32,bytes32,(bytes32))'
+UNVET_V1_DATA_SCHEMA = '(uint256,bytes32,uint256,uint256,bytes,bytes,(bytes32,bytes32),(bytes32))'
 PING_V1_DATA_SCHEMA = '(uint256,(bytes32))'
-DEPOSIT_V1_DATA_SCHEMA = '(bytes32,uint256,uint256,bytes32,bytes,uint256,(bytes32))'
-PAUSE_V2_DATA_SCHEMA = '(bytes32,uint256,uint256,bytes32,bytes,uint256,(bytes32))'
-PAUSE_V3_DATA_SCHEMA = '(uint256,bytes,(bytes32))'
+DEPOSIT_V1_DATA_SCHEMA = '(uint256,bytes32,bytes32,uint256,uint256,(bytes32,bytes32),(bytes32))'
+PAUSE_V2_DATA_SCHEMA = '(uint256,bytes32,(bytes32,bytes32),uint256,(bytes32))'
+PAUSE_V3_DATA_SCHEMA = '(uint256,bytes32,(bytes32,bytes32),(bytes32))'
 
 
 def signature_to_r_vs(signature: bytes) -> tuple[VRS, VRS]:
@@ -71,15 +71,14 @@ class EventParser(abc.ABC):
         return self._create_message(decoded_data, guardian)
 
 
-# event MessageDepositV1(address indexed guardianAddress, (bytes32 depositRoot, uint256 nonce, uint256 blockNumber, bytes32 blockHash,
-# bytes signature, uint256 stakingModuleId, (bytes32 version) app) data)",
+# event MessageDepositV1(address indexed guardianAddress, (uint256 blockNumber, bytes32 blockHash, bytes32 depositRoot,
+# uint256 stakingModuleId, uint256 nonce, (bytes32 r, bytes32 vs) signature, (bytes32 version) app) data),
 class DepositParser(EventParser):
     def __init__(self, w3: Web3):
         super().__init__(w3, DEPOSIT_V1_DATA_SCHEMA)
 
     def _create_message(self, parsed_data: tuple, guardian: str) -> dict:
-        deposit_root, nonce, block_number, block_hash, signature, staking_module_id, app = parsed_data
-        r, _vs = signature_to_r_vs(signature)
+        block_number, block_hash, deposit_root, staking_module_id, nonce, (r, vs), app = parsed_data
         return DepositMessage(
             type=MessageType.DEPOSIT,
             depositRoot=bytes_to_hex_string(deposit_root),
@@ -90,22 +89,19 @@ class DepositParser(EventParser):
             stakingModuleId=staking_module_id,
             signature={
                 'r': r,
-                '_vs': _vs,
+                '_vs': vs,
             },
         )
 
 
-# event MessageUnvetV1(address indexed guardianAddress, (uint256 nonce, uint256 blockNumber, bytes32 blockHash, uint256 stakingModuleId,
-# bytes signature, bytes32 operatorIds, bytes32 vettedKeysByOperator, (bytes32 version) app) data)",
-
-
+# event MessageUnvetV1(address indexed guardianAddress, (uint256 blockNumber, bytes32 blockHash, uint256 stakingModuleId, uint256 nonce,
+# bytes operatorIds, bytes vettedKeysByOperator, (bytes32 r, bytes32 vs) signature, (bytes32 version) app) data)
 class UnvetParser(EventParser):
     def __init__(self, w3: Web3):
         super().__init__(w3, UNVET_V1_DATA_SCHEMA)
 
     def _create_message(self, parsed_data: tuple, guardian: str) -> dict:
-        nonce, block_number, block_hash, staking_module_id, signature, operator_ids, vetted_keys_by_operator, app = parsed_data
-        r, _vs = signature_to_r_vs(signature)
+        block_number, block_hash, staking_module_id, nonce, operator_ids, vetted_keys_by_operator, (r, vs), app = parsed_data
         return UnvetMessage(
             type=MessageType.UNVET,
             nonce=nonce,
@@ -114,7 +110,7 @@ class UnvetParser(EventParser):
             stakingModuleId=staking_module_id,
             signature={
                 'r': r,
-                '_vs': _vs,
+                '_vs': vs,
             },
             operatorIds=operator_ids,
             vettedKeysByOperator=vetted_keys_by_operator,
@@ -122,8 +118,6 @@ class UnvetParser(EventParser):
 
 
 # event MessagePingV1(address indexed guardianAddress, (uint256 blockNumber, (bytes32 version) app) data)",
-
-
 class PingParser(EventParser):
     def __init__(self, w3: Web3):
         super().__init__(w3, PING_V1_DATA_SCHEMA)
@@ -137,17 +131,14 @@ class PingParser(EventParser):
         )
 
 
-# event MessagePauseV2(address indexed guardianAddress, (bytes32 depositRoot, uint256 nonce, uint256 blockNumber, bytes32 blockHash,
-# bytes signature, uint256 stakingModuleId, (bytes32 version) app) data)",
-
-
+# event MessagePauseV2(address indexed guardianAddress, (uint256 blockNumber, bytes32 blockHash, (bytes32 r, bytes32 vs) signature,
+# uint256 stakingModuleId, (bytes32 version) app) data)
 class PauseV2Parser(EventParser):
     def __init__(self, w3: Web3):
         super().__init__(w3, PAUSE_V2_DATA_SCHEMA)
 
     def _create_message(self, parsed_data: tuple, guardian: str) -> dict:
-        deposit_root, nonce, block_number, block_hash, signature, staking_module_id, app = parsed_data
-        r, _vs = signature_to_r_vs(signature)
+        block_number, block_hash, (r, vs), staking_module_id, app = parsed_data
         return PauseMessage(
             type=MessageType.PAUSE,
             blockNumber=block_number,
@@ -155,28 +146,26 @@ class PauseV2Parser(EventParser):
             stakingModuleId=staking_module_id,
             signature={
                 'r': r,
-                '_vs': _vs,
+                '_vs': vs,
             },
         )
 
 
-# event MessagePauseV3(address indexed guardianAddress, (uint256 blockNumber, bytes signature, (bytes32 version) app) data)",
-
-
+# event MessagePauseV3(address indexed guardianAddress, (uint256 blockNumber, bytes32 blockHash, (bytes32 r, bytes32 vs) signature,
+# (bytes32 version) app) data)
 class PauseV3Parser(EventParser):
     def __init__(self, w3: Web3):
         super().__init__(w3, PAUSE_V3_DATA_SCHEMA)
 
     def _create_message(self, parsed_data: tuple, guardian: str) -> dict:
-        block_number, signature, app = parsed_data
-        r, _vs = signature_to_r_vs(signature)
+        block_number, block_hash, (r, vs), app = parsed_data
         return PauseMessage(
             type=MessageType.PAUSE,
             blockNumber=block_number,
             guardianAddress=guardian,
             signature={
                 'r': r,
-                '_vs': _vs,
+                '_vs': vs,
             },
         )
 

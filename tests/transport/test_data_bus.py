@@ -110,6 +110,13 @@ def test_data_bus_mock_responses(web3_lido_unit):
     assert len(messages) == len(receipts)
 
 
+# event MessageDepositV1(address indexed guardianAddress, (uint256 blockNumber, bytes32 blockHash, bytes32 depositRoot,
+# uint256 stakingModuleId, uint256 nonce, (bytes32 r, bytes32 vs) signature, (bytes32 version) app) data),
+
+# event MessageDepositV1(address indexed guardianAddress, (bytes32 depositRoot, uint256 nonce, uint256 blockNumber, bytes32 blockHash,
+# bytes signature, uint256 stakingModuleId, (bytes32 version) app) data)",
+
+
 def mock_receipts(w3: Web3) -> list[EventData]:
     return [
         EventData(
@@ -127,12 +134,12 @@ def mock_receipts(w3: Web3) -> list[EventData]:
                     types=[DEPOSIT_V1_DATA_SCHEMA],
                     args=[
                         (
-                            '0x0000000000000000000000000000000000000000000000000000000000000000',
-                            40,
                             2,
                             '0x42eef33d13c4440627c3fab6e3abee85af796ae6f77dcade628b183640b519d0',
-                            '0x0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000',
+                            '0x0000000000000000000000000000000000000000000000000000000000000000',
                             3,
+                            40,
+                            ((0).to_bytes(32), (0).to_bytes(32)),
                             ('0x0000000000000000000000000000000000000000000000000000000000000000',),
                         )
                     ],
