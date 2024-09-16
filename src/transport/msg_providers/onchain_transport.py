@@ -3,9 +3,7 @@ import logging
 from enum import StrEnum
 from typing import List, Optional
 
-from cryptography.verify_signature import compute_vs
-from eth_account.account import VRS
-from eth_typing import ChecksumAddress, HexStr
+from eth_typing import ChecksumAddress
 from schema import Schema
 from transport.msg_providers.common import BaseMessageProvider
 from transport.msg_providers.rabbit import MessageType
@@ -42,12 +40,6 @@ PING_V1_DATA_SCHEMA = '(uint256,(bytes32))'
 DEPOSIT_V1_DATA_SCHEMA = '(uint256,bytes32,bytes32,uint256,uint256,(bytes32,bytes32),(bytes32))'
 PAUSE_V2_DATA_SCHEMA = '(uint256,bytes32,(bytes32,bytes32),uint256,(bytes32))'
 PAUSE_V3_DATA_SCHEMA = '(uint256,bytes32,(bytes32,bytes32),(bytes32))'
-
-
-def signature_to_r_vs(signature: bytes) -> tuple[VRS, VRS]:
-    r, s, v = signature[:32], signature[32:64], int.from_bytes(signature[64:])
-    _vs = compute_vs(v, HexStr(bytes_to_hex_string(s)))
-    return HexStr(bytes_to_hex_string(r)), HexStr(_vs)
 
 
 class EventParser(abc.ABC):
@@ -88,8 +80,8 @@ class DepositParser(EventParser):
             guardianAddress=guardian,
             stakingModuleId=staking_module_id,
             signature={
-                'r': r,
-                '_vs': vs,
+                'r': bytes_to_hex_string(r),
+                '_vs': bytes_to_hex_string(vs),
             },
         )
 
@@ -109,8 +101,8 @@ class UnvetParser(EventParser):
             guardianAddress=guardian,
             stakingModuleId=staking_module_id,
             signature={
-                'r': r,
-                '_vs': vs,
+                'r': bytes_to_hex_string(r),
+                '_vs': bytes_to_hex_string(vs),
             },
             operatorIds=operator_ids,
             vettedKeysByOperator=vetted_keys_by_operator,
@@ -145,8 +137,8 @@ class PauseV2Parser(EventParser):
             guardianAddress=guardian,
             stakingModuleId=staking_module_id,
             signature={
-                'r': r,
-                '_vs': vs,
+                'r': bytes_to_hex_string(r),
+                '_vs': bytes_to_hex_string(vs),
             },
         )
 
