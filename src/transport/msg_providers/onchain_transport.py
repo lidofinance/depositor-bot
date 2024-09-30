@@ -69,7 +69,7 @@ class DepositParser(EventParser):
     def __init__(self, w3: Web3):
         super().__init__(w3, DEPOSIT_V1_DATA_SCHEMA)
 
-    def _create_message(self, parsed_data: tuple, guardian: str) -> dict:
+    def _create_message(self, parsed_data: tuple, guardian: str) -> DepositMessage:
         block_number, block_hash, deposit_root, staking_module_id, nonce, (r, vs), app = parsed_data
         return DepositMessage(
             type=MessageType.DEPOSIT,
