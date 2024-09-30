@@ -1,7 +1,6 @@
 import logging
 from typing import TypedDict
 
-from eth_typing import Hash32
 from schema import And, Schema
 from transport.msg_types.base import ADDRESS_REGREX, Signature, SignatureSchema
 
@@ -39,7 +38,6 @@ PauseMessageSchema = Schema(
 class PauseMessage(TypedDict):
     type: str
     blockNumber: int
-    blockHash: Hash32
     guardianAddress: str
     signature: Signature
     stakingModuleId: int

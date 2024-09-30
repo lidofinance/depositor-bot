@@ -44,7 +44,7 @@ if MELLOW_CONTRACT_ADDRESS:
     MELLOW_CONTRACT_ADDRESS = Web3.to_checksum_address(MELLOW_CONTRACT_ADDRESS)
 VAULT_DIRECT_DEPOSIT_THRESHOLD = Web3.to_wei(*os.getenv('VAULT_DIRECT_DEPOSIT_THRESHOLD', '1 ether').split(' '))
 
-# rabbit
+# rabbit / onchain_transport
 MESSAGE_TRANSPORTS = os.getenv('MESSAGE_TRANSPORTS', '').split(',')
 
 # rabbit secrets
@@ -59,6 +59,7 @@ ONCHAIN_TRANSPORT_RPC_ENDPOINTS = os.getenv('ONCHAIN_TRANSPORT_RPC_ENDPOINTS', '
 ONCHAIN_TRANSPORT_ADDRESS = os.getenv('ONCHAIN_TRANSPORT_ADDRESS', None)
 if ONCHAIN_TRANSPORT_ADDRESS:
     # bot will throw exception if there is unexpected str and it's ok
+    # Expecting onchain databus contract address
     ONCHAIN_TRANSPORT_ADDRESS = Web3.to_checksum_address(ONCHAIN_TRANSPORT_ADDRESS)
 
 # Transactions settings

@@ -7,10 +7,10 @@ from blockchain.contracts.data_bus import DataBusContract
 from eth_typing import ChecksumAddress, HexAddress, HexStr
 from schema import Or, Schema
 from transport.msg_providers.onchain_transport import (
-    DEPOSIT_V1_DATA_SCHEMA,
-    PING_V1_DATA_SCHEMA,
+    DepositParser,
     OnchainTransportProvider,
     OnchainTransportSinks,
+    PingParser,
 )
 from transport.msg_types.deposit import DepositMessage, DepositMessageSchema
 from transport.msg_types.ping import PingMessage, PingMessageSchema
@@ -123,7 +123,8 @@ def mock_receipts(w3: Web3) -> list[EventData]:
             args={
                 'sender': _DEFAULT_GUARDIAN,
                 'data': w3.codec.encode(
-                    types=[PING_V1_DATA_SCHEMA], args=[(1, ('0x0000000000000000000000000000000000000000000000000000000000000000',))]
+                    types=[PingParser.PING_V1_DATA_SCHEMA],
+                    args=[(1, ('0x0000000000000000000000000000000000000000000000000000000000000000',))],
                 ),
             },
         ),
@@ -131,7 +132,7 @@ def mock_receipts(w3: Web3) -> list[EventData]:
             args={
                 'sender': _DEFAULT_GUARDIAN,
                 'data': w3.codec.encode(
-                    types=[DEPOSIT_V1_DATA_SCHEMA],
+                    types=[DepositParser.DEPOSIT_V1_DATA_SCHEMA],
                     args=[
                         (
                             2,
@@ -150,7 +151,8 @@ def mock_receipts(w3: Web3) -> list[EventData]:
             args={
                 'sender': _DEFAULT_GUARDIAN,
                 'data': w3.codec.encode(
-                    types=[PING_V1_DATA_SCHEMA], args=[(3, ('0x0000000000000000000000000000000000000000000000000000000000000000',))]
+                    types=[PingParser.PING_V1_DATA_SCHEMA],
+                    args=[(3, ('0x0000000000000000000000000000000000000000000000000000000000000000',))],
                 ),
             },
         ),
@@ -158,7 +160,8 @@ def mock_receipts(w3: Web3) -> list[EventData]:
             args={
                 'sender': _DEFAULT_GUARDIAN,
                 'data': w3.codec.encode(
-                    types=[PING_V1_DATA_SCHEMA], args=[(4, ('0x0000000000000000000000000000000000000000000000000000000000000000',))]
+                    types=[PingParser.PING_V1_DATA_SCHEMA],
+                    args=[(4, ('0x0000000000000000000000000000000000000000000000000000000000000000',))],
                 ),
             },
         ),

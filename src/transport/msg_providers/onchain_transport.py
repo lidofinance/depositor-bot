@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 #     address indexed sender,
 #     bytes data
 # ) anonymous;
-MESSAGE_EVENT_ABI = {
+EVENT_ABI = {
     'anonymous': True,
     'inputs': [
         {'indexed': True, 'name': 'eventId', 'type': 'bytes32'},
@@ -35,18 +35,49 @@ MESSAGE_EVENT_ABI = {
     'type': 'event',
 }
 
-UNVET_V1_DATA_SCHEMA = '(uint256,bytes32,uint256,uint256,bytes,bytes,(bytes32,bytes32),(bytes32))'
-PING_V1_DATA_SCHEMA = '(uint256,(bytes32))'
-DEPOSIT_V1_DATA_SCHEMA = '(uint256,bytes32,bytes32,uint256,uint256,(bytes32,bytes32),(bytes32))'
-PAUSE_V2_DATA_SCHEMA = '(uint256,bytes32,(bytes32,bytes32),uint256,(bytes32))'
-PAUSE_V3_DATA_SCHEMA = '(uint256,bytes32,(bytes32,bytes32),(bytes32))'
-
 
 class EventParser(abc.ABC):
+    """
+    Abstract base class for parsing Ethereum event logs.
+
+    This class provides a structure for decoding Ethereum logs and transforming the extracted
+    data into a structured message using the Web3.py library. It abstracts the process of:
+
+    - Decoding logs from blockchain events based on a predefined event ABI (Application Binary Interface).
+    - Extracting relevant data from the decoded log.
+    - Creating a structured message (usually a dictionary) from the parsed data.
+
+    Attributes:
+        _w3 (Web3): A Web3 instance for interacting with the Ethereum blockchain.
+        _schema (str): A schema defining the structure for decoding the event data.
+        _message_abi (dict): The ABI for the 'Message' event used to decode event logs.
+
+    Methods:
+        _create_message(parsed_data: dict, guardian: str) -> dict:
+            Abstract method to be implemented by subclasses to create a structured message
+            from the parsed event data.
+
+        _decode_event(log: LogReceipt) -> EventData:
+            Decodes the given log using the provided 'Message' event ABI and returns the decoded event data.
+
+        parse(log: LogReceipt) -> Optional[dict]:
+            Parses the given Ethereum log, decodes the 'Message' event data, and uses the subclass-specific
+            message creation logic to return a structured message. If parsing fails, it returns None.
+
+    Usage:
+        Subclasses should implement the `_create_message` method, which transforms the parsed
+        event data and sender (guardian) address into a meaningful structure, such as a dictionary.
+
+    Example:
+        class MyEventParser(EventParser):
+            def _create_message(self, parsed_data, guardian):
+                return {"guardian": guardian, "data": parsed_data}
+    """
+
     def __init__(self, w3: Web3, schema: str):
         self._w3 = w3
         self._schema = schema
-        self._message_abi = w3.eth.contract(abi=[MESSAGE_EVENT_ABI]).events.Message().abi
+        self._message_abi: dict = w3.eth.contract(abi=[EVENT_ABI]).events.Message().abi
 
     @abc.abstractmethod
     def _create_message(self, parsed_data: dict, guardian: str) -> dict:
@@ -66,8 +97,10 @@ class EventParser(abc.ABC):
 # event MessageDepositV1(address indexed guardianAddress, (uint256 blockNumber, bytes32 blockHash, bytes32 depositRoot,
 # uint256 stakingModuleId, uint256 nonce, (bytes32 r, bytes32 vs) signature, (bytes32 version) app) data),
 class DepositParser(EventParser):
+    DEPOSIT_V1_DATA_SCHEMA = '(uint256,bytes32,bytes32,uint256,uint256,(bytes32,bytes32),(bytes32))'
+
     def __init__(self, w3: Web3):
-        super().__init__(w3, DEPOSIT_V1_DATA_SCHEMA)
+        super().__init__(w3, self.DEPOSIT_V1_DATA_SCHEMA)
 
     def _create_message(self, parsed_data: tuple, guardian: str) -> DepositMessage:
         block_number, block_hash, deposit_root, staking_module_id, nonce, (r, vs), app = parsed_data
@@ -89,8 +122,10 @@ class DepositParser(EventParser):
 # event MessageUnvetV1(address indexed guardianAddress, (uint256 blockNumber, bytes32 blockHash, uint256 stakingModuleId, uint256 nonce,
 # bytes operatorIds, bytes vettedKeysByOperator, (bytes32 r, bytes32 vs) signature, (bytes32 version) app) data)
 class UnvetParser(EventParser):
+    UNVET_V1_DATA_SCHEMA = '(uint256,bytes32,uint256,uint256,bytes,bytes,(bytes32,bytes32),(bytes32))'
+
     def __init__(self, w3: Web3):
-        super().__init__(w3, UNVET_V1_DATA_SCHEMA)
+        super().__init__(w3, self.UNVET_V1_DATA_SCHEMA)
 
     def _create_message(self, parsed_data: tuple, guardian: str) -> UnvetMessage:
         block_number, block_hash, staking_module_id, nonce, operator_ids, vetted_keys_by_operator, (r, vs), app = parsed_data
@@ -111,8 +146,10 @@ class UnvetParser(EventParser):
 
 # event MessagePingV1(address indexed guardianAddress, (uint256 blockNumber, (bytes32 version) app) data)",
 class PingParser(EventParser):
+    PING_V1_DATA_SCHEMA = '(uint256,(bytes32))'
+
     def __init__(self, w3: Web3):
-        super().__init__(w3, PING_V1_DATA_SCHEMA)
+        super().__init__(w3, self.PING_V1_DATA_SCHEMA)
 
     def _create_message(self, parsed_data: tuple, guardian: str) -> PingMessage:
         block_number, app = parsed_data
@@ -126,8 +163,10 @@ class PingParser(EventParser):
 # event MessagePauseV2(address indexed guardianAddress, (uint256 blockNumber, bytes32 blockHash, (bytes32 r, bytes32 vs) signature,
 # uint256 stakingModuleId, (bytes32 version) app) data)
 class PauseV2Parser(EventParser):
+    PAUSE_V2_DATA_SCHEMA = '(uint256,bytes32,(bytes32,bytes32),uint256,(bytes32))'
+
     def __init__(self, w3: Web3):
-        super().__init__(w3, PAUSE_V2_DATA_SCHEMA)
+        super().__init__(w3, self.PAUSE_V2_DATA_SCHEMA)
 
     def _create_message(self, parsed_data: tuple, guardian: str) -> dict:
         block_number, block_hash, (r, vs), staking_module_id, app = parsed_data
@@ -146,8 +185,10 @@ class PauseV2Parser(EventParser):
 # event MessagePauseV3(address indexed guardianAddress, (uint256 blockNumber, bytes32 blockHash, (bytes32 r, bytes32 vs) signature,
 # (bytes32 version) app) data)
 class PauseV3Parser(EventParser):
+    PAUSE_V3_DATA_SCHEMA = '(uint256,bytes32,(bytes32,bytes32),(bytes32))'
+
     def __init__(self, w3: Web3):
-        super().__init__(w3, PAUSE_V3_DATA_SCHEMA)
+        super().__init__(w3, self.PAUSE_V3_DATA_SCHEMA)
 
     def _create_message(self, parsed_data: tuple, guardian: str) -> dict:
         block_number, block_hash, (r, vs), app = parsed_data
@@ -163,11 +204,11 @@ class PauseV3Parser(EventParser):
 
 
 class OnchainTransportSinks(StrEnum):
-    DEPOSIT_V1 = f'MessageDepositV1(address,{DEPOSIT_V1_DATA_SCHEMA})'
-    PAUSE_V2 = f'MessagePauseV2(address,{PAUSE_V2_DATA_SCHEMA})'
-    PAUSE_V3 = f'MessagePauseV3(address,{PAUSE_V3_DATA_SCHEMA})'
-    PING_V1 = f'MessagePingV1(address,{PING_V1_DATA_SCHEMA})'
-    UNVET_V1 = f'MessageUnvetV1(address,{UNVET_V1_DATA_SCHEMA})'
+    DEPOSIT_V1 = f'MessageDepositV1(address,{DepositParser.DEPOSIT_V1_DATA_SCHEMA})'
+    PAUSE_V2 = f'MessagePauseV2(address,{PauseV2Parser.PAUSE_V2_DATA_SCHEMA})'
+    PAUSE_V3 = f'MessagePauseV3(address,{PauseV3Parser.PAUSE_V3_DATA_SCHEMA})'
+    PING_V1 = f'MessagePingV1(address,{PingParser.PING_V1_DATA_SCHEMA})'
+    UNVET_V1 = f'MessageUnvetV1(address,{UnvetParser.UNVET_V1_DATA_SCHEMA})'
 
 
 class OnchainTransportProvider(BaseMessageProvider):
