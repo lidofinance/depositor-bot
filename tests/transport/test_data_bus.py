@@ -9,7 +9,6 @@ from schema import Or, Schema
 from transport.msg_providers.onchain_transport import (
     DepositParser,
     OnchainTransportProvider,
-    OnchainTransportSinks,
     PingParser,
 )
 from transport.msg_types.deposit import DepositMessage, DepositMessageSchema
@@ -79,7 +78,7 @@ def test_data_bus_provider(web3_transaction_integration):
         w3=web3_transaction_integration,
         onchain_address=variables.ONCHAIN_TRANSPORT_ADDRESS,
         message_schema=Schema(Or(DepositMessageSchema, PingMessageSchema)),
-        sinks=[OnchainTransportSinks.DEPOSIT_V1, OnchainTransportSinks.PING_V1],
+        parsers_providers=[DepositParser, PingParser],
     )
     messages = provider.get_messages()
     assert messages
@@ -100,7 +99,7 @@ def test_data_bus_mock_responses(web3_lido_unit):
         w3=web3_lido_unit,
         onchain_address=variables.ONCHAIN_TRANSPORT_ADDRESS,
         message_schema=Schema(Or(DepositMessageSchema, PingMessageSchema)),
-        sinks=[OnchainTransportSinks.DEPOSIT_V1, OnchainTransportSinks.PING_V1],
+        parsers_providers=[DepositParser, PingParser],
     )
 
     for parser in provider._parsers:

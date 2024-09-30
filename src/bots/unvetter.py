@@ -7,7 +7,7 @@ from blockchain.typings import Web3
 from metrics.metrics import UNEXPECTED_EXCEPTIONS
 from metrics.transport_message_metrics import message_metrics_filter
 from schema import Or, Schema
-from transport.msg_providers.onchain_transport import OnchainTransportProvider, OnchainTransportSinks
+from transport.msg_providers.onchain_transport import OnchainTransportProvider, PingParser, UnvetParser
 from transport.msg_providers.rabbit import MessageType, RabbitProvider
 from transport.msg_storage import MessageStorage
 from transport.msg_types.common import get_messages_sign_filter
@@ -59,7 +59,7 @@ class UnvetterBot:
                     w3=Web3(FallbackProvider(variables.ONCHAIN_TRANSPORT_RPC_ENDPOINTS)),
                     onchain_address=variables.ONCHAIN_TRANSPORT_ADDRESS,
                     message_schema=Schema(Or(UnvetMessageSchema, PingMessageSchema)),
-                    sinks=[OnchainTransportSinks.UNVET_V1, OnchainTransportSinks.PING_V1],
+                    parsers_providers=[UnvetParser, PingParser],
                 )
             )
 

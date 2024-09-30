@@ -1,7 +1,6 @@
 import abc
 import logging
-from enum import StrEnum
-from typing import List, Optional
+from typing import Callable, List, Optional
 
 from eth_typing import ChecksumAddress
 from schema import Schema
@@ -83,6 +82,11 @@ class EventParser(abc.ABC):
     def _create_message(self, parsed_data: dict, guardian: str) -> dict:
         pass
 
+    @property
+    @abc.abstractmethod
+    def message_abi(self):
+        pass
+
     def _decode_event(self, log: LogReceipt) -> EventData:
         return get_event_data(self._w3.codec, self._message_abi, log)
 
@@ -98,6 +102,7 @@ class EventParser(abc.ABC):
 # uint256 stakingModuleId, uint256 nonce, (bytes32 r, bytes32 vs) signature, (bytes32 version) app) data),
 class DepositParser(EventParser):
     DEPOSIT_V1_DATA_SCHEMA = '(uint256,bytes32,bytes32,uint256,uint256,(bytes32,bytes32),(bytes32))'
+    message_abi = f'MessageDepositV1(address,{DEPOSIT_V1_DATA_SCHEMA})'
 
     def __init__(self, w3: Web3):
         super().__init__(w3, self.DEPOSIT_V1_DATA_SCHEMA)
@@ -123,6 +128,7 @@ class DepositParser(EventParser):
 # bytes operatorIds, bytes vettedKeysByOperator, (bytes32 r, bytes32 vs) signature, (bytes32 version) app) data)
 class UnvetParser(EventParser):
     UNVET_V1_DATA_SCHEMA = '(uint256,bytes32,uint256,uint256,bytes,bytes,(bytes32,bytes32),(bytes32))'
+    message_abi = f'MessageUnvetV1(address,{UNVET_V1_DATA_SCHEMA})'
 
     def __init__(self, w3: Web3):
         super().__init__(w3, self.UNVET_V1_DATA_SCHEMA)
@@ -147,6 +153,7 @@ class UnvetParser(EventParser):
 # event MessagePingV1(address indexed guardianAddress, (uint256 blockNumber, (bytes32 version) app) data)",
 class PingParser(EventParser):
     PING_V1_DATA_SCHEMA = '(uint256,(bytes32))'
+    message_abi = f'MessagePingV1(address,{PING_V1_DATA_SCHEMA})'
 
     def __init__(self, w3: Web3):
         super().__init__(w3, self.PING_V1_DATA_SCHEMA)
@@ -164,6 +171,7 @@ class PingParser(EventParser):
 # uint256 stakingModuleId, (bytes32 version) app) data)
 class PauseV2Parser(EventParser):
     PAUSE_V2_DATA_SCHEMA = '(uint256,bytes32,(bytes32,bytes32),uint256,(bytes32))'
+    message_abi = f'MessagePauseV2(address,{PAUSE_V2_DATA_SCHEMA})'
 
     def __init__(self, w3: Web3):
         super().__init__(w3, self.PAUSE_V2_DATA_SCHEMA)
@@ -186,6 +194,7 @@ class PauseV2Parser(EventParser):
 # (bytes32 version) app) data)
 class PauseV3Parser(EventParser):
     PAUSE_V3_DATA_SCHEMA = '(uint256,bytes32,(bytes32,bytes32),(bytes32))'
+    message_abi = f'MessagePauseV3(address,{PAUSE_V3_DATA_SCHEMA})'
 
     def __init__(self, w3: Web3):
         super().__init__(w3, self.PAUSE_V3_DATA_SCHEMA)
@@ -203,48 +212,27 @@ class PauseV3Parser(EventParser):
         )
 
 
-class OnchainTransportSinks(StrEnum):
-    DEPOSIT_V1 = f'MessageDepositV1(address,{DepositParser.DEPOSIT_V1_DATA_SCHEMA})'
-    PAUSE_V2 = f'MessagePauseV2(address,{PauseV2Parser.PAUSE_V2_DATA_SCHEMA})'
-    PAUSE_V3 = f'MessagePauseV3(address,{PauseV3Parser.PAUSE_V3_DATA_SCHEMA})'
-    PING_V1 = f'MessagePingV1(address,{PingParser.PING_V1_DATA_SCHEMA})'
-    UNVET_V1 = f'MessageUnvetV1(address,{UnvetParser.UNVET_V1_DATA_SCHEMA})'
-
-
 class OnchainTransportProvider(BaseMessageProvider):
     STANDARD_OFFSET: int = 256
 
-    def __init__(self, w3: Web3, onchain_address: ChecksumAddress, message_schema: Schema, sinks: list[OnchainTransportSinks]):
+    def __init__(
+        self,
+        w3: Web3,
+        onchain_address: ChecksumAddress,
+        message_schema: Schema,
+        parsers_providers: list[Callable[[Web3], EventParser]],
+    ):
         super().__init__(message_schema)
         self._onchain_address = onchain_address
-        if not sinks:
-            raise ValueError('There must be at least a single sink for Data Bus provider')
+        if not parsers_providers:
+            raise ValueError('There must be at least a single parser for Data Bus provider')
         self._latest_block = -1
 
         logger.info('Data bus client initialized.')
 
         self._w3 = w3
-        self._topics = [self._w3.keccak(text=sink) for sink in sinks]
-        self._parsers: List[EventParser] = self._construct_parsers(sinks)
-
-    def _construct_parsers(self, sinks: List[OnchainTransportSinks]) -> List[EventParser]:
-        parser_mapping = {
-            OnchainTransportSinks.DEPOSIT_V1: DepositParser,
-            OnchainTransportSinks.PAUSE_V2: PauseV2Parser,
-            OnchainTransportSinks.PAUSE_V3: PauseV3Parser,
-            OnchainTransportSinks.PING_V1: PingParser,
-            OnchainTransportSinks.UNVET_V1: UnvetParser,
-        }
-
-        parsers = []
-        for sink in sinks:
-            parser_class = parser_mapping.get(sink)
-            if parser_class:
-                parsers.append(parser_class(self._w3))
-            else:
-                raise ValueError(f'Invalid sink in Data Bus sinks: {sink}')
-
-        return parsers
+        self._parsers: List[EventParser] = [provider(w3) for provider in parsers_providers]
+        self._topics = [self._w3.keccak(text=parser.message_abi) for parser in self._parsers]
 
     def _fetch_messages(self) -> list:
         latest_block_number = self._w3.eth.block_number

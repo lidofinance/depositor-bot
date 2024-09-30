@@ -9,7 +9,7 @@ from blockchain.typings import Web3
 from metrics.metrics import UNEXPECTED_EXCEPTIONS
 from metrics.transport_message_metrics import message_metrics_filter
 from schema import Or, Schema
-from transport.msg_providers.onchain_transport import OnchainTransportProvider, OnchainTransportSinks
+from transport.msg_providers.onchain_transport import OnchainTransportProvider, PauseV2Parser, PauseV3Parser, PingParser
 from transport.msg_providers.rabbit import MessageType, RabbitProvider
 from transport.msg_storage import MessageStorage
 from transport.msg_types.common import get_messages_sign_filter
@@ -54,7 +54,7 @@ class PauserBot:
                     w3=Web3(FallbackProvider(variables.ONCHAIN_TRANSPORT_RPC_ENDPOINTS)),
                     onchain_address=variables.ONCHAIN_TRANSPORT_ADDRESS,
                     message_schema=Schema(Or(PauseMessageSchema, PingMessageSchema)),
-                    sinks=[OnchainTransportSinks.PAUSE_V2, OnchainTransportSinks.PAUSE_V3, OnchainTransportSinks.PING_V1],
+                    parsers_providers=[PauseV2Parser, PauseV3Parser, PingParser],
                 )
             )
 

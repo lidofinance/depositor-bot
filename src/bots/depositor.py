@@ -22,7 +22,7 @@ from metrics.metrics import (
 )
 from metrics.transport_message_metrics import message_metrics_filter
 from schema import Or, Schema
-from transport.msg_providers.onchain_transport import OnchainTransportProvider, OnchainTransportSinks
+from transport.msg_providers.onchain_transport import DepositParser, OnchainTransportProvider, PingParser
 from transport.msg_providers.rabbit import MessageType, RabbitProvider
 from transport.msg_storage import MessageStorage
 from transport.msg_types.common import get_messages_sign_filter
@@ -91,7 +91,7 @@ class DepositorBot:
                     w3=Web3(FallbackProvider(variables.ONCHAIN_TRANSPORT_RPC_ENDPOINTS)),
                     onchain_address=variables.ONCHAIN_TRANSPORT_ADDRESS,
                     message_schema=Schema(Or(DepositMessageSchema, PingMessageSchema)),
-                    sinks=[OnchainTransportSinks.DEPOSIT_V1, OnchainTransportSinks.PING_V1],
+                    parsers_providers=[DepositParser, PingParser],
                 )
             )
 
