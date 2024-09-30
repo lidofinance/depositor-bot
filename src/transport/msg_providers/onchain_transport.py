@@ -114,7 +114,7 @@ class PingParser(EventParser):
     def __init__(self, w3: Web3):
         super().__init__(w3, PING_V1_DATA_SCHEMA)
 
-    def _create_message(self, parsed_data: tuple, guardian: str) -> dict:
+    def _create_message(self, parsed_data: tuple, guardian: str) -> PingMessage:
         block_number, app = parsed_data
         return PingMessage(
             type=MessageType.PING,
