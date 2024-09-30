@@ -92,7 +92,7 @@ class UnvetParser(EventParser):
     def __init__(self, w3: Web3):
         super().__init__(w3, UNVET_V1_DATA_SCHEMA)
 
-    def _create_message(self, parsed_data: tuple, guardian: str) -> dict:
+    def _create_message(self, parsed_data: tuple, guardian: str) -> UnvetMessage:
         block_number, block_hash, staking_module_id, nonce, operator_ids, vetted_keys_by_operator, (r, vs), app = parsed_data
         return UnvetMessage(
             type=MessageType.UNVET,
