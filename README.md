@@ -2,15 +2,19 @@
 
 ## Description
 
-Depositor and pauser bots are parts of [Deposit Security Module](https://github.com/lidofinance/lido-improvement-proposals/blob/develop/LIPS/lip-5.md#mitigations-for-deposit-front-running-vulnerability).
+Depositor and pauser bots are parts
+of [Deposit Security Module](https://github.com/lidofinance/lido-improvement-proposals/blob/develop/LIPS/lip-5.md#mitigations-for-deposit-front-running-vulnerability).
 
-**The Depositor Bot** obtains signed deposit messages from Council Daemons. 
-Once a sufficient number of messages is collected to constitute a quorum, the bot proceeds to initiate a deposit into the designated staking module. 
+**The Depositor Bot** obtains signed deposit messages from Council Daemons.
+Once a sufficient number of messages is collected to constitute a quorum, the bot proceeds to initiate a deposit into the designated staking
+module.
 This deposit is executed using the depositBufferedEther function within the "DepositSecurityModule" smart contract.
 
-Direct deposit is a mechanism that allows depositors to use side vault facilities for deposits. This process transfers ETH from the vault and facilitates the deposit to specified in side vault staking module, preventing funds from being stuck in the withdrawal queue.
+Direct deposit is a mechanism that allows depositors to use side vault facilities for deposits. This process transfers ETH from the vault
+and facilitates the deposit to specified in side vault staking module, preventing funds from being stuck in the withdrawal queue.
 
-**The Pauser Bot** obtains pause message from Council Daemon and enacts pause deposits on protocol. Pause can occurs when Lido detects stealing.
+**The Pauser Bot** obtains pause message from Council Daemon and enacts pause deposits on protocol. Pause can occurs when Lido detects
+stealing.
 
 **The Unvetting Bot** obtains unvet message from Council Daemon and enacts unvet on the specified node operator.
 Unvetting is the proces of decreasing approved depositable signing keys.
@@ -19,13 +23,13 @@ Unvetting is the proces of decreasing approved depositable signing keys.
 
 - [Running Daemon](#running-daemon)
 - [Variables](#variables)
-  - [Required variables](#required-variables)
-  - [Additional variables](#additional-variables)
+    - [Required variables](#required-variables)
+    - [Additional variables](#additional-variables)
 - [Metrics and logs](#metrics-and-logs)
 - [Development](#development)
-  - [Install](#install)
-  - [Tests](#tests)
-  - [Release flow](#release-flow)
+    - [Install](#install)
+    - [Tests](#tests)
+    - [Release flow](#release-flow)
 - [Annotations to code](#annotations-to-code)
 
 ## Running Daemon
@@ -54,17 +58,10 @@ Unvetting is the proces of decreasing approved depositable signing keys.
 | DEPOSIT_CONTRACT          | 0x00000000219ab540356cBB839Cbe05303d7705Fa | Ethereum deposit contract address                                                                                        |
 | DEPOSIT_MODULES_WHITELIST | 1                                          | List of staking module's ids in which the depositor bot will make deposits                                               |
 | ---                       | ---	                                       | ---                                                                                                                      |
-| MESSAGE_TRANSPORTS        | -                                          | Transports used in bot. One of/or both: rabbit/kafka                                                                     |
+| MESSAGE_TRANSPORTS        | -                                          | Transports used in bot. One of/or both: rabbit/onchain_transport                                                         |
 | RABBIT_MQ_URL             | -                                          | RabbitMQ url                                                                                                             |
 | RABBIT_MQ_USERNAME        | -                                          | RabbitMQ username for virtualhost                                                                                        |
 | RABBIT_MQ_PASSWORD        | -                                          | RabbitMQ password for virtualhost                                                                                        |
-| ---                       | --- _kafka is not used at the moment_ ---  | ---                                                                                                                      |
-| KAFKA_BROKER_ADDRESS_1    | -                                          | Kafka servers url and port                                                                                               |
-| KAFKA_USERNAME            | -                                          | Kafka username                                                                                                           |
-| KAFKA_PASSWORD            | -                                          | Password for kafka                                                                                                       |
-| KAFKA_NETWORK             | -                                          | Network type (mainnet or goerli)                                                                                         |
-| KAFKA_TOPIC               | -                                          | Kafka topic name (for msg receiving)                                                                                     |
-| KAFKA_GROUP_PREFIX        | -                                          | Just for staging (staging-)                                                                                              |
 
 ### Additional variables
 
