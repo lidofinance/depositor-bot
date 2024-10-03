@@ -49,13 +49,13 @@ def test_estimate_gas(web3_lido_unit, set_account):
     tx = Transaction()
 
     tx.estimate_gas = Mock(return_value=variables.CONTRACT_GAS_LIMIT * 2)
-    gas_amount = web3_lido_unit.transaction._estimate_gas(tx, variables.ACCOUNT.address)
+    gas_amount = web3_lido_unit.transaction.estimate_gas(tx, variables.ACCOUNT.address)
     assert gas_amount == variables.CONTRACT_GAS_LIMIT
 
     tx.estimate_gas = Mock(return_value=100)
-    gas_amount = web3_lido_unit.transaction._estimate_gas(tx, variables.ACCOUNT.address)
+    gas_amount = web3_lido_unit.transaction.estimate_gas(tx, variables.ACCOUNT.address)
     assert gas_amount == 130
 
     tx.estimate_gas = Mock(side_effect=ContractLogicError())
-    gas_amount = web3_lido_unit.transaction._estimate_gas(tx, variables.ACCOUNT.address)
+    gas_amount = web3_lido_unit.transaction.estimate_gas(tx, variables.ACCOUNT.address)
     assert gas_amount == variables.CONTRACT_GAS_LIMIT
