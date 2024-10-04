@@ -5,6 +5,8 @@ import time
 from typing import List, Optional
 
 import variables
+from metrics.metrics import RABBIT_TRANSPORT_FETCHED_MESSAGES, RABBIT_TRANSPORT_PROCESSED_MESSAGES, RABBIT_TRANSPORT_VALID_MESSAGES
+from prometheus_client import Gauge
 from schema import Schema
 from transport.msg_providers.common import BaseMessageProvider
 from transport.msg_providers.stomp.client import Client
@@ -106,3 +108,15 @@ class RabbitProvider(BaseMessageProvider):
             return None
 
         return value
+
+    @property
+    def fetched_messages_metric(self) -> Gauge:
+        return RABBIT_TRANSPORT_FETCHED_MESSAGES
+
+    @property
+    def processed_messages_metric(self) -> Gauge:
+        return RABBIT_TRANSPORT_PROCESSED_MESSAGES
+
+    @property
+    def valid_messages_metric(self) -> Gauge:
+        return RABBIT_TRANSPORT_VALID_MESSAGES

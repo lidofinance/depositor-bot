@@ -13,7 +13,7 @@ MODULE_TX_SEND = Counter(
     'transactions',
     'Amount of send transaction from bot with per module distribution.',
     ['status', 'module_id', 'is_mellow'],
-    namespace=PROMETHEUS_PREFIX
+    namespace=PROMETHEUS_PREFIX,
 )
 
 ACCOUNT_BALANCE = Gauge('account_balance', 'Account balance', namespace=PROMETHEUS_PREFIX)
@@ -115,6 +115,48 @@ UNEXPECTED_EXCEPTIONS = Counter(
 )
 
 MODULES = Gauge('modules', 'Modules gauge', ['module_id'], namespace=PROMETHEUS_PREFIX)
+
+ONCHAIN_TRANSPORT_FETCHED_MESSAGES = Gauge(
+    'onchain_fetched_messages',
+    'Total count of fetched onchain messages',
+    ['chain_id'],
+    namespace=PROMETHEUS_PREFIX,
+)
+
+ONCHAIN_TRANSPORT_PROCESSED_MESSAGES = Gauge(
+    'onchain_processed_messages',
+    'Total count of processed onchain messages',
+    ['chain_id'],
+    namespace=PROMETHEUS_PREFIX,
+)
+
+ONCHAIN_TRANSPORT_VALID_MESSAGES = Gauge(
+    'onchain_valid_messages',
+    'Total count of valid onchain messages',
+    ['chain_id'],
+    namespace=PROMETHEUS_PREFIX,
+)
+
+RABBIT_TRANSPORT_FETCHED_MESSAGES = Gauge(
+    'rabbit_fetched_messages',
+    'Total count of fetched rabbit messages',
+    [],
+    namespace=PROMETHEUS_PREFIX,
+)
+
+RABBIT_TRANSPORT_PROCESSED_MESSAGES = Gauge(
+    'rabbit_processed_messages',
+    'Total count of processed rabbit messages',
+    [],
+    namespace=PROMETHEUS_PREFIX,
+)
+
+RABBIT_TRANSPORT_VALID_MESSAGES = Gauge(
+    'rabbit_valid_messages',
+    'Total count of valid rabbit messages',
+    [],
+    namespace=PROMETHEUS_PREFIX,
+)
 
 for module_id in DEPOSIT_MODULES_WHITELIST:
     MODULES.labels(module_id).set(1)

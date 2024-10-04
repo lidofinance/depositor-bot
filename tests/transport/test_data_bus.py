@@ -1,4 +1,5 @@
 from typing import cast
+from unittest import mock
 from unittest.mock import Mock
 
 import pytest
@@ -91,22 +92,24 @@ _DEFAULT_GUARDIAN = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266'
 
 @pytest.mark.unit
 def test_data_bus_mock_responses(web3_lido_unit):
-    receipts = mock_receipts(web3_lido_unit)
-    web3_lido_unit.eth.get_logs = Mock(side_effect=[receipts, None])
-    web3_lido_unit.is_connected = Mock(return_value=True)
-    web3_lido_unit.eth.get_block_number = Mock(return_value=1)
-    provider = OnchainTransportProvider(
-        w3=web3_lido_unit,
-        onchain_address=variables.ONCHAIN_TRANSPORT_ADDRESS,
-        message_schema=Schema(Or(DepositMessageSchema, PingMessageSchema)),
-        parsers_providers=[DepositParser, PingParser],
-    )
+    with mock.patch('web3.eth.Eth.chain_id', new_callable=mock.PropertyMock) as mock_chain_id:
+        mock_chain_id.return_value = 1
+        receipts = mock_receipts(web3_lido_unit)
+        web3_lido_unit.eth.get_logs = Mock(side_effect=[receipts, None])
+        web3_lido_unit.is_connected = Mock(return_value=True)
+        web3_lido_unit.eth.get_block_number = Mock(return_value=1)
+        provider = OnchainTransportProvider(
+            w3=web3_lido_unit,
+            onchain_address=variables.ONCHAIN_TRANSPORT_ADDRESS,
+            message_schema=Schema(Or(DepositMessageSchema, PingMessageSchema)),
+            parsers_providers=[DepositParser, PingParser],
+        )
 
-    for parser in provider._parsers:
-        parser._decode_event = Mock(side_effect=lambda x: x)
+        for parser in provider._parsers:
+            parser._decode_event = Mock(side_effect=lambda x: x)
 
-    messages = provider.get_messages()
-    assert len(messages) == len(receipts)
+        messages = provider.get_messages()
+        assert len(messages) == len(receipts)
 
 
 # event MessageDepositV1(address indexed guardianAddress, (uint256 blockNumber, bytes32 blockHash, bytes32 depositRoot,
