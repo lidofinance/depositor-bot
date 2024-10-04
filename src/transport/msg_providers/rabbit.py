@@ -10,7 +10,6 @@ from prometheus_client import Gauge
 from schema import Schema
 from transport.msg_providers.common import BaseMessageProvider
 from transport.msg_providers.stomp.client import Client
-from transport.types import TransportType
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +27,7 @@ class RabbitProvider(BaseMessageProvider):
     connection = True
 
     def __init__(self, message_schema: Schema, routing_keys: List[str]):
-        super().__init__(message_schema, TransportType.RABBIT)
+        super().__init__(message_schema)
 
         logger.info({'msg': 'Rabbit initialize.'})
         self.routing_keys = routing_keys

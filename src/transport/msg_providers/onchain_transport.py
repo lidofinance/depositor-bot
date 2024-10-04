@@ -12,7 +12,6 @@ from transport.msg_types.deposit import DepositMessage
 from transport.msg_types.pause import PauseMessage
 from transport.msg_types.ping import PingMessage
 from transport.msg_types.unvet import UnvetMessage
-from transport.types import TransportType
 from utils.bytes import bytes_to_hex_string
 from web3 import Web3
 from web3._utils.events import get_event_data
@@ -225,7 +224,7 @@ class OnchainTransportProvider(BaseMessageProvider):
         message_schema: Schema,
         parsers_providers: list[Callable[[Web3], EventParser]],
     ):
-        super().__init__(message_schema, TransportType.ONCHAIN_TRANSPORT)
+        super().__init__(message_schema)
         self._onchain_address = onchain_address
         if not parsers_providers:
             raise ValueError('There must be at least a single parser for Data Bus provider')
