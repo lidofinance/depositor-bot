@@ -1,10 +1,25 @@
+from unittest.mock import Mock
+
 import pytest
+from prometheus_client import Gauge
 from schema import Or, Schema
 from transport.msg_providers.common import BaseMessageProvider
 from transport.msg_types.deposit import DepositMessageSchema
 
 
 class FakeMessageProvider(BaseMessageProvider):
+    @property
+    def fetched_messages_metric(self) -> Gauge:
+        return Mock()
+
+    @property
+    def processed_messages_metric(self) -> Gauge:
+        return Mock()
+
+    @property
+    def valid_messages_metric(self) -> Gauge:
+        return Mock()
+
     MAX_MESSAGES_RECEIVE = 1
 
     def _fetch_messages(self) -> list:
