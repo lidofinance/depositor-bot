@@ -5,9 +5,12 @@ import time
 from typing import List, Optional
 
 import variables
+from metrics.metrics import RABBIT_TRANSPORT_FETCHED_MESSAGES, RABBIT_TRANSPORT_PROCESSED_MESSAGES, RABBIT_TRANSPORT_VALID_MESSAGES
+from prometheus_client import Gauge
 from schema import Schema
 from transport.msg_providers.common import BaseMessageProvider
 from transport.msg_providers.stomp.client import Client
+from transport.types import TransportType
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +28,7 @@ class RabbitProvider(BaseMessageProvider):
     connection = True
 
     def __init__(self, message_schema: Schema, routing_keys: List[str]):
-        super().__init__(message_schema)
+        super().__init__(message_schema, TransportType.RABBIT)
 
         logger.info({'msg': 'Rabbit initialize.'})
         self.routing_keys = routing_keys
@@ -106,3 +109,15 @@ class RabbitProvider(BaseMessageProvider):
             return None
 
         return value
+
+    @property
+    def fetched_messages_metric(self) -> Gauge:
+        return RABBIT_TRANSPORT_FETCHED_MESSAGES
+
+    @property
+    def processed_messages_metric(self) -> Gauge:
+        return RABBIT_TRANSPORT_PROCESSED_MESSAGES
+
+    @property
+    def valid_messages_metric(self) -> Gauge:
+        return RABBIT_TRANSPORT_VALID_MESSAGES

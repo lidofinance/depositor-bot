@@ -3,6 +3,8 @@ import logging
 from typing import Callable, List, Optional
 
 from eth_typing import ChecksumAddress
+from metrics.metrics import ONCHAIN_TRANSPORT_FETCHED_MESSAGES, ONCHAIN_TRANSPORT_PROCESSED_MESSAGES, ONCHAIN_TRANSPORT_VALID_MESSAGES
+from prometheus_client import Gauge
 from schema import Schema
 from transport.msg_providers.common import BaseMessageProvider
 from transport.msg_providers.rabbit import MessageType
@@ -10,6 +12,7 @@ from transport.msg_types.deposit import DepositMessage
 from transport.msg_types.pause import PauseMessage
 from transport.msg_types.ping import PingMessage
 from transport.msg_types.unvet import UnvetMessage
+from transport.types import TransportType
 from utils.bytes import bytes_to_hex_string
 from web3 import Web3
 from web3._utils.events import get_event_data
@@ -222,7 +225,7 @@ class OnchainTransportProvider(BaseMessageProvider):
         message_schema: Schema,
         parsers_providers: list[Callable[[Web3], EventParser]],
     ):
-        super().__init__(message_schema)
+        super().__init__(message_schema, TransportType.ONCHAIN_TRANSPORT)
         self._onchain_address = onchain_address
         if not parsers_providers:
             raise ValueError('There must be at least a single parser for Data Bus provider')
@@ -231,6 +234,7 @@ class OnchainTransportProvider(BaseMessageProvider):
         logger.info('Data bus client initialized.')
 
         self._w3 = w3
+        self._chain_id = self._w3.eth.chain_id
         self._parsers: List[EventParser] = [provider(w3) for provider in parsers_providers]
         self._topics = [self._w3.keccak(text=parser.message_abi) for parser in self._parsers]
 
@@ -282,3 +286,15 @@ class OnchainTransportProvider(BaseMessageProvider):
                     }
                 )
         return None
+
+    @property
+    def fetched_messages_metric(self) -> Gauge:
+        return ONCHAIN_TRANSPORT_FETCHED_MESSAGES.labels(self._chain_id)
+
+    @property
+    def processed_messages_metric(self) -> Gauge:
+        return ONCHAIN_TRANSPORT_PROCESSED_MESSAGES.labels(self._chain_id)
+
+    @property
+    def valid_messages_metric(self) -> Gauge:
+        return ONCHAIN_TRANSPORT_VALID_MESSAGES.labels(self._chain_id)
