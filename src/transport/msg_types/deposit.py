@@ -53,3 +53,5 @@ class DepositMessage(TypedDict):
     guardianAddress: str
     signature: Signature
     stakingModuleId: int
+    transport: str
+    chain_id: int

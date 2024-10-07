@@ -32,3 +32,5 @@ class UnvetMessage(TypedDict):
     nonce: int
     operatorIds: str
     vettedKeysByOperator: str
+    transport: str
+    chain_id: int

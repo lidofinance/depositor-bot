@@ -21,19 +21,19 @@ ACCOUNT_BALANCE = Gauge('account_balance', 'Account balance', namespace=PROMETHE
 DEPOSIT_MESSAGES = Gauge(
     'deposit_messages',
     'Guardians deposit messages',
-    ['address', 'module_id', 'version'],
+    ['address', 'module_id', 'version', 'transport', 'chain_id'],
     namespace=PROMETHEUS_PREFIX,
 )
 PAUSE_MESSAGES = Gauge(
     'pause_messages',
     'Guardians pause messages',
-    ['address', 'module_id', 'version'],
+    ['address', 'module_id', 'version', 'transport', 'chain_id'],
     namespace=PROMETHEUS_PREFIX,
 )
 PING_MESSAGES = Gauge(
     'ping_messages',
     'Guardians ping messages',
-    ['address', 'version'],
+    ['address', 'version', 'transport', 'chain_id'],
     namespace=PROMETHEUS_PREFIX,
 )
 UNVET_MESSAGES = Gauge('unvet_messages', 'Guardian unvet messages', ['address', 'module_id', 'version'])
@@ -115,48 +115,6 @@ UNEXPECTED_EXCEPTIONS = Counter(
 )
 
 MODULES = Gauge('modules', 'Modules gauge', ['module_id'], namespace=PROMETHEUS_PREFIX)
-
-ONCHAIN_TRANSPORT_FETCHED_MESSAGES = Gauge(
-    'onchain_fetched_messages',
-    'Total count of fetched onchain messages',
-    ['chain_id'],
-    namespace=PROMETHEUS_PREFIX,
-)
-
-ONCHAIN_TRANSPORT_PROCESSED_MESSAGES = Gauge(
-    'onchain_processed_messages',
-    'Total count of processed onchain messages',
-    ['chain_id'],
-    namespace=PROMETHEUS_PREFIX,
-)
-
-ONCHAIN_TRANSPORT_VALID_MESSAGES = Gauge(
-    'onchain_valid_messages',
-    'Total count of valid onchain messages',
-    ['chain_id'],
-    namespace=PROMETHEUS_PREFIX,
-)
-
-RABBIT_TRANSPORT_FETCHED_MESSAGES = Gauge(
-    'rabbit_fetched_messages',
-    'Total count of fetched rabbit messages',
-    [],
-    namespace=PROMETHEUS_PREFIX,
-)
-
-RABBIT_TRANSPORT_PROCESSED_MESSAGES = Gauge(
-    'rabbit_processed_messages',
-    'Total count of processed rabbit messages',
-    [],
-    namespace=PROMETHEUS_PREFIX,
-)
-
-RABBIT_TRANSPORT_VALID_MESSAGES = Gauge(
-    'rabbit_valid_messages',
-    'Total count of valid rabbit messages',
-    [],
-    namespace=PROMETHEUS_PREFIX,
-)
 
 for module_id in DEPOSIT_MODULES_WHITELIST:
     MODULES.labels(module_id).set(1)
