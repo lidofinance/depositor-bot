@@ -84,9 +84,9 @@ class EventParser(abc.ABC):
     def _create_message(self, parsed_data: dict, guardian: str) -> dict:
         pass
 
-    @property
+    @staticmethod
     @abc.abstractmethod
-    def message_abi(self):
+    def message_abi(guardian: ChecksumAddress):
         pass
 
     def _decode_event(self, log: LogReceipt) -> EventData:
@@ -104,7 +104,6 @@ class EventParser(abc.ABC):
 # uint256 stakingModuleId, uint256 nonce, (bytes32 r, bytes32 vs) signature, (bytes32 version) app) data),
 class DepositParser(EventParser):
     DEPOSIT_V1_DATA_SCHEMA = '(uint256,bytes32,bytes32,uint256,uint256,(bytes32,bytes32),(bytes32))'
-    message_abi = f'MessageDepositV1(address,{DEPOSIT_V1_DATA_SCHEMA})'
 
     def __init__(self, w3: Web3):
         super().__init__(w3, self.DEPOSIT_V1_DATA_SCHEMA)
@@ -125,12 +124,15 @@ class DepositParser(EventParser):
             },
         )
 
+    @staticmethod
+    def message_abi(guardian: ChecksumAddress):
+        return f'MessageDepositV1({guardian},{DepositParser.DEPOSIT_V1_DATA_SCHEMA})'
+
 
 # event MessageUnvetV1(address indexed guardianAddress, (uint256 blockNumber, bytes32 blockHash, uint256 stakingModuleId, uint256 nonce,
 # bytes operatorIds, bytes vettedKeysByOperator, (bytes32 r, bytes32 vs) signature, (bytes32 version) app) data)
 class UnvetParser(EventParser):
     UNVET_V1_DATA_SCHEMA = '(uint256,bytes32,uint256,uint256,bytes,bytes,(bytes32,bytes32),(bytes32))'
-    message_abi = f'MessageUnvetV1(address,{UNVET_V1_DATA_SCHEMA})'
 
     def __init__(self, w3: Web3):
         super().__init__(w3, self.UNVET_V1_DATA_SCHEMA)
@@ -151,11 +153,14 @@ class UnvetParser(EventParser):
             vettedKeysByOperator=vetted_keys_by_operator,
         )
 
+    @staticmethod
+    def message_abi(guardian: ChecksumAddress):
+        return f'MessageUnvetV1({guardian},{UnvetParser.UNVET_V1_DATA_SCHEMA})'
+
 
 # event MessagePingV1(address indexed guardianAddress, (uint256 blockNumber, (bytes32 version) app) data)",
 class PingParser(EventParser):
     PING_V1_DATA_SCHEMA = '(uint256,(bytes32))'
-    message_abi = f'MessagePingV1(address,{PING_V1_DATA_SCHEMA})'
 
     def __init__(self, w3: Web3):
         super().__init__(w3, self.PING_V1_DATA_SCHEMA)
@@ -168,12 +173,15 @@ class PingParser(EventParser):
             guardianAddress=guardian,
         )
 
+    @staticmethod
+    def message_abi(guardian: ChecksumAddress):
+        return f'MessagePingV1({guardian},{PingParser.PING_V1_DATA_SCHEMA})'
+
 
 # event MessagePauseV2(address indexed guardianAddress, (uint256 blockNumber, bytes32 blockHash, (bytes32 r, bytes32 vs) signature,
 # uint256 stakingModuleId, (bytes32 version) app) data)
 class PauseV2Parser(EventParser):
     PAUSE_V2_DATA_SCHEMA = '(uint256,bytes32,(bytes32,bytes32),uint256,(bytes32))'
-    message_abi = f'MessagePauseV2(address,{PAUSE_V2_DATA_SCHEMA})'
 
     def __init__(self, w3: Web3):
         super().__init__(w3, self.PAUSE_V2_DATA_SCHEMA)
@@ -191,12 +199,15 @@ class PauseV2Parser(EventParser):
             },
         )
 
+    @staticmethod
+    def message_abi(guardian: ChecksumAddress):
+        return f'MessagePauseV2({guardian},{PauseV2Parser.PAUSE_V2_DATA_SCHEMA})'
+
 
 # event MessagePauseV3(address indexed guardianAddress, (uint256 blockNumber, bytes32 blockHash, (bytes32 r, bytes32 vs) signature,
 # (bytes32 version) app) data)
 class PauseV3Parser(EventParser):
     PAUSE_V3_DATA_SCHEMA = '(uint256,bytes32,(bytes32,bytes32),(bytes32))'
-    message_abi = f'MessagePauseV3(address,{PAUSE_V3_DATA_SCHEMA})'
 
     def __init__(self, w3: Web3):
         super().__init__(w3, self.PAUSE_V3_DATA_SCHEMA)
@@ -213,6 +224,10 @@ class PauseV3Parser(EventParser):
             },
         )
 
+    @staticmethod
+    def message_abi(guardian: ChecksumAddress):
+        return f'MessagePauseV3({guardian},{PauseV3Parser.PAUSE_V3_DATA_SCHEMA})'
+
 
 class OnchainTransportProvider(BaseMessageProvider):
     STANDARD_OFFSET: int = 256
@@ -223,6 +238,7 @@ class OnchainTransportProvider(BaseMessageProvider):
         onchain_address: ChecksumAddress,
         message_schema: Schema,
         parsers_providers: list[Callable[[Web3], EventParser]],
+        allowed_guardians: list[ChecksumAddress],
     ):
         super().__init__(message_schema)
         self._onchain_address = onchain_address
@@ -235,7 +251,7 @@ class OnchainTransportProvider(BaseMessageProvider):
         self._w3 = w3
         self._chain_id = self._w3.eth.chain_id
         self._parsers: List[EventParser] = [provider(w3) for provider in parsers_providers]
-        self._topics = [self._w3.keccak(text=parser.message_abi) for parser in self._parsers]
+        self._topics = [self._w3.keccak(text=parser.message_abi(address)) for parser in self._parsers for address in allowed_guardians]
 
     def _fetch_messages(self) -> list:
         latest_block_number = self._w3.eth.block_number

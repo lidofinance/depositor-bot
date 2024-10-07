@@ -20,6 +20,8 @@ from web3.types import EventData
 
 from tests.transport.onchain_sender import OnchainTransportSender
 
+_DEFAULT_GUARDIAN = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266'
+
 
 # Started with config: {
 #  NODE_HOST: 'http://127.0.0.1:8888',
@@ -80,14 +82,20 @@ def test_data_bus_provider(web3_transaction_integration):
         onchain_address=variables.ONCHAIN_TRANSPORT_ADDRESS,
         message_schema=Schema(Or(DepositMessageSchema, PingMessageSchema)),
         parsers_providers=[DepositParser, PingParser],
+        allowed_guardians=[Web3.to_checksum_address(_DEFAULT_GUARDIAN[:-1] + '7')],
     )
     messages = provider.get_messages()
-    assert messages
+    assert not messages
+    provider = OnchainTransportProvider(
+        w3=web3_transaction_integration,
+        onchain_address=variables.ONCHAIN_TRANSPORT_ADDRESS,
+        message_schema=Schema(Or(DepositMessageSchema, PingMessageSchema)),
+        parsers_providers=[DepositParser, PingParser],
+        allowed_guardians=[Web3.to_checksum_address(_DEFAULT_GUARDIAN)],
+    )
+    messages = provider.get_messages()
     for mes in messages:
         print(mes)
-
-
-_DEFAULT_GUARDIAN = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266'
 
 
 @pytest.mark.unit
@@ -103,6 +111,7 @@ def test_data_bus_mock_responses(web3_lido_unit):
             onchain_address=variables.ONCHAIN_TRANSPORT_ADDRESS,
             message_schema=Schema(Or(DepositMessageSchema, PingMessageSchema)),
             parsers_providers=[DepositParser, PingParser],
+            allowed_guardians=[Web3.to_checksum_address(_DEFAULT_GUARDIAN)],
         )
 
         for parser in provider._parsers:

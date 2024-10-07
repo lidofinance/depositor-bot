@@ -55,6 +55,7 @@ class PauserBot:
                     onchain_address=variables.ONCHAIN_TRANSPORT_ADDRESS,
                     message_schema=Schema(Or(PauseMessageSchema, PingMessageSchema)),
                     parsers_providers=[PauseV2Parser, PauseV3Parser, PingParser],
+                    allowed_guardians=self.w3.lido.deposit_security_module.get_guardians(),
                 )
             )
 
