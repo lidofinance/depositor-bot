@@ -25,7 +25,7 @@ def message_metrics_filter(msg: TypedDict) -> bool:
     address = msg.get('guardianAddress')
     version = msg.get('app', {}).get('version')
     transport = msg.get('transport', '')
-    chain_id = msg.get('chain_id', -1)
+    chain_id = msg.get('chain_id', '')
     staking_module_id = msg.get('stakingModuleId', -1)
 
     metrics_map = {

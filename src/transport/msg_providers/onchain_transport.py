@@ -231,7 +231,7 @@ class OnchainTransportProvider(BaseMessageProvider):
         logger.info('Data bus client initialized.')
 
         self._w3 = w3
-        self._chain_id = self._w3.eth.chain_id
+        self._chain_id = str(self._w3.eth.chain_id)
         self._parsers: List[EventParser] = [provider(w3) for provider in parsers_providers]
         self._topics = [self._w3.keccak(text=parser.message_abi) for parser in self._parsers]
 
