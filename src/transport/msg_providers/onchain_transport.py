@@ -36,6 +36,13 @@ EVENT_ABI = {
 }
 
 
+def _decode_version(version: bytes) -> str:
+    stripped = version.hex().rstrip('0')
+    if len(stripped) % 2 != 0:
+        stripped = stripped + '0'
+    return bytes.fromhex(stripped).decode('utf8')
+
+
 class EventParser(abc.ABC):
     """
     Abstract base class for parsing Ethereum event logs.
@@ -109,7 +116,7 @@ class DepositParser(EventParser):
         super().__init__(w3, self.DEPOSIT_V1_DATA_SCHEMA)
 
     def _create_message(self, parsed_data: tuple, guardian: str) -> DepositMessage:
-        block_number, block_hash, deposit_root, staking_module_id, nonce, (r, vs), app = parsed_data
+        block_number, block_hash, deposit_root, staking_module_id, nonce, (r, vs), (version,) = parsed_data
         return DepositMessage(
             type=MessageType.DEPOSIT,
             depositRoot=bytes_to_hex_string(deposit_root),
@@ -121,6 +128,9 @@ class DepositParser(EventParser):
             signature={
                 'r': bytes_to_hex_string(r),
                 '_vs': bytes_to_hex_string(vs),
+            },
+            app={
+                'version': _decode_version(version),
             },
         )
 
@@ -135,7 +145,7 @@ class UnvetParser(EventParser):
         super().__init__(w3, self.UNVET_V1_DATA_SCHEMA)
 
     def _create_message(self, parsed_data: tuple, guardian: str) -> UnvetMessage:
-        block_number, block_hash, staking_module_id, nonce, operator_ids, vetted_keys_by_operator, (r, vs), app = parsed_data
+        block_number, block_hash, staking_module_id, nonce, operator_ids, vetted_keys_by_operator, (r, vs), (version,) = parsed_data
         return UnvetMessage(
             type=MessageType.UNVET,
             nonce=nonce,
@@ -148,6 +158,9 @@ class UnvetParser(EventParser):
             },
             operatorIds=operator_ids,
             vettedKeysByOperator=vetted_keys_by_operator,
+            app={
+                'version': _decode_version(version),
+            },
         )
 
 
@@ -160,11 +173,14 @@ class PingParser(EventParser):
         super().__init__(w3, self.PING_V1_DATA_SCHEMA)
 
     def _create_message(self, parsed_data: tuple, guardian: str) -> PingMessage:
-        block_number, app = parsed_data
+        block_number, (version,) = parsed_data
         return PingMessage(
             type=MessageType.PING,
             blockNumber=block_number,
             guardianAddress=guardian,
+            app={
+                'version': _decode_version(version),
+            },
         )
 
 
@@ -178,7 +194,7 @@ class PauseV2Parser(EventParser):
         super().__init__(w3, self.PAUSE_V2_DATA_SCHEMA)
 
     def _create_message(self, parsed_data: tuple, guardian: str) -> dict:
-        block_number, block_hash, (r, vs), staking_module_id, app = parsed_data
+        block_number, block_hash, (r, vs), staking_module_id, (version,) = parsed_data
         return PauseMessage(
             type=MessageType.PAUSE,
             blockNumber=block_number,
@@ -187,6 +203,9 @@ class PauseV2Parser(EventParser):
             signature={
                 'r': bytes_to_hex_string(r),
                 '_vs': bytes_to_hex_string(vs),
+            },
+            app={
+                'version': _decode_version(version),
             },
         )
 
@@ -201,7 +220,7 @@ class PauseV3Parser(EventParser):
         super().__init__(w3, self.PAUSE_V3_DATA_SCHEMA)
 
     def _create_message(self, parsed_data: tuple, guardian: str) -> dict:
-        block_number, block_hash, (r, vs), app = parsed_data
+        block_number, block_hash, (r, vs), (version,) = parsed_data
         return PauseMessage(
             type=MessageType.PAUSE,
             blockNumber=block_number,
@@ -209,6 +228,9 @@ class PauseV3Parser(EventParser):
             signature={
                 'r': r,
                 '_vs': vs,
+            },
+            app={
+                'version': _decode_version(version),
             },
         )
 
