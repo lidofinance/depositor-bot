@@ -98,12 +98,15 @@ class RabbitProvider(BaseMessageProvider):
         self._queue.append(body)
 
     def _process_msg(self, msg: str) -> Optional[dict]:
+        parsed = self._parse_message(msg)
+        parsed['transport'] = 'rabbit'
+        return parsed
+
+    @staticmethod
+    def _parse_message(msg: str) -> Optional[dict]:
         try:
-            value = json.loads(msg)
-            value['transport'] = 'rabbit'
+            return json.loads(msg)
         except ValueError as error:
             # ignore not json msg
             logger.warning({'msg': 'Broken message in Rabbit', 'value': str(msg), 'error': str(error)})
             return None
-
-        return value

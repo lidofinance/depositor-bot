@@ -1,9 +1,9 @@
 import logging
-from typing import TypedDict
 
 from eth_typing import Hash32
 from schema import And, Schema
 from transport.msg_types.base import ADDRESS_REGREX, HASH_REGREX, HEX_BYTES_REGREX, Signature, SignatureSchema
+from transport.msg_types.common import Metadata
 
 logger = logging.getLogger(__name__)
 
@@ -22,8 +22,7 @@ UnvetMessageSchema = Schema(
 )
 
 
-class UnvetMessage(TypedDict):
-    type: str
+class UnvetMessage(Metadata):
     blockNumber: int
     blockHash: Hash32
     guardianAddress: str
@@ -32,5 +31,3 @@ class UnvetMessage(TypedDict):
     nonce: int
     operatorIds: str
     vettedKeysByOperator: str
-    transport: str
-    chain_id: int

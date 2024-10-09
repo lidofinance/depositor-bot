@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Callable, List
+from typing import Any, Callable, List, TypedDict
 
 from blockchain.typings import Web3
 from cryptography.verify_signature import recover_vs, verify_message_with_signature
@@ -43,6 +43,12 @@ def _vrs(msg: DepositMessage | PauseMessage | UnvetMessage) -> tuple[VRS, VRS, V
     r = msg['signature']['r']
     v, s = recover_vs(vs)
     return v, r, s
+
+
+class Metadata(TypedDict):
+    type: str
+    transport: str
+    chain_id: str
 
 
 def _select_label(msg: DepositMessage | PauseMessage | UnvetMessage) -> str:

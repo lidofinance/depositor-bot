@@ -1,8 +1,8 @@
 import logging
-from typing import TypedDict
 
 from schema import And, Schema
 from transport.msg_types.base import ADDRESS_REGREX, Signature, SignatureSchema
+from transport.msg_types.common import Metadata
 
 logger = logging.getLogger(__name__)
 
@@ -35,11 +35,8 @@ PauseMessageSchema = Schema(
 )
 
 
-class PauseMessage(TypedDict):
-    type: str
+class PauseMessage(Metadata):
     blockNumber: int
     guardianAddress: str
     signature: Signature
     stakingModuleId: int
-    transport: str
-    chain_id: int

@@ -21,8 +21,6 @@ class PingMessage(TypedDict):
     type: str
     blockNumber: int
     guardianAddress: str
-    transport: str
-    chain_id: int
 
 
 def to_check_sum_address(msg: dict):
