@@ -3,6 +3,7 @@ import logging
 from typing import Callable, List, Optional
 
 from eth_typing import ChecksumAddress
+from eth_utils import to_bytes
 from metrics.metrics import ONCHAIN_TRANSPORT_FETCHED_MESSAGES, ONCHAIN_TRANSPORT_PROCESSED_MESSAGES, ONCHAIN_TRANSPORT_VALID_MESSAGES
 from prometheus_client import Gauge
 from schema import Schema
@@ -214,6 +215,11 @@ class PauseV3Parser(EventParser):
         )
 
 
+def _32padding_address(address: ChecksumAddress) -> bytes:
+    address_bytes = to_bytes(hexstr=address)
+    return address_bytes.rjust(32, b'\0')
+
+
 class OnchainTransportProvider(BaseMessageProvider):
     STANDARD_OFFSET: int = 256
 
@@ -223,6 +229,7 @@ class OnchainTransportProvider(BaseMessageProvider):
         onchain_address: ChecksumAddress,
         message_schema: Schema,
         parsers_providers: list[Callable[[Web3], EventParser]],
+        allowed_guardians_provider: Callable[[], list[ChecksumAddress]],
     ):
         super().__init__(message_schema)
         self._onchain_address = onchain_address
@@ -234,8 +241,8 @@ class OnchainTransportProvider(BaseMessageProvider):
 
         self._w3 = w3
         self._chain_id = self._w3.eth.chain_id
+        self._allowed_guardians_provider = allowed_guardians_provider
         self._parsers: List[EventParser] = [provider(w3) for provider in parsers_providers]
-        self._topics = [self._w3.keccak(text=parser.message_abi) for parser in self._parsers]
 
     def _fetch_messages(self) -> list:
         latest_block_number = self._w3.eth.block_number
@@ -243,11 +250,13 @@ class OnchainTransportProvider(BaseMessageProvider):
         # If block distance is 0, then skip fetching to avoid looping on a single block
         if from_block == latest_block_number:
             return []
+        event_ids = [self._w3.keccak(text=parser.message_abi) for parser in self._parsers]
+        addresses_with_padding = [_32padding_address(address) for address in self._allowed_guardians_provider()]
         filter_params = FilterParams(
             fromBlock=from_block,
             toBlock=latest_block_number,
             address=self._onchain_address,
-            topics=[self._topics],
+            topics=[event_ids, addresses_with_padding],
         )
         try:
             logs = self._w3.eth.get_logs(filter_params)

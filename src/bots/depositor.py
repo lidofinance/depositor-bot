@@ -92,6 +92,7 @@ class DepositorBot:
                     onchain_address=variables.ONCHAIN_TRANSPORT_ADDRESS,
                     message_schema=Schema(Or(DepositMessageSchema, PingMessageSchema)),
                     parsers_providers=[DepositParser, PingParser],
+                    allowed_guardians_provider=self.w3.lido.deposit_security_module.get_guardians,
                 )
             )
 

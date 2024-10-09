@@ -26,7 +26,7 @@ class OnchainTransportSender:
         self._data_bus = data_bus_contract
 
     def send_deposit(self, deposit_mes: DepositMessage):
-        deposit_topic = self._w3.keccak(text=DepositParser.message_abi)
+        event_id = self._w3.keccak(text=DepositParser.message_abi)
         deposit_root, nonce, block_number, block_hash, staking_module_id, app = (
             deposit_mes['depositRoot'],
             deposit_mes['nonce'],
@@ -39,11 +39,11 @@ class OnchainTransportSender:
             types=[DepositParser.DEPOSIT_V1_DATA_SCHEMA],
             args=[(block_number, block_hash, deposit_root, staking_module_id, nonce, self._DEFAULT_SIGNATURE, app)],
         )
-        tx = self._data_bus.functions.sendMessage(deposit_topic, mes)
+        tx = self._data_bus.functions.sendMessage(event_id, mes)
         return tx.transact()
 
     def send_pause_v2(self, pause_mes: PauseMessage):
-        pause_topic = self._w3.keccak(text=PauseV2Parser.message_abi)
+        event_id = self._w3.keccak(text=PauseV2Parser.message_abi)
         block_number, staking_module_id, app = (
             pause_mes['blockNumber'],
             pause_mes['stakingModuleId'],
@@ -53,7 +53,7 @@ class OnchainTransportSender:
             types=[PauseV2Parser.PAUSE_V2_DATA_SCHEMA],
             args=[(block_number, self._DEFAULT_BLOCK_HASH, self._DEFAULT_SIGNATURE, staking_module_id, app)],
         )
-        tx = self._data_bus.functions.sendMessage(pause_topic, mes)
+        tx = self._data_bus.functions.sendMessage(event_id, mes)
         return tx.transact()
 
     def send_pause_v3(self, pause_mes: PauseMessage):
@@ -66,7 +66,7 @@ class OnchainTransportSender:
         return tx.transact()
 
     def send_unvet(self, unvet_mes: UnvetMessage):
-        unvet_topic = self._w3.keccak(text=UnvetParser.message_abi)
+        event_id = self._w3.keccak(text=UnvetParser.message_abi)
         nonce, block_number, block_hash, staking_module_id, operator_ids, vetted_keys, version = (
             unvet_mes['nonce'],
             unvet_mes['blockNumber'],
@@ -80,12 +80,12 @@ class OnchainTransportSender:
             types=[UnvetParser.UNVET_V1_DATA_SCHEMA],
             args=[(block_number, block_hash, staking_module_id, nonce, operator_ids, vetted_keys, self._DEFAULT_SIGNATURE, (version,))],
         )
-        tx = self._data_bus.functions.sendMessage(unvet_topic, mes)
+        tx = self._data_bus.functions.sendMessage(event_id, mes)
         return tx.transact()
 
     def send_ping(self, ping_mes: PingMessage):
-        ping_topic = self._w3.keccak(text=PingParser.message_abi)
+        event_id = self._w3.keccak(text=PingParser.message_abi)
         block_number, version = ping_mes['blockNumber'], (1).to_bytes(32)
         mes = self._w3.codec.encode(types=[PingParser.PING_V1_DATA_SCHEMA], args=[(block_number, (version,))])
-        tx = self._data_bus.functions.sendMessage(ping_topic, mes)
+        tx = self._data_bus.functions.sendMessage(event_id, mes)
         return tx.transact()
