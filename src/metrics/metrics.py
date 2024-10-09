@@ -36,7 +36,12 @@ PING_MESSAGES = Gauge(
     ['address', 'version', 'transport', 'chain_id'],
     namespace=PROMETHEUS_PREFIX,
 )
-UNVET_MESSAGES = Gauge('unvet_messages', 'Guardian unvet messages', ['address', 'module_id', 'version'])
+UNVET_MESSAGES = Gauge(
+    'unvet_messages',
+    'Guardian unvet messages',
+    ['address', 'module_id', 'version', 'transport', 'chain_id'],
+    namespace=PROMETHEUS_PREFIX,
+)
 
 CURRENT_QUORUM_SIZE = Gauge(
     'quorum_size',
