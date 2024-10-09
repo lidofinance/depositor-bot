@@ -68,7 +68,7 @@ class OnchainTransportSender:
     def send_unvet(self, unvet_mes: UnvetMessage):
         unvet_topic = self._w3.keccak(text=UnvetParser.message_abi)
         nonce, block_number, block_hash, staking_module_id, operator_ids, vetted_keys, version = (
-            unvet_mes.nonce,
+            unvet_mes['nonce'],
             unvet_mes['blockNumber'],
             unvet_mes['blockHash'],
             unvet_mes['stakingModuleId'],
