@@ -60,7 +60,7 @@ class UnvetterBot:
                     onchain_address=variables.ONCHAIN_TRANSPORT_ADDRESS,
                     message_schema=Schema(Or(UnvetMessageSchema, PingMessageSchema)),
                     parsers_providers=[UnvetParser, PingParser],
-                    allowed_guardians=self.w3.lido.deposit_security_module.get_guardians(),
+                    allowed_guardians_provider=self.w3.lido.deposit_security_module.get_guardians,
                 )
             )
 

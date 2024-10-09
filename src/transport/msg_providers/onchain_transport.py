@@ -238,7 +238,7 @@ class OnchainTransportProvider(BaseMessageProvider):
         onchain_address: ChecksumAddress,
         message_schema: Schema,
         parsers_providers: list[Callable[[Web3], EventParser]],
-        allowed_guardians: list[ChecksumAddress],
+        allowed_guardians_provider: Callable[[], list[ChecksumAddress]],
     ):
         super().__init__(message_schema)
         self._onchain_address = onchain_address
@@ -250,8 +250,8 @@ class OnchainTransportProvider(BaseMessageProvider):
 
         self._w3 = w3
         self._chain_id = self._w3.eth.chain_id
+        self._allowed_guardians_provider = allowed_guardians_provider
         self._parsers: List[EventParser] = [provider(w3) for provider in parsers_providers]
-        self._topics = [self._w3.keccak(text=parser.message_abi(address)) for parser in self._parsers for address in allowed_guardians]
 
     def _fetch_messages(self) -> list:
         latest_block_number = self._w3.eth.block_number
@@ -259,11 +259,14 @@ class OnchainTransportProvider(BaseMessageProvider):
         # If block distance is 0, then skip fetching to avoid looping on a single block
         if from_block == latest_block_number:
             return []
+        topics = [
+            self._w3.keccak(text=parser.message_abi(address)) for parser in self._parsers for address in self._allowed_guardians_provider()
+        ]
         filter_params = FilterParams(
             fromBlock=from_block,
             toBlock=latest_block_number,
             address=self._onchain_address,
-            topics=[self._topics],
+            topics=[topics],
         )
         try:
             logs = self._w3.eth.get_logs(filter_params)

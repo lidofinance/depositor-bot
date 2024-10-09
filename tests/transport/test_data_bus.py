@@ -82,7 +82,7 @@ def test_data_bus_provider(web3_transaction_integration):
         onchain_address=variables.ONCHAIN_TRANSPORT_ADDRESS,
         message_schema=Schema(Or(DepositMessageSchema, PingMessageSchema)),
         parsers_providers=[DepositParser, PingParser],
-        allowed_guardians=[Web3.to_checksum_address(_DEFAULT_GUARDIAN[:-1] + '7')],
+        allowed_guardians_provider=lambda: [Web3.to_checksum_address(_DEFAULT_GUARDIAN[:-1] + '7')],
     )
     messages = provider.get_messages()
     assert not messages
@@ -91,11 +91,12 @@ def test_data_bus_provider(web3_transaction_integration):
         onchain_address=variables.ONCHAIN_TRANSPORT_ADDRESS,
         message_schema=Schema(Or(DepositMessageSchema, PingMessageSchema)),
         parsers_providers=[DepositParser, PingParser],
-        allowed_guardians=[Web3.to_checksum_address(_DEFAULT_GUARDIAN)],
+        allowed_guardians_provider=lambda: [Web3.to_checksum_address(_DEFAULT_GUARDIAN)],
     )
     messages = provider.get_messages()
     for mes in messages:
         print(mes)
+    assert messages
 
 
 @pytest.mark.unit
@@ -111,7 +112,7 @@ def test_data_bus_mock_responses(web3_lido_unit):
             onchain_address=variables.ONCHAIN_TRANSPORT_ADDRESS,
             message_schema=Schema(Or(DepositMessageSchema, PingMessageSchema)),
             parsers_providers=[DepositParser, PingParser],
-            allowed_guardians=[Web3.to_checksum_address(_DEFAULT_GUARDIAN)],
+            allowed_guardians_provider=lambda: [Web3.to_checksum_address(_DEFAULT_GUARDIAN)],
         )
 
         for parser in provider._parsers:
