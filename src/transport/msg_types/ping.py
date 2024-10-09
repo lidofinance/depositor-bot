@@ -1,8 +1,7 @@
 import logging
-from typing import TypedDict
 
 from schema import And, Schema
-from transport.msg_types.base import ADDRESS_REGREX
+from transport.msg_types.base import ADDRESS_REGREX, Metadata
 from web3 import Web3
 
 logger = logging.getLogger(__name__)
@@ -17,8 +16,7 @@ PingMessageSchema = Schema(
 )
 
 
-class PingMessage(TypedDict):
-    type: str
+class PingMessage(Metadata):
     blockNumber: int
     guardianAddress: str
 

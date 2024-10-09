@@ -25,3 +25,9 @@ class Signature(TypedDict):
     r: VRS
     s: VRS
     _vs: str
+
+
+class Metadata(TypedDict):
+    type: str
+    transport: str
+    chain_id: str

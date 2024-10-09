@@ -1,8 +1,7 @@
 import logging
 
 from schema import And, Schema
-from transport.msg_types.base import ADDRESS_REGREX, Signature, SignatureSchema
-from transport.msg_types.common import Metadata
+from transport.msg_types.base import ADDRESS_REGREX, Metadata, Signature, SignatureSchema
 
 logger = logging.getLogger(__name__)
 
