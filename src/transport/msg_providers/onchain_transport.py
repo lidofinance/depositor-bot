@@ -3,6 +3,7 @@ import logging
 from typing import Callable, List, Optional
 
 from eth_typing import ChecksumAddress
+from eth_utils import to_bytes
 from metrics.metrics import ONCHAIN_TRANSPORT_FETCHED_MESSAGES, ONCHAIN_TRANSPORT_PROCESSED_MESSAGES, ONCHAIN_TRANSPORT_VALID_MESSAGES
 from prometheus_client import Gauge
 from schema import Schema
@@ -84,9 +85,9 @@ class EventParser(abc.ABC):
     def _create_message(self, parsed_data: dict, guardian: str) -> dict:
         pass
 
-    @staticmethod
+    @property
     @abc.abstractmethod
-    def message_abi(guardian: ChecksumAddress):
+    def message_abi(self):
         pass
 
     def _decode_event(self, log: LogReceipt) -> EventData:
@@ -104,6 +105,7 @@ class EventParser(abc.ABC):
 # uint256 stakingModuleId, uint256 nonce, (bytes32 r, bytes32 vs) signature, (bytes32 version) app) data),
 class DepositParser(EventParser):
     DEPOSIT_V1_DATA_SCHEMA = '(uint256,bytes32,bytes32,uint256,uint256,(bytes32,bytes32),(bytes32))'
+    message_abi = f'MessageDepositV1(address,{DEPOSIT_V1_DATA_SCHEMA})'
 
     def __init__(self, w3: Web3):
         super().__init__(w3, self.DEPOSIT_V1_DATA_SCHEMA)
@@ -124,15 +126,12 @@ class DepositParser(EventParser):
             },
         )
 
-    @staticmethod
-    def message_abi(guardian: ChecksumAddress):
-        return f'MessageDepositV1({guardian},{DepositParser.DEPOSIT_V1_DATA_SCHEMA})'
-
 
 # event MessageUnvetV1(address indexed guardianAddress, (uint256 blockNumber, bytes32 blockHash, uint256 stakingModuleId, uint256 nonce,
 # bytes operatorIds, bytes vettedKeysByOperator, (bytes32 r, bytes32 vs) signature, (bytes32 version) app) data)
 class UnvetParser(EventParser):
     UNVET_V1_DATA_SCHEMA = '(uint256,bytes32,uint256,uint256,bytes,bytes,(bytes32,bytes32),(bytes32))'
+    message_abi = f'MessageUnvetV1(address,{UNVET_V1_DATA_SCHEMA})'
 
     def __init__(self, w3: Web3):
         super().__init__(w3, self.UNVET_V1_DATA_SCHEMA)
@@ -153,14 +152,11 @@ class UnvetParser(EventParser):
             vettedKeysByOperator=vetted_keys_by_operator,
         )
 
-    @staticmethod
-    def message_abi(guardian: ChecksumAddress):
-        return f'MessageUnvetV1({guardian},{UnvetParser.UNVET_V1_DATA_SCHEMA})'
-
 
 # event MessagePingV1(address indexed guardianAddress, (uint256 blockNumber, (bytes32 version) app) data)",
 class PingParser(EventParser):
     PING_V1_DATA_SCHEMA = '(uint256,(bytes32))'
+    message_abi = f'MessagePingV1(address,{PING_V1_DATA_SCHEMA})'
 
     def __init__(self, w3: Web3):
         super().__init__(w3, self.PING_V1_DATA_SCHEMA)
@@ -173,15 +169,12 @@ class PingParser(EventParser):
             guardianAddress=guardian,
         )
 
-    @staticmethod
-    def message_abi(guardian: ChecksumAddress):
-        return f'MessagePingV1({guardian},{PingParser.PING_V1_DATA_SCHEMA})'
-
 
 # event MessagePauseV2(address indexed guardianAddress, (uint256 blockNumber, bytes32 blockHash, (bytes32 r, bytes32 vs) signature,
 # uint256 stakingModuleId, (bytes32 version) app) data)
 class PauseV2Parser(EventParser):
     PAUSE_V2_DATA_SCHEMA = '(uint256,bytes32,(bytes32,bytes32),uint256,(bytes32))'
+    message_abi = f'MessagePauseV2(address,{PAUSE_V2_DATA_SCHEMA})'
 
     def __init__(self, w3: Web3):
         super().__init__(w3, self.PAUSE_V2_DATA_SCHEMA)
@@ -199,15 +192,12 @@ class PauseV2Parser(EventParser):
             },
         )
 
-    @staticmethod
-    def message_abi(guardian: ChecksumAddress):
-        return f'MessagePauseV2({guardian},{PauseV2Parser.PAUSE_V2_DATA_SCHEMA})'
-
 
 # event MessagePauseV3(address indexed guardianAddress, (uint256 blockNumber, bytes32 blockHash, (bytes32 r, bytes32 vs) signature,
 # (bytes32 version) app) data)
 class PauseV3Parser(EventParser):
     PAUSE_V3_DATA_SCHEMA = '(uint256,bytes32,(bytes32,bytes32),(bytes32))'
+    message_abi = f'MessagePauseV3(address,{PAUSE_V3_DATA_SCHEMA})'
 
     def __init__(self, w3: Web3):
         super().__init__(w3, self.PAUSE_V3_DATA_SCHEMA)
@@ -224,9 +214,10 @@ class PauseV3Parser(EventParser):
             },
         )
 
-    @staticmethod
-    def message_abi(guardian: ChecksumAddress):
-        return f'MessagePauseV3({guardian},{PauseV3Parser.PAUSE_V3_DATA_SCHEMA})'
+
+def _32padding_address(address: ChecksumAddress) -> bytes:
+    address_bytes = to_bytes(hexstr=address)
+    return address_bytes.rjust(32, b'\0')
 
 
 class OnchainTransportProvider(BaseMessageProvider):
@@ -259,14 +250,13 @@ class OnchainTransportProvider(BaseMessageProvider):
         # If block distance is 0, then skip fetching to avoid looping on a single block
         if from_block == latest_block_number:
             return []
-        topics = [
-            self._w3.keccak(text=parser.message_abi(address)) for parser in self._parsers for address in self._allowed_guardians_provider()
-        ]
+        event_ids = [self._w3.keccak(text=parser.message_abi) for parser in self._parsers]
+        addresses_with_padding = [_32padding_address(address) for address in self._allowed_guardians_provider()]
         filter_params = FilterParams(
             fromBlock=from_block,
             toBlock=latest_block_number,
             address=self._onchain_address,
-            topics=[topics],
+            topics=[event_ids, addresses_with_padding],
         )
         try:
             logs = self._w3.eth.get_logs(filter_params)
