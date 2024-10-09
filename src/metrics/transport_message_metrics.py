@@ -37,7 +37,7 @@ def message_metrics_filter(msg: TypedDict) -> bool:
     if msg_type in metrics_map:
         metrics_map[msg_type].labels(
             address=address,
-            staking_module_id=staking_module_id,
+            module_id=staking_module_id,
             version=version,
             transport=transport,
             chain_id=chain_id,

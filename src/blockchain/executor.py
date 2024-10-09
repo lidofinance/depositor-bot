@@ -1,6 +1,7 @@
 # pyright: reportTypedDictNotRequiredAccess=false
 
 import logging
+import traceback
 from time import sleep
 from typing import Any, Callable, Optional
 
@@ -100,4 +101,5 @@ class Executor:
             logger.error({'msg': 'No active node available. Shut down.', 'error': str(exception)})
             raise NoActiveProviderError from exception
         except Exception as error:
-            logger.error({'msg': 'Unexpected error.', 'error': str(error), 'args': str(error.args)})
+            stack_trace = traceback.format_exc()
+            logger.error({'msg': 'Unexpected error.', 'error': str(error), 'args': str(error.args), 'stack': stack_trace})
