@@ -4,8 +4,6 @@ from typing import Callable, List, Optional
 
 from eth_typing import ChecksumAddress
 from eth_utils import to_bytes
-from metrics.metrics import ONCHAIN_TRANSPORT_FETCHED_MESSAGES, ONCHAIN_TRANSPORT_PROCESSED_MESSAGES, ONCHAIN_TRANSPORT_VALID_MESSAGES
-from prometheus_client import Gauge
 from schema import Schema
 from transport.msg_providers.common import BaseMessageProvider
 from transport.msg_providers.rabbit import MessageType
@@ -240,7 +238,7 @@ class OnchainTransportProvider(BaseMessageProvider):
         logger.info('Data bus client initialized.')
 
         self._w3 = w3
-        self._chain_id = self._w3.eth.chain_id
+        self._chain_id = str(self._w3.eth.chain_id)
         self._allowed_guardians_provider = allowed_guardians_provider
         self._parsers: List[EventParser] = [provider(w3) for provider in parsers_providers]
 
@@ -281,6 +279,12 @@ class OnchainTransportProvider(BaseMessageProvider):
             return []
 
     def _process_msg(self, log: LogReceipt) -> Optional[dict]:
+        parsed = self._parse_log(log)
+        parsed['chain_id'] = self._chain_id
+        parsed['transport'] = 'onchain'
+        return parsed
+
+    def _parse_log(self, log: LogReceipt) -> Optional[dict]:
         for parser in self._parsers:
             try:
                 return parser.parse(log)
@@ -294,15 +298,3 @@ class OnchainTransportProvider(BaseMessageProvider):
                     }
                 )
         return None
-
-    @property
-    def fetched_messages_metric(self) -> Gauge:
-        return ONCHAIN_TRANSPORT_FETCHED_MESSAGES.labels(self._chain_id)
-
-    @property
-    def processed_messages_metric(self) -> Gauge:
-        return ONCHAIN_TRANSPORT_PROCESSED_MESSAGES.labels(self._chain_id)
-
-    @property
-    def valid_messages_metric(self) -> Gauge:
-        return ONCHAIN_TRANSPORT_VALID_MESSAGES.labels(self._chain_id)

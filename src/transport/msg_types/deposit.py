@@ -1,8 +1,7 @@
 import logging
-from typing import TypedDict
 
 from schema import And, Schema
-from transport.msg_types.base import ADDRESS_REGREX, HASH_REGREX, Signature, SignatureSchema
+from transport.msg_types.base import ADDRESS_REGREX, HASH_REGREX, Metadata, Signature, SignatureSchema
 
 logger = logging.getLogger(__name__)
 
@@ -44,8 +43,7 @@ DepositMessageSchema = Schema(
 )
 
 
-class DepositMessage(TypedDict):
-    type: str
+class DepositMessage(Metadata):
     depositRoot: str
     nonce: int
     blockNumber: int

@@ -1,33 +1,51 @@
 import logging
+from typing import TypedDict
 
 from metrics.metrics import DEPOSIT_MESSAGES, PAUSE_MESSAGES, PING_MESSAGES, UNVET_MESSAGES
 from transport.msg_providers.rabbit import MessageType
-from transport.msg_types.deposit import DepositMessage
 
 logger = logging.getLogger(__name__)
 
 
-def message_metrics_filter(msg: DepositMessage) -> bool:
-    msg_type = msg.get('type', None)
+def message_metrics_filter(msg: TypedDict) -> bool:
+    """
+    Processes guardian messages and updates Prometheus metrics based on the message type.
+    Returns True for valid message types to allow further processing, and False for messages
+    that should be filtered (such as PING messages).
+
+    Args:
+        msg: A dictionary containing message details.
+
+    Returns:
+        bool: True if the message should be processed, False otherwise.
+    """
+    msg_type = msg.get('type')
     logger.info({'msg': 'Guardian message received.', 'value': msg, 'type': msg_type})
 
-    address, version = msg.get('guardianAddress'), msg.get('app', {}).get('version')
+    address = msg.get('guardianAddress')
+    version = msg.get('app', {}).get('version')
+    transport = msg.get('transport', '')
+    chain_id = msg.get('chain_id', '')
+    staking_module_id = msg.get('stakingModuleId', -1)
 
-    if msg_type == MessageType.PAUSE:
-        PAUSE_MESSAGES.labels(address, msg.get('stakingModuleId', -1), version).inc()
-        return True
+    metrics_map = {
+        MessageType.PAUSE: PAUSE_MESSAGES,
+        MessageType.DEPOSIT: DEPOSIT_MESSAGES,
+        MessageType.UNVET: UNVET_MESSAGES,
+    }
 
-    if msg_type == MessageType.DEPOSIT:
-        DEPOSIT_MESSAGES.labels(address, msg.get('stakingModuleId', -1), version).inc()
-        return True
-
-    if msg_type == MessageType.UNVET:
-        UNVET_MESSAGES.labels(address, msg.get('stakingModuleId', -1), version).inc()
+    if msg_type in metrics_map:
+        metrics_map[msg_type].labels(
+            address=address,
+            staking_module_id=staking_module_id,
+            version=version,
+            transport=transport,
+            chain_id=chain_id,
+        ).inc()
         return True
 
     if msg_type == MessageType.PING:
-        # Filter all ping messages, because we use them only for metrics
-        PING_MESSAGES.labels(address, version).inc()
+        PING_MESSAGES.labels(address=address, version=version, transport=transport, chain_id=chain_id).inc()
         return False
 
     logger.warning({'msg': 'Received unexpected msg type.', 'value': msg, 'type': msg_type})
