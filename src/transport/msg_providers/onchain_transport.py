@@ -147,14 +147,15 @@ class UnvetParser(EventParser):
             type=MessageType.UNVET,
             nonce=nonce,
             blockHash=bytes_to_hex_string(block_hash),
+            blockNumber=block_number,
             guardianAddress=guardian,
             stakingModuleId=staking_module_id,
             signature={
                 'r': bytes_to_hex_string(r),
                 '_vs': bytes_to_hex_string(vs),
             },
-            operatorIds=operator_ids,
-            vettedKeysByOperator=vetted_keys_by_operator,
+            operatorIds=bytes_to_hex_string(operator_ids),
+            vettedKeysByOperator=bytes_to_hex_string(vetted_keys_by_operator),
             app={
                 'version': _decode_version(version),
             },
@@ -223,8 +224,8 @@ class PauseV3Parser(EventParser):
             blockNumber=block_number,
             guardianAddress=guardian,
             signature={
-                'r': r,
-                '_vs': vs,
+                'r': bytes_to_hex_string(r),
+                '_vs': bytes_to_hex_string(vs),
             },
             app={
                 'version': _decode_version(version),
