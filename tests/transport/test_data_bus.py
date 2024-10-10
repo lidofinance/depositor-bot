@@ -45,7 +45,6 @@ def test_data_bus_provider(
     """
     Utilise this function for an adhoc testing of data bus transport
     """
-    variables.ONCHAIN_TRANSPORT_RPC_ENDPOINTS = ['https://gnosis-chiado-rpc.publicnode.com']
     variables.ONCHAIN_TRANSPORT_ADDRESS = ChecksumAddress(HexAddress(HexStr('0x37De961D6bb5865867aDd416be07189D2Dd960e6')))
     provider = OnchainTransportProvider(
         w3=web3_transaction_integration,
@@ -80,7 +79,6 @@ def test_data_bus_provider_unvet(
     """
     Utilise this function for an adhoc testing of data bus transport
     """
-    variables.ONCHAIN_TRANSPORT_RPC_ENDPOINTS = ['https://gnosis-chiado-rpc.publicnode.com']
     variables.ONCHAIN_TRANSPORT_ADDRESS = ChecksumAddress(HexAddress(HexStr('0x37De961D6bb5865867aDd416be07189D2Dd960e6')))
     data_bus_contract = cast(
         DataBusContract,
@@ -137,7 +135,6 @@ def test_data_bus_provider_pause_v2(
     """
     Utilise this function for an adhoc testing of data bus transport
     """
-    variables.ONCHAIN_TRANSPORT_RPC_ENDPOINTS = ['https://gnosis-chiado-rpc.publicnode.com']
     variables.ONCHAIN_TRANSPORT_ADDRESS = ChecksumAddress(HexAddress(HexStr('0x37De961D6bb5865867aDd416be07189D2Dd960e6')))
     data_bus_contract = cast(
         DataBusContract,
@@ -190,7 +187,6 @@ def test_data_bus_provider_pause_v3(
     """
     Utilise this function for an adhoc testing of data bus transport
     """
-    variables.ONCHAIN_TRANSPORT_RPC_ENDPOINTS = ['https://gnosis-chiado-rpc.publicnode.com']
     variables.ONCHAIN_TRANSPORT_ADDRESS = ChecksumAddress(HexAddress(HexStr('0x37De961D6bb5865867aDd416be07189D2Dd960e6')))
     data_bus_contract = cast(
         DataBusContract,
