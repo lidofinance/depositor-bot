@@ -23,7 +23,15 @@ _DEFAULT_GUARDIAN = '0xf060ab3d5dCfdC6a0DFd5ca0645ac569b8f105CA'
 #  DATA_BUS_ADDRESS: '0x5FbDB2315678afecb367f032d93F642f64180aa3'
 # }
 @pytest.mark.integration_chiado
-def test_data_bus_provider(web3_transaction_integration):
+@pytest.mark.parametrize(
+    'web3_provider_integration',
+    [12217621],
+    indirect=['web3_provider_integration'],
+)
+def test_data_bus_provider(
+    web3_provider_integration,
+    web3_transaction_integration,
+):
     """
     Utilise this function for an adhoc testing of data bus transport
     """
@@ -46,9 +54,7 @@ def test_data_bus_provider(web3_transaction_integration):
         allowed_guardians_provider=lambda: [Web3.to_checksum_address(_DEFAULT_GUARDIAN)],
     )
     messages = provider.get_messages()
-    for mes in messages:
-        print(mes)
-    assert messages
+    assert len(messages) == 75
 
 
 @pytest.mark.unit
