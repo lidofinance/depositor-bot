@@ -1,10 +1,8 @@
-from typing import cast
 from unittest import mock
 from unittest.mock import Mock
 
 import pytest
 import variables
-from blockchain.contracts.data_bus import DataBusContract
 from eth_typing import ChecksumAddress, HexAddress, HexStr
 from schema import Or, Schema
 from transport.msg_providers.onchain_transport import (
@@ -12,15 +10,12 @@ from transport.msg_providers.onchain_transport import (
     OnchainTransportProvider,
     PingParser,
 )
-from transport.msg_types.deposit import DepositMessage, DepositMessageSchema
-from transport.msg_types.ping import PingMessage, PingMessageSchema
-from transport.msg_types.unvet import UnvetMessage
+from transport.msg_types.deposit import DepositMessageSchema
+from transport.msg_types.ping import PingMessageSchema
 from web3 import Web3
 from web3.types import EventData
 
-from tests.transport.onchain_sender import OnchainTransportSender
-
-_DEFAULT_GUARDIAN = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266'
+_DEFAULT_GUARDIAN = '0xf060ab3d5dCfdC6a0DFd5ca0645ac569b8f105CA'
 
 
 # Started with config: {
@@ -28,55 +23,20 @@ _DEFAULT_GUARDIAN = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266'
 #  DATA_BUS_ADDRESS: '0x5FbDB2315678afecb367f032d93F642f64180aa3'
 # }
 @pytest.mark.integration_chiado
-def test_data_bus_provider(web3_transaction_integration):
+@pytest.mark.parametrize(
+    'web3_provider_integration',
+    [12217621],
+    indirect=['web3_provider_integration'],
+)
+def test_data_bus_provider(
+    web3_provider_integration,
+    web3_transaction_integration,
+):
     """
     Utilise this function for an adhoc testing of data bus transport
     """
     variables.ONCHAIN_TRANSPORT_RPC_ENDPOINTS = ['https://gnosis-chiado-rpc.publicnode.com']
-    variables.ONCHAIN_TRANSPORT_ADDRESS = ChecksumAddress(HexAddress(HexStr('0x42E1DEfC18388E3AA1fCADa851499A11405cf37f')))
-    data_bus_contract = cast(
-        DataBusContract,
-        web3_transaction_integration.eth.contract(
-            address=variables.ONCHAIN_TRANSPORT_ADDRESS,
-            ContractFactoryClass=DataBusContract,
-        ),
-    )
-
-    onchain_sender = OnchainTransportSender(w3=web3_transaction_integration, data_bus_contract=data_bus_contract)
-    onchain_sender.send_deposit(
-        deposit_mes=DepositMessage(
-            type='deposit',
-            depositRoot='0x0000000000000000000000000000000000000000000000000000000000000000',
-            nonce=40,
-            blockNumber=2,
-            blockHash='0x42eef33d13c4440627c3fab6e3abee85af796ae6f77dcade628b183640b519d0',
-            guardianAddress=_DEFAULT_GUARDIAN,
-            stakingModuleId=1,
-            app={'version': (1).to_bytes(32)},
-        )
-    )
-    onchain_sender.send_ping(
-        ping_mes=PingMessage(
-            type='ping',
-            blockNumber=2,
-            guardianAddress=_DEFAULT_GUARDIAN,
-            app={'version': (1).to_bytes(32)},
-        )
-    )
-    onchain_sender.send_unvet(
-        unvet_mes=UnvetMessage(
-            type='unvet',
-            blockNumber=2,
-            blockHash='0x42eef33d13c4440627c3fab6e3abee85af796ae6f77dcade628b183640b519d0',
-            guardianAddress=_DEFAULT_GUARDIAN,
-            stakingModuleId=1,
-            nonce=32,
-            operatorIds=bytes(32),
-            vettedKeysByOperator=bytes(32),
-            app={'version': (1).to_bytes(32)},
-        )
-    )
-    web3_transaction_integration.provider.make_request('anvil_mine', [10])
+    variables.ONCHAIN_TRANSPORT_ADDRESS = ChecksumAddress(HexAddress(HexStr('0x37De961D6bb5865867aDd416be07189D2Dd960e6')))
     provider = OnchainTransportProvider(
         w3=web3_transaction_integration,
         onchain_address=variables.ONCHAIN_TRANSPORT_ADDRESS,
@@ -94,9 +54,7 @@ def test_data_bus_provider(web3_transaction_integration):
         allowed_guardians_provider=lambda: [Web3.to_checksum_address(_DEFAULT_GUARDIAN)],
     )
     messages = provider.get_messages()
-    for mes in messages:
-        print(mes)
-    assert messages
+    assert len(messages) == 75
 
 
 @pytest.mark.unit

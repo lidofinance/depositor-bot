@@ -31,3 +31,4 @@ class Metadata(TypedDict):
     type: str
     transport: str
     chain_id: str
+    app: dict
