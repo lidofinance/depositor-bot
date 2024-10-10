@@ -37,10 +37,7 @@ EVENT_ABI = {
 
 
 def _decode_version(version: bytes) -> str:
-    stripped = version.hex().rstrip('0')
-    if len(stripped) % 2 != 0:
-        stripped = stripped + '0'
-    return bytes.fromhex(stripped).decode('utf8')
+    return version.decode('utf-8').rstrip('\x00')
 
 
 class EventParser(abc.ABC):
