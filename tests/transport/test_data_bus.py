@@ -26,6 +26,7 @@ from tests.transport.onchain_sender import OnchainTransportSender
 
 _DEFAULT_GUARDIAN = '0xf060ab3d5dCfdC6a0DFd5ca0645ac569b8f105CA'
 _ANVIL_GUARDIAN = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266'
+_ANVIL_GUARDIAN_2 = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8'
 
 
 # Started with config: {
@@ -46,6 +47,7 @@ def test_data_bus_provider(
     Utilise this function for an adhoc testing of data bus transport
     """
     variables.ONCHAIN_TRANSPORT_ADDRESS = ChecksumAddress(HexAddress(HexStr('0x37De961D6bb5865867aDd416be07189D2Dd960e6')))
+    web3_transaction_integration.eth.get_balance = Mock(return_value=1)
     provider = OnchainTransportProvider(
         w3=web3_transaction_integration,
         onchain_address=variables.ONCHAIN_TRANSPORT_ADDRESS,
@@ -107,7 +109,7 @@ def test_data_bus_provider_unvet(
         onchain_address=variables.ONCHAIN_TRANSPORT_ADDRESS,
         message_schema=Schema(Or(UnvetMessageSchema)),
         parsers_providers=[UnvetParser],
-        allowed_guardians_provider=lambda: [Web3.to_checksum_address(_ANVIL_GUARDIAN[:-1] + '7')],
+        allowed_guardians_provider=lambda: [Web3.to_checksum_address(_ANVIL_GUARDIAN_2)],
     )
     messages = provider.get_messages()
     assert not messages
@@ -158,7 +160,7 @@ def test_data_bus_provider_pause_v2(
         onchain_address=variables.ONCHAIN_TRANSPORT_ADDRESS,
         message_schema=Schema(Or(PauseMessageSchema)),
         parsers_providers=[PauseV2Parser],
-        allowed_guardians_provider=lambda: [Web3.to_checksum_address(_ANVIL_GUARDIAN[:-1] + '7')],
+        allowed_guardians_provider=lambda: [Web3.to_checksum_address(_ANVIL_GUARDIAN_2)],
     )
     messages = provider.get_messages()
     assert not messages
