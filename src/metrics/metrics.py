@@ -122,7 +122,7 @@ UNEXPECTED_EXCEPTIONS = Counter(
 GUARDIAN_BALANCE = Gauge(
     'guardian_balance',
     'Balance of the guardian',
-    ['address'],
+    ['address', 'chain_id'],
     namespace=PROMETHEUS_PREFIX,
 )
 

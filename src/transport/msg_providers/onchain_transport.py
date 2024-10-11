@@ -280,7 +280,7 @@ class OnchainTransportProvider(BaseMessageProvider):
         )
         for guard in guardians:
             balance = self._w3.eth.get_balance(guard)
-            GUARDIAN_BALANCE.labels(address=guard).set(balance)
+            GUARDIAN_BALANCE.labels(address=guard, chain_id=self._chain_id).set(balance)
         try:
             logs = self._w3.eth.get_logs(filter_params)
             if logs:
