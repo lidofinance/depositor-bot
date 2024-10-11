@@ -33,13 +33,7 @@ _ANVIL_GUARDIAN = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266'
 #  DATA_BUS_ADDRESS: '0x5FbDB2315678afecb367f032d93F642f64180aa3'
 # }
 @pytest.mark.integration_chiado
-@pytest.mark.parametrize(
-    'web3_provider_integration',
-    [12217621],
-    indirect=['web3_provider_integration'],
-)
 def test_data_bus_provider(
-    web3_provider_integration,
     web3_transaction_integration,
 ):
     """
