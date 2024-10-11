@@ -40,6 +40,7 @@ def test_data_bus_provider(
     Utilise this function for an adhoc testing of data bus transport
     """
     variables.ONCHAIN_TRANSPORT_ADDRESS = ChecksumAddress(HexAddress(HexStr('0x37De961D6bb5865867aDd416be07189D2Dd960e6')))
+    web3_transaction_integration.eth.get_balance = Mock(return_value=1)
     provider = OnchainTransportProvider(
         w3=web3_transaction_integration,
         onchain_address=variables.ONCHAIN_TRANSPORT_ADDRESS,

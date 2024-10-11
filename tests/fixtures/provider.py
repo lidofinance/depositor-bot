@@ -2,7 +2,6 @@ import os
 from unittest.mock import Mock
 
 import pytest
-import variables
 from blockchain.web3_extentions.lido_contracts import LidoContracts
 from blockchain.web3_extentions.transaction import TransactionUtils
 from web3 import HTTPProvider, Web3
@@ -31,7 +30,7 @@ def web3_provider_integration(request) -> Web3:
 
     with anvil_fork(
         os.getenv('ANVIL_PATH', ''),
-        variables.WEB3_RPC_ENDPOINTS[0],
+        'https://gnosis-chiado-rpc.publicnode.com',
         block_num,
     ):
         web3 = Web3(HTTPProvider('http://127.0.0.1:8545', request_kwargs={'timeout': 3600}))
