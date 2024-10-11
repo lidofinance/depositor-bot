@@ -224,6 +224,7 @@ def test_data_bus_mock_responses(web3_lido_unit):
         receipts = mock_receipts(web3_lido_unit)
         web3_lido_unit.eth.get_logs = Mock(side_effect=[receipts, None])
         web3_lido_unit.is_connected = Mock(return_value=True)
+        web3_lido_unit.eth.get_balance = Mock(return_value=1)
         web3_lido_unit.eth.get_block_number = Mock(return_value=1)
         provider = OnchainTransportProvider(
             w3=web3_lido_unit,
