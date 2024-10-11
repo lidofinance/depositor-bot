@@ -34,7 +34,9 @@ def web3_provider_integration(request) -> Web3:
         variables.WEB3_RPC_ENDPOINTS[0],
         block_num,
     ):
-        yield Web3(HTTPProvider('http://127.0.0.1:8545', request_kwargs={'timeout': 3600}))
+        web3 = Web3(HTTPProvider('http://127.0.0.1:8545', request_kwargs={'timeout': 3600}))
+        assert web3.is_connected()
+        yield web3
 
 
 @pytest.fixture

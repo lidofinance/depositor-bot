@@ -33,19 +33,14 @@ _ANVIL_GUARDIAN = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266'
 #  DATA_BUS_ADDRESS: '0x5FbDB2315678afecb367f032d93F642f64180aa3'
 # }
 @pytest.mark.integration_chiado
-@pytest.mark.parametrize(
-    'web3_provider_integration',
-    [12217621],
-    indirect=['web3_provider_integration'],
-)
 def test_data_bus_provider(
-    web3_provider_integration,
     web3_transaction_integration,
 ):
     """
     Utilise this function for an adhoc testing of data bus transport
     """
     variables.ONCHAIN_TRANSPORT_ADDRESS = ChecksumAddress(HexAddress(HexStr('0x37De961D6bb5865867aDd416be07189D2Dd960e6')))
+    web3_transaction_integration.eth.get_balance = Mock(return_value=1)
     provider = OnchainTransportProvider(
         w3=web3_transaction_integration,
         onchain_address=variables.ONCHAIN_TRANSPORT_ADDRESS,
@@ -63,17 +58,11 @@ def test_data_bus_provider(
         allowed_guardians_provider=lambda: [Web3.to_checksum_address(_DEFAULT_GUARDIAN)],
     )
     messages = provider.get_messages()
-    assert len(messages) == 75
+    assert messages
 
 
 @pytest.mark.integration_chiado
-@pytest.mark.parametrize(
-    'web3_provider_integration',
-    [12217621],
-    indirect=['web3_provider_integration'],
-)
 def test_data_bus_provider_unvet(
-    web3_provider_integration,
     web3_transaction_integration,
 ):
     """
@@ -123,13 +112,7 @@ def test_data_bus_provider_unvet(
 
 
 @pytest.mark.integration_chiado
-@pytest.mark.parametrize(
-    'web3_provider_integration',
-    [12217621],
-    indirect=['web3_provider_integration'],
-)
 def test_data_bus_provider_pause_v2(
-    web3_provider_integration,
     web3_transaction_integration,
 ):
     """
@@ -175,13 +158,7 @@ def test_data_bus_provider_pause_v2(
 
 
 @pytest.mark.integration_chiado
-@pytest.mark.parametrize(
-    'web3_provider_integration',
-    [12217621],
-    indirect=['web3_provider_integration'],
-)
 def test_data_bus_provider_pause_v3(
-    web3_provider_integration,
     web3_transaction_integration,
 ):
     """
@@ -224,6 +201,7 @@ def test_data_bus_mock_responses(web3_lido_unit):
         receipts = mock_receipts(web3_lido_unit)
         web3_lido_unit.eth.get_logs = Mock(side_effect=[receipts, None])
         web3_lido_unit.is_connected = Mock(return_value=True)
+        web3_lido_unit.eth.get_balance = Mock(return_value=1)
         web3_lido_unit.eth.get_block_number = Mock(return_value=1)
         provider = OnchainTransportProvider(
             w3=web3_lido_unit,

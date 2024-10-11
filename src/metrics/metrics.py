@@ -119,6 +119,13 @@ UNEXPECTED_EXCEPTIONS = Counter(
     namespace=PROMETHEUS_PREFIX,
 )
 
+GUARDIAN_BALANCE = Gauge(
+    'guardian_balance',
+    'Balance of the guardian',
+    ['address', 'chain_id'],
+    namespace=PROMETHEUS_PREFIX,
+)
+
 MODULES = Gauge('modules', 'Modules gauge', ['module_id'], namespace=PROMETHEUS_PREFIX)
 
 for module_id in DEPOSIT_MODULES_WHITELIST:
