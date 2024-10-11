@@ -35,7 +35,7 @@ class anvil_fork:
             ],
         )
         # Wait until server is ready
-        time.sleep(30)
+        time.sleep(60)
         return self.process
 
     def __exit__(self, exc_type, exc_val, exc_tb):
