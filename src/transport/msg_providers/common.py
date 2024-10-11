@@ -1,6 +1,6 @@
 import abc
 import logging
-from typing import Any, List, Optional
+from typing import Any
 
 from schema import Schema, SchemaError
 
@@ -12,31 +12,25 @@ class BaseMessageProvider(abc.ABC):
 
     MAX_MESSAGES_RECEIVE = 1000
 
-    def __init__(self, client: str, message_schema: Schema):
+    def __init__(self, message_schema: Schema):
         self.message_schema = message_schema
-        self.client = client
 
-    def get_messages(self) -> List[dict]:
-        messages = []
+    def get_messages(self) -> list[dict]:
+        """
+        Fetches new messages, processes them, and filters out only the valid ones.
 
-        for _ in range(self.MAX_MESSAGES_RECEIVE):
-            msg = self._receive_message()
-
-            if msg is None:
-                break
-
-            value = self._process_msg(msg)
-
-            if value and self._is_valid(value):
-                messages.append(value)
-
-        return messages
+        Returns:
+            List[Dict]: A list of processed and valid messages.
+        """
+        fetched = self._fetch_messages()
+        processed = [self._process_msg(m) for m in fetched]
+        return [msg for msg in processed if msg and self._is_valid(msg)]
 
     @abc.abstractmethod
-    def _receive_message(self) -> Any:
+    def _fetch_messages(self) -> list:
         raise NotImplementedError('Receive message from transport.')
 
-    def _process_msg(self, msg: Any) -> Optional[dict]:
+    def _process_msg(self, msg: Any) -> dict | None:
         # Overwrite this method to add msg serialization.
         # Return None if message is not serializable
         return msg

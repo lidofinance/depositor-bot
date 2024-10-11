@@ -24,8 +24,8 @@ class RabbitProvider(BaseMessageProvider):
     last_reconnect_dt = datetime.datetime.now()
     connection = True
 
-    def __init__(self, client: str, message_schema: Schema, routing_keys: List[str]):
-        super().__init__(client, message_schema)
+    def __init__(self, message_schema: Schema, routing_keys: List[str]):
+        super().__init__(message_schema)
 
         logger.info({'msg': 'Rabbit initialize.'})
         self.routing_keys = routing_keys
@@ -74,6 +74,17 @@ class RabbitProvider(BaseMessageProvider):
     def __del__(self):
         self.client.disconnect()
 
+    def _fetch_messages(self) -> list:
+        messages = []
+
+        for _ in range(self.MAX_MESSAGES_RECEIVE):
+            msg = self._receive_message()
+            if msg is None:
+                break
+            messages.append(msg)
+
+        return messages
+
     def _receive_message(self) -> Optional[dict]:
         if not self.connection:
             raise ConnectionError('Connection RabbitMQ was lost.')
@@ -87,11 +98,15 @@ class RabbitProvider(BaseMessageProvider):
         self._queue.append(body)
 
     def _process_msg(self, msg: str) -> Optional[dict]:
+        parsed = self._parse_message(msg)
+        parsed['transport'] = 'rabbit'
+        return parsed
+
+    @staticmethod
+    def _parse_message(msg: str) -> Optional[dict]:
         try:
-            value = json.loads(msg)
+            return json.loads(msg)
         except ValueError as error:
             # ignore not json msg
-            logger.warning({'msg': 'Broken message in Kafka', 'value': str(msg), 'error': str(error)})
+            logger.warning({'msg': 'Broken message in Rabbit', 'value': str(msg), 'error': str(error)})
             return None
-
-        return value

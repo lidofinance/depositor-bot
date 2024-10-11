@@ -62,7 +62,6 @@ class GasPriceCalculator:
             )
             base_fee_per_gas = self._get_pending_base_fee()
             success = recommended_max_gas >= base_fee_per_gas
-            logger.info({'msg': 'Calculations deposit recommendations.', 'value': success})
         DEPOSIT_AMOUNT_OK.labels(module_id).set(int(success))
         return success
 

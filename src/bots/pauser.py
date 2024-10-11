@@ -6,17 +6,18 @@ from typing import Callable
 import variables
 from blockchain.executor import Executor
 from blockchain.typings import Web3
-from cryptography.verify_signature import compute_vs
 from metrics.metrics import UNEXPECTED_EXCEPTIONS
 from metrics.transport_message_metrics import message_metrics_filter
 from schema import Or, Schema
-from transport.msg_providers.kafka import KafkaMessageProvider
+from transport.msg_providers.onchain_transport import OnchainTransportProvider, PauseV2Parser, PauseV3Parser, PingParser
 from transport.msg_providers.rabbit import MessageType, RabbitProvider
 from transport.msg_storage import MessageStorage
-from transport.msg_types.pause import PauseMessage, PauseMessageSchema, get_pause_messages_sign_filter
+from transport.msg_types.common import get_messages_sign_filter
+from transport.msg_types.pause import PauseMessage, PauseMessageSchema
 from transport.msg_types.ping import PingMessageSchema, to_check_sum_address
 from transport.types import TransportType
 from web3.types import BlockData
+from web3_multi_provider import FallbackProvider
 
 logger = logging.getLogger(__name__)
 
@@ -42,17 +43,19 @@ class PauserBot:
         if TransportType.RABBIT in variables.MESSAGE_TRANSPORTS:
             transports.append(
                 RabbitProvider(
-                    client='pauser',
                     routing_keys=[MessageType.PING, MessageType.PAUSE],
                     message_schema=Schema(Or(PauseMessageSchema, PingMessageSchema)),
                 )
             )
 
-        if TransportType.KAFKA in variables.MESSAGE_TRANSPORTS:
+        if TransportType.ONCHAIN_TRANSPORT in variables.MESSAGE_TRANSPORTS:
             transports.append(
-                KafkaMessageProvider(
-                    client=f'{variables.KAFKA_GROUP_PREFIX}pause',
+                OnchainTransportProvider(
+                    w3=Web3(FallbackProvider(variables.ONCHAIN_TRANSPORT_RPC_ENDPOINTS)),
+                    onchain_address=variables.ONCHAIN_TRANSPORT_ADDRESS,
                     message_schema=Schema(Or(PauseMessageSchema, PingMessageSchema)),
+                    parsers_providers=[PauseV2Parser, PauseV3Parser, PingParser],
+                    allowed_guardians_provider=self.w3.lido.deposit_security_module.get_guardians,
                 )
             )
 
@@ -64,7 +67,7 @@ class PauserBot:
             filters=[
                 message_metrics_filter,
                 to_check_sum_address,
-                get_pause_messages_sign_filter(self.w3),
+                get_messages_sign_filter(self.w3),
             ],
         )
 
@@ -119,7 +122,7 @@ class PauserBot:
             return False
 
         pause_tx = self.w3.lido.deposit_security_module.pause_deposits(
-            message['blockNumber'], module_id, (message['signature']['r'], compute_vs(message['signature']['v'], message['signature']['s']))
+            message['blockNumber'], module_id, (message['signature']['r'], message['signature']['_vs'])
         )
 
         if not self.w3.transaction.check(pause_tx):
@@ -136,7 +139,7 @@ class PauserBot:
             return False
 
         pause_tx = self.w3.lido.deposit_security_module.pause_deposits_v2(
-            message['blockNumber'], (message['signature']['r'], compute_vs(message['signature']['v'], message['signature']['s']))
+            message['blockNumber'], (message['signature']['r'], message['signature']['_vs'])
         )
 
         result = self.w3.transaction.send(pause_tx, False, 6)

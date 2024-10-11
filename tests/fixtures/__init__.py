@@ -15,6 +15,7 @@ from .provider import (
     web3_lido_integration,
     web3_lido_unit,
     web3_provider_integration,
+    web3_transaction_integration,
 )
 from .strategy import (
     base_deposit_strategy,
@@ -39,6 +40,7 @@ __all__ = [
     'web3_lido_unit',
     'web3_provider_integration',
     'web3_lido_integration',
+    'web3_transaction_integration',
     'weth',
     'simple_dvt_staking_strategy',
     'staking_module',

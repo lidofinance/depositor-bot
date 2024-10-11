@@ -13,7 +13,7 @@ MODULE_TX_SEND = Counter(
     'transactions',
     'Amount of send transaction from bot with per module distribution.',
     ['status', 'module_id', 'is_mellow'],
-    namespace=PROMETHEUS_PREFIX
+    namespace=PROMETHEUS_PREFIX,
 )
 
 ACCOUNT_BALANCE = Gauge('account_balance', 'Account balance', namespace=PROMETHEUS_PREFIX)
@@ -21,22 +21,27 @@ ACCOUNT_BALANCE = Gauge('account_balance', 'Account balance', namespace=PROMETHE
 DEPOSIT_MESSAGES = Gauge(
     'deposit_messages',
     'Guardians deposit messages',
-    ['address', 'module_id', 'version'],
+    ['address', 'module_id', 'version', 'transport', 'chain_id'],
     namespace=PROMETHEUS_PREFIX,
 )
 PAUSE_MESSAGES = Gauge(
     'pause_messages',
     'Guardians pause messages',
-    ['address', 'module_id', 'version'],
+    ['address', 'module_id', 'version', 'transport', 'chain_id'],
     namespace=PROMETHEUS_PREFIX,
 )
 PING_MESSAGES = Gauge(
     'ping_messages',
     'Guardians ping messages',
-    ['address', 'version'],
+    ['address', 'version', 'transport', 'chain_id'],
     namespace=PROMETHEUS_PREFIX,
 )
-UNVET_MESSAGES = Gauge('unvet_messages', 'Guardian unvet messages', ['address', 'module_id', 'version'])
+UNVET_MESSAGES = Gauge(
+    'unvet_messages',
+    'Guardian unvet messages',
+    ['address', 'module_id', 'version', 'transport', 'chain_id'],
+    namespace=PROMETHEUS_PREFIX,
+)
 
 CURRENT_QUORUM_SIZE = Gauge(
     'quorum_size',
@@ -111,6 +116,13 @@ UNEXPECTED_EXCEPTIONS = Counter(
     'unexpected_exceptions',
     'Total count of unexpected exceptions',
     ['type'],
+    namespace=PROMETHEUS_PREFIX,
+)
+
+GUARDIAN_BALANCE = Gauge(
+    'guardian_balance',
+    'Balance of the guardian',
+    ['address', 'chain_id'],
     namespace=PROMETHEUS_PREFIX,
 )
 

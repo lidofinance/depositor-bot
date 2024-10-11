@@ -44,21 +44,23 @@ if MELLOW_CONTRACT_ADDRESS:
     MELLOW_CONTRACT_ADDRESS = Web3.to_checksum_address(MELLOW_CONTRACT_ADDRESS)
 VAULT_DIRECT_DEPOSIT_THRESHOLD = Web3.to_wei(*os.getenv('VAULT_DIRECT_DEPOSIT_THRESHOLD', '1 ether').split(' '))
 
-# rabbit / kafka / rabbit,kafka
+# rabbit / onchain_transport
 MESSAGE_TRANSPORTS = os.getenv('MESSAGE_TRANSPORTS', '').split(',')
-
-# Kafka secrets
-KAFKA_BROKER_ADDRESS_1 = os.getenv('KAFKA_BROKER_ADDRESS_1')
-KAFKA_USERNAME = os.getenv('KAFKA_USERNAME')
-KAFKA_PASSWORD = os.getenv('KAFKA_PASSWORD')
-KAFKA_NETWORK = os.getenv('KAFKA_NETWORK', 'mainnet')  # or goerli
-KAFKA_TOPIC = os.getenv('KAFKA_TOPIC')
-KAFKA_GROUP_PREFIX = os.getenv('KAFKA_GROUP_PREFIX', '')
 
 # rabbit secrets
 RABBIT_MQ_URL = os.getenv('RABBIT_MQ_URL', 'ws://127.0.0.1:15674/ws')
 RABBIT_MQ_USERNAME = os.getenv('RABBIT_MQ_USERNAME', 'guest')
 RABBIT_MQ_PASSWORD = os.getenv('RABBIT_MQ_PASSWORD', 'guest')
+
+# data bus
+# gnosis nodes
+ONCHAIN_TRANSPORT_RPC_ENDPOINTS = os.getenv('ONCHAIN_TRANSPORT_RPC_ENDPOINTS', '').split(',')
+
+ONCHAIN_TRANSPORT_ADDRESS = os.getenv('ONCHAIN_TRANSPORT_ADDRESS', None)
+if ONCHAIN_TRANSPORT_ADDRESS:
+    # bot will throw exception if there is unexpected str and it's ok
+    # Expecting onchain databus contract address
+    ONCHAIN_TRANSPORT_ADDRESS = Web3.to_checksum_address(ONCHAIN_TRANSPORT_ADDRESS)
 
 # Transactions settings
 CREATE_TRANSACTIONS = os.getenv('CREATE_TRANSACTIONS') == 'true'
@@ -67,7 +69,7 @@ MIN_PRIORITY_FEE = Web3.to_wei(*os.getenv('MIN_PRIORITY_FEE', '50 mwei').split('
 MAX_PRIORITY_FEE = Web3.to_wei(*os.getenv('MAX_PRIORITY_FEE', '10 gwei').split(' '))
 
 MAX_GAS_FEE = Web3.to_wei(*os.getenv('MAX_GAS_FEE', '100 gwei').split(' '))
-CONTRACT_GAS_LIMIT = int(os.getenv('CONTRACT_GAS_LIMIT', 15 * 10 ** 6))
+CONTRACT_GAS_LIMIT = int(os.getenv('CONTRACT_GAS_LIMIT', 15 * 10**6))
 
 # Mainnet: "https://relay.flashbots.net",
 # Holesky: "https://relay-holesky.flashbots.net",
@@ -113,17 +115,13 @@ PUBLIC_ENV_VARS = {
     'ACCOUNT': '' if ACCOUNT is None else ACCOUNT.address,
     'MELLOW_CONTRACT_ADDRESS': MELLOW_CONTRACT_ADDRESS,
     'VAULT_DIRECT_DEPOSIT_THRESHOLD': VAULT_DIRECT_DEPOSIT_THRESHOLD,
+    'ONCHAIN_TRANSPORT_ADDRESS': ONCHAIN_TRANSPORT_ADDRESS,
 }
 
 PRIVATE_ENV_VARS = {
     'WEB3_RPC_ENDPOINTS': WEB3_RPC_ENDPOINTS,
+    'ONCHAIN_TRANSPORT_RPC_ENDPOINTS': ONCHAIN_TRANSPORT_RPC_ENDPOINTS,
     'WALLET_PRIVATE_KEY': WALLET_PRIVATE_KEY,
-    'KAFKA_BROKER_ADDRESS_1': KAFKA_BROKER_ADDRESS_1,
-    'KAFKA_USERNAME': KAFKA_USERNAME,
-    'KAFKA_PASSWORD': KAFKA_PASSWORD,
-    'KAFKA_NETWORK': KAFKA_NETWORK,
-    'KAFKA_TOPIC': KAFKA_TOPIC,
-    'KAFKA_GROUP_PREFIX': KAFKA_GROUP_PREFIX,
     'RABBIT_MQ_URL': RABBIT_MQ_URL,
     'RABBIT_MQ_USERNAME': RABBIT_MQ_USERNAME,
     'RABBIT_MQ_PASSWORD': RABBIT_MQ_PASSWORD,

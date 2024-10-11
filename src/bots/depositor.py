@@ -22,13 +22,15 @@ from metrics.metrics import (
 )
 from metrics.transport_message_metrics import message_metrics_filter
 from schema import Or, Schema
-from transport.msg_providers.kafka import KafkaMessageProvider
+from transport.msg_providers.onchain_transport import DepositParser, OnchainTransportProvider, PingParser
 from transport.msg_providers.rabbit import MessageType, RabbitProvider
 from transport.msg_storage import MessageStorage
-from transport.msg_types.deposit import DepositMessage, DepositMessageSchema, get_deposit_messages_sign_filter
+from transport.msg_types.common import get_messages_sign_filter
+from transport.msg_types.deposit import DepositMessage, DepositMessageSchema
 from transport.msg_types.ping import PingMessageSchema, to_check_sum_address
 from transport.types import TransportType
 from web3.types import BlockData
+from web3_multi_provider import FallbackProvider
 
 logger = logging.getLogger(__name__)
 
@@ -78,17 +80,19 @@ class DepositorBot:
         if TransportType.RABBIT in variables.MESSAGE_TRANSPORTS:
             transports.append(
                 RabbitProvider(
-                    client='depositor',
                     routing_keys=[MessageType.PING, MessageType.DEPOSIT],
                     message_schema=Schema(Or(DepositMessageSchema, PingMessageSchema)),
                 )
             )
 
-        if TransportType.KAFKA in variables.MESSAGE_TRANSPORTS:
+        if TransportType.ONCHAIN_TRANSPORT in variables.MESSAGE_TRANSPORTS:
             transports.append(
-                KafkaMessageProvider(
-                    client=f'{variables.KAFKA_GROUP_PREFIX}deposit',
+                OnchainTransportProvider(
+                    w3=Web3(FallbackProvider(variables.ONCHAIN_TRANSPORT_RPC_ENDPOINTS)),
+                    onchain_address=variables.ONCHAIN_TRANSPORT_ADDRESS,
                     message_schema=Schema(Or(DepositMessageSchema, PingMessageSchema)),
+                    parsers_providers=[DepositParser, PingParser],
+                    allowed_guardians_provider=self.w3.lido.deposit_security_module.get_guardians,
                 )
             )
 
@@ -100,7 +104,7 @@ class DepositorBot:
             filters=[
                 message_metrics_filter,
                 to_check_sum_address,
-                get_deposit_messages_sign_filter(self.w3),
+                get_messages_sign_filter(self.w3),
             ],
         )
 
@@ -122,10 +126,7 @@ class DepositorBot:
 
         return True
 
-    def _is_mellow_depositable(
-        self,
-        module_id: int
-    ) -> bool:
+    def _is_mellow_depositable(self, module_id: int) -> bool:
         if not variables.MELLOW_CONTRACT_ADDRESS:
             return False
         try:

@@ -4,18 +4,19 @@ from typing import Callable, Optional
 import variables
 from blockchain.executor import Executor
 from blockchain.typings import Web3
-from cryptography.verify_signature import compute_vs
 from metrics.metrics import UNEXPECTED_EXCEPTIONS
 from metrics.transport_message_metrics import message_metrics_filter
 from schema import Or, Schema
-from transport.msg_providers.kafka import KafkaMessageProvider
+from transport.msg_providers.onchain_transport import OnchainTransportProvider, PingParser, UnvetParser
 from transport.msg_providers.rabbit import MessageType, RabbitProvider
 from transport.msg_storage import MessageStorage
+from transport.msg_types.common import get_messages_sign_filter
 from transport.msg_types.ping import PingMessageSchema, to_check_sum_address
-from transport.msg_types.unvet import UnvetMessage, UnvetMessageSchema, get_unvet_messages_sign_filter
+from transport.msg_types.unvet import UnvetMessage, UnvetMessageSchema
 from transport.types import TransportType
 from utils.bytes import from_hex_string_to_bytes
 from web3.types import BlockData
+from web3_multi_provider import FallbackProvider
 
 logger = logging.getLogger(__name__)
 
@@ -47,17 +48,19 @@ class UnvetterBot:
         if TransportType.RABBIT in variables.MESSAGE_TRANSPORTS:
             transports.append(
                 RabbitProvider(
-                    client='unvetter',
                     routing_keys=[MessageType.UNVET, MessageType.PING],
                     message_schema=Schema(Or(UnvetMessageSchema, PingMessageSchema)),
                 )
             )
 
-        if TransportType.KAFKA in variables.MESSAGE_TRANSPORTS:
+        if TransportType.ONCHAIN_TRANSPORT in variables.MESSAGE_TRANSPORTS:
             transports.append(
-                KafkaMessageProvider(
-                    client=f'{variables.KAFKA_GROUP_PREFIX}unvet',
+                OnchainTransportProvider(
+                    w3=Web3(FallbackProvider(variables.ONCHAIN_TRANSPORT_RPC_ENDPOINTS)),
+                    onchain_address=variables.ONCHAIN_TRANSPORT_ADDRESS,
                     message_schema=Schema(Or(UnvetMessageSchema, PingMessageSchema)),
+                    parsers_providers=[UnvetParser, PingParser],
+                    allowed_guardians_provider=self.w3.lido.deposit_security_module.get_guardians,
                 )
             )
 
@@ -69,7 +72,7 @@ class UnvetterBot:
             filters=[
                 message_metrics_filter,
                 to_check_sum_address,
-                get_unvet_messages_sign_filter(self.w3),
+                get_messages_sign_filter(self.w3),
             ],
         )
 
@@ -130,7 +133,7 @@ class UnvetterBot:
             message['nonce'],
             from_hex_string_to_bytes(message['operatorIds']),
             from_hex_string_to_bytes(message['vettedKeysByOperator']),
-            (message['signature']['r'], compute_vs(message['signature']['v'], message['signature']['s'])),
+            (message['signature']['r'], message['signature']['_vs']),
         )
 
         if not self.w3.transaction.check(unvet_tx):
