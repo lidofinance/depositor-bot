@@ -53,7 +53,7 @@ class TransactionUtils(Module):
             variables.MAX_PRIORITY_FEE,
         )
 
-        gas_limit = self._estimate_gas(transaction, variables.ACCOUNT.address)
+        gas_limit = self.estimate_gas(transaction, variables.ACCOUNT.address)
 
         transaction_dict = transaction.build_transaction(
             TxParams(
@@ -88,7 +88,7 @@ class TransactionUtils(Module):
         return status
 
     @staticmethod
-    def _estimate_gas(transaction: ContractFunction, account_address: ChecksumAddress) -> int:
+    def estimate_gas(transaction: ContractFunction, account_address: ChecksumAddress) -> int:
         try:
             gas = transaction.estimate_gas({'from': account_address})
         except ContractLogicError as error:
