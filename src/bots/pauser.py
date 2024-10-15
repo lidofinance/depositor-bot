@@ -7,7 +7,7 @@ import variables
 from blockchain.executor import Executor
 from blockchain.typings import Web3
 from metrics.metrics import UNEXPECTED_EXCEPTIONS
-from metrics.transport_message_metrics import message_metrics_filter
+from metrics.transport_message_metrics import message_metrics_curried
 from schema import Or, Schema
 from transport.msg_providers.onchain_transport import OnchainTransportProvider, PauseV2Parser, PauseV3Parser, PingParser
 from transport.msg_providers.rabbit import MessageType, RabbitProvider
@@ -39,6 +39,7 @@ class PauserBot:
         self.w3 = w3
 
         transports = []
+        web3_clients = [w3]
 
         if TransportType.RABBIT in variables.MESSAGE_TRANSPORTS:
             transports.append(
@@ -49,15 +50,17 @@ class PauserBot:
             )
 
         if TransportType.ONCHAIN_TRANSPORT in variables.MESSAGE_TRANSPORTS:
+            onchain_w3 = Web3(FallbackProvider(variables.ONCHAIN_TRANSPORT_RPC_ENDPOINTS))
             transports.append(
                 OnchainTransportProvider(
-                    w3=Web3(FallbackProvider(variables.ONCHAIN_TRANSPORT_RPC_ENDPOINTS)),
+                    w3=onchain_w3,
                     onchain_address=variables.ONCHAIN_TRANSPORT_ADDRESS,
                     message_schema=Schema(Or(PauseMessageSchema, PingMessageSchema)),
                     parsers_providers=[PauseV2Parser, PauseV3Parser, PingParser],
                     allowed_guardians_provider=self.w3.lido.deposit_security_module.get_guardians,
                 )
             )
+            web3_clients.append(onchain_w3)
 
         if not transports:
             logger.warning({'msg': 'No transports found', 'value': variables.MESSAGE_TRANSPORTS})
@@ -65,7 +68,7 @@ class PauserBot:
         self.message_storage = MessageStorage(
             transports,
             filters=[
-                message_metrics_filter,
+                message_metrics_curried(web3_clients),
                 to_check_sum_address,
                 get_messages_sign_filter(self.w3),
             ],
