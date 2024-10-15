@@ -1,4 +1,5 @@
 import logging
+from unittest import mock
 from unittest.mock import Mock
 
 import pytest
@@ -16,11 +17,13 @@ COUNCIL_PK = '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d
 
 @pytest.fixture
 def pause_bot(web3_lido_unit, block_data):
-    web3_lido_unit.eth.get_block = Mock(return_value=block_data)
-    variables.MESSAGE_TRANSPORTS = ''
-    web3_lido_unit.lido.deposit_security_module.get_pause_intent_validity_period_blocks = Mock(return_value=10)
-    web3_lido_unit.lido.deposit_security_module.get_guardians = Mock(return_value=[COUNCIL_ADDRESS])
-    yield PauserBot(web3_lido_unit)
+    with mock.patch('web3.eth.Eth.chain_id', new_callable=mock.PropertyMock) as mock_chain_id:
+        mock_chain_id.side_effect = [1, 2, 3]
+        web3_lido_unit.eth.get_block = Mock(return_value=block_data)
+        variables.MESSAGE_TRANSPORTS = ''
+        web3_lido_unit.lido.deposit_security_module.get_pause_intent_validity_period_blocks = Mock(return_value=10)
+        web3_lido_unit.lido.deposit_security_module.get_guardians = Mock(return_value=[COUNCIL_ADDRESS])
+        yield PauserBot(web3_lido_unit)
 
 
 @pytest.fixture
