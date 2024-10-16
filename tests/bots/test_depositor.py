@@ -120,7 +120,7 @@ def test_depositor_check_module_status(depositor_bot):
 @pytest.mark.parametrize(
     'is_depositable,quorum,is_gas_price_ok,is_deposited_keys_amount_ok',
     [
-        pytest.param(True, True, True, True, marks=pytest.mark.xfail),
+        pytest.param(True, True, True, True, marks=pytest.mark.xfail(raises=AssertionError, strict=True)),
         (False, True, True, True),
         (True, False, True, True),
         (True, True, False, True),
@@ -135,8 +135,10 @@ def test_depositor_deposit_to_module(depositor_bot, is_depositable, quorum, is_g
     strategy.is_gas_price_ok = Mock(return_value=is_gas_price_ok)
     strategy.can_deposit_keys_based_on_ether = Mock(return_value=is_deposited_keys_amount_ok)
     depositor_bot._select_strategy = Mock(return_value=(strategy, False))
+    depositor_bot.prepare_and_send_tx = Mock()
 
     assert not depositor_bot._deposit_to_module(1)
+    assert depositor_bot.prepare_and_send_tx.call_count == 0
 
 
 @pytest.fixture
