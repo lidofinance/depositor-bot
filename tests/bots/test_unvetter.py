@@ -61,7 +61,11 @@ def get_unvet_message(web3) -> UnvetMessage:
 @pytest.mark.integration
 @pytest.mark.parametrize(
     'web3_provider_integration',
-    [19628126],
+    [
+        {
+            'block': 19628126,
+        }
+    ],
     indirect=['web3_provider_integration'],
 )
 def test_unvetter(web3_provider_integration, web3_lido_integration, caplog):
