@@ -20,7 +20,7 @@ from metrics.metrics import (
     QUORUM,
     UNEXPECTED_EXCEPTIONS,
 )
-from metrics.transport_message_metrics import message_metrics_curried
+from metrics.transport_message_metrics import message_metrics_filter
 from schema import Or, Schema
 from transport.msg_providers.onchain_transport import DepositParser, OnchainTransportProvider, PingParser
 from transport.msg_providers.rabbit import MessageType, RabbitProvider
@@ -105,10 +105,11 @@ class DepositorBot:
         self.message_storage = MessageStorage(
             transports,
             filters=[
-                message_metrics_curried(web3_clients),
+                message_metrics_filter,
                 to_check_sum_address,
                 get_messages_sign_filter(self.w3),
             ],
+            web3_clients=web3_clients,
         )
 
     def execute(self, block: BlockData) -> bool:

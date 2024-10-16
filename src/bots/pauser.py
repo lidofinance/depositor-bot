@@ -7,7 +7,7 @@ import variables
 from blockchain.executor import Executor
 from blockchain.typings import Web3
 from metrics.metrics import UNEXPECTED_EXCEPTIONS
-from metrics.transport_message_metrics import message_metrics_curried
+from metrics.transport_message_metrics import message_metrics_filter
 from schema import Or, Schema
 from transport.msg_providers.onchain_transport import OnchainTransportProvider, PauseV2Parser, PauseV3Parser, PingParser
 from transport.msg_providers.rabbit import MessageType, RabbitProvider
@@ -68,10 +68,11 @@ class PauserBot:
         self.message_storage = MessageStorage(
             transports,
             filters=[
-                message_metrics_curried(web3_clients),
+                message_metrics_filter,
                 to_check_sum_address,
                 get_messages_sign_filter(self.w3),
             ],
+            web3_clients=web3_clients,
         )
 
     def execute(self, block: BlockData) -> bool:
