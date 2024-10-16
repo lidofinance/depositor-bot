@@ -21,13 +21,6 @@ MODULE_TX_SEND = Counter(
     namespace=PROMETHEUS_PREFIX,
 )
 
-ACCOUNT_BALANCE = Gauge(
-    'account_balance',
-    'Account balance',
-    ['address'],
-    namespace=PROMETHEUS_PREFIX,
-)
-
 DEPOSIT_MESSAGES = Gauge(
     'deposit_messages',
     'Guardians deposit messages',
@@ -132,6 +125,14 @@ UNEXPECTED_EXCEPTIONS = Counter(
     'unexpected_exceptions',
     'Total count of unexpected exceptions',
     ['type'],
+    namespace=PROMETHEUS_PREFIX,
+)
+
+# TODO unify ACCOUNT_BALANCE and GUARDIAN_BALANCE
+ACCOUNT_BALANCE = Gauge(
+    'account_balance',
+    'Account balance',
+    ['address', 'chain_id'],
     namespace=PROMETHEUS_PREFIX,
 )
 
