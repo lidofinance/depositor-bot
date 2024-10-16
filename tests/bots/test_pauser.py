@@ -21,6 +21,7 @@ def pause_bot(web3_lido_unit, block_data):
         mock_chain_id.side_effect = [1, 2, 3]
         web3_lido_unit.eth.get_block = Mock(return_value=block_data)
         variables.MESSAGE_TRANSPORTS = ''
+        web3_lido_unit.eth.get_balance = Mock(return_value=1)
         web3_lido_unit.lido.deposit_security_module.get_pause_intent_validity_period_blocks = Mock(return_value=10)
         web3_lido_unit.lido.deposit_security_module.get_guardians = Mock(return_value=[COUNCIL_ADDRESS])
         yield PauserBot(web3_lido_unit)
