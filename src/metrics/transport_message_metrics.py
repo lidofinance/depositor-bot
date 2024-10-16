@@ -1,10 +1,19 @@
 import logging
 from typing import TypedDict
 
+from blockchain.typings import Web3
 from metrics.metrics import DEPOSIT_MESSAGES, PAUSE_MESSAGES, PING_MESSAGES, UNVET_MESSAGES
 from transport.msg_providers.rabbit import MessageType
 
 logger = logging.getLogger(__name__)
+
+
+def _chain_id_to_web3_mapping(clients: list[Web3]):
+    chain_id_web3 = {}
+    for w3_client in clients:
+        chain = w3_client.eth.chain_id
+        chain_id_web3[chain] = w3_client
+    return chain_id_web3
 
 
 def message_metrics_filter(msg: TypedDict) -> bool:

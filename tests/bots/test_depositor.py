@@ -1,4 +1,5 @@
 import logging
+from unittest import mock
 from unittest.mock import Mock
 
 import pytest
@@ -19,11 +20,13 @@ def depositor_bot(
     base_deposit_strategy,
     block_data,
 ):
-    variables.MESSAGE_TRANSPORTS = ''
-    variables.DEPOSIT_MODULES_WHITELIST = [1, 2]
-    web3_lido_unit.lido.staking_router.get_staking_module_ids = Mock(return_value=[1, 2])
-    web3_lido_unit.eth.get_block = Mock(return_value=block_data)
-    yield DepositorBot(web3_lido_unit, deposit_transaction_sender, mellow_deposit_strategy, base_deposit_strategy, gas_price_calculator)
+    with mock.patch('web3.eth.Eth.chain_id', new_callable=mock.PropertyMock) as mock_chain_id:
+        mock_chain_id.side_effect = [1, 2, 3]
+        variables.MESSAGE_TRANSPORTS = ''
+        variables.DEPOSIT_MODULES_WHITELIST = [1, 2]
+        web3_lido_unit.lido.staking_router.get_staking_module_ids = Mock(return_value=[1, 2])
+        web3_lido_unit.eth.get_block = Mock(return_value=block_data)
+        yield DepositorBot(web3_lido_unit, deposit_transaction_sender, mellow_deposit_strategy, base_deposit_strategy, gas_price_calculator)
 
 
 @pytest.fixture

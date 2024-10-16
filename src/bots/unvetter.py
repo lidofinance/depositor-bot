@@ -44,6 +44,7 @@ class UnvetterBot:
             return
 
         transports = []
+        web3_clients = [self.w3]
 
         if TransportType.RABBIT in variables.MESSAGE_TRANSPORTS:
             transports.append(
@@ -54,15 +55,17 @@ class UnvetterBot:
             )
 
         if TransportType.ONCHAIN_TRANSPORT in variables.MESSAGE_TRANSPORTS:
+            onchain_transport_client = Web3(FallbackProvider(variables.ONCHAIN_TRANSPORT_RPC_ENDPOINTS))
             transports.append(
                 OnchainTransportProvider(
-                    w3=Web3(FallbackProvider(variables.ONCHAIN_TRANSPORT_RPC_ENDPOINTS)),
+                    w3=onchain_transport_client,
                     onchain_address=variables.ONCHAIN_TRANSPORT_ADDRESS,
                     message_schema=Schema(Or(UnvetMessageSchema, PingMessageSchema)),
                     parsers_providers=[UnvetParser, PingParser],
                     allowed_guardians_provider=self.w3.lido.deposit_security_module.get_guardians,
                 )
             )
+            web3_clients.append(onchain_transport_client)
 
         if not transports:
             logger.warning({'msg': 'No transports found', 'value': variables.MESSAGE_TRANSPORTS})
@@ -74,6 +77,7 @@ class UnvetterBot:
                 to_check_sum_address,
                 get_messages_sign_filter(self.w3),
             ],
+            web3_clients=web3_clients,
         )
 
     def execute(self, block: BlockData) -> bool:
