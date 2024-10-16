@@ -14,6 +14,7 @@ from blockchain.typings import Web3
 from metrics.metrics import (
     ACCOUNT_BALANCE,
     CURRENT_QUORUM_SIZE,
+    GUARDIAN_BALANCE,
     IS_DEPOSITABLE,
     MELLOW_VAULT_BALANCE,
     MODULE_TX_SEND,
@@ -30,7 +31,7 @@ from transport.msg_types.deposit import DepositMessage, DepositMessageSchema
 from transport.msg_types.ping import PingMessageSchema, to_check_sum_address
 from transport.types import TransportType
 from web3.types import BlockData
-from web3_multi_provider import FallbackProvider
+from web3_multi_provider import FallbackProvider, MultiProvider
 
 logger = logging.getLogger(__name__)
 
@@ -126,54 +127,29 @@ class DepositorBot:
 
         return True
 
-    def _is_mellow_depositable(self, module_id: int) -> bool:
-        if not variables.MELLOW_CONTRACT_ADDRESS:
-            return False
-        try:
-            buffered = self.w3.lido.lido.get_buffered_ether()
-            unfinalized = self.w3.lido.lido_locator.withdrawal_queue_contract.unfinalized_st_eth()
-            if buffered < unfinalized:
-                return False
-            staking_module_contract: StakingModuleContract = self.w3.lido.simple_dvt_staking_strategy.staking_module_contract
-            if staking_module_contract.get_staking_module_id() != module_id:
-                logger.debug(
-                    {
-                        'msg': 'Mellow module check failed.',
-                        'contract_module': staking_module_contract.get_staking_module_id(),
-                        'tx_module': module_id,
-                    }
-                )
-                return False
-            balance = self.w3.lido.simple_dvt_staking_strategy.vault_balance()
-        except Exception as e:
-            logger.warning(
-                {
-                    'msg': 'Failed to check if mellow depositable.',
-                    'module_id': module_id,
-                    'err': repr(e),
-                }
-            )
-            return False
-        MELLOW_VAULT_BALANCE.labels(module_id).set(balance)
-        if balance < variables.VAULT_DIRECT_DEPOSIT_THRESHOLD:
-            logger.info(
-                {
-                    'msg': f'{balance} is less than VAULT_DIRECT_DEPOSIT_THRESHOLD while building mellow transaction.',
-                    'balance': balance,
-                    'threshold': variables.VAULT_DIRECT_DEPOSIT_THRESHOLD,
-                }
-            )
-            return False
-        logger.debug({'msg': 'Mellow module check succeeded.', 'tx_module': module_id})
-        return True
-
     def _check_balance(self):
+        eth_chain_id = self.w3.eth.chain_id
+
         if variables.ACCOUNT:
             balance = self.w3.eth.get_balance(variables.ACCOUNT.address)
-            ACCOUNT_BALANCE.labels(variables.ACCOUNT.address).set(balance)
+            ACCOUNT_BALANCE.labels(variables.ACCOUNT.address, eth_chain_id).set(balance)
             logger.info({'msg': 'Check account balance.', 'value': balance})
-        else:
-            logger.info({'msg': 'No account provided. Dry mode.'})
+
+        logger.info({'msg': 'Check guardians balances.'})
+
+        w3_databus, w3_databus_chain_id = None, None
+        if variables.ONCHAIN_TRANSPORT_RPC_ENDPOINTS:
+            w3_databus = Web3(MultiProvider(variables.ONCHAIN_TRANSPORT_RPC_ENDPOINTS))
+            w3_databus_chain_id = w3_databus.eth.chain_id
+
+        guardians = self.w3.lido.deposit_security_module.get_guardians()
+        for address in guardians:
+            eth_balance = self.w3.eth.get_balance(address)
+            GUARDIAN_BALANCE.labels(address=address, chain_id=eth_chain_id).set(eth_balance)
+
+            if w3_databus is not None:
+                balance = w3_databus.eth.get_balance(address)
+                GUARDIAN_BALANCE.labels(address=address, chain_id=w3_databus_chain_id).set(balance)
 
     def _deposit_to_module(self, module_id: int) -> bool:
         is_depositable = self._check_module_status(module_id)
@@ -213,6 +189,48 @@ class DepositorBot:
         if self._is_mellow_depositable(module_id):
             return self._mellow_strategy, True
         return self._general_strategy, False
+
+    def _is_mellow_depositable(self, module_id: int) -> bool:
+        if not variables.MELLOW_CONTRACT_ADDRESS:
+            return False
+
+        try:
+            buffered = self.w3.lido.lido.get_buffered_ether()
+            unfinalized = self.w3.lido.lido_locator.withdrawal_queue_contract.unfinalized_st_eth()
+            if buffered < unfinalized:
+                return False
+            staking_module_contract: StakingModuleContract = self.w3.lido.simple_dvt_staking_strategy.staking_module_contract
+            if staking_module_contract.get_staking_module_id() != module_id:
+                logger.debug(
+                    {
+                        'msg': 'Mellow module check failed.',
+                        'contract_module': staking_module_contract.get_staking_module_id(),
+                        'tx_module': module_id,
+                    }
+                )
+                return False
+            balance = self.w3.lido.simple_dvt_staking_strategy.vault_balance()
+        except Exception as e:
+            logger.warning(
+                {
+                    'msg': 'Failed to check if mellow depositable.',
+                    'module_id': module_id,
+                    'err': repr(e),
+                }
+            )
+            return False
+        MELLOW_VAULT_BALANCE.labels(module_id).set(balance)
+        if balance < variables.VAULT_DIRECT_DEPOSIT_THRESHOLD:
+            logger.info(
+                {
+                    'msg': f'{balance} is less than VAULT_DIRECT_DEPOSIT_THRESHOLD while building mellow transaction.',
+                    'balance': balance,
+                    'threshold': variables.VAULT_DIRECT_DEPOSIT_THRESHOLD,
+                }
+            )
+            return False
+        logger.debug({'msg': 'Mellow module check succeeded.', 'tx_module': module_id})
+        return True
 
     def _check_module_status(self, module_id: int) -> bool:
         """Returns True if module is ready for deposit"""
