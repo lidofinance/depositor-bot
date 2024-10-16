@@ -170,11 +170,10 @@ class DepositorBot:
     def _check_balance(self):
         if variables.ACCOUNT:
             balance = self.w3.eth.get_balance(variables.ACCOUNT.address)
-            ACCOUNT_BALANCE.set(balance)
+            ACCOUNT_BALANCE.labels(variables.ACCOUNT.address).set(balance)
             logger.info({'msg': 'Check account balance.', 'value': balance})
         else:
             logger.info({'msg': 'No account provided. Dry mode.'})
-            ACCOUNT_BALANCE.set(0)
 
     def _deposit_to_module(self, module_id: int) -> bool:
         is_depositable = self._check_module_status(module_id)
