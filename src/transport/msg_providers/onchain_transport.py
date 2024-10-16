@@ -4,7 +4,6 @@ from typing import Callable, List, Optional
 
 from eth_typing import ChecksumAddress
 from eth_utils import to_bytes
-from metrics.metrics import GUARDIAN_BALANCE
 from schema import Schema
 from transport.msg_providers.common import BaseMessageProvider
 from transport.msg_providers.rabbit import MessageType
@@ -278,9 +277,6 @@ class OnchainTransportProvider(BaseMessageProvider):
             address=self._onchain_address,
             topics=[event_ids, addresses_with_padding],
         )
-        for guard in guardians:
-            balance = self._w3.eth.get_balance(guard)
-            GUARDIAN_BALANCE.labels(address=guard, chain_id=self._chain_id).set(balance)
         try:
             logs = self._w3.eth.get_logs(filter_params)
             if logs:
