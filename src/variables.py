@@ -12,6 +12,8 @@ logger = logging.getLogger(__name__)
 # EL node
 WEB3_RPC_ENDPOINTS = os.getenv('WEB3_RPC_ENDPOINTS', '').split(',')
 
+TESTNET_WEB3_RPC_ENDPOINTS = os.getenv('TESTNET_WEB3_RPC_ENDPOINTS', '').split(',')
+
 # Account private key
 WALLET_PRIVATE_KEY = os.getenv('WALLET_PRIVATE_KEY', None)
 

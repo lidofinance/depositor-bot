@@ -158,7 +158,7 @@ def test_pause_message_filtered_by_module_id(pause_bot, block_data, pause_messag
 @pytest.mark.integration
 @pytest.mark.parametrize(
     'web3_provider_integration,module_id',
-    [[19628126, 1], [19628126, 2]],
+    [[{'block': 19628126}, 1], [{'block': 19628126}, 2]],
     indirect=['web3_provider_integration'],
 )
 def test_pauser_bot(web3_lido_integration, web3_provider_integration, add_account_to_guardian, module_id, caplog):
