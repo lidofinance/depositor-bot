@@ -27,6 +27,7 @@ def test_depositor_bot_mellow_deposits(
     deposit_transaction_sender_integration,
     mellow_deposit_strategy_integration,
     base_deposit_strategy_integration,
+    csm_strategy_integration,
     gas_price_calculator_integration,
     module_id,
     add_accounts_to_guardian,
@@ -56,6 +57,7 @@ def test_depositor_bot_mellow_deposits(
         gas_price_calculator_integration,
         mellow_deposit_strategy_integration,
         base_deposit_strategy_integration,
+        csm_strategy_integration,
     )
 
     # Clear the message storage and execute the bot without any messages

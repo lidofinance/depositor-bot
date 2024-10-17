@@ -20,6 +20,8 @@ from .provider import (
 from .strategy import (
     base_deposit_strategy,
     base_deposit_strategy_integration,
+    csm_strategy,
+    csm_strategy_integration,
     deposit_transaction_sender,
     deposit_transaction_sender_integration,
     gas_price_calculator,
@@ -52,4 +54,6 @@ __all__ = [
     'deposit_transaction_sender_integration',
     'mellow_deposit_strategy',
     'mellow_deposit_strategy_integration',
+    'csm_strategy',
+    'csm_strategy_integration',
 ]

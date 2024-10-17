@@ -56,12 +56,8 @@ class GasPriceCalculator:
                 }
             )
         else:
-            recommended_max_gas = GasPriceCalculator._calculate_recommended_gas_based_on_deposit_amount(
-                possible_keys,
-                module_id,
-            )
             base_fee_per_gas = self._get_pending_base_fee()
-            success = recommended_max_gas >= base_fee_per_gas
+            success = deposit_strategy.is_deposit_recommended_based_on_keys_amount(possible_keys, base_fee_per_gas, module_id)
         DEPOSIT_AMOUNT_OK.labels(module_id).set(int(success))
         return success
 
@@ -70,7 +66,7 @@ class GasPriceCalculator:
         # For one key recommended gas fee will be around 10
         # For 10 keys around 100 gwei. For 20 keys ~ 800 gwei
         # ToDo percentiles for all modules?
-        recommended_max_gas = (deposits_amount ** 3 + 100) * 10 ** 8
+        recommended_max_gas = (deposits_amount**3 + 100) * 10**8
         logger.info({'msg': 'Calculate recommended max gas based on possible deposits.', 'value': recommended_max_gas})
         GAS_FEE.labels('based_on_buffer_fee', module_id).set(recommended_max_gas)
         return recommended_max_gas
