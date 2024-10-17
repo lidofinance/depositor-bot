@@ -35,7 +35,7 @@ _ANVIL_GUARDIAN = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266'
 @pytest.mark.integration
 @pytest.mark.parametrize(
     'web3_provider_integration',
-    [{'endpoint': 'https://gnosis-chiado-rpc.publicnode.com'}],
+    [{'endpoint': variables.ONCHAIN_TRANSPORT_RPC_ENDPOINTS[0]}],
     indirect=['web3_provider_integration'],
 )
 def test_data_bus_provider(
@@ -69,7 +69,7 @@ def test_data_bus_provider(
 @pytest.mark.integration
 @pytest.mark.parametrize(
     'web3_provider_integration',
-    [{'endpoint': 'https://gnosis-chiado-rpc.publicnode.com'}],
+    [{'endpoint': variables.ONCHAIN_TRANSPORT_RPC_ENDPOINTS[0]}],
     indirect=['web3_provider_integration'],
 )
 def test_data_bus_provider_unvet(
@@ -124,7 +124,7 @@ def test_data_bus_provider_unvet(
 @pytest.mark.integration
 @pytest.mark.parametrize(
     'web3_provider_integration',
-    [{'endpoint': 'https://gnosis-chiado-rpc.publicnode.com'}],
+    [{'endpoint': variables.ONCHAIN_TRANSPORT_RPC_ENDPOINTS[0]}],
     indirect=['web3_provider_integration'],
 )
 def test_data_bus_provider_pause_v2(
@@ -175,7 +175,7 @@ def test_data_bus_provider_pause_v2(
 @pytest.mark.integration
 @pytest.mark.parametrize(
     'web3_provider_integration',
-    [{'endpoint': 'https://gnosis-chiado-rpc.publicnode.com'}],
+    [{'endpoint': variables.ONCHAIN_TRANSPORT_RPC_ENDPOINTS[0]}],
     indirect=['web3_provider_integration'],
 )
 def test_data_bus_provider_pause_v3(

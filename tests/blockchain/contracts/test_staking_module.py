@@ -1,4 +1,5 @@
 import pytest
+import variables
 
 from tests.utils.contract_utils import check_contract
 from tests.utils.regrex import ADDRESS_REGREX, check_value_re, check_value_type
@@ -7,7 +8,7 @@ from tests.utils.regrex import ADDRESS_REGREX, check_value_re, check_value_type
 @pytest.mark.integration
 @pytest.mark.parametrize(
     'web3_provider_integration',
-    [{'endpoint': 'https://ethereum-holesky-rpc.publicnode.com'}],
+    [{'endpoint': variables.TESTNET_WEB3_RPC_ENDPOINTS[0]}],
     indirect=['web3_provider_integration'],
 )
 def test_staking_module_contract_call(staking_module, caplog):
