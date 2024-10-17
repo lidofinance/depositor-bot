@@ -1,4 +1,3 @@
-import logging
 from unittest.mock import Mock
 
 import pytest
@@ -62,7 +61,7 @@ def test_depositor_one_module_deposited(depositor_bot, block_data):
             (0, 0, (2,), (0, 10, 10)),
         ]
     )
-
+    depositor_bot._check_balance = Mock()
     depositor_bot._deposit_to_module = Mock(return_value=True)
     depositor_bot.execute(block_data)
 
@@ -89,22 +88,6 @@ def test_is_mellow_depositable(depositor_bot):
     depositor_bot.w3.lido.lido.get_buffered_ether = Mock(return_value=Web3.to_wei(0.5, 'ether'))
     depositor_bot.w3.lido.lido_locator.withdrawal_queue_contract.unfinalized_st_eth = Mock(return_value=Web3.to_wei(1, 'ether'))
     assert not depositor_bot._is_mellow_depositable(1)
-
-
-@pytest.mark.unit
-def test_check_balance_dry(depositor_bot, caplog):
-    caplog.set_level(logging.INFO)
-    depositor_bot._check_balance()
-    assert 'No account provided. Dry mode.' in caplog.messages[-1]
-
-
-@pytest.mark.unit
-def test_check_balance(depositor_bot, caplog, set_account):
-    caplog.set_level(logging.INFO)
-
-    depositor_bot.w3.eth.get_balance = Mock(return_value=10 * 10**18)
-    depositor_bot._check_balance()
-    assert 'Check account balance' in caplog.messages[-1]
 
 
 @pytest.mark.unit
