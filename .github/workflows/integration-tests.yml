@@ -35,6 +35,7 @@ jobs:
           poetry run pytest tests -m integration
         env:
           WEB3_RPC_ENDPOINTS: ${{ secrets.WEB3_RPC_ENDPOINT }}
+          TESTNET_WEB3_RPC_ENDPOINTS: 'https://ethereum-holesky-rpc.publicnode.com'
           DEPOSIT_CONTRACT: "0x00000000219ab540356cBB839Cbe05303d7705Fa"
           LIDO_LOCATOR: "0xC1d0b3DE6792Bf6b4b37EccdcC24e45978Cfd2Eb"
           ONCHAIN_TRANSPORT_RPC_ENDPOINTS: "https://gnosis-chiado-rpc.publicnode.com"
