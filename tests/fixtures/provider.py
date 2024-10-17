@@ -25,7 +25,7 @@ def web3_lido_unit() -> Web3:
 
 
 # -- Integration fixtures --
-@pytest.fixture
+@pytest.fixture(scope='session')
 def web3_provider_integration(request) -> Web3:
     params = getattr(request, 'param', {})
     rpc_endpoint = params.get('endpoint', variables.WEB3_RPC_ENDPOINTS[0])
