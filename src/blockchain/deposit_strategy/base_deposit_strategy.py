@@ -70,7 +70,7 @@ class MellowDepositStrategy(BaseDepositStrategy):
         return possible_deposits_amount if possible_deposits_amount_assumption == possible_deposits_amount else 0
 
 
-class CSMDepositStrategy:
+class CSMDepositStrategy(BaseDepositStrategy):
     DEPOSITABLE_KEYS_THRESHOLD = 2
 
     def is_deposit_recommended_based_on_keys_amount(self, deposits_amount: int, base_fee: int, module_id: int) -> bool:

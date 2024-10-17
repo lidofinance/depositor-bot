@@ -5,7 +5,7 @@ from typing import Callable, Optional
 
 import variables
 from blockchain.contracts.staking_module import StakingModuleContract
-from blockchain.deposit_strategy.base_deposit_strategy import BaseDepositStrategy, MellowDepositStrategy
+from blockchain.deposit_strategy.base_deposit_strategy import BaseDepositStrategy, CSMDepositStrategy, MellowDepositStrategy
 from blockchain.deposit_strategy.deposit_transaction_sender import Sender
 from blockchain.deposit_strategy.gas_price_calculator import GasPriceCalculator
 from blockchain.deposit_strategy.prefered_module_to_deposit import get_preferred_to_deposit_modules
@@ -68,12 +68,14 @@ class DepositorBot:
         gas_price_calcaulator: GasPriceCalculator,
         mellow_deposit_strategy: MellowDepositStrategy,
         base_deposit_strategy: BaseDepositStrategy,
+        csm_strategy: CSMDepositStrategy,
     ):
         self.w3 = w3
         self._sender = sender
         self._gas_price_calculator = gas_price_calcaulator
         self._mellow_strategy = mellow_deposit_strategy
         self._general_strategy = base_deposit_strategy
+        self._csm_strategy = csm_strategy
 
         transports = []
 
@@ -211,6 +213,8 @@ class DepositorBot:
         return False
 
     def _select_strategy(self, module_id) -> tuple[BaseDepositStrategy, bool]:
+        if module_id == 3:
+            return self._csm_strategy, False
         if self._is_mellow_depositable(module_id):
             return self._mellow_strategy, True
         return self._general_strategy, False
