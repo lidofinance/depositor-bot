@@ -116,7 +116,10 @@ def test_pause_bot_without_messages(pause_bot, block_data):
 @pytest.mark.unit
 @pytest.mark.parametrize(
     'block_range',
-    [4, pytest.param(6, marks=pytest.mark.xfail)],
+    [
+        4,
+        pytest.param(6, marks=pytest.mark.xfail(raises=AssertionError, strict=True)),
+    ],
 )
 def test_pause_bot_outdate_messages(pause_bot, block_data, pause_message, block_range):
     pause_message['blockNumber'] = 5
@@ -131,7 +134,10 @@ def test_pause_bot_outdate_messages(pause_bot, block_data, pause_message, block_
 @pytest.mark.unit
 @pytest.mark.parametrize(
     'active_module',
-    [False, pytest.param(True, marks=pytest.mark.xfail)],
+    [
+        False,
+        pytest.param(True, marks=pytest.mark.xfail(raises=AssertionError, strict=True)),
+    ],
 )
 def test_pause_bot_clean_messages(pause_bot, block_data, pause_message, active_module):
     pause_bot.message_storage.messages = [pause_message]
