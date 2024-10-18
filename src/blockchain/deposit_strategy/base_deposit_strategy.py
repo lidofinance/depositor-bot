@@ -69,13 +69,17 @@ class BaseDepositStrategy(DepositStrategy):
         return possible_deposits_amount
 
     def is_deposit_recommended_based_on_keys_amount(self, deposits_amount: int, base_fee: int, module_id: int) -> bool:
+        return self._recommended_max_gas(deposits_amount, module_id) >= base_fee
+
+    @staticmethod
+    def _recommended_max_gas(deposits_amount: int, module_id: int):
         # For one key recommended gas fee will be around 10
         # For 10 keys around 100 gwei. For 20 keys ~ 800 gwei
         # ToDo percentiles for all modules?
         recommended_max_gas = (deposits_amount**3 + 100) * 10**8
         logger.info({'msg': 'Calculate recommended max gas based on possible deposits.', 'value': recommended_max_gas})
         GAS_FEE.labels('based_on_buffer_fee', module_id).set(recommended_max_gas)
-        return recommended_max_gas >= base_fee
+        return recommended_max_gas
 
 
 class MellowDepositStrategy(BaseDepositStrategy):
