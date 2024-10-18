@@ -15,7 +15,7 @@ class BaseDepositStrategy(DepositStrategy):
         self.w3 = w3
         self._gas_price_calculator = gas_price_calculator
 
-    def calculate_deposit_recommendation(self, module_id: int) -> bool:
+    def can_deposit_keys_based_on_ether(self, module_id: int) -> bool:
         possible_keys = self.deposited_keys_amount(module_id)
         success = False
         threshold = self._depositable_keys_threshold()

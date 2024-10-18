@@ -192,13 +192,13 @@ class DepositorBot:
         gas_is_ok = strategy.is_gas_price_ok(module_id)
         logger.info({'msg': 'Calculate gas recommendations.', 'value': gas_is_ok})
 
-        is_deposit_amount_ok = strategy.calculate_deposit_recommendation(module_id)
+        is_deposit_amount_ok = strategy.can_deposit_keys_based_on_ether(module_id)
         logger.info({'msg': 'Calculations deposit recommendations.', 'value': is_deposit_amount_ok, 'is_mellow': is_mellow})
 
         if is_mellow and not is_deposit_amount_ok:
             strategy = self._general_strategy
             is_mellow = False
-            is_deposit_amount_ok = strategy.calculate_deposit_recommendation(module_id)
+            is_deposit_amount_ok = strategy.can_deposit_keys_based_on_ether(module_id)
             logger.info({'msg': 'Calculations deposit recommendations.', 'value': is_deposit_amount_ok, 'is_mellow': is_mellow})
 
         if is_depositable and quorum and can_deposit and gas_is_ok and is_deposit_amount_ok:
