@@ -31,10 +31,10 @@ def test_is_gas_price_ok(gas_price_calculator):
     'deposits,expected_range',
     [(1, (0, 20)), (5, (20, 100)), (10, (50, 1000)), (100, (1000, 1000000))],
 )
-def test_calculate_recommended_gas_based_on_deposit_amount(gas_price_calculator, deposits, expected_range):
+def test_calculate_recommended_gas_based_on_deposit_amount(base_deposit_strategy, deposits, expected_range):
     assert (
         expected_range[0] * 10**9
-        <= gas_price_calculator._calculate_recommended_gas_based_on_deposit_amount(deposits, MODULE_ID)
+        <= base_deposit_strategy.is_deposit_recommended_based_on_keys_amount(deposits, MODULE_ID)
         <= expected_range[1] * 10**9
     )
 

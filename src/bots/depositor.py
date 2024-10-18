@@ -9,6 +9,7 @@ from blockchain.deposit_strategy.base_deposit_strategy import BaseDepositStrateg
 from blockchain.deposit_strategy.deposit_transaction_sender import Sender
 from blockchain.deposit_strategy.gas_price_calculator import GasPriceCalculator
 from blockchain.deposit_strategy.prefered_module_to_deposit import get_preferred_to_deposit_modules
+from blockchain.deposit_strategy.strategy import DepositStrategy
 from blockchain.executor import Executor
 from blockchain.typings import Web3
 from metrics.metrics import (
@@ -211,7 +212,7 @@ class DepositorBot:
         logger.info({'msg': 'Checks failed. Skip deposit.'})
         return False
 
-    def _select_strategy(self, module_id) -> tuple[BaseDepositStrategy, bool]:
+    def _select_strategy(self, module_id) -> tuple[DepositStrategy, bool]:
         if module_id == 3:
             return self._csm_strategy, False
         if self._is_mellow_depositable(module_id):

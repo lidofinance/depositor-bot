@@ -131,8 +131,10 @@ def test_depositor_deposit_to_module(depositor_bot, is_depositable, quorum, is_g
     depositor_bot._check_module_status = Mock(return_value=is_depositable)
     depositor_bot._get_quorum = Mock(return_value=quorum)
     depositor_bot._mellow_works = False
-    depositor_bot._gas_price_calculator.is_gas_price_ok = Mock(return_value=is_gas_price_ok)
-    depositor_bot._gas_price_calculator.calculate_deposit_recommendation = Mock(return_value=is_deposited_keys_amount_ok)
+    strategy = Mock()
+    strategy.is_gas_price_ok = Mock(return_value=is_gas_price_ok)
+    strategy.calculate_deposit_recommendation = Mock(return_value=is_deposited_keys_amount_ok)
+    depositor_bot._select_strategy = Mock(return_value=(strategy, False))
 
     assert not depositor_bot._deposit_to_module(1)
 

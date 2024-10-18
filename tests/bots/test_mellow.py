@@ -70,7 +70,7 @@ def test_depositor_bot_mellow_deposits(
     db.message_storage.messages = deposit_messages
 
     # All the mellow specific checks
-    mellow_strategy = MellowDepositStrategy(web3_lido_integration)
+    mellow_strategy = MellowDepositStrategy(web3_lido_integration, gas_price_calculator_integration)
     initial_vault_balance = web3_lido_integration.lido.simple_dvt_staking_strategy.vault_balance()
     buffered = web3_lido_integration.lido.lido.get_buffered_ether()
     unfinalized = web3_lido_integration.lido.lido_locator.withdrawal_queue_contract.unfinalized_st_eth()
