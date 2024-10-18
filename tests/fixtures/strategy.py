@@ -5,23 +5,23 @@ from blockchain.deposit_strategy.gas_price_calculator import GasPriceCalculator
 
 
 @pytest.fixture
-def base_deposit_strategy(web3_lido_unit):
-    yield BaseDepositStrategy(web3_lido_unit)
+def base_deposit_strategy(web3_lido_unit, gas_price_calculator):
+    yield BaseDepositStrategy(web3_lido_unit, gas_price_calculator)
 
 
 @pytest.fixture
-def base_deposit_strategy_integration(web3_lido_integration):
-    yield BaseDepositStrategy(web3_lido_integration)
+def base_deposit_strategy_integration(web3_lido_integration, gas_price_calculator_integration):
+    yield BaseDepositStrategy(web3_lido_integration, gas_price_calculator_integration)
 
 
 @pytest.fixture
-def mellow_deposit_strategy(web3_lido_unit):
-    yield MellowDepositStrategy(web3_lido_unit)
+def mellow_deposit_strategy(web3_lido_unit, gas_price_calculator):
+    yield MellowDepositStrategy(web3_lido_unit, gas_price_calculator)
 
 
 @pytest.fixture
-def mellow_deposit_strategy_integration(web3_lido_integration):
-    yield MellowDepositStrategy(web3_lido_integration)
+def mellow_deposit_strategy_integration(web3_lido_integration, gas_price_calculator_integration):
+    yield MellowDepositStrategy(web3_lido_integration, gas_price_calculator_integration)
 
 
 @pytest.fixture
@@ -45,10 +45,10 @@ def gas_price_calculator_integration(web3_lido_integration):
 
 
 @pytest.fixture
-def csm_strategy(web3_lido_unit):
-    yield CSMDepositStrategy(web3_lido_unit)
+def csm_strategy(web3_lido_unit, gas_price_calculator):
+    yield CSMDepositStrategy(web3_lido_unit, gas_price_calculator)
 
 
 @pytest.fixture
-def csm_strategy_integration(web3_lido_integration):
-    yield CSMDepositStrategy(web3_lido_integration)
+def csm_strategy_integration(web3_lido_integration, gas_price_calculator_integration):
+    yield CSMDepositStrategy(web3_lido_integration, gas_price_calculator_integration)
