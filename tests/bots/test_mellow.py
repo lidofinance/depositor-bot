@@ -54,7 +54,6 @@ def test_depositor_bot_mellow_deposits(
     db: DepositorBot = DepositorBot(
         web3_lido_integration,
         deposit_transaction_sender_integration,
-        gas_price_calculator_integration,
         mellow_deposit_strategy_integration,
         base_deposit_strategy_integration,
         csm_strategy_integration,

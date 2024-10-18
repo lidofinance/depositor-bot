@@ -14,7 +14,6 @@ from tests.utils.protocol_utils import get_deposit_message
 def depositor_bot(
     web3_lido_unit,
     deposit_transaction_sender,
-    gas_price_calculator,
     mellow_deposit_strategy,
     base_deposit_strategy,
     block_data,
@@ -24,9 +23,7 @@ def depositor_bot(
     variables.DEPOSIT_MODULES_WHITELIST = [1, 2]
     web3_lido_unit.lido.staking_router.get_staking_module_ids = Mock(return_value=[1, 2])
     web3_lido_unit.eth.get_block = Mock(return_value=block_data)
-    yield DepositorBot(
-        web3_lido_unit, deposit_transaction_sender, mellow_deposit_strategy, base_deposit_strategy, gas_price_calculator, csm_strategy
-    )
+    yield DepositorBot(web3_lido_unit, deposit_transaction_sender, mellow_deposit_strategy, base_deposit_strategy, csm_strategy)
 
 
 @pytest.fixture
@@ -307,7 +304,6 @@ def test_depositor_bot_non_mellow_deposits(
     db: DepositorBot = DepositorBot(
         web3_lido_integration,
         deposit_transaction_sender_integration,
-        gas_price_calculator_integration,
         mellow_deposit_strategy_integration,
         base_deposit_strategy_integration,
         csm_strategy_integration,
