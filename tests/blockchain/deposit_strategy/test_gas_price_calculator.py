@@ -7,23 +7,23 @@ MODULE_ID = 1
 
 
 @pytest.mark.unit
-def test_is_gas_price_ok(gas_price_calculator):
-    gas_price_calculator.get_pending_base_fee = Mock(return_value=10)
-    gas_price_calculator.get_recommended_gas_fee = Mock(return_value=20)
+def test_is_gas_price_ok(base_deposit_strategy):
+    base_deposit_strategy._gas_price_calculator.get_pending_base_fee = Mock(return_value=10)
+    base_deposit_strategy._gas_price_calculator.get_recommended_gas_fee = Mock(return_value=20)
     variables.MAX_GAS_FEE = 300
 
-    gas_price_calculator.w3.lido.lido.get_depositable_ether = Mock(return_value=100)
+    base_deposit_strategy._gas_price_calculator.w3.lido.lido.get_depositable_ether = Mock(return_value=100)
     variables.MAX_BUFFERED_ETHERS = 200
-    assert gas_price_calculator.is_gas_price_ok(MODULE_ID)
+    assert base_deposit_strategy.is_gas_price_ok(MODULE_ID)
 
-    gas_price_calculator.get_recommended_gas_fee = Mock(return_value=5)
-    assert not gas_price_calculator.is_gas_price_ok(MODULE_ID)
+    base_deposit_strategy._gas_price_calculator.get_recommended_gas_fee = Mock(return_value=5)
+    assert not base_deposit_strategy.is_gas_price_ok(MODULE_ID)
 
-    gas_price_calculator.w3.lido.lido.get_depositable_ether = Mock(return_value=300)
-    assert gas_price_calculator.is_gas_price_ok(MODULE_ID)
+    base_deposit_strategy._gas_price_calculator.w3.lido.lido.get_depositable_ether = Mock(return_value=300)
+    assert base_deposit_strategy.is_gas_price_ok(MODULE_ID)
 
-    gas_price_calculator.get_pending_base_fee = Mock(return_value=400)
-    assert not gas_price_calculator.is_gas_price_ok(MODULE_ID)
+    base_deposit_strategy._gas_price_calculator.get_pending_base_fee = Mock(return_value=400)
+    assert not base_deposit_strategy.is_gas_price_ok(MODULE_ID)
 
 
 @pytest.mark.unit
