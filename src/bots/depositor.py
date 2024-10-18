@@ -39,10 +39,10 @@ def run_depositor(w3):
     logger.info({'msg': 'Initialize Depositor bot.'})
     sender = Sender(w3)
     gas_price_calculator = GasPriceCalculator(w3)
-    mellow_deposit_strategy = MellowDepositStrategy(w3)
-    base_deposit_strategy = BaseDepositStrategy(w3)
-    csm_strategy = CSMDepositStrategy(w3)
-    depositor_bot = DepositorBot(w3, sender, gas_price_calculator, mellow_deposit_strategy, base_deposit_strategy, csm_strategy)
+    mellow_deposit_strategy = MellowDepositStrategy(w3, gas_price_calculator)
+    base_deposit_strategy = BaseDepositStrategy(w3, gas_price_calculator)
+    csm_strategy = CSMDepositStrategy(w3, gas_price_calculator)
+    depositor_bot = DepositorBot(w3, sender, mellow_deposit_strategy, base_deposit_strategy, csm_strategy)
 
     e = Executor(
         w3,
@@ -66,14 +66,12 @@ class DepositorBot:
         self,
         w3: Web3,
         sender: Sender,
-        gas_price_calcaulator: GasPriceCalculator,
         mellow_deposit_strategy: MellowDepositStrategy,
         base_deposit_strategy: BaseDepositStrategy,
         csm_strategy: CSMDepositStrategy,
     ):
         self.w3 = w3
         self._sender = sender
-        self._gas_price_calculator = gas_price_calcaulator
         self._mellow_strategy = mellow_deposit_strategy
         self._general_strategy = base_deposit_strategy
         self._csm_strategy = csm_strategy
@@ -189,17 +187,17 @@ class DepositorBot:
         can_deposit = self.w3.lido.deposit_security_module.can_deposit(module_id)
         logger.info({'msg': 'Can deposit to module.', 'value': can_deposit})
 
-        gas_is_ok = self._gas_price_calculator.is_gas_price_ok(module_id)
+        strategy, is_mellow = self._select_strategy(module_id)
+        gas_is_ok = strategy.is_gas_price_ok(module_id)
         logger.info({'msg': 'Calculate gas recommendations.', 'value': gas_is_ok})
 
-        strategy, is_mellow = self._select_strategy(module_id)
-        is_deposit_amount_ok = self._gas_price_calculator.calculate_deposit_recommendation(strategy, module_id)
+        is_deposit_amount_ok = strategy.calculate_deposit_recommendation(module_id)
         logger.info({'msg': 'Calculations deposit recommendations.', 'value': is_deposit_amount_ok, 'is_mellow': is_mellow})
 
         if is_mellow and not is_deposit_amount_ok:
             strategy = self._general_strategy
             is_mellow = False
-            is_deposit_amount_ok = self._gas_price_calculator.calculate_deposit_recommendation(strategy, module_id)
+            is_deposit_amount_ok = strategy.calculate_deposit_recommendation(module_id)
             logger.info({'msg': 'Calculations deposit recommendations.', 'value': is_deposit_amount_ok, 'is_mellow': is_mellow})
 
         if is_depositable and quorum and can_deposit and gas_is_ok and is_deposit_amount_ok:
