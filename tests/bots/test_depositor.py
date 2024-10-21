@@ -13,16 +13,16 @@ from tests.utils.protocol_utils import get_deposit_message
 def depositor_bot(
     web3_lido_unit,
     deposit_transaction_sender,
-    gas_price_calculator,
     mellow_deposit_strategy,
     base_deposit_strategy,
     block_data,
+    csm_strategy,
 ):
     variables.MESSAGE_TRANSPORTS = ''
     variables.DEPOSIT_MODULES_WHITELIST = [1, 2]
     web3_lido_unit.lido.staking_router.get_staking_module_ids = Mock(return_value=[1, 2])
     web3_lido_unit.eth.get_block = Mock(return_value=block_data)
-    yield DepositorBot(web3_lido_unit, deposit_transaction_sender, mellow_deposit_strategy, base_deposit_strategy, gas_price_calculator)
+    yield DepositorBot(web3_lido_unit, deposit_transaction_sender, mellow_deposit_strategy, base_deposit_strategy, csm_strategy)
 
 
 @pytest.fixture
@@ -114,9 +114,10 @@ def test_depositor_deposit_to_module(depositor_bot, is_depositable, quorum, is_g
     depositor_bot._check_module_status = Mock(return_value=is_depositable)
     depositor_bot._get_quorum = Mock(return_value=quorum)
     depositor_bot._mellow_works = False
-    depositor_bot._gas_price_calculator.is_gas_price_ok = Mock(return_value=is_gas_price_ok)
-    depositor_bot._gas_price_calculator.calculate_deposit_recommendation = Mock(return_value=is_deposited_keys_amount_ok)
-    depositor_bot.prepare_and_send_tx = Mock()
+    strategy = Mock()
+    strategy.is_gas_price_ok = Mock(return_value=is_gas_price_ok)
+    strategy.can_deposit_keys_based_on_ether = Mock(return_value=is_deposited_keys_amount_ok)
+    depositor_bot._select_strategy = Mock(return_value=(strategy, False))
 
     assert not depositor_bot._deposit_to_module(1)
     assert depositor_bot.prepare_and_send_tx.call_count == 0
@@ -239,6 +240,7 @@ def test_depositor_bot_non_mellow_deposits(
     mellow_deposit_strategy_integration,
     base_deposit_strategy_integration,
     gas_price_calculator_integration,
+    csm_strategy_integration,
     module_id,
     add_accounts_to_guardian,
 ):
@@ -288,9 +290,9 @@ def test_depositor_bot_non_mellow_deposits(
     db: DepositorBot = DepositorBot(
         web3_lido_integration,
         deposit_transaction_sender_integration,
-        gas_price_calculator_integration,
         mellow_deposit_strategy_integration,
         base_deposit_strategy_integration,
+        csm_strategy_integration,
     )
 
     # Clear the message storage and execute the bot without any messages
