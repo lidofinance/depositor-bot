@@ -5,10 +5,8 @@ from typing import Literal
 
 import numpy
 import variables
-from blockchain.deposit_strategy.base_deposit_strategy import BaseDepositStrategy
 from blockchain.typings import Web3
 from eth_typing import BlockNumber
-from metrics.metrics import DEPOSIT_AMOUNT_OK, GAS_FEE, GAS_OK
 from web3.types import Wei
 
 logger = logging.getLogger(__name__)
@@ -21,61 +19,12 @@ class GasPriceCalculator:
     def __init__(self, w3: Web3):
         self.w3 = w3
 
-    def is_gas_price_ok(self, module_id: int) -> bool:
-        """
-        Determines if the gas price is ok for doing a deposit.
-        """
-        current_gas_fee = self._get_pending_base_fee()
-        GAS_FEE.labels('current_fee', module_id).set(current_gas_fee)
-
-        current_buffered_ether = self.w3.lido.lido.get_depositable_ether()
-        if current_buffered_ether > variables.MAX_BUFFERED_ETHERS:
-            success = current_gas_fee <= variables.MAX_GAS_FEE
-        else:
-            recommended_gas_fee = self._get_recommended_gas_fee()
-            GAS_FEE.labels('recommended_fee', module_id).set(recommended_gas_fee)
-            GAS_FEE.labels('max_fee', module_id).set(variables.MAX_GAS_FEE)
-            success = recommended_gas_fee >= current_gas_fee
-        GAS_OK.labels(module_id).set(int(success))
-        return success
-
-    def _get_pending_base_fee(self) -> Wei:
+    def get_pending_base_fee(self) -> Wei:
         base_fee_per_gas = self.w3.eth.get_block('pending')['baseFeePerGas']
         logger.info({'msg': 'Fetch base_fee_per_gas for pending block.', 'value': base_fee_per_gas})
         return base_fee_per_gas
 
-    def calculate_deposit_recommendation(self, deposit_strategy: BaseDepositStrategy, module_id: int) -> bool:
-        possible_keys = deposit_strategy.deposited_keys_amount(module_id)
-        success = False
-        if possible_keys < deposit_strategy.DEPOSITABLE_KEYS_THRESHOLD:
-            logger.info(
-                {
-                    'msg': f'Possible deposits amount is {possible_keys}. Skip deposit.',
-                    'module_id': module_id,
-                    'threshold': deposit_strategy.DEPOSITABLE_KEYS_THRESHOLD,
-                }
-            )
-        else:
-            recommended_max_gas = GasPriceCalculator._calculate_recommended_gas_based_on_deposit_amount(
-                possible_keys,
-                module_id,
-            )
-            base_fee_per_gas = self._get_pending_base_fee()
-            success = recommended_max_gas >= base_fee_per_gas
-        DEPOSIT_AMOUNT_OK.labels(module_id).set(int(success))
-        return success
-
-    @staticmethod
-    def _calculate_recommended_gas_based_on_deposit_amount(deposits_amount: int, module_id: int) -> int:
-        # For one key recommended gas fee will be around 10
-        # For 10 keys around 100 gwei. For 20 keys ~ 800 gwei
-        # ToDo percentiles for all modules?
-        recommended_max_gas = (deposits_amount ** 3 + 100) * 10 ** 8
-        logger.info({'msg': 'Calculate recommended max gas based on possible deposits.', 'value': recommended_max_gas})
-        GAS_FEE.labels('based_on_buffer_fee', module_id).set(recommended_max_gas)
-        return recommended_max_gas
-
-    def _get_recommended_gas_fee(self) -> Wei:
+    def get_recommended_gas_fee(self) -> Wei:
         gas_history = self._fetch_gas_fee_history(variables.GAS_FEE_PERCENTILE_DAYS_HISTORY_1)
         return Wei(int(numpy.percentile(gas_history, variables.GAS_FEE_PERCENTILE_1)))
 
