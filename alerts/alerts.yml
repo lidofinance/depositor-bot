@@ -1,0 +1,83 @@
+groups:
+  - name: Depositor bot. No metrics
+    rules:
+      - alert: DepositorBotNoMetrics
+        expr: absent_over_time(depositor_bot_build_info{service="lido-depositor-bot"}[5m])
+        for: 3m
+        labels:
+          severity: warning
+          app_team: tooling
+        annotations:
+          summary: "Depositor doesn't reporting metrics for too long."
+          description: "Depositor doesn't reporting metrics for too long."
+  - name: Pauser bot. No metrics
+    rules:
+      - alert: PauserBotNoMetrics
+        expr: absent_over_time(pauser_bot_build_info{service="lido-pause-bot"}[5m])
+        for: 3m
+        labels:
+          severity: warning
+          app_team: tooling
+        annotations:
+          summary: "Pauser doesn't reporting metrics for too long."
+          description: "Pauser doesn't reporting metrics for too long."
+  - name: Unvetter bot. No metrics
+    rules:
+      - alert: UnvetterBotNoMetrics
+        expr: absent_over_time(unvetter_bot_build_info{service="lido-unvetter-bot"}[5m])
+        for: 3m
+        labels:
+          severity: warning
+          app_team: tooling
+        annotations:
+          summary: "Unvetter doesn't reporting metrics for too long."
+          description: "Unvetter doesn't reporting metrics for too long."
+  - name: Transport stuck
+    rules:
+      - alert: NoMessagesReceivedFor6h
+        expr: sum by (service,address) (changes(label_replace({__name__=~"depositor_bot_ping_messages|depositor_bot_deposit_messages|pauser_bot_ping_messages|pauser_bot_pause_messages|unvetter_bot_ping_messages|unvetter_bot_unvet_messages"},"name_label","$1","__name__", "(.+)")[6h:])) == 0
+        labels:
+          severity: warning
+          app_team: tooling
+        annotations:
+          summary: "No activity detected for the last 6 hours for address {{ $labels.address }}"
+          description: "None of the counters (deposit, pause, unvet, ping) have increased in the last 6 hours for the address {{ $labels.address }}."
+  - name: Depositor bot. Account balance
+    rules:
+      - alert: DepositorBotAccountBalanceLow
+        expr:
+          depositor_bot_account_balance{service="lido-depositor-bot"}/10^18 < 3
+          UNLESS ON(service)
+          depositor_bot_build_info{service="lido-depositor-bot",CREATE_TRANSACTIONS="False"}
+        for: 5m
+        labels:
+          severity: warning
+          app_team: tooling
+        annotations:
+          summary: "Account balance is lower than 3 ETH."
+          description: "Account balance is {{ $value }} ETH."
+
+      - alert: DepositorBotAccountBalanceCriticalLow
+        expr:
+          depositor_bot_account_balance{service="lido-depositor-bot"}/10^18 < 1
+          UNLESS ON(service)
+          depositor_bot_build_info{service="lido-depositor-bot",CREATE_TRANSACTIONS="False"}
+        for: 5m
+        labels:
+          severity: warning
+          app_team: tooling
+        annotations:
+          summary: "Account balance is lower than 1 ETH."
+          description: "Account balance is {{ $value }} ETH."
+  - name: Depositor bot. Activity
+    rules:
+      - alert: DepositorBotNoDepositsFor2Days
+        expr: max(increase(depositor_bot_deposit_success_total{service="lido-depositor-bot"}[2d])) < 1 and depositor_bot_required_buffered_ether < depositor_bot_buffered_ether
+        for: 0m
+        labels:
+          severity: warning
+          app_team: tooling
+        annotations:
+          summary: "Depositor bot didn't deposit for 2 days."
+          description: "Some issues preventing depositor bot from deposits for quite a long time."
+
