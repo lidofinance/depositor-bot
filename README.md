@@ -120,7 +120,7 @@ poetry run pytest tests -m unit
 
 #### Run integration tests.
 
-TESTNET_WEB3_RPC_ENDPOINTS - set this variable for the Ethereum EL testnet RPC
+TESTNET_WEB3_RPC_ENDPOINTS - set this variable for the Ethereum EL testnet RPC, Holesky only.
 
 Install Anvil
 
