@@ -18,11 +18,10 @@ def setup_mellow_env():
 @pytest.mark.integration
 @pytest.mark.parametrize(
     'web3_provider_integration,module_id',
-    [[20529904, 2], [20529995, 2]],
+    [[{'block': 20529904}, 2], [{'block': 20529995}, 2]],
     indirect=['web3_provider_integration'],
 )
 def test_depositor_bot_mellow_deposits(
-    web3_provider_integration,
     web3_lido_integration,
     deposit_transaction_sender_integration,
     mellow_deposit_strategy_integration,

@@ -27,27 +27,15 @@ def web3_lido_unit() -> Web3:
 # -- Integration fixtures --
 @pytest.fixture
 def web3_provider_integration(request) -> Web3:
-    block_num = getattr(request, 'param', None)
+    params = getattr(request, 'param', {})
+    rpc_endpoint = params.get('endpoint', variables.WEB3_RPC_ENDPOINTS[0])
+    block_num = params.get('block', None)
+    anvil_path = os.getenv('ANVIL_PATH', '')
 
-    with anvil_fork(
-        os.getenv('ANVIL_PATH', ''),
-        variables.WEB3_RPC_ENDPOINTS[0],
-        block_num,
-    ):
+    with anvil_fork(anvil_path, rpc_endpoint, block_num):
         web3 = Web3(HTTPProvider('http://127.0.0.1:8545', request_kwargs={'timeout': 3600}))
-        assert web3.is_connected()
+        assert web3.is_connected(), 'Failed to connect to the Web3 provider.'
         yield web3
-
-
-@pytest.fixture
-def web3_lido_integration(web3_provider_integration: Web3) -> Web3:
-    web3_provider_integration.attach_modules(
-        {
-            'lido': LidoContracts,
-            'transaction': TransactionUtils,
-        }
-    )
-    yield web3_provider_integration
 
 
 @pytest.fixture
@@ -58,3 +46,13 @@ def web3_transaction_integration(web3_provider_integration: Web3) -> Web3:
         }
     )
     yield web3_provider_integration
+
+
+@pytest.fixture
+def web3_lido_integration(web3_transaction_integration: Web3) -> Web3:
+    web3_transaction_integration.attach_modules(
+        {
+            'lido': LidoContracts,
+        }
+    )
+    yield web3_transaction_integration

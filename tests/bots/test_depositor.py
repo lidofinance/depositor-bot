@@ -246,7 +246,7 @@ def test_get_quorum(depositor_bot, setup_deposit_message):
 @pytest.mark.integration
 @pytest.mark.parametrize(
     'web3_provider_integration,module_id',
-    [[19628126, 1], [19628126, 2]],
+    [[{'block': 19628126}, 1], [{'block': 19628126}, 2]],
     indirect=['web3_provider_integration'],
 )
 def test_depositor_bot_non_mellow_deposits(

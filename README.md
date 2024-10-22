@@ -34,13 +34,13 @@ Unvetting is the proces of decreasing approved depositable signing keys.
 
 ## Running Daemon
 
-1. Create `.env` file 
+1. Create `.env` file
 2. Setup variables
-   - Set WEB3_RPC_ENDPOINTS
-   - Set WALLET_PRIVATE_KEY
-   - Set CREATE_TRANSACTIONS to true
-   - Set MESSAGE_TRANSPORTS to rabbit
-   - Set RABBIT_MQ_URL, RABBIT_MQ_USERNAME and RABBIT_MQ_PASSWORD
+    - Set WEB3_RPC_ENDPOINTS
+    - Set WALLET_PRIVATE_KEY
+    - Set CREATE_TRANSACTIONS to true
+    - Set MESSAGE_TRANSPORTS to rabbit
+    - Set RABBIT_MQ_URL, RABBIT_MQ_USERNAME and RABBIT_MQ_PASSWORD
 3. ```docker-compose up```
 4. Send metrics and logs to grafana
 5. Setup alerts
@@ -83,6 +83,7 @@ Unvetting is the proces of decreasing approved depositable signing keys.
 | MAX_CYCLE_LIFETIME_IN_SECONDS     | 1200          | Max lifetime of usual cycle. If cycle will not end in this time, bot will crush                                          |
 | MELLOW_CONTRACT_ADDRESS           | None          | If variable is set then deposit can go to predifined module                                                              |
 | VAULT_DIRECT_DEPOSIT_THRESHOLD    | 1 ether       | If mellow vault has VAULT_DIRECT_DEPOSIT_THRESHOLD ethers then direct deposit will be sent                               |
+| ONCHAIN_TRANSPORT_RPC_ENDPOINTS   | -             | RPC endpoint for the databus RPC, Gnosis at the moment                                                                   |
 
 ## Metrics and logs
 
@@ -118,6 +119,8 @@ poetry run pytest tests -m unit
 ```
 
 #### Run integration tests.
+
+TESTNET_WEB3_RPC_ENDPOINTS - set this variable for the Ethereum EL testnet RPC, Holesky only.
 
 Install Anvil
 
