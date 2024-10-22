@@ -84,7 +84,6 @@ Unvetting is the proces of decreasing approved depositable signing keys.
 | MELLOW_CONTRACT_ADDRESS           | None          | If variable is set then deposit can go to predifined module                                                              |
 | VAULT_DIRECT_DEPOSIT_THRESHOLD    | 1 ether       | If mellow vault has VAULT_DIRECT_DEPOSIT_THRESHOLD ethers then direct deposit will be sent                               |
 | ONCHAIN_TRANSPORT_RPC_ENDPOINTS   | -             | RPC endpoint for the databus RPC, Gnosis at the moment                                                                   |
-| TESTNET_WEB3_RPC_ENDPOINTS        | -             | RPC endpoint for the Ethereum EL testnet RPC(it is used only for running tests)                                          |
 
 ## Metrics and logs
 
@@ -120,6 +119,8 @@ poetry run pytest tests -m unit
 ```
 
 #### Run integration tests.
+
+TESTNET_WEB3_RPC_ENDPOINTS - set this variable for the Ethereum EL testnet RPC
 
 Install Anvil
 
