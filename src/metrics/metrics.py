@@ -1,7 +1,12 @@
 from prometheus_client.metrics import Counter, Gauge, Histogram, Info
 from variables import DEPOSIT_MODULES_WHITELIST, PROMETHEUS_PREFIX, PUBLIC_ENV_VARS
 
-GAS_FEE = Gauge('gas_fee', 'Gas fee', ['type', 'module_id'], namespace=PROMETHEUS_PREFIX)
+GAS_FEE = Gauge(
+    'gas_fee',
+    'Gas fee',
+    ['type', 'module_id'],
+    namespace=PROMETHEUS_PREFIX,
+)
 
 TX_SEND = Counter('transactions_send', 'Amount of send transaction from bot.', ['status'], namespace=PROMETHEUS_PREFIX)
 
@@ -11,12 +16,10 @@ TX_SEND.labels('failure').inc(0)
 
 MODULE_TX_SEND = Counter(
     'transactions',
-    'Amount of send transaction from bot with per module distribution.',
+    'Amount of send transactions from depositor bot.',
     ['status', 'module_id', 'is_mellow'],
     namespace=PROMETHEUS_PREFIX,
 )
-
-ACCOUNT_BALANCE = Gauge('account_balance', 'Account balance', namespace=PROMETHEUS_PREFIX)
 
 DEPOSIT_MESSAGES = Gauge(
     'deposit_messages',
@@ -53,7 +56,6 @@ CURRENT_QUORUM_SIZE = Gauge(
 DEPOSITABLE_ETHER = Gauge(
     'depositable_ether',
     'Depositable Ether',
-    [],
     namespace=PROMETHEUS_PREFIX,
 )
 
@@ -106,16 +108,31 @@ DEPOSIT_AMOUNT_OK = Gauge(
     namespace=PROMETHEUS_PREFIX,
 )
 
-ETH_RPC_REQUESTS_DURATION = Histogram('eth_rpc_requests_duration', 'Duration of requests to ETH1 RPC', namespace=PROMETHEUS_PREFIX)
+ETH_RPC_REQUESTS_DURATION = Histogram(
+    'eth_rpc_requests_duration',
+    'Duration of requests to ETH1 RPC',
+    namespace=PROMETHEUS_PREFIX,
+)
 
 ETH_RPC_REQUESTS = Counter(
-    'eth_rpc_requests', 'Total count of requests to ETH1 RPC', ['method', 'code', 'domain'], namespace=PROMETHEUS_PREFIX
+    'eth_rpc_requests',
+    'Total count of requests to ETH1 RPC',
+    ['method', 'code', 'domain'],
+    namespace=PROMETHEUS_PREFIX,
 )
 
 UNEXPECTED_EXCEPTIONS = Counter(
     'unexpected_exceptions',
     'Total count of unexpected exceptions',
     ['type'],
+    namespace=PROMETHEUS_PREFIX,
+)
+
+# TODO unify ACCOUNT_BALANCE and GUARDIAN_BALANCE
+ACCOUNT_BALANCE = Gauge(
+    'account_balance',
+    'Account balance',
+    ['address', 'chain_id'],
     namespace=PROMETHEUS_PREFIX,
 )
 

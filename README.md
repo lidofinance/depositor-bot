@@ -97,17 +97,18 @@ Prometheus server hosted on `http://localhost:${{PROMETHEUS_PORT}}/`.
 ```bash
 git clone git@github.com:lidofinance/depositor-bot.git
 cd depositor-bot
-poetry install
+poetry install --with dev
+poetry run pre-commit install
 ```
 
 To run bot
 
 ```bash
-poetry run python main depositor
+poetry run python src/main.py depositor
 
-poetry run python main pauser
+poetry run python src/main.py pauser
 
-poetry run python main unvetter
+poetry run python src/main.py unvetter
 ```
 
 ### Tests
