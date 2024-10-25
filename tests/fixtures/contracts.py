@@ -7,8 +7,6 @@ from blockchain.contracts.deposit_security_module import DepositSecurityModuleCo
 from blockchain.contracts.erc20 import ERC20Contract
 from blockchain.contracts.lido import LidoContract
 from blockchain.contracts.lido_locator import LidoLocatorContract
-from blockchain.contracts.simple_dvt_staking_strategy import SimpleDVTStakingStrategyContract
-from blockchain.contracts.staking_module import StakingModuleContract
 from blockchain.contracts.staking_router import StakingRouterContract, StakingRouterContractV2
 from blockchain.typings import Web3
 
@@ -92,28 +90,6 @@ def staking_router_v2(web3_provider_integration, lido_locator):
 
 
 @pytest.fixture
-def simple_dvt_staking_strategy(web3_provider_integration):
-    yield cast(
-        SimpleDVTStakingStrategyContract,
-        web3_provider_integration.eth.contract(
-            address=variables.MELLOW_CONTRACT_ADDRESS,
-            ContractFactoryClass=SimpleDVTStakingStrategyContract,
-        ),
-    )
-
-
-@pytest.fixture
-def staking_module(web3_provider_integration, simple_dvt_staking_strategy):
-    yield cast(
-        StakingModuleContract,
-        web3_provider_integration.eth.contract(
-            address=simple_dvt_staking_strategy.get_staking_module(),
-            ContractFactoryClass=StakingModuleContract,
-        ),
-    )
-
-
-@pytest.fixture
 def weth(web3_provider_integration, staking_module):
     yield cast(
         ERC20Contract,
@@ -171,7 +147,7 @@ def upgrade_staking_router_to_v2(web3_lido_integration: Web3):
 
     admin = proxy.functions.proxy__getAdmin().call()
 
-    web3_lido_integration.provider.make_request('anvil_setBalance', [admin, 10 ** 18])
+    web3_lido_integration.provider.make_request('anvil_setBalance', [admin, 10**18])
 
     tx_hash = proxy.functions.proxy__upgradeTo(new_locator).transact({'from': admin})
     web3_lido_integration.eth.wait_for_transaction_receipt(tx_hash)

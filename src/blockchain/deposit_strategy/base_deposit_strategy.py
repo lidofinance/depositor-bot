@@ -65,7 +65,7 @@ class BaseDepositStrategy(DepositStrategy):
             module_id,
             depositable_ether,
         )
-        POSSIBLE_DEPOSITS_AMOUNT.labels(module_id, 0).set(possible_deposits_amount)
+        POSSIBLE_DEPOSITS_AMOUNT.labels(module_id).set(possible_deposits_amount)
         return possible_deposits_amount
 
     def is_deposit_recommended_based_on_keys_amount(self, deposits_amount: int, base_fee: int, module_id: int) -> bool:
@@ -80,34 +80,6 @@ class BaseDepositStrategy(DepositStrategy):
         logger.info({'msg': 'Calculate recommended max gas based on possible deposits.', 'value': recommended_max_gas})
         GAS_FEE.labels('based_on_buffer_fee', module_id).set(recommended_max_gas)
         return recommended_max_gas
-
-
-class MellowDepositStrategy(BaseDepositStrategy):
-    """
-    Performs deposited keys amount check for direct deposits.
-    """
-
-    def _depositable_ether(self) -> Wei:
-        depositable_ether = super()._depositable_ether()
-        additional_ether = self.w3.lido.simple_dvt_staking_strategy.vault_balance()
-        if additional_ether > 0:
-            logger.info({'msg': 'Adding mellow vault balance to the depositable check', 'vault': additional_ether})
-        depositable_ether += additional_ether
-        return depositable_ether
-
-    def deposited_keys_amount(self, module_id: int) -> int:
-        depositable_ether = self._depositable_ether()
-        possible_deposits_amount_assumption = self.w3.lido.staking_router.get_staking_module_max_deposits_count(
-            module_id,
-            depositable_ether,
-        )
-        possible_deposited_eth = Web3.to_wei(32 * possible_deposits_amount_assumption, 'ether')
-        possible_deposits_amount = self.w3.lido.staking_router.get_staking_module_max_deposits_count(
-            module_id,
-            possible_deposited_eth,
-        )
-        POSSIBLE_DEPOSITS_AMOUNT.labels(module_id, 1).set(possible_deposits_amount)
-        return possible_deposits_amount if possible_deposits_amount_assumption == possible_deposits_amount else 0
 
 
 class CSMDepositStrategy(BaseDepositStrategy):

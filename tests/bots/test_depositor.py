@@ -2,7 +2,6 @@ from unittest.mock import Mock
 
 import pytest
 import variables
-from blockchain.typings import Web3
 from bots.depositor import DepositorBot
 
 from tests.conftest import COUNCIL_ADDRESS_1, COUNCIL_ADDRESS_2, COUNCIL_PK_1, COUNCIL_PK_2, DSM_OWNER
@@ -13,7 +12,6 @@ from tests.utils.protocol_utils import get_deposit_message
 def depositor_bot(
     web3_lido_unit,
     deposit_transaction_sender,
-    mellow_deposit_strategy,
     base_deposit_strategy,
     block_data,
     csm_strategy,
@@ -22,7 +20,7 @@ def depositor_bot(
     variables.DEPOSIT_MODULES_WHITELIST = [1, 2]
     web3_lido_unit.lido.staking_router.get_staking_module_ids = Mock(return_value=[1, 2])
     web3_lido_unit.eth.get_block = Mock(return_value=block_data)
-    yield DepositorBot(web3_lido_unit, deposit_transaction_sender, mellow_deposit_strategy, base_deposit_strategy, csm_strategy)
+    yield DepositorBot(web3_lido_unit, deposit_transaction_sender, base_deposit_strategy, csm_strategy)
 
 
 @pytest.fixture
@@ -69,28 +67,6 @@ def test_depositor_one_module_deposited(depositor_bot, block_data):
 
 
 @pytest.mark.unit
-def test_is_mellow_depositable(depositor_bot):
-    variables.MELLOW_CONTRACT_ADDRESS = None
-    assert not depositor_bot._is_mellow_depositable(1)
-
-    variables.MELLOW_CONTRACT_ADDRESS = '0x1'
-    depositor_bot.w3.lido.lido.get_buffered_ether = Mock(return_value=Web3.to_wei(1, 'ether'))
-    depositor_bot.w3.lido.lido_locator.withdrawal_queue_contract.unfinalized_st_eth = Mock(return_value=Web3.to_wei(1, 'ether'))
-    depositor_bot.w3.lido.simple_dvt_staking_strategy.staking_module_contract.get_staking_module_id = Mock(return_value=1)
-    assert not depositor_bot._is_mellow_depositable(2)
-
-    depositor_bot.w3.lido.simple_dvt_staking_strategy.vault_balance = Mock(return_value=Web3.to_wei(0.5, 'ether'))
-    assert not depositor_bot._is_mellow_depositable(1)
-
-    depositor_bot.w3.lido.simple_dvt_staking_strategy.vault_balance = Mock(return_value=Web3.to_wei(1.4, 'ether'))
-    assert depositor_bot._is_mellow_depositable(1)
-
-    depositor_bot.w3.lido.lido.get_buffered_ether = Mock(return_value=Web3.to_wei(0.5, 'ether'))
-    depositor_bot.w3.lido.lido_locator.withdrawal_queue_contract.unfinalized_st_eth = Mock(return_value=Web3.to_wei(1, 'ether'))
-    assert not depositor_bot._is_mellow_depositable(1)
-
-
-@pytest.mark.unit
 def test_depositor_check_module_status(depositor_bot):
     depositor_bot.w3.lido.staking_router.is_staking_module_active = Mock(return_value=True)
     assert depositor_bot._check_module_status(1)
@@ -113,7 +89,6 @@ def test_depositor_check_module_status(depositor_bot):
 def test_depositor_deposit_to_module(depositor_bot, is_depositable, quorum, is_gas_price_ok, is_deposited_keys_amount_ok):
     depositor_bot._check_module_status = Mock(return_value=is_depositable)
     depositor_bot._get_quorum = Mock(return_value=quorum)
-    depositor_bot._mellow_works = False
     strategy = Mock()
     strategy.is_gas_price_ok = Mock(return_value=is_gas_price_ok)
     strategy.can_deposit_keys_based_on_ether = Mock(return_value=is_deposited_keys_amount_ok)
@@ -234,19 +209,16 @@ def test_get_quorum(depositor_bot, setup_deposit_message):
     [[{'block': 19628126}, 1], [{'block': 19628126}, 2]],
     indirect=['web3_provider_integration'],
 )
-def test_depositor_bot_non_mellow_deposits(
+def test_depositor_bot(
     web3_provider_integration,
     web3_lido_integration,
     deposit_transaction_sender_integration,
-    mellow_deposit_strategy_integration,
     base_deposit_strategy_integration,
     gas_price_calculator_integration,
     csm_strategy_integration,
     module_id,
     add_accounts_to_guardian,
 ):
-    # Disable mellow integration
-    variables.MELLOW_CONTRACT_ADDRESS = None
     # Define the whitelist of deposit modules
     variables.DEPOSIT_MODULES_WHITELIST = [1, 2]
 
@@ -291,7 +263,6 @@ def test_depositor_bot_non_mellow_deposits(
     db: DepositorBot = DepositorBot(
         web3_lido_integration,
         deposit_transaction_sender_integration,
-        mellow_deposit_strategy_integration,
         base_deposit_strategy_integration,
         csm_strategy_integration,
     )
