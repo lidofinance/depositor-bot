@@ -28,10 +28,10 @@ def test_send_deposit_tx(deposit_transaction_sender: Sender):
         )
     ]
     deposit_transaction_sender._prepare_signs_for_deposit = Mock(return_value=tuple())
-    assert not deposit_transaction_sender.prepare_and_send(messages, False, False)
+    assert not deposit_transaction_sender.prepare_and_send(messages, False)
     assert deposit_transaction_sender._w3.lido.deposit_security_module.deposit_buffered_ether.called
 
     deposit_transaction_sender._w3.transaction.check = Mock(return_value=True)
     deposit_transaction_sender._w3.transaction.send = Mock(return_value=True)
-    assert deposit_transaction_sender.prepare_and_send(messages, False, False)
+    assert deposit_transaction_sender.prepare_and_send(messages, False)
     assert deposit_transaction_sender._w3.lido.deposit_security_module.deposit_buffered_ether.called

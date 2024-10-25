@@ -92,7 +92,7 @@ def test_depositor_deposit_to_module(depositor_bot, is_depositable, quorum, is_g
     strategy = Mock()
     strategy.is_gas_price_ok = Mock(return_value=is_gas_price_ok)
     strategy.can_deposit_keys_based_on_ether = Mock(return_value=is_deposited_keys_amount_ok)
-    depositor_bot._select_strategy = Mock(return_value=(strategy, False))
+    depositor_bot._select_strategy = Mock(return_value=strategy)
     depositor_bot.prepare_and_send_tx = Mock()
 
     assert not depositor_bot._deposit_to_module(1)
