@@ -1,17 +1,17 @@
 import pytest
-from blockchain.deposit_strategy.base_deposit_strategy import BaseDepositStrategy, CSMDepositStrategy
+from blockchain.deposit_strategy.base_deposit_strategy import CSMDepositStrategy, DefaultDepositStrategy
 from blockchain.deposit_strategy.deposit_transaction_sender import Sender
 from blockchain.deposit_strategy.gas_price_calculator import GasPriceCalculator
 
 
 @pytest.fixture
 def base_deposit_strategy(web3_lido_unit, gas_price_calculator):
-    yield BaseDepositStrategy(web3_lido_unit, gas_price_calculator)
+    yield DefaultDepositStrategy(web3_lido_unit, gas_price_calculator)
 
 
 @pytest.fixture
 def base_deposit_strategy_integration(web3_lido_integration, gas_price_calculator_integration):
-    yield BaseDepositStrategy(web3_lido_integration, gas_price_calculator_integration)
+    yield DefaultDepositStrategy(web3_lido_integration, gas_price_calculator_integration)
 
 
 @pytest.fixture

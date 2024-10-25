@@ -1,3 +1,4 @@
+import abc
 import logging
 
 import variables
@@ -29,7 +30,7 @@ class BaseDepositStrategy(DepositStrategy):
             )
         else:
             base_fee_per_gas = self._gas_price_calculator.get_pending_base_fee()
-            success = self.is_deposit_recommended_based_on_keys_amount(possible_keys, base_fee_per_gas, module_id)
+            success = self._is_deposit_recommended_based_on_keys_amount(possible_keys, base_fee_per_gas, module_id)
         DEPOSIT_AMOUNT_OK.labels(module_id).set(int(success))
         return success
 
@@ -44,7 +45,7 @@ class BaseDepositStrategy(DepositStrategy):
         if current_buffered_ether > variables.MAX_BUFFERED_ETHERS:
             success = current_gas_fee <= variables.MAX_GAS_FEE
         else:
-            recommended_gas_fee = self._gas_price_calculator.get_recommended_gas_fee()
+            recommended_gas_fee = self.get_recommended_fee()
             GAS_FEE.labels('recommended_fee', module_id).set(recommended_gas_fee)
             GAS_FEE.labels('max_fee', module_id).set(variables.MAX_GAS_FEE)
             success = recommended_gas_fee >= current_gas_fee
@@ -68,9 +69,6 @@ class BaseDepositStrategy(DepositStrategy):
         POSSIBLE_DEPOSITS_AMOUNT.labels(module_id).set(possible_deposits_amount)
         return possible_deposits_amount
 
-    def is_deposit_recommended_based_on_keys_amount(self, deposits_amount: int, base_fee: int, module_id: int) -> bool:
-        return self._recommended_max_gas(deposits_amount, module_id) >= base_fee
-
     @staticmethod
     def _recommended_max_gas(deposits_amount: int, module_id: int):
         # For one key recommended gas fee will be around 10
@@ -81,9 +79,21 @@ class BaseDepositStrategy(DepositStrategy):
         GAS_FEE.labels('based_on_buffer_fee', module_id).set(recommended_max_gas)
         return recommended_max_gas
 
+    @abc.abstractmethod
+    def _is_deposit_recommended_based_on_keys_amount(self, deposits_amount: int, base_fee: int, module_id: int) -> bool:
+        pass
+
+    def get_recommended_fee(self) -> Wei:
+        return self._gas_price_calculator.get_recommended_gas_fee()
+
+
+class DefaultDepositStrategy(BaseDepositStrategy):
+    def _is_deposit_recommended_based_on_keys_amount(self, deposits_amount: int, base_fee: int, module_id: int) -> bool:
+        return self._recommended_max_gas(deposits_amount, module_id) >= base_fee
+
 
 class CSMDepositStrategy(BaseDepositStrategy):
-    def is_deposit_recommended_based_on_keys_amount(self, deposits_amount: int, base_fee: int, module_id: int) -> bool:
+    def _is_deposit_recommended_based_on_keys_amount(self, deposits_amount: int, base_fee: int, module_id: int) -> bool:
         return True
 
     def _depositable_keys_threshold(self) -> int:

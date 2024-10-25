@@ -4,7 +4,7 @@ from collections import defaultdict
 from typing import Callable, Optional
 
 import variables
-from blockchain.deposit_strategy.base_deposit_strategy import BaseDepositStrategy, CSMDepositStrategy
+from blockchain.deposit_strategy.base_deposit_strategy import CSMDepositStrategy, DefaultDepositStrategy
 from blockchain.deposit_strategy.deposit_transaction_sender import Sender
 from blockchain.deposit_strategy.gas_price_calculator import GasPriceCalculator
 from blockchain.deposit_strategy.prefered_module_to_deposit import get_preferred_to_deposit_modules
@@ -39,7 +39,7 @@ def run_depositor(w3):
     logger.info({'msg': 'Initialize Depositor bot.'})
     sender = Sender(w3)
     gas_price_calculator = GasPriceCalculator(w3)
-    base_deposit_strategy = BaseDepositStrategy(w3, gas_price_calculator)
+    base_deposit_strategy = DefaultDepositStrategy(w3, gas_price_calculator)
     csm_strategy = CSMDepositStrategy(w3, gas_price_calculator)
     depositor_bot = DepositorBot(w3, sender, base_deposit_strategy, csm_strategy)
 
@@ -64,7 +64,7 @@ class DepositorBot:
         self,
         w3: Web3,
         sender: Sender,
-        base_deposit_strategy: BaseDepositStrategy,
+        base_deposit_strategy: DefaultDepositStrategy,
         csm_strategy: CSMDepositStrategy,
     ):
         self.w3 = w3
