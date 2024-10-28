@@ -81,8 +81,6 @@ Unvetting is the proces of decreasing approved depositable signing keys.
 | PROMETHEUS_PREFIX                 | depositor_bot | Prefix for the metrics                                                                                                   |
 | HEALTHCHECK_SERVER_PORT           | 9010          | Port with bot`s status server                                                                                            |
 | MAX_CYCLE_LIFETIME_IN_SECONDS     | 1200          | Max lifetime of usual cycle. If cycle will not end in this time, bot will crush                                          |
-| MELLOW_CONTRACT_ADDRESS           | None          | If variable is set then deposit can go to predifined module                                                              |
-| VAULT_DIRECT_DEPOSIT_THRESHOLD    | 1 ether       | If mellow vault has VAULT_DIRECT_DEPOSIT_THRESHOLD ethers then direct deposit will be sent                               |
 | ONCHAIN_TRANSPORT_RPC_ENDPOINTS   | -             | RPC endpoint for the databus RPC, Gnosis at the moment                                                                   |
 
 ## Metrics and logs
