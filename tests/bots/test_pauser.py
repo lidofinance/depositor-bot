@@ -125,6 +125,7 @@ def test_pause_bot_outdate_messages(pause_bot, block_data, pause_message, block_
     pause_message['blockNumber'] = 5
     pause_bot.message_storage.messages = [pause_message]
     pause_bot.w3.lido.deposit_security_module.get_pause_intent_validity_period_blocks = Mock(return_value=block_range)
+    pause_bot._sign_filter = Mock(return_value=lambda _: True)
 
     pause_bot._send_pause_message = Mock()
     pause_bot.execute(block_data)
@@ -143,6 +144,8 @@ def test_pause_bot_clean_messages(pause_bot, block_data, pause_message, active_m
     pause_bot.message_storage.messages = [pause_message]
     pause_bot.w3.lido.staking_router.is_staking_module_active = Mock(return_value=active_module)
 
+    pause_bot._sign_filter = Mock(return_value=lambda _: True)
+
     pause_bot.execute(block_data)
     assert len(pause_bot.message_storage.messages) == 0
 
@@ -152,7 +155,6 @@ def test_pause_message_filtered_by_module_id(pause_bot, block_data, pause_messag
     new_message = pause_message.copy()
     new_message['stakingModuleId'] = 2
 
-    # mock because prefix
     pause_bot._sign_filter = Mock(return_value=lambda _: True)
 
     pause_bot.message_storage.messages = [pause_message, pause_message, new_message]
