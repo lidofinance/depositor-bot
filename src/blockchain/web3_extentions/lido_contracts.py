@@ -90,9 +90,8 @@ class LidoContracts(Module):
         )
 
         dsm_version = self.deposit_security_module.version()
-
+        logger.debug({'msg': f'Use deposit security module V{dsm_version}.'})
         if dsm_version == 1:
-            logger.debug({'msg': 'Use deposit security module V1.'})
             self.deposit_security_module = cast(
                 DepositSecurityModuleContract,
                 self.w3.eth.contract(
@@ -100,5 +99,3 @@ class LidoContracts(Module):
                     ContractFactoryClass=DepositSecurityModuleContract,
                 ),
             )
-        else:
-            logger.debug({'msg': f'Use deposit security module V{dsm_version}.'})
