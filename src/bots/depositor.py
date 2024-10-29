@@ -25,7 +25,6 @@ from schema import Or, Schema
 from transport.msg_providers.onchain_transport import DepositParser, OnchainTransportProvider, PingParser
 from transport.msg_providers.rabbit import MessageType, RabbitProvider
 from transport.msg_storage import MessageStorage
-from transport.msg_types.common import get_messages_sign_filter
 from transport.msg_types.deposit import DepositMessage, DepositMessageSchema
 from transport.msg_types.ping import PingMessageSchema, to_check_sum_address
 from transport.types import TransportType
@@ -101,8 +100,8 @@ class DepositorBot:
             filters=[
                 message_metrics_filter,
                 to_check_sum_address,
-                get_messages_sign_filter(self.w3),
             ],
+            prefix_provider=self.w3.lido.deposit_security_module.get_attest_message_prefix,
         )
 
     def execute(self, block: BlockData) -> bool:

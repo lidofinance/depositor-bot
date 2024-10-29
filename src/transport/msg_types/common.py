@@ -1,7 +1,6 @@
 import logging
 from typing import Any, Callable, List
 
-from blockchain.typings import Web3
 from cryptography.verify_signature import recover_vs, verify_message_with_signature
 from eth_account.account import VRS
 from metrics.metrics import UNEXPECTED_EXCEPTIONS
@@ -14,12 +13,12 @@ from utils.bytes import from_hex_string_to_bytes
 logger = logging.getLogger(__name__)
 
 
-def get_messages_sign_filter(web3: Web3) -> Callable:
+def get_messages_sign_filter(prefix) -> Callable:
     """Returns filter that checks message validity"""
 
     def check_messages(msg: DepositMessage | PauseMessage | UnvetMessage) -> bool:
         v, r, s = _vrs(msg)
-        data, abi = _verification_data(web3, msg)
+        data, abi = _verification_data(prefix, msg)
 
         is_valid = verify_message_with_signature(
             data=data,
@@ -57,16 +56,13 @@ def _select_label(msg: DepositMessage | PauseMessage | UnvetMessage) -> str:
         raise ValueError('Unsupported message type')
 
 
-def _verification_data(web3: Web3, msg: DepositMessage | PauseMessage | UnvetMessage) -> tuple[List[Any], List[str]]:
+def _verification_data(prefix: bytes, msg: DepositMessage | PauseMessage | UnvetMessage) -> tuple[List[Any], List[str]]:
     t = msg['type']
     if t == MessageType.PAUSE:
-        prefix = web3.lido.deposit_security_module.get_pause_message_prefix()
         return _verification_data_pause(prefix, msg)
     elif t == MessageType.UNVET:
-        prefix = web3.lido.deposit_security_module.get_unvet_message_prefix()
         return _verification_data_unvet(prefix, msg)
     elif t == MessageType.DEPOSIT:
-        prefix = web3.lido.deposit_security_module.get_attest_message_prefix()
         return _verification_data_deposit(prefix, msg)
     else:
         raise ValueError('Unsupported message type')
