@@ -7,10 +7,13 @@ from metrics.metrics import UNEXPECTED_EXCEPTIONS
 from transport.msg_providers.rabbit import MessageType
 from transport.msg_types.deposit import DepositMessage
 from transport.msg_types.pause import PauseMessage
+from transport.msg_types.ping import PingMessage
 from transport.msg_types.unvet import UnvetMessage
 from utils.bytes import from_hex_string_to_bytes
 
 logger = logging.getLogger(__name__)
+
+BotMessage = DepositMessage | PauseMessage | UnvetMessage | PingMessage
 
 
 def get_messages_sign_filter(prefix) -> Callable:
@@ -75,12 +78,11 @@ def _verification_data_deposit(prefix: bytes, msg: DepositMessage) -> tuple[List
 
 
 def _verification_data_pause(prefix: bytes, msg: PauseMessage) -> tuple[List[Any], List[str]]:
-    if msg.get('stakingModuleId', -1) != -1:
-        data = [prefix, msg['blockNumber'], msg['stakingModuleId']]
-        abi = ['bytes32', 'uint256', 'uint256']
-    else:
-        data = [prefix, msg['blockNumber']]
-        abi = ['bytes32', 'uint256']
+    data = [prefix, msg['blockNumber']]
+    abi = ['bytes32', 'uint256']
+    if 'stakingModuleId' in msg:
+        data.append(msg['stakingModuleId'])
+        abi.append('uint256')
     return data, abi
 
 

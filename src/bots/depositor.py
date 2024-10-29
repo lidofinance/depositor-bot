@@ -111,7 +111,7 @@ class DepositorBot:
 
         if not modules_id:
             # Read messages in case if no depositable modules for metrics
-            self.message_storage.receive_messages()
+            self.message_storage.get_messages_and_actualize()
 
         for module_id in modules_id:
             logger.info({'msg': f'Do deposit to module with id: {module_id}.'})
@@ -188,7 +188,7 @@ class DepositorBot:
         actualize_filter = self._get_message_actualize_filter()
         prefix = self.w3.lido.deposit_security_module.get_attest_message_prefix()
         sign_filter = get_messages_sign_filter(prefix)
-        messages = self.message_storage.get_messages([sign_filter, actualize_filter])
+        messages = self.message_storage.get_messages_and_actualize(sign_filter, actualize_filter)
 
         module_filter = self._get_module_messages_filter(module_id)
         messages = list(filter(module_filter, messages))
@@ -249,13 +249,7 @@ class DepositorBot:
         nonce = self.w3.lido.staking_router.get_staking_module_nonce(module_id)
 
         def message_filter(message: DepositMessage) -> bool:
-            if message['stakingModuleId'] != module_id:
-                return False
-
-            if message['nonce'] < nonce:
-                return False
-
-            return True
+            return message['stakingModuleId'] == module_id and message['nonce'] >= nonce
 
         return message_filter
 

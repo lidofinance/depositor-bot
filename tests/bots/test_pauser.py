@@ -107,7 +107,7 @@ def get_pause_message_v2(web3):
 
 @pytest.mark.unit
 def test_pause_bot_without_messages(pause_bot, block_data):
-    pause_bot.message_storage.get_messages = Mock(return_value=[])
+    pause_bot.message_storage.get_messages_and_actualize = Mock(return_value=[])
     pause_bot._send_pause_message = Mock()
     pause_bot.execute(block_data)
     pause_bot._send_pause_message.assert_not_called()
@@ -151,6 +151,9 @@ def test_pause_bot_clean_messages(pause_bot, block_data, pause_message, active_m
 def test_pause_message_filtered_by_module_id(pause_bot, block_data, pause_message):
     new_message = pause_message.copy()
     new_message['stakingModuleId'] = 2
+
+    # mock because prefix
+    pause_bot._sign_filter = Mock(return_value=lambda _: True)
 
     pause_bot.message_storage.messages = [pause_message, pause_message, new_message]
     pause_bot.w3.lido.staking_router.is_staking_module_active = lambda module_id: not module_id % 2

@@ -1,5 +1,5 @@
 import logging
-from typing import Callable, Optional
+from typing import Callable, Iterable, Optional
 
 import variables
 from blockchain.executor import Executor
@@ -89,14 +89,14 @@ class UnvetterBot:
 
         return True
 
-    def receive_unvet_messages(self) -> list[UnvetMessage]:
+    def receive_unvet_messages(self) -> Iterable[UnvetMessage]:
         if self.message_storage is None:
             return []
 
         actualize_filter = self._get_message_actualize_filter()
         prefix = self.w3.lido.deposit_security_module.get_unvet_message_prefix()
         sign_filter = get_messages_sign_filter(prefix)
-        return self.message_storage.get_messages([sign_filter, actualize_filter])
+        return self.message_storage.get_messages_and_actualize(sign_filter, actualize_filter)
 
     def _get_message_actualize_filter(self) -> Callable[[UnvetMessage], bool]:
         modules = self.w3.lido.staking_router.get_staking_module_ids()
@@ -149,6 +149,6 @@ class UnvetterBot:
             return
         prefix = self.w3.lido.deposit_security_module.get_unvet_message_prefix()
         sign_filter = get_messages_sign_filter(prefix)
-        self.message_storage.get_messages(
-            [sign_filter, lambda message: message['stakingModuleId'] != module_id or message['nonce'] >= nonce]
+        self.message_storage.get_messages_and_actualize(
+            sign_filter, lambda message: message['stakingModuleId'] != module_id or message['nonce'] >= nonce
         )

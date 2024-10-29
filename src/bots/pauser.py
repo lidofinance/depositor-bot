@@ -71,7 +71,8 @@ class PauserBot:
         )
 
     def execute(self, block: BlockData) -> bool:
-        messages = self.receive_pause_messages()
+        filters = self._message_filters()
+        messages = self.message_storage.get_messages_and_actualize(*filters)
         logger.info({'msg': f'Received {len(messages)} pause messages.'})
 
         for message in messages:
@@ -79,11 +80,12 @@ class PauserBot:
 
         return True
 
-    def receive_pause_messages(self) -> list[PauseMessage]:
+    def _message_filters(self):
+        sign_filter = self._sign_filter()
+
         actualize_filter = self._get_message_actualize_filter()
-        prefix = self.w3.lido.deposit_security_module.get_pause_message_prefix()
-        sign_filter = get_messages_sign_filter(prefix)
-        return self.message_storage.get_messages([sign_filter, actualize_filter])
+
+        return sign_filter, actualize_filter
 
     def _get_message_actualize_filter(self) -> Callable[[PauseMessage], bool]:
         current_block = self.w3.eth.get_block('latest')
@@ -102,14 +104,12 @@ class PauserBot:
     def _send_pause_message(self, message: PauseMessage) -> bool:
         if self.w3.lido.deposit_security_module.__class__.__name__ == 'DepositSecurityModuleContractV2':
             logger.warning({'msg': 'Handle pause message.', 'value': message})
-
-            if message.get('stakingModuleId', -1) == -1:
-                return self._send_pause_v2(message)
-
+            send_func = self._send_pause_v2
         else:
-            if message.get('stakingModuleId', -1) != -1:
-                return self._send_pause(message)
+            send_func = self._send_pause
 
+        if 'stakingModuleId' in message:
+            return send_func(message)
         logger.error({'msg': 'Unsupported message. Outdated schema.', 'value': message})
         return True
 
@@ -148,6 +148,8 @@ class PauserBot:
         return result
 
     def _clear_outdated_messages_for_module(self, module_id: int) -> None:
+        self.message_storage.get_messages_and_actualize(self._sign_filter(), lambda message: message['stakingModuleId'] != module_id)
+
+    def _sign_filter(self):
         prefix = self.w3.lido.deposit_security_module.get_pause_message_prefix()
-        sign_filter = get_messages_sign_filter(prefix)
-        self.message_storage.get_messages([sign_filter, lambda message: message['stakingModuleId'] != module_id])
+        return get_messages_sign_filter(prefix)
