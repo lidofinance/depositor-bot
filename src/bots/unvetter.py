@@ -10,6 +10,7 @@ from schema import Or, Schema
 from transport.msg_providers.onchain_transport import OnchainTransportProvider, PingParser, UnvetParser
 from transport.msg_providers.rabbit import MessageType, RabbitProvider
 from transport.msg_storage import MessageStorage
+from transport.msg_types.common import get_messages_sign_filter
 from transport.msg_types.ping import PingMessageSchema, to_check_sum_address
 from transport.msg_types.unvet import UnvetMessage, UnvetMessageSchema
 from transport.types import TransportType
@@ -72,7 +73,6 @@ class UnvetterBot:
                 message_metrics_filter,
                 to_check_sum_address,
             ],
-            prefix_provider=self.w3.lido.deposit_security_module.get_unvet_message_prefix,
         )
 
     def execute(self, block: BlockData) -> bool:
@@ -94,7 +94,9 @@ class UnvetterBot:
             return []
 
         actualize_filter = self._get_message_actualize_filter()
-        return self.message_storage.get_messages(actualize_filter)
+        prefix = self.w3.lido.deposit_security_module.get_unvet_message_prefix()
+        sign_filter = get_messages_sign_filter(prefix)
+        return self.message_storage.get_messages([sign_filter, actualize_filter])
 
     def _get_message_actualize_filter(self) -> Callable[[UnvetMessage], bool]:
         modules = self.w3.lido.staking_router.get_staking_module_ids()
@@ -145,5 +147,8 @@ class UnvetterBot:
     def _clear_outdated_messages_for_module(self, module_id: int, nonce: int) -> None:
         if self.message_storage is None:
             return
-
-        self.message_storage.get_messages(lambda message: message['stakingModuleId'] != module_id or message['nonce'] >= nonce)
+        prefix = self.w3.lido.deposit_security_module.get_unvet_message_prefix()
+        sign_filter = get_messages_sign_filter(prefix)
+        self.message_storage.get_messages(
+            [sign_filter, lambda message: message['stakingModuleId'] != module_id or message['nonce'] >= nonce]
+        )

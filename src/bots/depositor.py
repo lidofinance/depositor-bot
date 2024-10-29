@@ -25,6 +25,7 @@ from schema import Or, Schema
 from transport.msg_providers.onchain_transport import DepositParser, OnchainTransportProvider, PingParser
 from transport.msg_providers.rabbit import MessageType, RabbitProvider
 from transport.msg_storage import MessageStorage
+from transport.msg_types.common import get_messages_sign_filter
 from transport.msg_types.deposit import DepositMessage, DepositMessageSchema
 from transport.msg_types.ping import PingMessageSchema, to_check_sum_address
 from transport.types import TransportType
@@ -101,7 +102,6 @@ class DepositorBot:
                 message_metrics_filter,
                 to_check_sum_address,
             ],
-            prefix_provider=self.w3.lido.deposit_security_module.get_attest_message_prefix,
         )
 
     def execute(self, block: BlockData) -> bool:
@@ -186,7 +186,9 @@ class DepositorBot:
     def _get_quorum(self, module_id: int) -> Optional[list[DepositMessage]]:
         """Returns quorum messages or None is quorum is not ready"""
         actualize_filter = self._get_message_actualize_filter()
-        messages = self.message_storage.get_messages(actualize_filter)
+        prefix = self.w3.lido.deposit_security_module.get_attest_message_prefix()
+        sign_filter = get_messages_sign_filter(prefix)
+        messages = self.message_storage.get_messages([sign_filter, actualize_filter])
 
         module_filter = self._get_module_messages_filter(module_id)
         messages = list(filter(module_filter, messages))
