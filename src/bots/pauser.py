@@ -76,7 +76,7 @@ class PauserBot:
         logger.info({'msg': f'Received {len(messages)} pause messages.'})
 
         for message in messages:
-            self._send_pause_message(message)
+            return self._send_pause_v2(message)
 
         return True
 
@@ -97,40 +97,6 @@ class PauserBot:
             return message['blockNumber'] > current_block['number'] - message_validity_time
 
         return message_filter
-
-    def _send_pause_message(self, message: PauseMessage) -> bool:
-        if self.w3.lido.deposit_security_module.__class__.__name__ == 'DepositSecurityModuleContractV2':
-            logger.warning({'msg': 'Handle pause message.', 'value': message})
-
-            if message.get('stakingModuleId', -1) == -1:
-                return self._send_pause_v2(message)
-
-        else:
-            if message.get('stakingModuleId', -1) != -1:
-                return self._send_pause(message)
-
-        logger.error({'msg': 'Unsupported message. Outdated schema.', 'value': message})
-        return True
-
-    def _send_pause(self, message: PauseMessage):
-        module_id = message['stakingModuleId']
-
-        if not self.w3.lido.staking_router.is_staking_module_active(module_id):
-            # Module already deactivated
-            self._clear_outdated_messages_for_module(module_id)
-            logger.info({'msg': f'Module {module_id} already paused. Skip message.'})
-            return False
-
-        pause_tx = self.w3.lido.deposit_security_module.pause_deposits(
-            message['blockNumber'], module_id, (message['signature']['r'], message['signature']['_vs'])
-        )
-
-        if not self.w3.transaction.check(pause_tx):
-            return False
-
-        result = self.w3.transaction.send(pause_tx, False, 6)
-        logger.info({'msg': f'Transaction send. Result is {result}.', 'value': result})
-        return result
 
     def _send_pause_v2(self, message: PauseMessage):
         if self.w3.lido.deposit_security_module.is_deposits_paused():

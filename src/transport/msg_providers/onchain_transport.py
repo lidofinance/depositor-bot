@@ -272,8 +272,8 @@ class OnchainTransportProvider(BaseMessageProvider):
         guardians = self._allowed_guardians_provider()
         addresses_with_padding = [_32padding_address(address) for address in guardians]
         filter_params = FilterParams(
-            fromBlock=from_block,
-            toBlock=latest_block_number,
+            from_block=from_block,
+            to_block=latest_block_number,
             address=self._onchain_address,
             topics=[event_ids, addresses_with_padding],
         )

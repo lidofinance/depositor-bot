@@ -11,6 +11,8 @@ logger = logging.getLogger(__name__)
 
 
 class DepositSecurityModuleContract(ContractInterface):
+    """Deprecated. Use DepositSecurityModuleContractV2 instead."""
+
     abi_path = './interfaces/DepositSecurityModule.json'
 
     def get_guardian_quorum(self, block_identifier: BlockIdentifier = 'latest') -> int:
@@ -79,7 +81,7 @@ class DepositSecurityModuleContract(ContractInterface):
         logger.info(
             {
                 'msg': f'Build `depositBufferedEther({block_number}, {block_hash}, {deposit_root}, {staking_module_id}, '
-                       f'{nonce}, {deposit_call_data}, {guardian_signatures})` tx.'  # noqa
+                f'{nonce}, {deposit_call_data}, {guardian_signatures})` tx.'  # noqa
             }
         )
         return tx
@@ -221,7 +223,7 @@ class DepositSecurityModuleContractV2(DepositSecurityModuleContract):
         logger.info(
             {
                 'msg': f'Build `unvetSigningKeys({block_number}, {block_hash}, {staking_module_id}, {nonce}, '
-                       f'{operator_ids}, {vetted_keys_by_operator}, {guardian_signature})` tx.'  # noqa
+                f'{operator_ids}, {vetted_keys_by_operator}, {guardian_signature})` tx.'  # noqa
             }
         )
         return tx

@@ -4,7 +4,6 @@ import pytest
 import variables
 from blockchain.contracts.deposit import DepositContract
 from blockchain.contracts.deposit_security_module import DepositSecurityModuleContract, DepositSecurityModuleContractV2
-from blockchain.contracts.erc20 import ERC20Contract
 from blockchain.contracts.lido import LidoContract
 from blockchain.contracts.lido_locator import LidoLocatorContract
 from blockchain.contracts.staking_router import StakingRouterContract, StakingRouterContractV2
@@ -85,17 +84,6 @@ def staking_router_v2(web3_provider_integration, lido_locator):
         web3_provider_integration.eth.contract(
             address=lido_locator.staking_router(),
             ContractFactoryClass=StakingRouterContractV2,
-        ),
-    )
-
-
-@pytest.fixture
-def weth(web3_provider_integration, staking_module):
-    yield cast(
-        ERC20Contract,
-        web3_provider_integration.eth.contract(
-            address=staking_module.weth(),
-            ContractFactoryClass=ERC20Contract,
         ),
     )
 

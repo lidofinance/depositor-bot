@@ -15,7 +15,7 @@ class Sender:
     Chain senders for deposit transactions.
     """
 
-    _TIMEOUT_IN_BLOCKS = 6
+    _TIMEOUT_IN_BLOCKS = 10
 
     def __init__(self, w3: Web3):
         self._w3 = w3
@@ -23,7 +23,6 @@ class Sender:
     @staticmethod
     def _prepare_signs_for_deposit(quorum: list[DepositMessage]) -> tuple[tuple[str, str], ...]:
         sorted_messages = sorted(quorum, key=lambda msg: int(msg['guardianAddress'], 16))
-
         return tuple((msg['signature']['r'], msg['signature']['_vs']) for msg in sorted_messages)
 
     def prepare_and_send(

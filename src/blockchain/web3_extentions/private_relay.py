@@ -84,25 +84,5 @@ class PrivateRelayClient:
             {
                 'tx': tx.rawTransaction.hex(),
                 'maxBlockNumber': hex(self.w3.eth.get_block('pending')['number'] + timeout_in_blocks),
-                'preferences': {
-                    'builders': [
-                        'rpc.flashbots.net',
-                        'https://rpc.f1b.io',
-                        'rsync-builder.xyz',
-                        'rpc.beaverbuild.org',
-                        'builder0x69.io',
-                        'rpc.titanbuilder.xyz',
-                        'builder.eigenphi.io',
-                        'builder.eigenphi.io',
-                        'https://builder.gmbit.co/rpc',
-                        'rpc.payload.de',
-                        'rpc.lokibuilder.xyz',
-                        'https://buildai.net',
-                        'rpc.mevshare.jetbldr.xyz',
-                        'flashbots.rpc.tbuilder.xyz',
-                        'rpc.penguinbuild.org',
-                        'rpc.bobthebuilder.xyz',
-                    ]
-                },
             }
         ]
