@@ -9,7 +9,7 @@ class MessageStorage:
 
     """Fetches all messages, filter them and storing"""
 
-    def __init__(self, transports: List[BaseMessageProvider], filters: List[Callable], prefix_provider: Optional[Callable]):
+    def __init__(self, transports: List[BaseMessageProvider], filters: List[Callable], prefix_provider: Optional[Callable] = None):
         """
         transports - List of objects with working get_messages method.
         filters - functions that would be applied to messages when they are received. (That would need only one check)
