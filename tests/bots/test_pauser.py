@@ -179,6 +179,7 @@ def test_pauser_bot(web3_lido_integration, web3_provider_integration, add_accoun
     pm = get_pause_message(web3_lido_integration, module_id)
 
     pb = PauserBot(web3_lido_integration)
+    pb._get_message_actualize_filter = Mock(return_value=lambda x: True)
     pb.execute(latest)
 
     web3_lido_integration.provider.make_request('anvil_mine', [1])
