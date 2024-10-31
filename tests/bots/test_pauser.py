@@ -208,14 +208,16 @@ def test_pauser_bot(web3_lido_integration, web3_provider_integration, add_accoun
 
     upgrade_staking_router_to_v2(web3_lido_integration)
     web3_lido_integration.lido.deposit_security_module.get_guardians = Mock(return_value=[COUNCIL_ADDRESS])
+    # recreate signature
+    pb.message_storage.messages = [get_pause_message_v2(web3_lido_integration)]
     pb.execute(latest)
     assert pb.message_storage.messages
     assert [
         msg
         for msg in caplog.messages
         if (
-            "Build `pauseDeposits(19628129, ('0xe37ddb5eadce3a4f03274a102c45a21865f9d6fa03f61fdb98466ae0fd677331', "
-            "'0xb1dff99d6b8ad3402c7237341816568bf2831ddbe0bddd111eebd12a59efcb8c'))` tx."
+            "Build `pauseDeposits(19628132, ('0xafd5cffaea441e00ec6aaf081589ea70ee665c827047071b28153e4472ce48fa', "
+            "'0x4c4ea8132ca88766d4beead65d47330b15e7921e7dc71de162fc2a971d8800b4'))` tx."
         )
         in msg
     ]
