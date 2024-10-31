@@ -37,7 +37,7 @@ class MessageStorage:
         Returns:
             Iterable[BotMessage]: A list of messages that pass all filters.
         """
-        filters = self._filters
+        filters = list(self._filters)
         filters.extend(args)
 
         messages = self.messages
