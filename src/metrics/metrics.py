@@ -1,4 +1,5 @@
 from prometheus_client.metrics import Counter, Gauge, Histogram, Info
+from prometheus_client.utils import INF
 from variables import DEPOSIT_MODULES_WHITELIST, PROMETHEUS_PREFIX, PUBLIC_ENV_VARS
 
 GAS_FEE = Gauge(
@@ -105,6 +106,7 @@ ETH_RPC_REQUESTS_DURATION = Histogram(
     'eth_rpc_requests_duration',
     'Duration of requests to ETH1 RPC',
     namespace=PROMETHEUS_PREFIX,
+    buckets=(0.25, 0.5, 0.75, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0, 120.0, INF),
 )
 
 ETH_RPC_REQUESTS = Counter(

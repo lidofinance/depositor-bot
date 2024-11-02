@@ -7,6 +7,7 @@ from web3.contract.contract import Contract
 
 class ContractInterface(Contract):
     abi_path: str
+    decode_tuples = True
 
     @staticmethod
     def load_abi(abi_file: str) -> dict:

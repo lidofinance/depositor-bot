@@ -11,12 +11,13 @@ include = [
 package-mode = false
 
 [tool.poetry.dependencies]
-python = ">=3.10,<3.13"
+python = ">=3.13,<3.14"
 numpy = "^2.1.2"
 prometheus-client = "^0.21.0"
 schema = "^0.7.5"
 websocket-client = "^1.4.1"
 web3 = "^7.4.0"
+web3-multi-provider = "^2.0.0"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.4.4"

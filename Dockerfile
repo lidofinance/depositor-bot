@@ -1,4 +1,4 @@
-FROM python:3.12.4-slim as base
+FROM python:3.13.0-slim as base
 
 RUN apt-get update && apt-get install -y --no-install-recommends -qq \
     gcc=4:12.2.0-3 \

@@ -56,7 +56,6 @@ class LidoContracts(Module):
             self.w3.eth.contract(
                 address=self.lido_locator.staking_router(),
                 ContractFactoryClass=StakingRouterContractV2,
-                decode_tuples=True,
             ),
         )
 

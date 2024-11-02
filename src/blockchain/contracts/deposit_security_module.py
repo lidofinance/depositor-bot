@@ -10,10 +10,8 @@ from web3.types import BlockIdentifier
 logger = logging.getLogger(__name__)
 
 
-class DepositSecurityModuleContract(ContractInterface):
-    """Deprecated. Use DepositSecurityModuleContractV2 instead."""
-
-    abi_path = './interfaces/DepositSecurityModule.json'
+class DepositSecurityModuleContractV2(ContractInterface):
+    abi_path = './interfaces/DepositSecurityModuleV2.json'
 
     def get_guardian_quorum(self, block_identifier: BlockIdentifier = 'latest') -> int:
         """Returns number of valid guardian signatures required to vet (depositRoot, nonce) pair."""
@@ -142,35 +140,6 @@ class DepositSecurityModuleContract(ContractInterface):
             }
         )
         return response
-
-    def get_unvet_message_prefix(self, block_identifier: BlockIdentifier = 'latest'):
-        raise NotImplementedError('V1 does not implement this method.')
-
-    def unvet_signing_keys(
-        self,
-        block_number: int,
-        block_hash: Hash32,
-        staking_module_id: int,
-        nonce: int,
-        operator_ids: bytes,
-        vetted_keys_by_operator: bytes,
-        guardian_signature: tuple[str, str],
-    ):
-        raise NotImplementedError('V1 does not implement this method.')
-
-    def is_deposits_paused(self, block_identifier: BlockIdentifier = 'latest'):
-        raise NotImplementedError('V1 does not implement this method.')
-
-    def pause_deposits_v2(
-        self,
-        block_number: int,
-        guardian_signature: tuple[str, str],
-    ) -> ContractFunction:
-        raise NotImplementedError('V1 does not implement this method.')
-
-
-class DepositSecurityModuleContractV2(DepositSecurityModuleContract):
-    abi_path = './interfaces/DepositSecurityModuleV2.json'
 
     def pause_deposits_v2(
         self,

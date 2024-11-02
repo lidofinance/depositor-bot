@@ -5,7 +5,7 @@ import traceback
 from time import sleep
 from typing import Any, Callable, Optional
 
-from blockchain.constants import SLOT_TIME
+from blockchain.constants import SLOT_TIME, SLOTS_IN_EPOCH
 from blockchain.typings import Web3
 from metrics import healthcheck_pulse
 from utils.timeout import TimeoutManager, TimeoutManagerError
@@ -65,7 +65,7 @@ class Executor:
         with TimeoutManager(
             max(
                 # Wait at least 5 slots before throw exception
-                32 * SLOT_TIME,
+                SLOTS_IN_EPOCH * SLOT_TIME,
                 self.blocks_between_execution * SLOT_TIME * 4,
             )
         ):

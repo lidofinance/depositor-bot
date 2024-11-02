@@ -6,8 +6,8 @@ from web3.types import BlockIdentifier, Wei
 logger = logging.getLogger(__name__)
 
 
-class StakingRouterContract(ContractInterface):
-    abi_path = './interfaces/StakingRouter.json'
+class StakingRouterContractV2(ContractInterface):
+    abi_path = './interfaces/StakingRouterV2.json'
 
     def get_contract_version(self, block_identifier: BlockIdentifier = 'latest') -> int:
         response = self.functions.getContractVersion().call(block_identifier=block_identifier)
@@ -92,7 +92,3 @@ class StakingRouterContract(ContractInterface):
             }
         )
         return response
-
-
-class StakingRouterContractV2(StakingRouterContract):
-    abi_path = './interfaces/StakingRouterV2.json'
