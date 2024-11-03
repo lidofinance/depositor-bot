@@ -67,13 +67,6 @@ POSSIBLE_DEPOSITS_AMOUNT = Gauge(
     namespace=PROMETHEUS_PREFIX,
 )
 
-IS_DEPOSITABLE = Gauge(
-    'is_depositable',
-    'Represents is_depositable check.',
-    ['module_id'],
-    namespace=PROMETHEUS_PREFIX,
-)
-
 QUORUM = Gauge(
     'quorum',
     'Represents if quorum could be collected.',

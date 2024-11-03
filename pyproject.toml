@@ -18,6 +18,8 @@ schema = "^0.7.5"
 websocket-client = "^1.4.1"
 web3 = "^7.4.0"
 web3-multi-provider = "^2.0.0"
+pydantic = "^2.9.2"
+polyfactory = "^2.17.0"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.4.4"

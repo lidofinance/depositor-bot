@@ -15,12 +15,12 @@ COUNCIL_PK = '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d
 
 
 @pytest.fixture
-def pause_bot(web3_lido_unit, block_data):
-    web3_lido_unit.eth.get_block = Mock(return_value=block_data)
+def pause_bot(w3_unit, block_data):
+    w3_unit.eth.get_block = Mock(return_value=block_data)
     variables.MESSAGE_TRANSPORTS = ''
-    web3_lido_unit.lido.deposit_security_module.get_pause_intent_validity_period_blocks = Mock(return_value=10)
-    web3_lido_unit.lido.deposit_security_module.get_guardians = Mock(return_value=[COUNCIL_ADDRESS])
-    yield PauserBot(web3_lido_unit)
+    w3_unit.lido.deposit_security_module.get_pause_intent_validity_period_blocks = Mock(return_value=10)
+    w3_unit.lido.deposit_security_module.get_guardians = Mock(return_value=[COUNCIL_ADDRESS])
+    yield PauserBot(w3_unit)
 
 
 @pytest.fixture
@@ -121,44 +121,30 @@ def test_pause_bot_without_messages(pause_bot, block_data):
         pytest.param(6, marks=pytest.mark.xfail(raises=AssertionError, strict=True)),
     ],
 )
-def test_pause_bot_outdate_messages(pause_bot, block_data, pause_message, block_range):
+def test_pause_bot_outdated_messages(pause_bot, block_data, pause_message, block_range):
     pause_message['blockNumber'] = 5
     pause_bot.message_storage.messages = [pause_message]
+    pause_bot.w3.lido.deposit_security_module.is_deposits_paused = Mock(return_value=False)
     pause_bot.w3.lido.deposit_security_module.get_pause_intent_validity_period_blocks = Mock(return_value=block_range)
 
-    pause_bot._send_pause_message = Mock()
+    pause_bot._send_pause_v2 = Mock()
     pause_bot.execute(block_data)
-    pause_bot._send_pause_message.assert_not_called()
+    pause_bot._send_pause_v2.assert_not_called()
 
 
 @pytest.mark.unit
 @pytest.mark.parametrize(
-    'active_module',
+    'is_deposits_paused',
     [
-        False,
-        pytest.param(True, marks=pytest.mark.xfail(raises=AssertionError, strict=True)),
+        True,
+        pytest.param(False, marks=pytest.mark.xfail(raises=AssertionError, strict=True)),
     ],
 )
-def test_pause_bot_clean_messages(pause_bot, block_data, pause_message, active_module):
+def test_pause_bot_clean_messages(pause_bot, block_data, pause_message, is_deposits_paused):
     pause_bot.message_storage.messages = [pause_message]
-    pause_bot.w3.lido.staking_router.is_staking_module_active = Mock(return_value=active_module)
-
+    pause_bot.w3.lido.deposit_security_module.is_deposits_paused = Mock(return_value=is_deposits_paused)
     pause_bot.execute(block_data)
     assert len(pause_bot.message_storage.messages) == 0
-
-
-@pytest.mark.unit
-def test_pause_message_filtered_by_module_id(pause_bot, block_data, pause_message):
-    new_message = pause_message.copy()
-    new_message['stakingModuleId'] = 2
-
-    pause_bot.message_storage.messages = [pause_message, pause_message, new_message]
-    pause_bot.w3.lido.staking_router.is_staking_module_active = lambda module_id: not module_id % 2
-
-    pause_bot.execute(block_data)
-
-    # Only module_id=1 messages filtered
-    assert len(pause_bot.message_storage.messages) == 1
 
 
 @pytest.mark.integration

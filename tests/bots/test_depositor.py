@@ -5,12 +5,13 @@ import variables
 from bots.depositor import DepositorBot
 
 from tests.conftest import COUNCIL_ADDRESS_1, COUNCIL_ADDRESS_2, COUNCIL_PK_1, COUNCIL_PK_2, DSM_OWNER
+from tests.factories.staking_module import StakingModuleDigestFactory
 from tests.utils.protocol_utils import get_deposit_message
 
 
 @pytest.fixture
 def depositor_bot(
-    web3_lido_unit,
+    w3_unit,
     deposit_transaction_sender,
     base_deposit_strategy,
     block_data,
@@ -18,9 +19,9 @@ def depositor_bot(
 ):
     variables.MESSAGE_TRANSPORTS = ''
     variables.DEPOSIT_MODULES_WHITELIST = [1, 2]
-    web3_lido_unit.lido.staking_router.get_staking_module_ids = Mock(return_value=[1, 2])
-    web3_lido_unit.eth.get_block = Mock(return_value=block_data)
-    yield DepositorBot(web3_lido_unit, deposit_transaction_sender, base_deposit_strategy, csm_strategy)
+    w3_unit.lido.staking_router.get_staking_module_ids = Mock(return_value=[1, 2])
+    w3_unit.eth.get_block = Mock(return_value=block_data)
+    yield DepositorBot(w3_unit, deposit_transaction_sender, base_deposit_strategy, csm_strategy)
 
 
 @pytest.fixture
@@ -53,12 +54,28 @@ def test_depositor_one_module_deposited(depositor_bot, block_data):
     depositor_bot.w3.lido.staking_router.get_staking_module_ids = Mock(return_value=modules)
     depositor_bot.w3.lido.staking_router.get_staking_module_max_deposits_count = Mock(return_value=0)
     depositor_bot.w3.lido.deposit_security_module.get_max_deposits = Mock(return_value=10)
+
     depositor_bot.w3.lido.staking_router.get_staking_module_digests = Mock(
         return_value=[
-            (0, 0, (1,), (10, 20, 10)),
-            (0, 0, (2,), (0, 10, 10)),
+            StakingModuleDigestFactory.build(
+                state={'id': 1},
+                summary={
+                    'total_exited_validators': 10,
+                    'total_deposited_validators': 20,
+                    'depositable_validators_count': 10,
+                },
+            ),
+            StakingModuleDigestFactory.build(
+                state={'id': 2},
+                summary={
+                    'total_exited_validators': 0,
+                    'total_deposited_validators': 10,
+                    'depositable_validators_count': 10,
+                },
+            ),
         ]
     )
+
     depositor_bot._check_balance = Mock()
     depositor_bot._deposit_to_module = Mock(return_value=True)
     depositor_bot.execute(block_data)
@@ -67,17 +84,8 @@ def test_depositor_one_module_deposited(depositor_bot, block_data):
 
 
 @pytest.mark.unit
-def test_depositor_check_module_status(depositor_bot):
-    depositor_bot.w3.lido.staking_router.is_staking_module_active = Mock(return_value=True)
-    assert depositor_bot._check_module_status(1)
-
-    depositor_bot.w3.lido.staking_router.is_staking_module_active = Mock(return_value=False)
-    assert not depositor_bot._check_module_status(1)
-
-
-@pytest.mark.unit
 @pytest.mark.parametrize(
-    'is_depositable,quorum,is_gas_price_ok,is_deposited_keys_amount_ok',
+    'can_deposit,quorum,is_gas_price_ok,is_deposited_keys_amount_ok',
     [
         pytest.param(True, True, True, True, marks=pytest.mark.xfail(raises=AssertionError, strict=True)),
         (False, True, True, True),
@@ -86,9 +94,9 @@ def test_depositor_check_module_status(depositor_bot):
         (True, True, True, False),
     ],
 )
-def test_depositor_deposit_to_module(depositor_bot, is_depositable, quorum, is_gas_price_ok, is_deposited_keys_amount_ok):
-    depositor_bot._check_module_status = Mock(return_value=is_depositable)
+def test_depositor_deposit_to_module(depositor_bot, can_deposit, quorum, is_gas_price_ok, is_deposited_keys_amount_ok):
     depositor_bot._get_quorum = Mock(return_value=quorum)
+    depositor_bot.w3.lido.deposit_security_module.can_deposit = Mock(return_value=can_deposit)
     strategy = Mock()
     strategy.is_gas_price_ok = Mock(return_value=is_gas_price_ok)
     strategy.can_deposit_keys_based_on_ether = Mock(return_value=is_deposited_keys_amount_ok)

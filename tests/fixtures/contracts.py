@@ -3,10 +3,10 @@ from typing import cast
 import pytest
 import variables
 from blockchain.contracts.deposit import DepositContract
-from blockchain.contracts.deposit_security_module import DepositSecurityModuleContract, DepositSecurityModuleContractV2
+from blockchain.contracts.deposit_security_module import DepositSecurityModuleContractV2
 from blockchain.contracts.lido import LidoContract
 from blockchain.contracts.lido_locator import LidoLocatorContract
-from blockchain.contracts.staking_router import StakingRouterContract, StakingRouterContractV2
+from blockchain.contracts.staking_router import StakingRouterContractV2
 from blockchain.typings import Web3
 
 
@@ -46,10 +46,10 @@ def lido_contract(web3_provider_integration, lido_locator):
 @pytest.fixture
 def deposit_security_module(web3_provider_integration, lido_locator):
     yield cast(
-        DepositSecurityModuleContract,
+        DepositSecurityModuleContractV2,
         web3_provider_integration.eth.contract(
             address=lido_locator.deposit_security_module(),
-            ContractFactoryClass=DepositSecurityModuleContract,
+            ContractFactoryClass=DepositSecurityModuleContractV2,
         ),
     )
 
@@ -69,10 +69,10 @@ def deposit_security_module_v2(web3_lido_integration, lido_locator):
 @pytest.fixture
 def staking_router(web3_provider_integration, lido_locator):
     yield cast(
-        StakingRouterContract,
+        StakingRouterContractV2,
         web3_provider_integration.eth.contract(
             address=lido_locator.staking_router(),
-            ContractFactoryClass=StakingRouterContract,
+            ContractFactoryClass=StakingRouterContractV2,
         ),
     )
 

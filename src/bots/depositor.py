@@ -5,9 +5,9 @@ from typing import Callable, Optional
 
 import variables
 from blockchain.deposit_strategy.base_deposit_strategy import CSMDepositStrategy, DefaultDepositStrategy
+from blockchain.deposit_strategy.deposit_order import get_preferred_to_deposit_modules_ids
 from blockchain.deposit_strategy.deposit_transaction_sender import Sender
 from blockchain.deposit_strategy.gas_price_calculator import GasPriceCalculator
-from blockchain.deposit_strategy.prefered_module_to_deposit import get_preferred_to_deposit_modules
 from blockchain.deposit_strategy.strategy import DepositStrategy
 from blockchain.executor import Executor
 from blockchain.typings import Web3
@@ -15,7 +15,6 @@ from metrics.metrics import (
     ACCOUNT_BALANCE,
     CURRENT_QUORUM_SIZE,
     GUARDIAN_BALANCE,
-    IS_DEPOSITABLE,
     MODULE_TX_SEND,
     QUORUM,
     UNEXPECTED_EXCEPTIONS,
@@ -108,7 +107,7 @@ class DepositorBot:
     def execute(self, block: BlockData) -> bool:
         self._check_balance()
 
-        modules_id = get_preferred_to_deposit_modules(self.w3, variables.DEPOSIT_MODULES_WHITELIST)
+        modules_id = get_preferred_to_deposit_modules_ids(self.w3, variables.DEPOSIT_MODULES_WHITELIST)
 
         if not modules_id:
             # Read messages in case if no depositable modules for metrics
@@ -148,9 +147,6 @@ class DepositorBot:
                 GUARDIAN_BALANCE.labels(address=address, chain_id=w3_databus_chain_id).set(balance)
 
     def _deposit_to_module(self, module_id: int) -> bool:
-        is_depositable = self._check_module_status(module_id)
-        logger.info({'msg': 'Fetch module depositable status.', 'value': is_depositable})
-
         quorum = self._get_quorum(module_id)
         logger.info({'msg': 'Build quorum.', 'value': quorum})
 
@@ -164,7 +160,7 @@ class DepositorBot:
         is_deposit_amount_ok = strategy.can_deposit_keys_based_on_ether(module_id)
         logger.info({'msg': 'Calculations deposit recommendations.', 'value': is_deposit_amount_ok})
 
-        if is_depositable and quorum and can_deposit and gas_is_ok and is_deposit_amount_ok:
+        if quorum and can_deposit and gas_is_ok and is_deposit_amount_ok:
             logger.info({'msg': 'Checks passed. Prepare deposit tx.'})
             success = self.prepare_and_send_tx(module_id, quorum)
             self._flashbots_works = not self._flashbots_works or success
@@ -177,12 +173,6 @@ class DepositorBot:
         if module_id == 3:
             return self._csm_strategy
         return self._general_strategy
-
-    def _check_module_status(self, module_id: int) -> bool:
-        """Returns True if module is ready for deposit"""
-        ready = self.w3.lido.staking_router.is_staking_module_active(module_id)
-        IS_DEPOSITABLE.labels(module_id).set(int(ready))
-        return ready
 
     def _get_quorum(self, module_id: int) -> Optional[list[DepositMessage]]:
         """Returns quorum messages or None is quorum is not ready"""

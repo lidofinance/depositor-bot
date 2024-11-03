@@ -215,16 +215,16 @@ def test_data_bus_provider_pause_v3(
 
 
 @pytest.mark.unit
-def test_data_bus_mock_responses(web3_lido_unit):
+def test_data_bus_mock_responses(w3_unit):
     with mock.patch('web3.eth.Eth.chain_id', new_callable=mock.PropertyMock) as mock_chain_id:
         mock_chain_id.return_value = 1
-        receipts = mock_receipts(web3_lido_unit)
-        web3_lido_unit.eth.get_logs = Mock(side_effect=[receipts, None])
-        web3_lido_unit.is_connected = Mock(return_value=True)
-        web3_lido_unit.eth.get_balance = Mock(return_value=1)
-        web3_lido_unit.eth.get_block_number = Mock(return_value=1)
+        receipts = mock_receipts(w3_unit)
+        w3_unit.eth.get_logs = Mock(side_effect=[receipts, None])
+        w3_unit.is_connected = Mock(return_value=True)
+        w3_unit.eth.get_balance = Mock(return_value=1)
+        w3_unit.eth.get_block_number = Mock(return_value=1)
         provider = OnchainTransportProvider(
-            w3=web3_lido_unit,
+            w3=w3_unit,
             onchain_address=variables.ONCHAIN_TRANSPORT_ADDRESS,
             message_schema=Schema(Or(DepositMessageSchema, PingMessageSchema)),
             parsers_providers=[DepositParser, PingParser],

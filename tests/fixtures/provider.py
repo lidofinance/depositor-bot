@@ -3,16 +3,17 @@ from unittest.mock import Mock
 
 import pytest
 import variables
+from blockchain.typings import Web3
 from blockchain.web3_extentions.lido_contracts import LidoContracts
 from blockchain.web3_extentions.transaction import TransactionUtils
-from web3 import HTTPProvider, Web3
+from web3 import HTTPProvider
 
 from tests.fork import anvil_fork
 
 
 # -- Unit fixtures --
 @pytest.fixture
-def web3_lido_unit() -> Web3:
+def w3_unit() -> Web3:
     web3 = Web3()
     web3.lido = Mock()
     web3.attach_modules(
