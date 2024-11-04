@@ -1,4 +1,4 @@
-from typing import Callable, Iterable, List
+from typing import Callable, List
 
 from transport.msg_providers.common import BaseMessageProvider
 from transport.msg_types.common import BotMessage
@@ -25,27 +25,29 @@ class MessageStorage:
                                       used to filter messages when they are received.
         """
         self._transports = transports
-        self._filters = filters
+        self._filter = lambda x: all(f(x) for f in filters)
 
-    def get_messages_and_actualize(self, *args: Callable[[BotMessage], bool]) -> Iterable[BotMessage]:
+    def get_messages_and_actualize(self, actualize_filter: Callable[[BotMessage], bool]) -> list[BotMessage]:
         """
-        Fetches all messages from transports, applies both initial and additional filters, and updates the message list.
+        Fetches all messages from each transport, applies filtering, and updates the message list.
+
+        This method retrieves messages from all transports associated with the instance and filters them
+        based on both the instance’s `_filter` function and an additional `actualize_filter` function
+        provided as an argument. The filtered messages are stored in the instance's `messages` attribute.
 
         Args:
-            *args (Callable[[BotMessage], bool]): Additional filter functions to apply to the messages.
+            actualize_filter (Callable[[BotMessage], bool]): A function that takes a `BotMessage` as an argument
+                                                                and returns `True` if the message should be included
+                                                                after filtering; otherwise, `False`.
 
         Returns:
-            Iterable[BotMessage]: A list of messages that pass all filters.
+            list[BotMessage]: A list of `BotMessage` objects that pass both the instance filter and the
+                                `actualize_filter` criteria.
         """
-        filters = list(self._filters)
-        filters.extend(args)
-
         messages = self.messages
         for transport in self._transports:
             messages.extend(transport.get_messages())
-        for _filter in filters:
-            messages = filter(_filter, messages)
-        self.messages = list(messages)
+        self.messages = list(filter(lambda x: self._filter(x) and actualize_filter(x), messages))
         return self.messages
 
     def clear(self):

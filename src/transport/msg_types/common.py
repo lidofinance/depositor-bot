@@ -78,11 +78,12 @@ def _verification_data_deposit(prefix: bytes, msg: DepositMessage) -> tuple[List
 
 
 def _verification_data_pause(prefix: bytes, msg: PauseMessage) -> tuple[List[Any], List[str]]:
-    data = [prefix, msg['blockNumber']]
-    abi = ['bytes32', 'uint256']
     if 'stakingModuleId' in msg:
-        data.append(msg['stakingModuleId'])
-        abi.append('uint256')
+        data = [prefix, msg['blockNumber'], msg['stakingModuleId']]
+        abi = ['bytes32', 'uint256', 'uint256']
+    else:
+        data = [prefix, msg['blockNumber']]
+        abi = ['bytes32', 'uint256']
     return data, abi
 
 
