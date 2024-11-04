@@ -72,7 +72,7 @@ class PauserBot:
 
     def execute(self, block: BlockData) -> bool:
         filters = self._message_filters()
-        messages = self.message_storage.get_messages_and_actualize(*filters)
+        messages = self.message_storage.get_messages_and_actualize(filters)
         logger.info({'msg': f'Received {len(messages)} pause messages.'})
 
         for message in messages:
@@ -85,7 +85,7 @@ class PauserBot:
 
         actualize_filter = self._get_message_actualize_filter()
 
-        return sign_filter, actualize_filter
+        return lambda x: sign_filter(x) and actualize_filter(x)
 
     def _get_message_actualize_filter(self) -> Callable[[PauseMessage], bool]:
         current_block = self.w3.eth.get_block('latest')
@@ -147,8 +147,10 @@ class PauserBot:
         return result
 
     def _clear_outdated_messages_for_module(self, module_id: int) -> None:
-        self.message_storage.get_messages_and_actualize(self._sign_filter(), lambda message: message['stakingModuleId'] != module_id)
+        self.message_storage.get_messages_and_actualize(
+            lambda message: self._sign_filter()(message) and message['stakingModuleId'] != module_id
+        )
 
-    def _sign_filter(self):
+    def _sign_filter(self) -> Callable:
         prefix = self.w3.lido.deposit_security_module.get_pause_message_prefix()
         return get_messages_sign_filter(prefix)
