@@ -147,9 +147,8 @@ class PauserBot:
         return result
 
     def _clear_outdated_messages_for_module(self, module_id: int) -> None:
-        self.message_storage.get_messages_and_actualize(
-            lambda message: self._sign_filter()(message) and message['stakingModuleId'] != module_id
-        )
+        sign_filter = self._sign_filter()
+        self.message_storage.get_messages_and_actualize(lambda message: sign_filter(message) and message['stakingModuleId'] != module_id)
 
     def _sign_filter(self) -> Callable:
         prefix = self.w3.lido.deposit_security_module.get_pause_message_prefix()
