@@ -1,5 +1,5 @@
 import logging
-from typing import Callable, Optional
+from typing import Callable, Optional, TypedDict
 
 import variables
 from blockchain.executor import Executor
@@ -10,7 +10,7 @@ from schema import Or, Schema
 from transport.msg_providers.onchain_transport import OnchainTransportProvider, PingParser, UnvetParser
 from transport.msg_providers.rabbit import MessageType, RabbitProvider
 from transport.msg_storage import MessageStorage
-from transport.msg_types.common import BotMessage, get_messages_sign_filter
+from transport.msg_types.common import get_messages_sign_filter
 from transport.msg_types.ping import PingMessageSchema, to_check_sum_address
 from transport.msg_types.unvet import UnvetMessage, UnvetMessageSchema
 from transport.types import TransportType
@@ -144,12 +144,12 @@ class UnvetterBot:
         logger.info({'msg': f'Transaction send. Result is {result}.', 'value': result})
         return result
 
-    def _clear_outdated_messages_for_module(self, module_id: int, nonce: int) -> None:
+    def _clear_outdated_messages_for_module(self, module_id: int, nonce: int):
         prefix = self.w3.lido.deposit_security_module.get_unvet_message_prefix()
         sign_filter = get_messages_sign_filter(prefix)
 
-        def unvet_filter(msg: BotMessage) -> bool:
-            is_message_relevant = msg['stakingModuleId'] != module_id or msg['nonce'] >= nonce
+        def unvet_filter(msg: TypedDict) -> bool:
+            is_message_relevant = msg['stakingModuleId'] != module_id or int(msg['nonce']) >= nonce
             return is_message_relevant and sign_filter(msg)
 
         self.message_storage.get_messages_and_actualize(unvet_filter)

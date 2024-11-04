@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Callable, List
+from typing import Any, Callable, List, cast
 
 from cryptography.verify_signature import recover_vs, verify_message_with_signature
 from eth_account.account import VRS
@@ -59,14 +59,14 @@ def _select_label(msg: DepositMessage | PauseMessage | UnvetMessage) -> str:
         raise ValueError('Unsupported message type')
 
 
-def _verification_data(prefix: bytes, msg: DepositMessage | PauseMessage | UnvetMessage) -> tuple[List[Any], List[str]]:
+def _verification_data(prefix: bytes, msg: BotMessage) -> tuple[List[Any], List[str]]:
     t = msg['type']
     if t == MessageType.PAUSE:
-        return _verification_data_pause(prefix, msg)
+        return _verification_data_pause(prefix, cast(PauseMessage, msg))
     elif t == MessageType.UNVET:
-        return _verification_data_unvet(prefix, msg)
+        return _verification_data_unvet(prefix, cast(UnvetMessage, msg))
     elif t == MessageType.DEPOSIT:
-        return _verification_data_deposit(prefix, msg)
+        return _verification_data_deposit(prefix, cast(DepositMessage, msg))
     else:
         raise ValueError('Unsupported message type')
 

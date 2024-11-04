@@ -301,8 +301,9 @@ class OnchainTransportProvider(BaseMessageProvider):
 
     def _process_msg(self, log: LogReceipt) -> Optional[dict]:
         parsed = self._parse_log(log)
-        parsed['chain_id'] = self._chain_id
-        parsed['transport'] = 'onchain'
+        if parsed:
+            parsed['chain_id'] = self._chain_id
+            parsed['transport'] = 'onchain'
         return parsed
 
     def _parse_log(self, log: LogReceipt) -> Optional[dict]:

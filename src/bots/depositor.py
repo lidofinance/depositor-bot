@@ -191,7 +191,7 @@ class DepositorBot:
         messages = self.message_storage.get_messages_and_actualize(lambda x: sign_filter(x) and actualize_filter(x))
 
         module_filter = self._get_module_messages_filter(module_id)
-        messages = list(filter(module_filter, messages))
+        filtered_messages = list(filter(module_filter, messages))
 
         min_signs_to_deposit = self.w3.lido.deposit_security_module.get_guardian_quorum()
 
@@ -201,7 +201,7 @@ class DepositorBot:
 
         max_quorum_size = 0
 
-        for message in messages:
+        for message in filtered_messages:
             # Remove duplications (blockHash, guardianAddress)
             messages_by_block_hash[message['blockHash']][message['guardianAddress']] = message
 
