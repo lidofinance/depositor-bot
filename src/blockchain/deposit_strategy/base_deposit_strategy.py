@@ -42,12 +42,12 @@ class BaseDepositStrategy(DepositStrategy):
         GAS_FEE.labels('current_fee', module_id).set(current_gas_fee)
 
         current_buffered_ether = self.w3.lido.lido.get_depositable_ether()
+        recommended_gas_fee = self.get_recommended_fee()
+        GAS_FEE.labels('recommended_fee', module_id).set(recommended_gas_fee)
+        GAS_FEE.labels('max_fee', module_id).set(variables.MAX_GAS_FEE)
         if current_buffered_ether > variables.MAX_BUFFERED_ETHERS:
             success = current_gas_fee <= variables.MAX_GAS_FEE
         else:
-            recommended_gas_fee = self.get_recommended_fee()
-            GAS_FEE.labels('recommended_fee', module_id).set(recommended_gas_fee)
-            GAS_FEE.labels('max_fee', module_id).set(variables.MAX_GAS_FEE)
             success = recommended_gas_fee >= current_gas_fee
         GAS_OK.labels(module_id).set(int(success))
         return success
