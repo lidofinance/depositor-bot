@@ -91,7 +91,8 @@ HEALTHCHECK_SERVER_PORT = int(os.getenv('HEALTHCHECK_SERVER_PORT', os.getenv('PU
 MAX_CYCLE_LIFETIME_IN_SECONDS = int(os.getenv('MAX_CYCLE_LIFETIME_IN_SECONDS', '1200'))
 
 # List of ids of staking modules in which the depositor bot will make deposits
-DEPOSIT_MODULES_WHITELIST = [int(module_id) for module_id in os.getenv('DEPOSIT_MODULES_WHITELIST', '1').split(',')]
+_env_whitelist = os.getenv('DEPOSIT_MODULES_WHITELIST', '1')
+DEPOSIT_MODULES_WHITELIST = [] if _env_whitelist == '' else [int(module_id) for module_id in _env_whitelist.split(',')]
 
 # All non-private env variables to the logs in main
 PUBLIC_ENV_VARS = {
