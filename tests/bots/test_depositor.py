@@ -1,8 +1,9 @@
-from unittest.mock import Mock
+import unittest
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 import variables
-from bots.depositor import DepositorBot
+from bots.depositor import CSM_MODULE, DepositorBot
 
 from tests.conftest import COUNCIL_ADDRESS_1, COUNCIL_ADDRESS_2, COUNCIL_PK_1, COUNCIL_PK_2, DSM_OWNER
 from tests.utils.protocol_utils import get_deposit_message
@@ -204,6 +205,88 @@ def test_get_quorum(depositor_bot, setup_deposit_message):
     assert deposit_messages[3] in quorum
 
 
+class TestDepositBot(unittest.TestCase):
+    @pytest.fixture(autouse=True)
+    def inject_fixtures(self, request):
+        """Inject pytest fixtures into unittest.TestCase."""
+        self.bot = request.getfixturevalue('depositor_bot')
+
+    def setUp(self):
+        # Mock dependencies and setup the instance
+        self.bot._check_balance = MagicMock()
+        self.bot._recommender = MagicMock()
+        self.bot.message_storage = MagicMock()
+        self.bot._deposit_to_module = MagicMock()
+
+    @pytest.mark.unit
+    @patch('bots.depositor.variables.DEPOSIT_MODULES_WHITELIST', [1, 2, CSM_MODULE])
+    def test_execute_no_depositable_modules(self):
+        """Test execute behavior when there are no depositable modules."""
+        self.bot._recommender.get_preferred_to_deposit_modules.return_value = []
+
+        result = self.bot.execute(block=MagicMock())
+        self.bot._check_balance.assert_called_once()
+        self.bot.message_storage.receive_messages.assert_called_once()
+        self.assertTrue(result)
+
+    @pytest.mark.unit
+    @patch('bots.depositor.variables.DEPOSIT_MODULES_WHITELIST', [1, CSM_MODULE])
+    def test_execute_deposit_to_modules(self):
+        """Test execute with available modules and successful deposits."""
+        self.bot._recommender.get_preferred_to_deposit_modules.return_value = [1, CSM_MODULE]
+        self.bot._deposit_to_module.side_effect = lambda module_id: module_id == CSM_MODULE  # Only CSM_MODULE succeeds
+
+        result = self.bot.execute(block=MagicMock())
+
+        # Check the correct sequence of method calls
+        self.bot._check_balance.assert_called_once()
+        self.bot._deposit_to_module.assert_any_call(1)
+        self.bot._deposit_to_module.assert_any_call(CSM_MODULE)
+        self.assertTrue(result)
+
+    @pytest.mark.unit
+    @patch('bots.depositor.variables.DEPOSIT_MODULES_WHITELIST', [1, CSM_MODULE])
+    def test_timeout_modules_successful_csm_deposit(self):
+        """Test _timeout_modules with a successful deposit to CSM_MODULE, expecting timeouts to reset."""
+        self.bot._recommender.reset_timeout = MagicMock()
+        self.bot._recommender.set_timeout = MagicMock()
+
+        result = self.bot._timeout_modules(deposit_result=True, module_id=CSM_MODULE)
+
+        # Reset timeout should be called for all modules in whitelist except CSM_MODULE
+        self.bot._recommender.reset_timeout.assert_any_call(1)
+        self.bot._recommender.set_timeout.assert_not_called()
+        self.assertFalse(result)
+
+    @pytest.mark.unit
+    @patch('bots.depositor.variables.DEPOSIT_MODULES_WHITELIST', [1, CSM_MODULE])
+    def test_timeout_modules_unsuccessful_csm_deposit(self):
+        """Test _timeout_modules with an unsuccessful deposit to CSM_MODULE, expecting timeouts to be set."""
+        self.bot._recommender.reset_timeout = MagicMock()
+        self.bot._recommender.set_timeout = MagicMock()
+
+        result = self.bot._timeout_modules(deposit_result=False, module_id=CSM_MODULE)
+
+        # Set timeout should be called for all modules in whitelist except CSM_MODULE
+        self.bot._recommender.set_timeout.assert_any_call(1)
+        self.bot._recommender.reset_timeout.assert_not_called()
+        self.assertTrue(result)
+
+    @pytest.mark.unit
+    @patch('bots.depositor.variables.DEPOSIT_MODULES_WHITELIST', [1, CSM_MODULE])
+    def test_timeout_modules_non_csm_module(self):
+        """Test _timeout_modules with a non-CSM_MODULE deposit, expecting no timeout changes."""
+        self.bot._recommender.reset_timeout = MagicMock()
+        self.bot._recommender.set_timeout = MagicMock()
+
+        result = self.bot._timeout_modules(deposit_result=True, module_id=1)
+
+        # No timeouts should be modified for non-CSM_MODULE deposits
+        self.bot._recommender.reset_timeout.assert_not_called()
+        self.bot._recommender.set_timeout.assert_not_called()
+        self.assertFalse(result)
+
+
 @pytest.mark.integration
 @pytest.mark.parametrize(
     'web3_provider_integration,module_id',
@@ -222,7 +305,7 @@ def test_depositor_bot(
     module_recommender_integration,
 ):
     # Define the whitelist of deposit modules
-    variables.DEPOSIT_MODULES_WHITELIST = [1, 2]
+    variables.DEPOSIT_MODULES_WHITELIST = [1, 2, 3]
 
     # Set the balance for the first account
     web3_lido_integration.provider.make_request(

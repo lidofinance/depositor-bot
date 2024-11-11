@@ -130,6 +130,22 @@ class DepositorBot:
 
         return True
 
+    def _timeout_modules(self, deposit_result: bool, module_id: int) -> bool:
+        if module_id != CSM_MODULE:
+            return False
+
+        if deposit_result:
+            # on successful deposit to CSM reset timeouts to all the other modules
+            for module in variables.DEPOSIT_MODULES_WHITELIST:
+                self._recommender.reset_timeout(module)
+            return False
+
+        # on unsuccessful deposit to CSM set timeout to other modules
+        for module in variables.DEPOSIT_MODULES_WHITELIST:
+            if module != CSM_MODULE:
+                self._recommender.set_timeout(module)
+        return True
+
     def _check_balance(self):
         eth_chain_id = self.w3.eth.chain_id
 
@@ -184,22 +200,6 @@ class DepositorBot:
         if module_id == CSM_MODULE:
             return self._csm_strategy
         return self._general_strategy
-
-    def _timeout_modules(self, deposit_result: bool, module_id: int) -> bool:
-        if module_id != CSM_MODULE:
-            return False
-
-        if deposit_result:
-            # on successful deposit to CSM reset timeouts to all the other modules
-            for module in variables.DEPOSIT_MODULES_WHITELIST:
-                self._recommender.reset_timeout(module)
-            return False
-
-        # on unsuccessful deposit to CSM set timeout to other modules
-        for module in variables.DEPOSIT_MODULES_WHITELIST:
-            if module != CSM_MODULE:
-                self._recommender.set_timeout(module)
-        return True
 
     def _check_module_status(self, module_id: int) -> bool:
         """Returns True if module is ready for deposit"""
