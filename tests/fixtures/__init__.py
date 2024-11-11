@@ -24,6 +24,8 @@ from .strategy import (
     deposit_transaction_sender_integration,
     gas_price_calculator,
     gas_price_calculator_integration,
+    module_recommender,
+    module_recommender_integration,
 )
 
 __all__ = [
@@ -48,4 +50,6 @@ __all__ = [
     'deposit_transaction_sender_integration',
     'csm_strategy',
     'csm_strategy_integration',
+    'module_recommender',
+    'module_recommender_integration',
 ]

@@ -43,7 +43,8 @@ def run_depositor(w3):
     gas_price_calculator = GasPriceCalculator(w3)
     base_deposit_strategy = DefaultDepositStrategy(w3, gas_price_calculator)
     csm_strategy = CSMDepositStrategy(w3, gas_price_calculator)
-    depositor_bot = DepositorBot(w3, sender, base_deposit_strategy, csm_strategy)
+    recommender = DepositModuleRecommender(w3)
+    depositor_bot = DepositorBot(w3, sender, base_deposit_strategy, csm_strategy, recommender)
 
     e = Executor(
         w3,

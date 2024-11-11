@@ -15,12 +15,13 @@ def depositor_bot(
     base_deposit_strategy,
     block_data,
     csm_strategy,
+    module_recommender,
 ):
     variables.MESSAGE_TRANSPORTS = ''
     variables.DEPOSIT_MODULES_WHITELIST = [1, 2]
     web3_lido_unit.lido.staking_router.get_staking_module_ids = Mock(return_value=[1, 2])
     web3_lido_unit.eth.get_block = Mock(return_value=block_data)
-    yield DepositorBot(web3_lido_unit, deposit_transaction_sender, base_deposit_strategy, csm_strategy)
+    yield DepositorBot(web3_lido_unit, deposit_transaction_sender, base_deposit_strategy, csm_strategy, module_recommender)
 
 
 @pytest.fixture
@@ -218,6 +219,7 @@ def test_depositor_bot(
     csm_strategy_integration,
     module_id,
     add_accounts_to_guardian,
+    module_recommender_integration,
 ):
     # Define the whitelist of deposit modules
     variables.DEPOSIT_MODULES_WHITELIST = [1, 2]
@@ -265,6 +267,7 @@ def test_depositor_bot(
         deposit_transaction_sender_integration,
         base_deposit_strategy_integration,
         csm_strategy_integration,
+        module_recommender_integration,
     )
 
     # Clear the message storage and execute the bot without any messages
