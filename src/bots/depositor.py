@@ -5,9 +5,9 @@ from typing import Callable, Optional
 
 import variables
 from blockchain.deposit_strategy.base_deposit_strategy import CSMDepositStrategy, DefaultDepositStrategy
+from blockchain.deposit_strategy.deposit_module_recommender import DepositModuleRecommender
 from blockchain.deposit_strategy.deposit_transaction_sender import Sender
 from blockchain.deposit_strategy.gas_price_calculator import GasPriceCalculator
-from blockchain.deposit_strategy.prefered_module_to_deposit import get_preferred_to_deposit_modules
 from blockchain.deposit_strategy.strategy import DepositStrategy
 from blockchain.executor import Executor
 from blockchain.typings import Web3
@@ -33,6 +33,8 @@ from web3.types import BlockData
 from web3_multi_provider import FallbackProvider, MultiProvider
 
 logger = logging.getLogger(__name__)
+
+CSM_MODULE = 3
 
 
 def run_depositor(w3):
@@ -66,11 +68,13 @@ class DepositorBot:
         sender: Sender,
         base_deposit_strategy: DefaultDepositStrategy,
         csm_strategy: CSMDepositStrategy,
+        recommender: DepositModuleRecommender,
     ):
         self.w3 = w3
         self._sender = sender
         self._general_strategy = base_deposit_strategy
         self._csm_strategy = csm_strategy
+        self._recommender = recommender
 
         transports = []
 
@@ -108,16 +112,18 @@ class DepositorBot:
     def execute(self, block: BlockData) -> bool:
         self._check_balance()
 
-        modules_id = get_preferred_to_deposit_modules(self.w3, variables.DEPOSIT_MODULES_WHITELIST)
+        module_ids = self._recommender.get_preferred_to_deposit_modules(variables.DEPOSIT_MODULES_WHITELIST)
 
-        if not modules_id:
+        if not module_ids:
             # Read messages in case if no depositable modules for metrics
             self.message_storage.receive_messages()
 
-        for module_id in modules_id:
+        for module_id in module_ids:
             logger.info({'msg': f'Do deposit to module with id: {module_id}.'})
             try:
-                self._deposit_to_module(module_id)
+                success = self._deposit_to_module(module_id)
+                if self._timeout_modules(success, module_id):
+                    break
             except ModuleNotSupportedError as error:
                 logger.warning({'msg': 'Module not supported exception.', 'error': str(error)})
 
@@ -174,9 +180,25 @@ class DepositorBot:
         return False
 
     def _select_strategy(self, module_id) -> DepositStrategy:
-        if module_id == 3:
+        if module_id == CSM_MODULE:
             return self._csm_strategy
         return self._general_strategy
+
+    def _timeout_modules(self, deposit_result: bool, module_id: int) -> bool:
+        if module_id != CSM_MODULE:
+            return False
+
+        if deposit_result:
+            # on successful deposit to CSM reset timeouts to all the other modules
+            for module in variables.DEPOSIT_MODULES_WHITELIST:
+                self._recommender.reset_timeout(module)
+            return False
+
+        # on unsuccessful deposit to CSM set timeout to other modules
+        for module in variables.DEPOSIT_MODULES_WHITELIST:
+            if module != CSM_MODULE:
+                self._recommender.set_timeout(module)
+        return True
 
     def _check_module_status(self, module_id: int) -> bool:
         """Returns True if module is ready for deposit"""
