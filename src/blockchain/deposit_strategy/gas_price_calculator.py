@@ -16,8 +16,19 @@ class GasPriceCalculator:
     _BLOCKS_IN_ONE_DAY = 24 * 60 * 60 // 12
     _REQUEST_SIZE = 1024
 
-    def __init__(self, w3: Web3):
+    def __init__(self, w3: Web3, gas_addendum: int = 6):
+        """
+        gas_addendum is used to increase number of deposits during to calm market. The value should be increased if bot
+        wants to deposit more often.
+        The value 6 was calculated this way:
+        profit_per_val = 32 * 10**9 * 0.03(APR) / 12 / 30
+        gas_per_validator = 112176
+        x = profit_per_val / gas_per_validator
+
+        x / 4(we assume that chances of significant gas drop during 8 hours are low)
+        """
         self.w3 = w3
+        self._gas_addendum = gas_addendum
 
     def get_pending_base_fee(self) -> Wei:
         base_fee_per_gas = self.w3.eth.get_block('pending')['baseFeePerGas']
@@ -26,7 +37,7 @@ class GasPriceCalculator:
 
     def get_recommended_gas_fee(self) -> Wei:
         gas_history = self._fetch_gas_fee_history(variables.GAS_FEE_PERCENTILE_DAYS_HISTORY_1)
-        return Wei(int(numpy.percentile(gas_history, variables.GAS_FEE_PERCENTILE_1)))
+        return Wei(int(numpy.percentile(gas_history, variables.GAS_FEE_PERCENTILE_1)) + self._gas_addendum)
 
     def _fetch_gas_fee_history(self, days: int) -> list[int]:
         latest_block_num = self.w3.eth.get_block('latest')['number']
