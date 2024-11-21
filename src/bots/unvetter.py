@@ -146,10 +146,10 @@ class UnvetterBot:
 
     def _clear_outdated_messages_for_module(self, module_id: int, nonce: int):
         prefix = self.w3.lido.deposit_security_module.get_unvet_message_prefix()
-        sign_filter = get_messages_sign_filter(prefix)
+        is_message_signed_filter = get_messages_sign_filter(prefix)
 
-        def unvet_filter(msg: TypedDict) -> bool:
+        def is_unvet_message_relevant(msg: TypedDict) -> bool:
             is_message_relevant = msg['stakingModuleId'] != module_id or int(msg['nonce']) >= nonce
-            return is_message_relevant and sign_filter(msg)
+            return is_message_relevant and is_message_signed_filter(msg)
 
-        self.message_storage.get_messages_and_actualize(unvet_filter)
+        self.message_storage.get_messages_and_actualize(is_unvet_message_relevant)
