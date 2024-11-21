@@ -107,7 +107,7 @@ def get_pause_message_v2(web3):
 
 @pytest.mark.unit
 def test_pause_bot_without_messages(pause_bot, block_data):
-    pause_bot.message_storage.get_messages = Mock(return_value=[])
+    pause_bot.message_storage.get_messages_and_actualize = Mock(return_value=[])
     pause_bot._send_pause_message = Mock()
     pause_bot.execute(block_data)
     pause_bot._send_pause_message.assert_not_called()
@@ -125,6 +125,7 @@ def test_pause_bot_outdate_messages(pause_bot, block_data, pause_message, block_
     pause_message['blockNumber'] = 5
     pause_bot.message_storage.messages = [pause_message]
     pause_bot.w3.lido.deposit_security_module.get_pause_intent_validity_period_blocks = Mock(return_value=block_range)
+    pause_bot._sign_filter = Mock(return_value=lambda _: True)
 
     pause_bot._send_pause_message = Mock()
     pause_bot.execute(block_data)
@@ -143,6 +144,8 @@ def test_pause_bot_clean_messages(pause_bot, block_data, pause_message, active_m
     pause_bot.message_storage.messages = [pause_message]
     pause_bot.w3.lido.staking_router.is_staking_module_active = Mock(return_value=active_module)
 
+    pause_bot._sign_filter = Mock(return_value=lambda _: True)
+
     pause_bot.execute(block_data)
     assert len(pause_bot.message_storage.messages) == 0
 
@@ -151,6 +154,8 @@ def test_pause_bot_clean_messages(pause_bot, block_data, pause_message, active_m
 def test_pause_message_filtered_by_module_id(pause_bot, block_data, pause_message):
     new_message = pause_message.copy()
     new_message['stakingModuleId'] = 2
+
+    pause_bot._sign_filter = Mock(return_value=lambda _: True)
 
     pause_bot.message_storage.messages = [pause_message, pause_message, new_message]
     pause_bot.w3.lido.staking_router.is_staking_module_active = lambda module_id: not module_id % 2
@@ -174,6 +179,7 @@ def test_pauser_bot(web3_lido_integration, web3_provider_integration, add_accoun
     pm = get_pause_message(web3_lido_integration, module_id)
 
     pb = PauserBot(web3_lido_integration)
+    pb._get_message_actualize_filter = Mock(return_value=lambda x: True)
     pb.execute(latest)
 
     web3_lido_integration.provider.make_request('anvil_mine', [1])
@@ -202,14 +208,16 @@ def test_pauser_bot(web3_lido_integration, web3_provider_integration, add_accoun
 
     upgrade_staking_router_to_v2(web3_lido_integration)
     web3_lido_integration.lido.deposit_security_module.get_guardians = Mock(return_value=[COUNCIL_ADDRESS])
+    # recreate signature
+    pb.message_storage.messages = [get_pause_message_v2(web3_lido_integration)]
     pb.execute(latest)
     assert pb.message_storage.messages
     assert [
         msg
         for msg in caplog.messages
         if (
-            "Build `pauseDeposits(19628129, ('0xe37ddb5eadce3a4f03274a102c45a21865f9d6fa03f61fdb98466ae0fd677331', "
-            "'0xb1dff99d6b8ad3402c7237341816568bf2831ddbe0bddd111eebd12a59efcb8c'))` tx."
+            "Build `pauseDeposits(19628132, ('0xafd5cffaea441e00ec6aaf081589ea70ee665c827047071b28153e4472ce48fa', "
+            "'0x4c4ea8132ca88766d4beead65d47330b15e7921e7dc71de162fc2a971d8800b4'))` tx."
         )
         in msg
     ]

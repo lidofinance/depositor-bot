@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 
 from blockchain.typings import Web3
+from eth_account.account import VRS
 from eth_typing import Hash32
 from transport.msg_types.deposit import DepositMessage
 from web3.contract.contract import ContractFunction
@@ -21,7 +22,7 @@ class Sender:
         self._w3 = w3
 
     @staticmethod
-    def _prepare_signs_for_deposit(quorum: list[DepositMessage]) -> tuple[tuple[str, str], ...]:
+    def _prepare_signs_for_deposit(quorum: list[DepositMessage]) -> tuple[tuple[VRS, str], ...]:
         sorted_messages = sorted(quorum, key=lambda msg: int(msg['guardianAddress'], 16))
 
         return tuple((msg['signature']['r'], msg['signature']['_vs']) for msg in sorted_messages)

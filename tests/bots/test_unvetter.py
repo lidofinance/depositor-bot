@@ -52,8 +52,8 @@ def get_unvet_message(web3) -> UnvetMessage:
         },
         'type': 'unvet',
     }
-
-    assert list(filter(get_messages_sign_filter(web3), [unvet_message]))
+    prefix = web3.lido.deposit_security_module.get_unvet_message_prefix()
+    assert list(filter(get_messages_sign_filter(prefix), [unvet_message]))
 
     return unvet_message
 
@@ -73,6 +73,7 @@ def test_unvetter(web3_provider_integration, web3_lido_integration, caplog):
 
     ub = UnvetterBot(web3_lido_integration)
     ub.execute(latest)
+    ub._get_message_actualize_filter = Mock(return_value=lambda x: True)
 
     assert ub.message_storage is None
 

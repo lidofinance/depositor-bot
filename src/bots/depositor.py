@@ -101,7 +101,6 @@ class DepositorBot:
             filters=[
                 message_metrics_filter,
                 to_check_sum_address,
-                get_messages_sign_filter(self.w3),
             ],
         )
 
@@ -112,7 +111,7 @@ class DepositorBot:
 
         if not modules_id:
             # Read messages in case if no depositable modules for metrics
-            self.message_storage.receive_messages()
+            self.message_storage.get_messages_and_actualize(lambda x: True)
 
         for module_id in modules_id:
             logger.info({'msg': f'Do deposit to module with id: {module_id}.'})
@@ -187,10 +186,12 @@ class DepositorBot:
     def _get_quorum(self, module_id: int) -> Optional[list[DepositMessage]]:
         """Returns quorum messages or None is quorum is not ready"""
         actualize_filter = self._get_message_actualize_filter()
-        messages = self.message_storage.get_messages(actualize_filter)
+        prefix = self.w3.lido.deposit_security_module.get_attest_message_prefix()
+        sign_filter = get_messages_sign_filter(prefix)
+        messages = self.message_storage.get_messages_and_actualize(lambda x: sign_filter(x) and actualize_filter(x))
 
         module_filter = self._get_module_messages_filter(module_id)
-        messages = list(filter(module_filter, messages))
+        filtered_messages = list(filter(module_filter, messages))
 
         min_signs_to_deposit = self.w3.lido.deposit_security_module.get_guardian_quorum()
 
@@ -200,7 +201,7 @@ class DepositorBot:
 
         max_quorum_size = 0
 
-        for message in messages:
+        for message in filtered_messages:
             # Remove duplications (blockHash, guardianAddress)
             messages_by_block_hash[message['blockHash']][message['guardianAddress']] = message
 
@@ -248,13 +249,7 @@ class DepositorBot:
         nonce = self.w3.lido.staking_router.get_staking_module_nonce(module_id)
 
         def message_filter(message: DepositMessage) -> bool:
-            if message['stakingModuleId'] != module_id:
-                return False
-
-            if message['nonce'] < nonce:
-                return False
-
-            return True
+            return message['stakingModuleId'] == module_id and message['nonce'] >= nonce
 
         return message_filter
 

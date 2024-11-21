@@ -193,10 +193,10 @@ def test_get_quorum(depositor_bot, setup_deposit_message):
 
     depositor_bot._get_module_messages_filter = Mock(return_value=lambda x: True)
     depositor_bot.w3.lido.deposit_security_module.get_guardian_quorum = Mock(return_value=2)
-    depositor_bot.message_storage.get_messages = Mock(return_value=deposit_messages[:2])
+    depositor_bot.message_storage.get_messages_and_actualize = Mock(return_value=deposit_messages[:2])
     assert not depositor_bot._get_quorum(1)
 
-    depositor_bot.message_storage.get_messages = Mock(return_value=deposit_messages[:4])
+    depositor_bot.message_storage.get_messages_and_actualize = Mock(return_value=deposit_messages[:4])
     quorum = depositor_bot._get_quorum(1)
     assert quorum
     assert deposit_messages[2] in quorum

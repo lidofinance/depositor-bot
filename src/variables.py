@@ -17,12 +17,12 @@ TESTNET_WEB3_RPC_ENDPOINTS = os.getenv('TESTNET_WEB3_RPC_ENDPOINTS', '').split('
 # Account private key
 WALLET_PRIVATE_KEY = os.getenv('WALLET_PRIVATE_KEY', None)
 
-ACCOUNT: Optional[LocalAccount]
+ACCOUNT: Optional[LocalAccount] = None
 if WALLET_PRIVATE_KEY:
-    ACCOUNT = Account.from_key(WALLET_PRIVATE_KEY)
-    logger.info({'msg': 'Load account from private key.', 'value': ACCOUNT.address})
+    account = Account.from_key(WALLET_PRIVATE_KEY)
+    logger.info({'msg': 'Load account from private key.', 'value': account.address})
+    ACCOUNT = account
 else:
-    ACCOUNT = None
     logger.warning({'msg': 'Account not provided. Run in dry mode.'})
 
 # App specific

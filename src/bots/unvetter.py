@@ -1,5 +1,5 @@
 import logging
-from typing import Callable, Optional
+from typing import Callable, Optional, TypedDict
 
 import variables
 from blockchain.executor import Executor
@@ -72,7 +72,6 @@ class UnvetterBot:
             filters=[
                 message_metrics_filter,
                 to_check_sum_address,
-                get_messages_sign_filter(self.w3),
             ],
         )
 
@@ -95,7 +94,9 @@ class UnvetterBot:
             return []
 
         actualize_filter = self._get_message_actualize_filter()
-        return self.message_storage.get_messages(actualize_filter)
+        prefix = self.w3.lido.deposit_security_module.get_unvet_message_prefix()
+        sign_filter = get_messages_sign_filter(prefix)
+        return self.message_storage.get_messages_and_actualize(lambda x: sign_filter(x) and actualize_filter(x))
 
     def _get_message_actualize_filter(self) -> Callable[[UnvetMessage], bool]:
         modules = self.w3.lido.staking_router.get_staking_module_ids()
@@ -143,8 +144,12 @@ class UnvetterBot:
         logger.info({'msg': f'Transaction send. Result is {result}.', 'value': result})
         return result
 
-    def _clear_outdated_messages_for_module(self, module_id: int, nonce: int) -> None:
-        if self.message_storage is None:
-            return
+    def _clear_outdated_messages_for_module(self, module_id: int, nonce: int):
+        prefix = self.w3.lido.deposit_security_module.get_unvet_message_prefix()
+        is_message_signed_filter = get_messages_sign_filter(prefix)
 
-        self.message_storage.get_messages(lambda message: message['stakingModuleId'] != module_id or message['nonce'] >= nonce)
+        def is_unvet_message_relevant(msg: TypedDict) -> bool:
+            is_message_relevant = msg['stakingModuleId'] != module_id or int(msg['nonce']) >= nonce
+            return is_message_relevant and is_message_signed_filter(msg)
+
+        self.message_storage.get_messages_and_actualize(is_unvet_message_relevant)
