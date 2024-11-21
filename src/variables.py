@@ -86,6 +86,18 @@ MAX_CYCLE_LIFETIME_IN_SECONDS = int(os.getenv('MAX_CYCLE_LIFETIME_IN_SECONDS', '
 _env_whitelist = os.getenv('DEPOSIT_MODULES_WHITELIST', '').strip()
 DEPOSIT_MODULES_WHITELIST = [int(module_id) for module_id in _env_whitelist.split(',')] if _env_whitelist else []
 
+"""
+GAS_ADDENDUM is used to increase number of deposits during to calm market. The value should be increased if bot
+wants to deposit more often.
+The value 6 was calculated this way:
+profit_per_val = 32 * 10**9 * 0.03(APR) / 12 / 30
+gas_per_validator = 112176
+x = profit_per_val / gas_per_validator
+
+x / 4(we assume that chances of significant gas drop during 8 hours are low)
+"""
+GAS_ADDENDUM = int(os.getenv('GAS_ADDENDUM', 6))
+
 # All non-private env variables to the logs in main
 PUBLIC_ENV_VARS = {
     'LIDO_LOCATOR': LIDO_LOCATOR,
