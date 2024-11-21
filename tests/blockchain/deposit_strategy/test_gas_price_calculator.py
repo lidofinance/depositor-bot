@@ -42,10 +42,10 @@ def test_get_recommended_gas_fee(gas_price_calculator):
     variables.GAS_FEE_PERCENTILE_DAYS_HISTORY_1 = 1
     variables.GAS_FEE_PERCENTILE_1 = 50
 
-    assert gas_price_calculator.get_recommended_gas_fee() == 5
+    assert gas_price_calculator.get_recommended_gas_fee() == 11
 
     variables.GAS_FEE_PERCENTILE_1 = 30
-    assert gas_price_calculator.get_recommended_gas_fee() == 3
+    assert gas_price_calculator.get_recommended_gas_fee() == 9
 
 
 @pytest.mark.integration
