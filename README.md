@@ -76,7 +76,7 @@ Unvetting is the proces of decreasing approved depositable signing keys.
 | GAS_FEE_PERCENTILE_1              | 20            | Percentile for first recommended fee calculation                                                                         |
 | GAS_FEE_PERCENTILE_DAYS_HISTORY_1 | 1             | Percentile for first recommended calculates from N days of the fee history                                               |
 | GAS_PRIORITY_FEE_PERCENTILE       | 25            | Priority transaction will be N percentile from priority fees in last block (min MIN_PRIORITY_FEE - max MAX_PRIORITY_FEE) |
-| GAS_ADDENDUM                      | 6             | Number of weis to add to the GAS_PRIORITY_FEE_PERCENTILE percentile value                                                |
+| GAS_ADDENDUM                      | 6 gwei        | Addendum to the GAS_PRIORITY_FEE_PERCENTILE percentile value                                                             |
 | MAX_BUFFERED_ETHERS               | 5000 ether    | Maximum amount of ETH in the buffer, after which the bot deposits at any gas                                             |
 | PROMETHEUS_PORT                   | 9000          | Port with metrics server                                                                                                 |
 | PROMETHEUS_PREFIX                 | depositor_bot | Prefix for the metrics                                                                                                   |

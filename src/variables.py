@@ -96,7 +96,7 @@ x = profit_per_val / gas_per_validator
 
 x / 4(we assume that chances of significant gas drop during 8 hours are low)
 """
-GAS_ADDENDUM = int(os.getenv('GAS_ADDENDUM', 6))
+GAS_ADDENDUM = Web3.to_wei(*os.getenv('GAS_ADDENDUM', '6 gwei').split(' '))
 
 # All non-private env variables to the logs in main
 PUBLIC_ENV_VARS = {

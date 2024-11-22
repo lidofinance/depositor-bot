@@ -26,7 +26,7 @@ class GasPriceCalculator:
 
     def get_recommended_gas_fee(self) -> Wei:
         gas_history = self._fetch_gas_fee_history(variables.GAS_FEE_PERCENTILE_DAYS_HISTORY_1)
-        return Wei(int(numpy.percentile(gas_history, variables.GAS_FEE_PERCENTILE_1)) + variables.GAS_ADDENDUM)
+        return Wei(int(numpy.percentile(gas_history, variables.GAS_FEE_PERCENTILE_1))) + variables.GAS_ADDENDUM
 
     def _fetch_gas_fee_history(self, days: int) -> list[int]:
         latest_block_num = self.w3.eth.get_block('latest')['number']
