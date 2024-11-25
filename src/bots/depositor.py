@@ -2,13 +2,12 @@
 import logging
 from collections import defaultdict
 from datetime import datetime, timedelta
-from typing import Callable, List, Optional
+from typing import Callable, Dict, List, Optional
 
 import variables
 from blockchain.deposit_strategy.base_deposit_strategy import CSMDepositStrategy, DefaultDepositStrategy
 from blockchain.deposit_strategy.deposit_transaction_sender import Sender
 from blockchain.deposit_strategy.gas_price_calculator import GasPriceCalculator
-from blockchain.deposit_strategy.prefered_module_to_deposit import get_preferred_to_deposit_modules
 from blockchain.deposit_strategy.strategy import DepositStrategy
 from blockchain.executor import Executor
 from blockchain.typings import Web3
@@ -16,7 +15,6 @@ from metrics.metrics import (
     ACCOUNT_BALANCE,
     CURRENT_QUORUM_SIZE,
     GUARDIAN_BALANCE,
-    IS_DEPOSITABLE,
     MODULE_TX_SEND,
     QUORUM,
     UNEXPECTED_EXCEPTIONS,
@@ -26,7 +24,7 @@ from schema import Or, Schema
 from transport.msg_providers.onchain_transport import DepositParser, OnchainTransportProvider, PingParser
 from transport.msg_providers.rabbit import MessageType, RabbitProvider
 from transport.msg_storage import MessageStorage
-from transport.msg_types.common import get_messages_sign_filter
+from transport.msg_types.common import BotMessage, get_messages_sign_filter
 from transport.msg_types.deposit import DepositMessage, DepositMessageSchema
 from transport.msg_types.ping import PingMessageSchema, to_check_sum_address
 from transport.types import TransportType
@@ -72,7 +70,7 @@ class DepositorBot:
         self._sender = sender
         self._general_strategy = base_deposit_strategy
         self._csm_strategy = csm_strategy
-        self._quorum_cache = dict()
+        self._quorum_cache: Dict[int, datetime] = dict()
 
         transports = []
 
@@ -109,13 +107,7 @@ class DepositorBot:
     def execute(self, block: BlockData) -> bool:
         self._check_balance()
 
-        modules_id = get_preferred_to_deposit_modules(self.w3, variables.DEPOSIT_MODULES_WHITELIST)
-
-        if not modules_id:
-            # Read messages in case if no depositable modules for metrics
-            self.message_storage.get_messages_and_actualize(lambda x: True)
-
-        for module_id in modules_id:
+        for module_id in self._get_preferred_to_deposit_modules():
             logger.info({'msg': f'Do deposit to module with id: {module_id}.'})
             try:
                 self._deposit_to_module(module_id)
@@ -149,14 +141,14 @@ class DepositorBot:
                 GUARDIAN_BALANCE.labels(address=address, chain_id=w3_databus_chain_id).set(balance)
 
     def _deposit_to_module(self, module_id: int) -> bool:
-        is_depositable = self._check_module_status(module_id)
-        logger.info({'msg': 'Fetch module depositable status.', 'value': is_depositable})
-
-        quorum = self._get_quorum(module_id)
-        logger.info({'msg': 'Build quorum.', 'value': quorum})
+        if module_id not in variables.DEPOSIT_MODULES_WHITELIST:
+            return False
 
         can_deposit = self.w3.lido.deposit_security_module.can_deposit(module_id)
         logger.info({'msg': 'Can deposit to module.', 'value': can_deposit})
+
+        quorum = self._get_quorum(module_id)
+        logger.info({'msg': 'Build quorum.', 'value': quorum})
 
         strategy = self._select_strategy(module_id)
         gas_is_ok = strategy.is_gas_price_ok(module_id)
@@ -165,7 +157,7 @@ class DepositorBot:
         is_deposit_amount_ok = strategy.can_deposit_keys_based_on_ether(module_id)
         logger.info({'msg': 'Calculations deposit recommendations.', 'value': is_deposit_amount_ok})
 
-        if is_depositable and quorum and can_deposit and gas_is_ok and is_deposit_amount_ok:
+        if can_deposit and quorum and gas_is_ok and is_deposit_amount_ok:
             logger.info({'msg': 'Checks passed. Prepare deposit tx.'})
             success = self.prepare_and_send_tx(module_id, quorum)
             self._flashbots_works = not self._flashbots_works or success
@@ -179,29 +171,12 @@ class DepositorBot:
             return self._csm_strategy
         return self._general_strategy
 
-    def _check_module_status(self, module_id: int) -> bool:
-        """Returns True if module is ready for deposit"""
-        ready = self.w3.lido.staking_router.is_staking_module_active(module_id)
-        IS_DEPOSITABLE.labels(module_id).set(int(ready))
-        return ready
-
     def _get_quorum(self, module_id: int) -> Optional[List[DepositMessage]]:
         """
         Returns quorum messages or None if the quorum is not ready.
         """
-        # Check quorum cache
-        now = datetime.now()
-        if module_id in self._quorum_cache:
-            ts, quorum = self._quorum_cache[module_id]
-            if now - ts <= timedelta(minutes=5):
-                return quorum
-
         # Fetch messages and apply filters
-        actualize_filter = self._get_message_actualize_filter()
-        prefix = self.w3.lido.deposit_security_module.get_attest_message_prefix()
-        sign_filter = get_messages_sign_filter(prefix)
-
-        messages = self.message_storage.get_messages_and_actualize(lambda x: sign_filter(x) and actualize_filter(x))
+        messages = self._fetch_actual_messages()
 
         # Apply module-specific filtering
         module_filter = self._get_module_messages_filter(module_id)
@@ -226,7 +201,6 @@ class DepositorBot:
                 # Cache and return the quorum
                 CURRENT_QUORUM_SIZE.labels('current').set(quorum_size)
                 QUORUM.labels(module_id).set(1)
-                self._quorum_cache[module_id] = (now, unified_messages)
                 return unified_messages
 
             # Track the largest quorum size seen
@@ -279,3 +253,43 @@ class DepositorBot:
         label = 'success' if success else 'failure'
         MODULE_TX_SEND.labels(label, module_id).inc()
         return success
+
+    def _fetch_actual_messages(self) -> list[BotMessage]:
+        # Fetch messages and apply filters
+        actualize_filter = self._get_message_actualize_filter()
+        prefix = self.w3.lido.deposit_security_module.get_attest_message_prefix()
+        sign_filter = get_messages_sign_filter(prefix)
+
+        return self.message_storage.get_messages_and_actualize(lambda x: sign_filter(x) and actualize_filter(x))
+
+    def _get_preferred_to_deposit_modules(self) -> List[int]:
+        # gather quorum
+        now = datetime.now()
+        for module_id in variables.DEPOSIT_MODULES_WHITELIST:
+            if self._get_quorum(module_id):
+                self._quorum_cache[module_id] = now
+
+        module_ids = self.w3.lido.staking_router.get_staking_module_ids()
+        modules = [
+            module for module in self.w3.lido.staking_router.get_staking_module_digests(module_ids) if self._is_module_depositable(module)
+        ]
+        return sorted(
+            modules,
+            key=lambda module: self._validator_difference(module),
+        )
+
+    def _is_module_depositable(self, module: list) -> bool:
+        module_id = module[2][0]
+
+        # Check if the quorum cache is valid
+        last_quorum_time = self._quorum_cache.get(module_id)
+        if not last_quorum_time:
+            return False
+
+        return datetime.now() - last_quorum_time <= timedelta(minutes=5)
+
+    @staticmethod
+    def _validator_difference(module) -> int:
+        total_deposited = module[3][1]  # totalDepositedValidators
+        total_exited = module[3][0]  # totalExitedValidators
+        return total_deposited - total_exited
