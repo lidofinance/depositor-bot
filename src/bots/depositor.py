@@ -273,10 +273,11 @@ class DepositorBot:
         modules = [
             module for module in self.w3.lido.staking_router.get_staking_module_digests(module_ids) if self._is_module_depositable(module)
         ]
-        return sorted(
+        sorted_modules = sorted(
             modules,
             key=lambda module: self._validator_difference(module),
         )
+        return list(map(lambda x: x[2][0], sorted_modules))
 
     def _is_module_depositable(self, module: list) -> bool:
         module_id = module[2][0]
