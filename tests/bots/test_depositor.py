@@ -87,7 +87,7 @@ def test_preferred_modules_with_quorum(depositor_bot):
     result = depositor_bot._get_preferred_to_deposit_modules()
 
     # Assertions
-    assert result == [[None, None, [1], [10, 5]]]  # Only module 1 is depositable
+    assert result == [1]  # Only module 1 is depositable
 
 
 @pytest.mark.unit
@@ -112,11 +112,7 @@ def test_preferred_modules_sorted_by_difference(depositor_bot):
     result = depositor_bot._get_preferred_to_deposit_modules()
 
     # Assertions
-    assert result == [
-        [None, None, [1], [10, 5]],  # Highest difference: 5
-        [None, None, [2], [15, 10]],  # Difference: 5
-        [None, None, [3], [20, 18]],  # Lowest difference: 2
-    ]
+    assert result == [1, 2, 3]
 
 
 @pytest.mark.unit
