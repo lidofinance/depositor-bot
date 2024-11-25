@@ -1,4 +1,6 @@
-from unittest.mock import Mock
+import unittest
+from datetime import datetime, timedelta
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 import variables
@@ -43,6 +45,111 @@ def deposit_message():
         },
         'app': {'version': '1.0.3', 'name': 'lido-council-daemon'},
     }
+
+
+@pytest.mark.unit
+class TestGetQuorum(unittest.TestCase):
+    def setUp(self):
+        # Mocked Web3 instance and dependencies
+        self.mock_w3 = MagicMock()
+        self.mock_message_storage = MagicMock()
+        self.mock_w3.lido.deposit_security_module.get_guardian_quorum.return_value = 3  # Require 3 signatures
+        self.mock_w3.lido.deposit_security_module.get_attest_message_prefix.return_value = 'prefix'
+        self.mock_w3.lido.deposit_security_module.get_guardians.return_value = ['guardian1', 'guardian2', 'guardian3']
+        self.mock_w3.eth.get_block.return_value = {'number': 1000}
+
+        # Instance of DepositorBot
+        self.depositor_bot = DepositorBot(
+            w3=self.mock_w3,
+            sender=MagicMock(),
+            base_deposit_strategy=MagicMock(),
+            csm_strategy=MagicMock(),
+        )
+        self.depositor_bot.message_storage = self.mock_message_storage
+
+    def test_quorum_from_cache(self):
+        # Mock cache with a valid entry
+        module_id = 1
+        cached_quorum = [{'blockHash': 'hash1', 'guardianAddress': 'guardian1'}]
+        self.depositor_bot._quorum_cache[module_id] = (datetime.now(), cached_quorum)
+
+        # Call the method
+        result = self.depositor_bot._get_quorum(module_id)
+
+        # Assertions
+        self.assertEqual(result, cached_quorum)
+        self.mock_message_storage.get_messages_and_actualize.assert_not_called()
+
+    @patch('datetime.datetime')
+    def test_quorum_cache_expired(self, mock_datetime):
+        # Set up expired cache
+        module_id = 1
+        cached_time = datetime(2024, 1, 1, 12, 0)
+        cached_quorum = [{'blockHash': 'hash1', 'guardianAddress': 'guardian1'}]
+        self.depositor_bot._quorum_cache[module_id] = (cached_time, cached_quorum)
+
+        # Mock current time to invalidate the cache
+        mock_datetime.now.return_value = cached_time + timedelta(minutes=6)
+
+        # Call the method
+        result = self.depositor_bot._get_quorum(module_id)
+
+        # Assertions
+        self.assertIsNone(result)  # Ensure cache is not used
+        self.mock_message_storage.get_messages_and_actualize.assert_called_once()
+
+    def test_quorum_met(self):
+        # Mock messages and filters
+        module_id = 1
+        filtered_messages = [
+            {'blockHash': 'hash1', 'guardianAddress': 'guardian1'},
+            {'blockHash': 'hash1', 'guardianAddress': 'guardian2'},
+            {'blockHash': 'hash1', 'guardianAddress': 'guardian3'},
+        ]
+        self.mock_message_storage.get_messages_and_actualize.return_value = filtered_messages
+        self.depositor_bot._get_module_messages_filter = MagicMock(return_value=lambda x: True)
+
+        # Call the method
+        result = self.depositor_bot._get_quorum(module_id)
+
+        # Assertions
+        self.assertIsNotNone(result)
+        self.assertEqual(len(result), 3)
+        self.mock_message_storage.get_messages_and_actualize.assert_called_once()
+
+    def test_no_quorum(self):
+        # Mock messages that do not meet quorum
+        module_id = 1
+        filtered_messages = [
+            {'blockHash': 'hash1', 'guardianAddress': 'guardian1'},
+            {'blockHash': 'hash1', 'guardianAddress': 'guardian2'},
+        ]
+        self.mock_message_storage.get_messages_and_actualize.return_value = filtered_messages
+        self.depositor_bot._get_module_messages_filter = MagicMock(return_value=lambda x: True)
+
+        # Call the method
+        result = self.depositor_bot._get_quorum(module_id)
+
+        # Assertions
+        self.assertIsNone(result)
+        self.mock_message_storage.get_messages_and_actualize.assert_called_once()
+
+    def test_message_filtering(self):
+        # Mock filtering logic
+        module_id = 1
+        all_messages = [
+            {'blockHash': 'hash1', 'guardianAddress': 'guardian1', 'stakingModuleId': 1, 'nonce': 5},
+            {'blockHash': 'hash2', 'guardianAddress': 'guardian2', 'stakingModuleId': 2, 'nonce': 5},
+        ]
+        self.mock_message_storage.get_messages_and_actualize.return_value = all_messages
+        self.depositor_bot._get_module_messages_filter = MagicMock(return_value=lambda x: x['stakingModuleId'] == 1)
+
+        # Call the method
+        result = self.depositor_bot._get_quorum(module_id)
+
+        # Assertions
+        self.assertIsNone(result)
+        self.mock_message_storage.get_messages_and_actualize.assert_called_once()
 
 
 @pytest.mark.unit

@@ -1,7 +1,8 @@
 # pyright: reportTypedDictNotRequiredAccess=false
 import logging
 from collections import defaultdict
-from typing import Callable, Optional
+from datetime import datetime, timedelta
+from typing import Callable, List, Optional
 
 import variables
 from blockchain.deposit_strategy.base_deposit_strategy import CSMDepositStrategy, DefaultDepositStrategy
@@ -71,6 +72,7 @@ class DepositorBot:
         self._sender = sender
         self._general_strategy = base_deposit_strategy
         self._csm_strategy = csm_strategy
+        self._quorum_cache = dict()
 
         transports = []
 
@@ -183,42 +185,57 @@ class DepositorBot:
         IS_DEPOSITABLE.labels(module_id).set(int(ready))
         return ready
 
-    def _get_quorum(self, module_id: int) -> Optional[list[DepositMessage]]:
-        """Returns quorum messages or None is quorum is not ready"""
+    def _get_quorum(self, module_id: int) -> Optional[List[DepositMessage]]:
+        """
+        Returns quorum messages or None if the quorum is not ready.
+        """
+        # Check quorum cache
+        now = datetime.now()
+        if module_id in self._quorum_cache:
+            ts, quorum = self._quorum_cache[module_id]
+            if now - ts <= timedelta(minutes=5):
+                return quorum
+
+        # Fetch messages and apply filters
         actualize_filter = self._get_message_actualize_filter()
         prefix = self.w3.lido.deposit_security_module.get_attest_message_prefix()
         sign_filter = get_messages_sign_filter(prefix)
+
         messages = self.message_storage.get_messages_and_actualize(lambda x: sign_filter(x) and actualize_filter(x))
 
+        # Apply module-specific filtering
         module_filter = self._get_module_messages_filter(module_id)
         filtered_messages = list(filter(module_filter, messages))
 
+        # Get the required quorum size
         min_signs_to_deposit = self.w3.lido.deposit_security_module.get_guardian_quorum()
-
         CURRENT_QUORUM_SIZE.labels('required').set(min_signs_to_deposit)
 
+        # Group messages by block hash and guardian address
         messages_by_block_hash = defaultdict(dict)
-
-        max_quorum_size = 0
-
         for message in filtered_messages:
-            # Remove duplications (blockHash, guardianAddress)
             messages_by_block_hash[message['blockHash']][message['guardianAddress']] = message
 
-        for messages_dict in messages_by_block_hash.values():
-            unified_messages = messages_dict.values()
-
+        # Evaluate quorum for each block hash
+        max_quorum_size = 0
+        for guardian_messages in messages_by_block_hash.values():
+            unified_messages = list(guardian_messages.values())
             quorum_size = len(unified_messages)
 
             if quorum_size >= min_signs_to_deposit:
+                # Cache and return the quorum
                 CURRENT_QUORUM_SIZE.labels('current').set(quorum_size)
                 QUORUM.labels(module_id).set(1)
-                return list(unified_messages)
+                self._quorum_cache[module_id] = (now, unified_messages)
+                return unified_messages
 
+            # Track the largest quorum size seen
             max_quorum_size = max(quorum_size, max_quorum_size)
 
+        # Update metrics and indicate no quorum
         CURRENT_QUORUM_SIZE.labels('current').set(max_quorum_size)
         QUORUM.labels(module_id).set(0)
+        return None
 
     def _get_message_actualize_filter(self) -> Callable[[DepositMessage], bool]:
         latest = self.w3.eth.get_block('latest')
