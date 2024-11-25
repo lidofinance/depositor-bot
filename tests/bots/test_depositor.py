@@ -1,6 +1,5 @@
-import unittest
 from datetime import datetime, timedelta
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import MagicMock, Mock
 
 import pytest
 import variables
@@ -48,113 +47,108 @@ def deposit_message():
 
 
 @pytest.mark.unit
-class TestGetQuorum(unittest.TestCase):
-    def setUp(self):
-        # Mocked Web3 instance and dependencies
-        self.mock_w3 = MagicMock()
-        self.mock_message_storage = MagicMock()
-        self.mock_w3.lido.deposit_security_module.get_guardian_quorum.return_value = 3  # Require 3 signatures
-        self.mock_w3.lido.deposit_security_module.get_attest_message_prefix.return_value = 'prefix'
-        self.mock_w3.lido.deposit_security_module.get_guardians.return_value = ['guardian1', 'guardian2', 'guardian3']
-        self.mock_w3.eth.get_block.return_value = {'number': 1000}
+def test_preferred_modules_no_quorum(depositor_bot):
+    # Setup mock data
+    depositor_bot._quorum_cache = {}
+    depositor_bot._get_quorum = Mock(return_value=False)
+    depositor_bot.w3.lido.staking_router.get_staking_module_ids.return_value = [1, 2, 3]
+    depositor_bot.w3.lido.staking_router.get_staking_module_digests.return_value = [
+        [None, None, [1], [0, 0]],
+        [None, None, [2], [0, 0]],
+        [None, None, [3], [0, 0]],
+    ]
 
-        # Instance of DepositorBot
-        self.depositor_bot = DepositorBot(
-            w3=self.mock_w3,
-            sender=MagicMock(),
-            base_deposit_strategy=MagicMock(),
-            csm_strategy=MagicMock(),
-        )
-        self.depositor_bot.message_storage = self.mock_message_storage
+    # Call the method
+    result = depositor_bot._get_preferred_to_deposit_modules()
 
-    def test_quorum_from_cache(self):
-        # Mock cache with a valid entry
-        module_id = 1
-        cached_quorum = [{'blockHash': 'hash1', 'guardianAddress': 'guardian1'}]
-        self.depositor_bot._quorum_cache[module_id] = (datetime.now(), cached_quorum)
+    # Assertions
+    assert result == []  # No quorum, so no modules should be returned
 
-        # Call the method
-        result = self.depositor_bot._get_quorum(module_id)
 
-        # Assertions
-        self.assertEqual(result, cached_quorum)
-        self.mock_message_storage.get_messages_and_actualize.assert_not_called()
+@pytest.mark.unit
+def test_preferred_modules_with_quorum(depositor_bot):
+    # Setup mock quorum cache
+    now = datetime.now()
+    depositor_bot._get_quorum = Mock(return_value=False)
+    depositor_bot._quorum_cache = {1: now, 2: now - timedelta(minutes=6)}
 
-    @patch('datetime.datetime')
-    def test_quorum_cache_expired(self, mock_datetime):
-        # Set up expired cache
-        module_id = 1
-        cached_time = datetime(2024, 1, 1, 12, 0)
-        cached_quorum = [{'blockHash': 'hash1', 'guardianAddress': 'guardian1'}]
-        self.depositor_bot._quorum_cache[module_id] = (cached_time, cached_quorum)
+    # Mock staking modules
+    depositor_bot.w3.lido.staking_router.get_staking_module_ids.return_value = [1, 2, 3]
+    depositor_bot.w3.lido.staking_router.get_staking_module_digests.return_value = [
+        [None, None, [1], [10, 5]],  # Total deposited 10, exited 5
+        [None, None, [2], [8, 3]],  # Total deposited 8, exited 3
+        [None, None, [3], [6, 4]],  # Total deposited 6, exited 4
+    ]
 
-        # Mock current time to invalidate the cache
-        mock_datetime.now.return_value = cached_time + timedelta(minutes=6)
+    # Mock depositable check
+    depositor_bot._is_module_depositable = MagicMock(side_effect=lambda module: module[2][0] == 1)
 
-        # Call the method
-        result = self.depositor_bot._get_quorum(module_id)
+    # Call the method
+    result = depositor_bot._get_preferred_to_deposit_modules()
 
-        # Assertions
-        self.assertIsNone(result)  # Ensure cache is not used
-        self.mock_message_storage.get_messages_and_actualize.assert_called_once()
+    # Assertions
+    assert result == [[None, None, [1], [10, 5]]]  # Only module 1 is depositable
 
-    def test_quorum_met(self):
-        # Mock messages and filters
-        module_id = 1
-        filtered_messages = [
-            {'blockHash': 'hash1', 'guardianAddress': 'guardian1'},
-            {'blockHash': 'hash1', 'guardianAddress': 'guardian2'},
-            {'blockHash': 'hash1', 'guardianAddress': 'guardian3'},
-        ]
-        self.mock_message_storage.get_messages_and_actualize.return_value = filtered_messages
-        self.depositor_bot._get_module_messages_filter = MagicMock(return_value=lambda x: True)
 
-        # Call the method
-        result = self.depositor_bot._get_quorum(module_id)
+@pytest.mark.unit
+def test_preferred_modules_sorted_by_difference(depositor_bot):
+    # Setup mock quorum cache
+    now = datetime.now()
+    depositor_bot._get_quorum = Mock(return_value=True)
+    depositor_bot._quorum_cache = {1: now, 2: now, 3: now}
 
-        # Assertions
-        self.assertIsNotNone(result)
-        self.assertEqual(len(result), 3)
-        self.mock_message_storage.get_messages_and_actualize.assert_called_once()
+    # Mock staking modules
+    depositor_bot.w3.lido.staking_router.get_staking_module_ids.return_value = [1, 2, 3]
+    depositor_bot.w3.lido.staking_router.get_staking_module_digests.return_value = [
+        [None, None, [1], [10, 5]],  # Total deposited 10, exited 5
+        [None, None, [2], [15, 10]],  # Total deposited 15, exited 10
+        [None, None, [3], [20, 18]],  # Total deposited 20, exited 18
+    ]
 
-    def test_no_quorum(self):
-        # Mock messages that do not meet quorum
-        module_id = 1
-        filtered_messages = [
-            {'blockHash': 'hash1', 'guardianAddress': 'guardian1'},
-            {'blockHash': 'hash1', 'guardianAddress': 'guardian2'},
-        ]
-        self.mock_message_storage.get_messages_and_actualize.return_value = filtered_messages
-        self.depositor_bot._get_module_messages_filter = MagicMock(return_value=lambda x: True)
+    # Mock depositable check
+    depositor_bot._is_module_depositable = MagicMock(return_value=True)
 
-        # Call the method
-        result = self.depositor_bot._get_quorum(module_id)
+    # Call the method
+    result = depositor_bot._get_preferred_to_deposit_modules()
 
-        # Assertions
-        self.assertIsNone(result)
-        self.mock_message_storage.get_messages_and_actualize.assert_called_once()
+    # Assertions
+    assert result == [
+        [None, None, [1], [10, 5]],  # Highest difference: 5
+        [None, None, [2], [15, 10]],  # Difference: 5
+        [None, None, [3], [20, 18]],  # Lowest difference: 2
+    ]
 
-    def test_message_filtering(self):
-        # Mock filtering logic
-        module_id = 1
-        all_messages = [
-            {'blockHash': 'hash1', 'guardianAddress': 'guardian1', 'stakingModuleId': 1, 'nonce': 5},
-            {'blockHash': 'hash2', 'guardianAddress': 'guardian2', 'stakingModuleId': 2, 'nonce': 5},
-        ]
-        self.mock_message_storage.get_messages_and_actualize.return_value = all_messages
-        self.depositor_bot._get_module_messages_filter = MagicMock(return_value=lambda x: x['stakingModuleId'] == 1)
 
-        # Call the method
-        result = self.depositor_bot._get_quorum(module_id)
+@pytest.mark.unit
+def test_preferred_modules_invalid_cache(depositor_bot):
+    # Setup mock quorum cache with expired entries
+    depositor_bot._get_quorum = Mock(return_value=False)
+    depositor_bot._quorum_cache = {
+        1: datetime.now() - timedelta(minutes=6),
+        2: datetime.now() - timedelta(minutes=10),
+    }
 
-        # Assertions
-        self.assertIsNone(result)
-        self.mock_message_storage.get_messages_and_actualize.assert_called_once()
+    # Mock staking modules
+    depositor_bot.w3.lido.staking_router.get_staking_module_ids.return_value = [1, 2]
+    depositor_bot.w3.lido.staking_router.get_staking_module_digests.return_value = [
+        [None, None, [1], [10, 5]],
+        [None, None, [2], [15, 10]],
+    ]
+
+    # Mock depositable check
+    depositor_bot._is_module_depositable = MagicMock(return_value=False)
+
+    # Call the method
+    result = depositor_bot._get_preferred_to_deposit_modules()
+
+    # Assertions
+    assert result == []  # No valid modules due to expired quorum cache
 
 
 @pytest.mark.unit
 def test_depositor_one_module_deposited(depositor_bot, block_data):
     modules = list(range(10))
+    depositor_bot._get_quorum = Mock(return_value=True)
 
     depositor_bot.w3.lido.lido.get_depositable_ether = Mock(return_value=10 * 32 * 10**18)
     depositor_bot.w3.lido.staking_router.get_staking_module_ids = Mock(return_value=modules)
@@ -174,15 +168,6 @@ def test_depositor_one_module_deposited(depositor_bot, block_data):
 
 
 @pytest.mark.unit
-def test_depositor_check_module_status(depositor_bot):
-    depositor_bot.w3.lido.staking_router.is_staking_module_active = Mock(return_value=True)
-    assert depositor_bot._check_module_status(1)
-
-    depositor_bot.w3.lido.staking_router.is_staking_module_active = Mock(return_value=False)
-    assert not depositor_bot._check_module_status(1)
-
-
-@pytest.mark.unit
 @pytest.mark.parametrize(
     'is_depositable,quorum,is_gas_price_ok,is_deposited_keys_amount_ok',
     [
@@ -194,7 +179,7 @@ def test_depositor_check_module_status(depositor_bot):
     ],
 )
 def test_depositor_deposit_to_module(depositor_bot, is_depositable, quorum, is_gas_price_ok, is_deposited_keys_amount_ok):
-    depositor_bot._check_module_status = Mock(return_value=is_depositable)
+    depositor_bot.w3.lido.deposit_security_module.can_deposit = Mock(return_value=is_depositable)
     depositor_bot._get_quorum = Mock(return_value=quorum)
     strategy = Mock()
     strategy.is_gas_price_ok = Mock(return_value=is_gas_price_ok)
