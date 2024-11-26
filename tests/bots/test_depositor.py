@@ -359,6 +359,7 @@ def test_depositor_bot(
 
     # Mine a new block
     web3_lido_integration.provider.make_request('anvil_mine', [1])
+    # this is done to ensure the deposit will be done to the target module
     web3_lido_integration.lido.staking_router.get_staking_module_ids = Mock(return_value=[module_id])
 
     # Initialize the DepositorBot
