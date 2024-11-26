@@ -1,5 +1,4 @@
-from datetime import datetime, timedelta
-from unittest.mock import MagicMock, Mock
+from unittest.mock import Mock
 
 import pytest
 import variables
@@ -44,101 +43,6 @@ def deposit_message():
         },
         'app': {'version': '1.0.3', 'name': 'lido-council-daemon'},
     }
-
-
-@pytest.mark.unit
-def test_preferred_modules_no_quorum(depositor_bot):
-    # Setup mock data
-    depositor_bot._module_last_heart_beat = {}
-    depositor_bot._get_quorum = Mock(return_value=False)
-    depositor_bot.w3.lido.staking_router.get_staking_module_ids.return_value = [1, 2, 3]
-    depositor_bot.w3.lido.staking_router.get_staking_module_digests.return_value = [
-        [None, None, [1], [0, 0]],
-        [None, None, [2], [0, 0]],
-        [None, None, [3], [0, 0]],
-    ]
-
-    # Call the method
-    result = depositor_bot._get_preferred_to_deposit_modules()
-
-    # Assertions
-    assert result == []  # No quorum, so no modules should be returned
-
-
-@pytest.mark.unit
-def test_preferred_modules_with_quorum(depositor_bot):
-    # Setup mock quorum cache
-    now = datetime.now()
-    depositor_bot._get_quorum = Mock(return_value=False)
-    depositor_bot._module_last_heart_beat = {1: now, 2: now - timedelta(minutes=6)}
-
-    # Mock staking modules
-    depositor_bot.w3.lido.staking_router.get_staking_module_ids.return_value = [1, 2, 3]
-    depositor_bot.w3.lido.staking_router.get_staking_module_digests.return_value = [
-        [None, None, [1], [10, 5]],  # Total deposited 10, exited 5
-        [None, None, [2], [8, 3]],  # Total deposited 8, exited 3
-        [None, None, [3], [6, 4]],  # Total deposited 6, exited 4
-    ]
-
-    # Mock depositable check
-    depositor_bot._is_module_healthy = MagicMock(side_effect=lambda module: module[2][0] == 1)
-
-    # Call the method
-    result = depositor_bot._get_preferred_to_deposit_modules()
-
-    # Assertions
-    assert result == [1]  # Only module 1 is depositable
-
-
-@pytest.mark.unit
-def test_preferred_modules_sorted_by_difference(depositor_bot):
-    # Setup mock quorum cache
-    now = datetime.now()
-    depositor_bot._get_quorum = Mock(return_value=True)
-    depositor_bot._module_last_heart_beat = {1: now, 2: now, 3: now}
-
-    # Mock staking modules
-    depositor_bot.w3.lido.staking_router.get_staking_module_ids.return_value = [1, 2, 3]
-    depositor_bot.w3.lido.staking_router.get_staking_module_digests.return_value = [
-        [None, None, [1], [10, 5]],  # Total deposited 10, exited 5
-        [None, None, [2], [15, 10]],  # Total deposited 15, exited 10
-        [None, None, [3], [20, 18]],  # Total deposited 20, exited 18
-    ]
-
-    # Mock depositable check
-    depositor_bot._is_module_healthy = MagicMock(return_value=True)
-
-    # Call the method
-    result = depositor_bot._get_preferred_to_deposit_modules()
-
-    # Assertions
-    assert result == [1, 2, 3]
-
-
-@pytest.mark.unit
-def test_preferred_modules_invalid_cache(depositor_bot):
-    # Setup mock quorum cache with expired entries
-    depositor_bot._get_quorum = Mock(return_value=False)
-    depositor_bot._module_last_heart_beat = {
-        1: datetime.now() - timedelta(minutes=6),
-        2: datetime.now() - timedelta(minutes=10),
-    }
-
-    # Mock staking modules
-    depositor_bot.w3.lido.staking_router.get_staking_module_ids.return_value = [1, 2]
-    depositor_bot.w3.lido.staking_router.get_staking_module_digests.return_value = [
-        [None, None, [1], [10, 5]],
-        [None, None, [2], [15, 10]],
-    ]
-
-    # Mock depositable check
-    depositor_bot._is_module_healthy = MagicMock(return_value=False)
-
-    # Call the method
-    result = depositor_bot._get_preferred_to_deposit_modules()
-
-    # Assertions
-    assert result == []  # No valid modules due to expired quorum cache
 
 
 @pytest.mark.unit

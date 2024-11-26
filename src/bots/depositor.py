@@ -294,7 +294,7 @@ class DepositorBot:
         can_deposit = self.w3.lido.deposit_security_module.can_deposit(module_id)
 
         strategy = self._select_strategy(module_id)
-        return can_deposit and is_valid_quorum and strategy.is_module_keys_amount_above_threshold(module_id)
+        return can_deposit and is_valid_quorum and strategy.keys_above_threshold(module_id)
 
     @staticmethod
     def _validator_difference(module: list) -> int:

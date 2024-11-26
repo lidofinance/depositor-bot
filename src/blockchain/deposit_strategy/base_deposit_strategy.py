@@ -25,7 +25,7 @@ class BaseDepositStrategy(DepositStrategy):
         DEPOSIT_AMOUNT_OK.labels(module_id).set(int(success))
         return success
 
-    def is_module_keys_amount_above_threshold(self, module_id: int) -> bool:
+    def keys_above_threshold(self, module_id: int) -> bool:
         possible_keys = self.deposited_keys_amount(module_id)
         return self._is_keys_amount_above_threshold(possible_keys, module_id)
 
