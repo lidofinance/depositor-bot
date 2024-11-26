@@ -2,7 +2,7 @@
 import logging
 from collections import defaultdict
 from datetime import datetime, timedelta
-from typing import Callable, Dict, List, Optional
+from typing import Callable, Dict, List, Optional, Tuple
 
 import variables
 from blockchain.deposit_strategy.base_deposit_strategy import CSMDepositStrategy, DefaultDepositStrategy
@@ -236,11 +236,7 @@ class DepositorBot:
 
     def _get_module_messages_filter(self, module_id: int) -> Callable[[DepositMessage], bool]:
         nonce = self.w3.lido.staking_router.get_staking_module_nonce(module_id)
-
-        def message_filter(message: DepositMessage) -> bool:
-            return message['stakingModuleId'] == module_id and message['nonce'] >= nonce
-
-        return message_filter
+        return lambda message: message['stakingModuleId'] == module_id and message['nonce'] >= nonce
 
     def prepare_and_send_tx(self, module_id: int, quorum: list[DepositMessage]) -> bool:
         success = self._sender.prepare_and_send(
@@ -267,37 +263,50 @@ class DepositorBot:
             if self._get_quorum(module_id):
                 self._module_last_heart_beat[module_id] = now
 
+        # filter out non allow-listed modules
         module_ids = [
             module_id
             for module_id in self.w3.lido.staking_router.get_staking_module_ids()
             if module_id in variables.DEPOSIT_MODULES_WHITELIST
         ]
-        modules_healthiness = [
-            (module, self._is_module_healthy(module)) for module in self.w3.lido.staking_router.get_staking_module_digests(module_ids)
-        ]
-        sorted_modules_healthiness = sorted(
-            modules_healthiness,
-            key=lambda module_health: self._validator_difference(module_health[0]),
+        # get digests for all the modules
+        module_digests = self.w3.lido.staking_router.get_staking_module_digests(module_ids)
+        # sort modules by validator count
+        sorted_module_digests = sorted(
+            module_digests,
+            key=lambda module_digest: self._validator_difference(module_digest),
         )
+        # decide if modules are healthy
+        # module[2][0] - module_id
+        modules_healthiness = [(module[2][0], self._is_module_healthy(module[2][0])) for module in sorted_module_digests]
+
+        # take all the modules in sorted order until the first healthy one(including)
+        result = self._take_until_first_healthy_module(modules_healthiness)
+        logger.info({'msg': f'Module iteration order {result}.'})
+        return result
+
+    def _is_module_healthy(self, module_id: int) -> bool:
+        # Check if the quorum cache is valid
+        last_quorum_time = self._module_last_heart_beat[module_id]
+        is_valid_quorum = datetime.now() - last_quorum_time <= timedelta(minutes=5)
+
+        # Check if module is available for deposits
+        can_deposit = self.w3.lido.deposit_security_module.can_deposit(module_id)
+
+        strategy = self._select_strategy(module_id)
+        return can_deposit and is_valid_quorum and strategy.is_module_keys_amount_above_threshold(module_id)
+
+    @staticmethod
+    def _validator_difference(module: list) -> int:
+        total_deposited = module[3][1]  # totalDepositedValidators
+        total_exited = module[3][0]  # totalExitedValidators
+        return total_deposited - total_exited
+
+    @staticmethod
+    def _take_until_first_healthy_module(sorted_modules_healthiness: list[Tuple[int, bool]]) -> list[int]:
         module_ids = []
-        for entry in sorted_modules_healthiness:
-            module = entry[0]
-            module_id = module[2][0]
-            is_healthy = entry[1]
+        for module_id, is_healthy in sorted_modules_healthiness:
             module_ids.append(module_id)
             if is_healthy:
                 break
         return module_ids
-
-    def _is_module_healthy(self, module: list) -> bool:
-        module_id = module[2][0]
-
-        # Check if the quorum cache is valid
-        last_quorum_time = self._module_last_heart_beat[module_id]
-        return datetime.now() - last_quorum_time <= timedelta(minutes=5)
-
-    @staticmethod
-    def _validator_difference(module) -> int:
-        total_deposited = module[3][1]  # totalDepositedValidators
-        total_exited = module[3][0]  # totalExitedValidators
-        return total_deposited - total_exited

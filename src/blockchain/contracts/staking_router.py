@@ -32,7 +32,7 @@ class StakingRouterContract(ContractInterface):
         )
         return response
 
-    def get_staking_module_digests(self, module_ids: list[int], block_identifier: BlockIdentifier = 'latest') -> list[dict]:
+    def get_staking_module_digests(self, module_ids: list[int], block_identifier: BlockIdentifier = 'latest') -> list[list]:
         """Returns staking module digest for passed staking module ids"""
         response = self.functions.getStakingModuleDigests(module_ids).call(block_identifier=block_identifier)
         logger.info(
