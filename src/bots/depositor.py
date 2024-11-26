@@ -288,7 +288,7 @@ class DepositorBot:
     def _is_module_healthy(self, module_id: int) -> bool:
         # Check if the quorum cache is valid
         last_quorum_time = self._module_last_heart_beat[module_id]
-        is_valid_quorum = datetime.now() - last_quorum_time <= timedelta(minutes=5)
+        is_valid_quorum = datetime.now() - last_quorum_time <= timedelta(minutes=variables.QUORUM_RETENTION_MINUTES)
 
         # Check if module is available for deposits
         can_deposit = self.w3.lido.deposit_security_module.can_deposit(module_id)
