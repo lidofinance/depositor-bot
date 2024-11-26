@@ -49,7 +49,7 @@ def deposit_message():
 @pytest.mark.unit
 def test_preferred_modules_no_quorum(depositor_bot):
     # Setup mock data
-    depositor_bot._quorum_cache = {}
+    depositor_bot._module_last_heart_beat = {}
     depositor_bot._get_quorum = Mock(return_value=False)
     depositor_bot.w3.lido.staking_router.get_staking_module_ids.return_value = [1, 2, 3]
     depositor_bot.w3.lido.staking_router.get_staking_module_digests.return_value = [
@@ -70,7 +70,7 @@ def test_preferred_modules_with_quorum(depositor_bot):
     # Setup mock quorum cache
     now = datetime.now()
     depositor_bot._get_quorum = Mock(return_value=False)
-    depositor_bot._quorum_cache = {1: now, 2: now - timedelta(minutes=6)}
+    depositor_bot._module_last_heart_beat = {1: now, 2: now - timedelta(minutes=6)}
 
     # Mock staking modules
     depositor_bot.w3.lido.staking_router.get_staking_module_ids.return_value = [1, 2, 3]
@@ -81,7 +81,7 @@ def test_preferred_modules_with_quorum(depositor_bot):
     ]
 
     # Mock depositable check
-    depositor_bot._is_module_depositable = MagicMock(side_effect=lambda module: module[2][0] == 1)
+    depositor_bot._is_module_healthy = MagicMock(side_effect=lambda module: module[2][0] == 1)
 
     # Call the method
     result = depositor_bot._get_preferred_to_deposit_modules()
@@ -95,7 +95,7 @@ def test_preferred_modules_sorted_by_difference(depositor_bot):
     # Setup mock quorum cache
     now = datetime.now()
     depositor_bot._get_quorum = Mock(return_value=True)
-    depositor_bot._quorum_cache = {1: now, 2: now, 3: now}
+    depositor_bot._module_last_heart_beat = {1: now, 2: now, 3: now}
 
     # Mock staking modules
     depositor_bot.w3.lido.staking_router.get_staking_module_ids.return_value = [1, 2, 3]
@@ -106,7 +106,7 @@ def test_preferred_modules_sorted_by_difference(depositor_bot):
     ]
 
     # Mock depositable check
-    depositor_bot._is_module_depositable = MagicMock(return_value=True)
+    depositor_bot._is_module_healthy = MagicMock(return_value=True)
 
     # Call the method
     result = depositor_bot._get_preferred_to_deposit_modules()
@@ -119,7 +119,7 @@ def test_preferred_modules_sorted_by_difference(depositor_bot):
 def test_preferred_modules_invalid_cache(depositor_bot):
     # Setup mock quorum cache with expired entries
     depositor_bot._get_quorum = Mock(return_value=False)
-    depositor_bot._quorum_cache = {
+    depositor_bot._module_last_heart_beat = {
         1: datetime.now() - timedelta(minutes=6),
         2: datetime.now() - timedelta(minutes=10),
     }
@@ -132,7 +132,7 @@ def test_preferred_modules_invalid_cache(depositor_bot):
     ]
 
     # Mock depositable check
-    depositor_bot._is_module_depositable = MagicMock(return_value=False)
+    depositor_bot._is_module_healthy = MagicMock(return_value=False)
 
     # Call the method
     result = depositor_bot._get_preferred_to_deposit_modules()

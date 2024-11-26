@@ -70,7 +70,8 @@ class DepositorBot:
         self._sender = sender
         self._general_strategy = base_deposit_strategy
         self._csm_strategy = csm_strategy
-        self._quorum_cache: Dict[int, datetime] = dict()
+        now = datetime.now()
+        self._module_last_heart_beat: Dict[int, datetime] = {module_id: now for module_id in variables.DEPOSIT_MODULES_WHITELIST}
 
         transports = []
 
@@ -141,9 +142,6 @@ class DepositorBot:
                 GUARDIAN_BALANCE.labels(address=address, chain_id=w3_databus_chain_id).set(balance)
 
     def _deposit_to_module(self, module_id: int) -> bool:
-        if module_id not in variables.DEPOSIT_MODULES_WHITELIST:
-            return False
-
         can_deposit = self.w3.lido.deposit_security_module.can_deposit(module_id)
         logger.info({'msg': 'Can deposit to module.', 'value': can_deposit})
 
@@ -262,31 +260,40 @@ class DepositorBot:
 
         return self.message_storage.get_messages_and_actualize(lambda x: sign_filter(x) and actualize_filter(x))
 
-    def _get_preferred_to_deposit_modules(self) -> List[int]:
+    def _get_preferred_to_deposit_modules(self) -> list[int]:
         # gather quorum
         now = datetime.now()
         for module_id in variables.DEPOSIT_MODULES_WHITELIST:
             if self._get_quorum(module_id):
-                self._quorum_cache[module_id] = now
+                self._module_last_heart_beat[module_id] = now
 
-        module_ids = self.w3.lido.staking_router.get_staking_module_ids()
-        modules = [
-            module for module in self.w3.lido.staking_router.get_staking_module_digests(module_ids) if self._is_module_depositable(module)
+        module_ids = [
+            module_id
+            for module_id in self.w3.lido.staking_router.get_staking_module_ids()
+            if module_id in variables.DEPOSIT_MODULES_WHITELIST
         ]
-        sorted_modules = sorted(
-            modules,
-            key=lambda module: self._validator_difference(module),
+        modules_healthiness = [
+            (module, self._is_module_healthy(module)) for module in self.w3.lido.staking_router.get_staking_module_digests(module_ids)
+        ]
+        sorted_modules_healthiness = sorted(
+            modules_healthiness,
+            key=lambda module_health: self._validator_difference(module_health[0]),
         )
-        return list(map(lambda x: x[2][0], sorted_modules))
+        module_ids = []
+        for entry in sorted_modules_healthiness:
+            module = entry[0]
+            module_id = module[2][0]
+            is_healthy = entry[1]
+            module_ids.append(module_id)
+            if is_healthy:
+                break
+        return module_ids
 
-    def _is_module_depositable(self, module: list) -> bool:
+    def _is_module_healthy(self, module: list) -> bool:
         module_id = module[2][0]
 
         # Check if the quorum cache is valid
-        last_quorum_time = self._quorum_cache.get(module_id)
-        if not last_quorum_time:
-            return False
-
+        last_quorum_time = self._module_last_heart_beat[module_id]
         return datetime.now() - last_quorum_time <= timedelta(minutes=5)
 
     @staticmethod
