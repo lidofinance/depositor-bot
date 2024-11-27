@@ -11,5 +11,5 @@ class DepositStrategy(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def keys_above_threshold(self, module_id: int) -> bool:
+    def deposited_keys_amount(self, module_id: int) -> int:
         pass

@@ -274,7 +274,7 @@ class DepositorBot:
         # sort modules by validator count
         sorted_module_digests = sorted(
             module_digests,
-            key=lambda module_digest: self._validator_difference(module_digest),
+            key=lambda module_digest: self.get_active_validators_count(module_digest),
         )
         # decide if modules are healthy
         # module[2][0] - module_id
@@ -288,7 +288,7 @@ class DepositorBot:
     def _is_module_healthy(self, module_id: int) -> bool:
         # Check if the quorum cache is valid
         last_quorum_time = self._module_last_heart_beat[module_id]
-        is_valid_quorum = datetime.now() - last_quorum_time <= timedelta(minutes=variables.QUORUM_RETENTION_MINUTES)
+        is_valid_quorum = (datetime.now() - last_quorum_time) <= timedelta(minutes=variables.QUORUM_RETENTION_MINUTES)
         logger.info({'msg': f'Is valid quorum {is_valid_quorum}.', 'module_id': module_id})
 
         # Check if module is available for deposits
@@ -296,10 +296,10 @@ class DepositorBot:
         logger.info({'msg': f'Can deposit {can_deposit}.', 'module_id': module_id})
 
         strategy = self._select_strategy(module_id)
-        return can_deposit and is_valid_quorum and strategy.keys_above_threshold(module_id)
+        return can_deposit and is_valid_quorum and strategy.deposited_keys_amount(module_id) >= 1
 
     @staticmethod
-    def _validator_difference(module: list) -> int:
+    def get_active_validators_count(module: list) -> int:
         total_deposited = module[3][1]  # totalDepositedValidators
         total_exited = module[3][0]  # totalExitedValidators
         return total_deposited - total_exited
