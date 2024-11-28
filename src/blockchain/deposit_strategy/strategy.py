@@ -9,3 +9,7 @@ class DepositStrategy(abc.ABC):
     @abc.abstractmethod
     def is_gas_price_ok(self, module_id: int) -> bool:
         pass
+
+    @abc.abstractmethod
+    def deposited_keys_amount(self, module_id: int) -> int:
+        pass

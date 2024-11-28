@@ -18,20 +18,24 @@ class BaseDepositStrategy(DepositStrategy):
 
     def can_deposit_keys_based_on_ether(self, module_id: int) -> bool:
         possible_keys = self.deposited_keys_amount(module_id)
-        success = False
+        success = self._is_keys_amount_above_threshold(possible_keys, module_id)
+        if success:
+            base_fee_per_gas = self._gas_price_calculator.get_pending_base_fee()
+            success = self._is_deposit_recommended_based_on_keys_amount(possible_keys, base_fee_per_gas, module_id)
+        DEPOSIT_AMOUNT_OK.labels(module_id).set(int(success))
+        return success
+
+    def _is_keys_amount_above_threshold(self, keys: int, module_id: int) -> bool:
         threshold = self._depositable_keys_threshold()
-        if possible_keys < threshold:
+        success = keys >= threshold
+        if not success:
             logger.info(
                 {
-                    'msg': f'Possible deposits amount is {possible_keys}. Skip deposit.',
+                    'msg': f'Possible deposits amount is {keys}. Skip deposit.',
                     'module_id': module_id,
                     'threshold': threshold,
                 }
             )
-        else:
-            base_fee_per_gas = self._gas_price_calculator.get_pending_base_fee()
-            success = self._is_deposit_recommended_based_on_keys_amount(possible_keys, base_fee_per_gas, module_id)
-        DEPOSIT_AMOUNT_OK.labels(module_id).set(int(success))
         return success
 
     def is_gas_price_ok(self, module_id: int) -> bool:
