@@ -109,17 +109,7 @@ class DepositorBot:
     def execute(self, block: BlockData) -> bool:
         self._check_balance()
 
-<<<<<<< HEAD
         for module_id in self._get_preferred_to_deposit_modules():
-=======
-        modules_id = get_preferred_to_deposit_modules(self.w3, variables.DEPOSIT_MODULES_WHITELIST)
-
-        if not modules_id:
-            # Read messages in case if no depositable modules for metrics
-            self.message_storage.get_messages_and_actualize(lambda x: True)
-
-        for module_id in modules_id:
->>>>>>> 7b7a569 (Fetch prefix one time for a batch (#279))
             logger.info({'msg': f'Do deposit to module with id: {module_id}.'})
             try:
                 self._deposit_to_module(module_id)
@@ -173,27 +163,12 @@ class DepositorBot:
             return self._csm_strategy
         return self._general_strategy
 
-<<<<<<< HEAD
     def _get_quorum(self, module_id: int) -> Optional[List[DepositMessage]]:
         """
         Returns quorum messages or None if the quorum is not ready.
         """
         # Fetch messages and apply filters
         messages = self._fetch_actual_messages()
-=======
-    def _check_module_status(self, module_id: int) -> bool:
-        """Returns True if module is ready for deposit"""
-        ready = self.w3.lido.staking_router.is_staking_module_active(module_id)
-        IS_DEPOSITABLE.labels(module_id).set(int(ready))
-        return ready
-
-    def _get_quorum(self, module_id: int) -> Optional[list[DepositMessage]]:
-        """Returns quorum messages or None is quorum is not ready"""
-        actualize_filter = self._get_message_actualize_filter()
-        prefix = self.w3.lido.deposit_security_module.get_attest_message_prefix()
-        sign_filter = get_messages_sign_filter(prefix)
-        messages = self.message_storage.get_messages_and_actualize(lambda x: sign_filter(x) and actualize_filter(x))
->>>>>>> 7b7a569 (Fetch prefix one time for a batch (#279))
 
         # Apply module-specific filtering
         module_filter = self._get_module_messages_filter(module_id)
@@ -205,15 +180,7 @@ class DepositorBot:
 
         # Group messages by block hash and guardian address
         messages_by_block_hash = defaultdict(dict)
-<<<<<<< HEAD
         for message in filtered_messages:
-=======
-
-        max_quorum_size = 0
-
-        for message in filtered_messages:
-            # Remove duplications (blockHash, guardianAddress)
->>>>>>> 7b7a569 (Fetch prefix one time for a batch (#279))
             messages_by_block_hash[message['blockHash']][message['guardianAddress']] = message
 
         # Evaluate quorum for each block hash
@@ -263,15 +230,7 @@ class DepositorBot:
 
     def _get_module_messages_filter(self, module_id: int) -> Callable[[DepositMessage], bool]:
         nonce = self.w3.lido.staking_router.get_staking_module_nonce(module_id)
-<<<<<<< HEAD
         return lambda message: message['stakingModuleId'] == module_id and message['nonce'] >= nonce
-=======
-
-        def message_filter(message: DepositMessage) -> bool:
-            return message['stakingModuleId'] == module_id and message['nonce'] >= nonce
-
-        return message_filter
->>>>>>> 7b7a569 (Fetch prefix one time for a batch (#279))
 
     def prepare_and_send_tx(self, module_id: int, quorum: list[DepositMessage]) -> bool:
         success = self._sender.prepare_and_send(
