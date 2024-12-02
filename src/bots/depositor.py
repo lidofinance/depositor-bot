@@ -29,7 +29,7 @@ from transport.msg_types.deposit import DepositMessage, DepositMessageSchema
 from transport.msg_types.ping import PingMessageSchema, to_check_sum_address
 from transport.types import TransportType
 from web3.types import BlockData
-from web3_multi_provider import FallbackProvider, MultiProvider
+from web3_multi_provider import FallbackProvider
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +73,8 @@ class DepositorBot:
         now = datetime.now()
         self._module_last_heart_beat: Dict[int, datetime] = {module_id: now for module_id in variables.DEPOSIT_MODULES_WHITELIST}
 
+        self._protocol_chain_id = self.w3.eth.chain_id
+
         transports = []
 
         if TransportType.RABBIT in variables.MESSAGE_TRANSPORTS:
@@ -83,16 +85,20 @@ class DepositorBot:
                 )
             )
 
+        self._onchain_transport_w3 = None
+        self._transport_chain_id = None
         if TransportType.ONCHAIN_TRANSPORT in variables.MESSAGE_TRANSPORTS:
+            self._onchain_transport_w3 = Web3(FallbackProvider(variables.ONCHAIN_TRANSPORT_RPC_ENDPOINTS))
             transports.append(
                 OnchainTransportProvider(
-                    w3=Web3(FallbackProvider(variables.ONCHAIN_TRANSPORT_RPC_ENDPOINTS)),
+                    w3=self._onchain_transport_w3,
                     onchain_address=variables.ONCHAIN_TRANSPORT_ADDRESS,
                     message_schema=Schema(Or(DepositMessageSchema, PingMessageSchema)),
                     parsers_providers=[DepositParser, PingParser],
                     allowed_guardians_provider=self.w3.lido.deposit_security_module.get_guardians,
                 )
             )
+            self._transport_chain_id = self._onchain_transport_w3.eth.chain_id
 
         if not transports:
             logger.warning({'msg': 'No transports found. Dry mode activated.', 'value': variables.MESSAGE_TRANSPORTS})
@@ -118,28 +124,21 @@ class DepositorBot:
         return True
 
     def _check_balance(self):
-        eth_chain_id = self.w3.eth.chain_id
-
         if variables.ACCOUNT:
             balance = self.w3.eth.get_balance(variables.ACCOUNT.address)
-            ACCOUNT_BALANCE.labels(variables.ACCOUNT.address, eth_chain_id).set(balance)
+            ACCOUNT_BALANCE.labels(variables.ACCOUNT.address, self._protocol_chain_id).set(balance)
             logger.info({'msg': 'Check account balance.', 'value': balance})
 
         logger.info({'msg': 'Check guardians balances.'})
 
-        w3_databus, w3_databus_chain_id = None, None
-        if variables.ONCHAIN_TRANSPORT_RPC_ENDPOINTS:
-            w3_databus = Web3(MultiProvider(variables.ONCHAIN_TRANSPORT_RPC_ENDPOINTS))
-            w3_databus_chain_id = w3_databus.eth.chain_id
-
         guardians = self.w3.lido.deposit_security_module.get_guardians()
         for address in guardians:
             eth_balance = self.w3.eth.get_balance(address)
-            GUARDIAN_BALANCE.labels(address=address, chain_id=eth_chain_id).set(eth_balance)
+            GUARDIAN_BALANCE.labels(address=address, chain_id=self._protocol_chain_id).set(eth_balance)
 
-            if w3_databus is not None:
-                balance = w3_databus.eth.get_balance(address)
-                GUARDIAN_BALANCE.labels(address=address, chain_id=w3_databus_chain_id).set(balance)
+            if self._onchain_transport_w3 is not None:
+                balance = self._onchain_transport_w3.eth.get_balance(address)
+                GUARDIAN_BALANCE.labels(address=address, chain_id=self._transport_chain_id).set(balance)
 
     def _deposit_to_module(self, module_id: int) -> bool:
         can_deposit = self.w3.lido.deposit_security_module.can_deposit(module_id)
