@@ -1,10 +1,11 @@
 import logging
-from typing import Any, Callable
+from typing import Any, Callable, Set, cast
 from urllib.parse import urlparse
 
 from metrics.metrics import ETH_RPC_REQUESTS, ETH_RPC_REQUESTS_DURATION
 from requests import HTTPError, Response
 from web3 import Web3
+from web3.middleware import construct_simple_cache_middleware
 from web3.types import RPCEndpoint, RPCResponse
 
 logger = logging.getLogger(__name__)
@@ -50,4 +51,15 @@ def add_requests_metric_middleware(web3: Web3):
 
         return middleware
 
+    web3.middleware_onion.inject(
+        construct_simple_cache_middleware(
+            rpc_whitelist=cast(
+                Set[RPCEndpoint],
+                {
+                    'eth_chainId',
+                },
+            )
+        ),
+        layer=0,
+    )
     web3.middleware_onion.add(metrics_collector)
