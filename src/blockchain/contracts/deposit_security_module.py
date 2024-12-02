@@ -240,3 +240,14 @@ class DepositSecurityModuleContractV2(DepositSecurityModuleContract):
             }
         )
         return response
+
+    def get_max_operators_per_unvetting(self, block_identifier: BlockIdentifier = 'latest') -> int:
+        response = self.functions.getMaxOperatorsPerUnvetting().call(block_identifier=block_identifier)
+        logger.info(
+            {
+                'msg': 'Call `getMaxOperatorsPerUnvetting()`.',
+                'value': response,
+                'block_identifier': repr(block_identifier),
+            }
+        )
+        return response

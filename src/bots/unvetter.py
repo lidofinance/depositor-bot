@@ -127,6 +127,19 @@ class UnvetterBot:
 
         self._clear_outdated_messages_for_module(module_id, actual_nonce)
 
+        operator_ids = from_hex_string_to_bytes(message['operatorIds'])
+        max_operators_per_unvetting = self.w3.lido.deposit_security_module.get_max_operators_per_unvetting()
+        node_operators_count = len(operator_ids) / 8
+        if node_operators_count > max_operators_per_unvetting:
+            logger.error(
+                {
+                    'msg': 'max_operators_per_unvetting check failed.',
+                    'node_operators_count': node_operators_count,
+                    'max_operators_per_unvetting': max_operators_per_unvetting,
+                }
+            )
+            return False
+
         unvet_tx = self.w3.lido.deposit_security_module.unvet_signing_keys(
             message['blockNumber'],
             message['blockHash'],
