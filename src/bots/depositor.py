@@ -11,6 +11,7 @@ from blockchain.deposit_strategy.gas_price_calculator import GasPriceCalculator
 from blockchain.deposit_strategy.strategy import DepositStrategy
 from blockchain.executor import Executor
 from blockchain.typings import Web3
+from blockchain.web3_extentions.middleware import add_cache_middleware
 from metrics.metrics import (
     ACCOUNT_BALANCE,
     CURRENT_QUORUM_SIZE,
@@ -73,8 +74,6 @@ class DepositorBot:
         now = datetime.now()
         self._module_last_heart_beat: Dict[int, datetime] = {module_id: now for module_id in variables.DEPOSIT_MODULES_WHITELIST}
 
-        self._protocol_chain_id = self.w3.eth.chain_id
-
         transports = []
 
         if TransportType.RABBIT in variables.MESSAGE_TRANSPORTS:
@@ -88,7 +87,7 @@ class DepositorBot:
         self._onchain_transport_w3 = None
         self._transport_chain_id = None
         if TransportType.ONCHAIN_TRANSPORT in variables.MESSAGE_TRANSPORTS:
-            self._onchain_transport_w3 = Web3(FallbackProvider(variables.ONCHAIN_TRANSPORT_RPC_ENDPOINTS))
+            self._onchain_transport_w3 = add_cache_middleware(Web3(FallbackProvider(variables.ONCHAIN_TRANSPORT_RPC_ENDPOINTS)))
             transports.append(
                 OnchainTransportProvider(
                     w3=self._onchain_transport_w3,
@@ -98,7 +97,6 @@ class DepositorBot:
                     allowed_guardians_provider=self.w3.lido.deposit_security_module.get_guardians,
                 )
             )
-            self._transport_chain_id = self._onchain_transport_w3.eth.chain_id
 
         if not transports:
             logger.warning({'msg': 'No transports found. Dry mode activated.', 'value': variables.MESSAGE_TRANSPORTS})
@@ -126,19 +124,19 @@ class DepositorBot:
     def _check_balance(self):
         if variables.ACCOUNT:
             balance = self.w3.eth.get_balance(variables.ACCOUNT.address)
-            ACCOUNT_BALANCE.labels(variables.ACCOUNT.address, self._protocol_chain_id).set(balance)
+            ACCOUNT_BALANCE.labels(variables.ACCOUNT.address, self.w3.eth.chain_id).set(balance)
             logger.info({'msg': 'Check account balance.', 'value': balance})
 
         logger.info({'msg': 'Check guardians balances.'})
 
         guardians = self.w3.lido.deposit_security_module.get_guardians()
+        providers = [self.w3]
+        if self._onchain_transport_w3 is not None:
+            providers.append(self._onchain_transport_w3)
         for address in guardians:
-            eth_balance = self.w3.eth.get_balance(address)
-            GUARDIAN_BALANCE.labels(address=address, chain_id=self._protocol_chain_id).set(eth_balance)
-
-            if self._onchain_transport_w3 is not None:
-                balance = self._onchain_transport_w3.eth.get_balance(address)
-                GUARDIAN_BALANCE.labels(address=address, chain_id=self._transport_chain_id).set(balance)
+            for provider in providers:
+                balance = self.w3.eth.get_balance(address)
+                GUARDIAN_BALANCE.labels(address=address, chain_id=provider.eth.chain_id).set(balance)
 
     def _deposit_to_module(self, module_id: int) -> bool:
         can_deposit = self.w3.lido.deposit_security_module.can_deposit(module_id)

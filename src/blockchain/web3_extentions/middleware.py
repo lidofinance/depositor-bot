@@ -51,6 +51,10 @@ def add_requests_metric_middleware(web3: Web3):
 
         return middleware
 
+    web3.middleware_onion.add(metrics_collector)
+
+
+def add_cache_middleware(web3: Web3) -> Web3:
     web3.middleware_onion.inject(
         construct_simple_cache_middleware(
             rpc_whitelist=cast(
@@ -62,4 +66,4 @@ def add_requests_metric_middleware(web3: Web3):
         ),
         layer=0,
     )
-    web3.middleware_onion.add(metrics_collector)
+    return web3
