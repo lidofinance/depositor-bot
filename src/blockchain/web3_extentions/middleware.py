@@ -11,7 +11,7 @@ from web3.types import RPCEndpoint, RPCResponse
 logger = logging.getLogger(__name__)
 
 
-def add_requests_metric_middleware(web3: Web3):
+def add_requests_metric_middleware(web3: Web3) -> Web3:
     """
     Works correctly with MultiProvider and vanilla Providers.
 
@@ -21,6 +21,7 @@ def add_requests_metric_middleware(web3: Web3):
 
     def metrics_collector(make_request: Callable[[RPCEndpoint, Any], RPCResponse], w3: Web3) -> Callable[[RPCEndpoint, Any], RPCResponse]:
         """Constructs a middleware which measure requests parameters"""
+        chain_id = w3.eth.chain_id
 
         def middleware(method: RPCEndpoint, params: Any) -> RPCResponse:
             try:
@@ -32,6 +33,7 @@ def add_requests_metric_middleware(web3: Web3):
                     method=method,
                     code=failed.status_code,
                     domain=urlparse(web3.provider.endpoint_uri).netloc,  # pyright: ignore
+                    chain_id=chain_id,
                 ).inc()
                 raise
 
@@ -46,12 +48,14 @@ def add_requests_metric_middleware(web3: Web3):
                 method=method,
                 code=code,
                 domain=urlparse(web3.provider.endpoint_uri).netloc,  # pyright: ignore
+                chain_id=chain_id,
             ).inc()
             return response
 
         return middleware
 
     web3.middleware_onion.add(metrics_collector)
+    return web3
 
 
 def add_cache_middleware(web3: Web3) -> Web3:

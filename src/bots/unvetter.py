@@ -16,7 +16,6 @@ from transport.msg_types.unvet import UnvetMessage, UnvetMessageSchema
 from transport.types import TransportType
 from utils.bytes import from_hex_string_to_bytes
 from web3.types import BlockData
-from web3_multi_provider import FallbackProvider
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +55,7 @@ class UnvetterBot:
         if TransportType.ONCHAIN_TRANSPORT in variables.MESSAGE_TRANSPORTS:
             transports.append(
                 OnchainTransportProvider(
-                    w3=Web3(FallbackProvider(variables.ONCHAIN_TRANSPORT_RPC_ENDPOINTS)),
+                    w3=OnchainTransportProvider.create_ochain_transport_w3(),
                     onchain_address=variables.ONCHAIN_TRANSPORT_ADDRESS,
                     message_schema=Schema(Or(UnvetMessageSchema, PingMessageSchema)),
                     parsers_providers=[UnvetParser, PingParser],

@@ -11,7 +11,6 @@ from blockchain.deposit_strategy.gas_price_calculator import GasPriceCalculator
 from blockchain.deposit_strategy.strategy import DepositStrategy
 from blockchain.executor import Executor
 from blockchain.typings import Web3
-from blockchain.web3_extentions.middleware import add_cache_middleware
 from metrics.metrics import (
     ACCOUNT_BALANCE,
     CURRENT_QUORUM_SIZE,
@@ -30,7 +29,6 @@ from transport.msg_types.deposit import DepositMessage, DepositMessageSchema
 from transport.msg_types.ping import PingMessageSchema, to_check_sum_address
 from transport.types import TransportType
 from web3.types import BlockData
-from web3_multi_provider import FallbackProvider
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +85,7 @@ class DepositorBot:
         self._onchain_transport_w3 = None
         self._transport_chain_id = None
         if TransportType.ONCHAIN_TRANSPORT in variables.MESSAGE_TRANSPORTS:
-            self._onchain_transport_w3 = add_cache_middleware(Web3(FallbackProvider(variables.ONCHAIN_TRANSPORT_RPC_ENDPOINTS)))
+            self._onchain_transport_w3 = OnchainTransportProvider.create_ochain_transport_w3()
             transports.append(
                 OnchainTransportProvider(
                     w3=self._onchain_transport_w3,
