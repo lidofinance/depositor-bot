@@ -83,7 +83,6 @@ class DepositorBot:
             )
 
         self._onchain_transport_w3 = None
-        self._transport_chain_id = None
         if TransportType.ONCHAIN_TRANSPORT in variables.MESSAGE_TRANSPORTS:
             self._onchain_transport_w3 = OnchainTransportProvider.create_ochain_transport_w3()
             transports.append(
