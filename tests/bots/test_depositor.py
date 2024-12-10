@@ -1,5 +1,6 @@
 import unittest
 from datetime import datetime, timedelta
+from unittest import mock
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
@@ -125,11 +126,12 @@ def depositor_bot(
     block_data,
     csm_strategy,
 ):
-    variables.MESSAGE_TRANSPORTS = ''
-    variables.DEPOSIT_MODULES_WHITELIST = [1, 2]
-    web3_lido_unit.lido.staking_router.get_staking_module_ids = Mock(return_value=[1, 2])
-    web3_lido_unit.eth.get_block = Mock(return_value=block_data)
-    yield DepositorBot(web3_lido_unit, deposit_transaction_sender, base_deposit_strategy, csm_strategy)
+    with mock.patch('web3.eth.Eth.chain_id', new_callable=mock.PropertyMock) as _:
+        variables.MESSAGE_TRANSPORTS = ''
+        variables.DEPOSIT_MODULES_WHITELIST = [1, 2]
+        web3_lido_unit.lido.staking_router.get_staking_module_ids = Mock(return_value=[1, 2])
+        web3_lido_unit.eth.get_block = Mock(return_value=block_data)
+        yield DepositorBot(web3_lido_unit, deposit_transaction_sender, base_deposit_strategy, csm_strategy)
 
 
 @pytest.fixture
