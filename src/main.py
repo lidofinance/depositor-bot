@@ -4,7 +4,7 @@ from enum import StrEnum
 import variables
 from blockchain.typings import Web3
 from blockchain.web3_extentions.lido_contracts import LidoContracts
-from blockchain.web3_extentions.middleware import add_cache_middleware, add_requests_metric_middleware
+from blockchain.web3_extentions.middleware import add_middlewares
 from blockchain.web3_extentions.transaction import TransactionUtils
 from bots.depositor import run_depositor
 from bots.pauser import run_pauser
@@ -49,7 +49,7 @@ def main(bot_name: str):
     )
 
     logger.info({'msg': 'Add metrics to web3 requests.'})
-    add_requests_metric_middleware(add_cache_middleware(w3))
+    add_middlewares(w3)
 
     if bot_name == BotModule.DEPOSITOR:
         run_depositor(w3)

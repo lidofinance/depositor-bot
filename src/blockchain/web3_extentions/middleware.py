@@ -51,7 +51,7 @@ def add_requests_metric_middleware(web3: Web3) -> Web3:
 
         return middleware
 
-    web3.middleware_onion.add(metrics_collector)
+    web3.middleware_onion.inject(metrics_collector, layer=0)
     return web3
 
 
@@ -67,4 +67,15 @@ def add_cache_middleware(web3: Web3) -> Web3:
         ),
         layer=0,
     )
+    return web3
+
+
+def add_middlewares(web3: Web3) -> Web3:
+    """
+    Cache middleware should go first to avoid rewriting metrics for cached requests.
+    If middleware has level = 0, the middleware will be appended to the end of the middleware list.
+    So we need [..., cache, other middlewares]
+    """
+    add_cache_middleware(web3)
+    add_requests_metric_middleware(web3)
     return web3
