@@ -110,7 +110,7 @@ ETH_RPC_REQUESTS_DURATION = Histogram(
 ETH_RPC_REQUESTS = Counter(
     'eth_rpc_requests',
     'Total count of requests to ETH1 RPC',
-    ['method', 'code', 'domain', 'chain_id'],
+    ['method', 'code', 'domain'],
     namespace=PROMETHEUS_PREFIX,
 )
 
