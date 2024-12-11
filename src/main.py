@@ -4,7 +4,7 @@ from enum import StrEnum
 import variables
 from blockchain.typings import Web3
 from blockchain.web3_extentions.lido_contracts import LidoContracts
-from blockchain.web3_extentions.requests_metric_middleware import add_requests_metric_middleware
+from blockchain.web3_extentions.middleware import add_middlewares
 from blockchain.web3_extentions.transaction import TransactionUtils
 from bots.depositor import run_depositor
 from bots.pauser import run_pauser
@@ -24,13 +24,7 @@ class BotModule(StrEnum):
 
 
 def main(bot_name: str):
-    logger.info(
-        {
-            'msg': 'Bot env variables',
-            'value': variables.PUBLIC_ENV_VARS,
-            'bot_name': bot_name
-        }
-    )
+    logger.info({'msg': 'Bot env variables', 'value': variables.PUBLIC_ENV_VARS, 'bot_name': bot_name})
     if bot_name not in list(BotModule):
         msg = f'Last arg should be one of {[str(item) for item in BotModule]}, received {BotModule}.'
         logger.error({'msg': msg})
@@ -55,7 +49,7 @@ def main(bot_name: str):
     )
 
     logger.info({'msg': 'Add metrics to web3 requests.'})
-    add_requests_metric_middleware(w3)
+    add_middlewares(w3)
 
     if bot_name == BotModule.DEPOSITOR:
         run_depositor(w3)

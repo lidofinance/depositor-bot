@@ -8,6 +8,7 @@ readme = "README.md"
 include = [
     "LICENSE",
 ]
+package-mode = false
 
 [tool.poetry.dependencies]
 python = ">=3.10,<3.13"
@@ -34,8 +35,6 @@ pythonpath = [
 markers = [
     "unit", # offline
     "integration", # hardhat fork
-    "integration_holesky", # holesky fork
-    "integration_chiado", # chiado(gnosis testnet) run only
 ]
 
 [tool.ruff]

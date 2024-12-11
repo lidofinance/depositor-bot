@@ -4,8 +4,6 @@ from .contracts import (
     deposit_security_module_v2,
     lido_contract,
     lido_locator,
-    simple_dvt_staking_strategy,
-    staking_module,
     staking_router,
     staking_router_v2,
     upgrade_staking_router_to_v2,
@@ -26,8 +24,6 @@ from .strategy import (
     deposit_transaction_sender_integration,
     gas_price_calculator,
     gas_price_calculator_integration,
-    mellow_deposit_strategy,
-    mellow_deposit_strategy_integration,
 )
 
 __all__ = [
@@ -44,16 +40,12 @@ __all__ = [
     'web3_lido_integration',
     'web3_transaction_integration',
     'weth',
-    'simple_dvt_staking_strategy',
-    'staking_module',
     'base_deposit_strategy',
     'base_deposit_strategy_integration',
     'deposit_transaction_sender',
     'gas_price_calculator',
     'gas_price_calculator_integration',
     'deposit_transaction_sender_integration',
-    'mellow_deposit_strategy',
-    'mellow_deposit_strategy_integration',
     'csm_strategy',
     'csm_strategy_integration',
 ]

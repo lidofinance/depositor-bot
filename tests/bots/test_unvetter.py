@@ -2,13 +2,13 @@ import logging
 from unittest.mock import Mock
 
 import pytest
+import variables
+from blockchain.typings import Web3
 from bots.unvetter import UnvetterBot
 from cryptography.verify_signature import compute_vs
 from transport.msg_types.common import get_messages_sign_filter
 from transport.msg_types.unvet import UnvetMessage
 from utils.bytes import from_hex_string_to_bytes
-
-from tests.fixtures import upgrade_staking_router_to_v2
 
 # WARNING: These accounts, and their private keys, are publicly known.
 COUNCIL_ADDRESS = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8'
@@ -52,8 +52,8 @@ def get_unvet_message(web3) -> UnvetMessage:
         },
         'type': 'unvet',
     }
-
-    assert list(filter(get_messages_sign_filter(web3), [unvet_message]))
+    prefix = web3.lido.deposit_security_module.get_unvet_message_prefix()
+    assert list(filter(get_messages_sign_filter(prefix), [unvet_message]))
 
     return unvet_message
 
@@ -61,22 +61,24 @@ def get_unvet_message(web3) -> UnvetMessage:
 @pytest.mark.integration
 @pytest.mark.parametrize(
     'web3_provider_integration',
-    [19628126],
+    [
+        {
+            'block': 21318213,
+        }
+    ],
     indirect=['web3_provider_integration'],
 )
 def test_unvetter(web3_provider_integration, web3_lido_integration, caplog):
+    # explicitly set v2 address
+    variables.LIDO_LOCATOR = Web3.to_checksum_address('0x3ABc4764f0237923d52056CFba7E9AEBf87113D3')
+
     latest = web3_lido_integration.eth.get_block('latest')
 
     ub = UnvetterBot(web3_lido_integration)
     ub.execute(latest)
-
-    assert ub.message_storage is None
-
-    upgrade_staking_router_to_v2(web3_lido_integration)
+    ub._get_message_actualize_filter = Mock(return_value=lambda x: True)
 
     ub.execute(latest)
-    assert ub.message_storage is not None
-
     web3_lido_integration.lido.deposit_security_module.get_guardians = Mock(return_value=[COUNCIL_ADDRESS])
     ub.message_storage.messages = [get_unvet_message(web3_lido_integration)]
 

@@ -12,15 +12,17 @@ logger = logging.getLogger(__name__)
 # EL node
 WEB3_RPC_ENDPOINTS = os.getenv('WEB3_RPC_ENDPOINTS', '').split(',')
 
+TESTNET_WEB3_RPC_ENDPOINTS = os.getenv('TESTNET_WEB3_RPC_ENDPOINTS', '').split(',')
+
 # Account private key
 WALLET_PRIVATE_KEY = os.getenv('WALLET_PRIVATE_KEY', None)
 
-ACCOUNT: Optional[LocalAccount]
+ACCOUNT: Optional[LocalAccount] = None
 if WALLET_PRIVATE_KEY:
-    ACCOUNT = Account.from_key(WALLET_PRIVATE_KEY)
-    logger.info({'msg': 'Load account from private key.', 'value': ACCOUNT.address})
+    account = Account.from_key(WALLET_PRIVATE_KEY)
+    logger.info({'msg': 'Load account from private key.', 'value': account.address})
+    ACCOUNT = account
 else:
-    ACCOUNT = None
     logger.warning({'msg': 'Account not provided. Run in dry mode.'})
 
 # App specific
@@ -34,16 +36,6 @@ LIDO_LOCATOR = Web3.to_checksum_address(os.getenv('LIDO_LOCATOR', '0xC1d0b3DE679
 # Holesky: 0x4242424242424242424242424242424242424242
 DEPOSIT_CONTRACT = Web3.to_checksum_address(os.getenv('DEPOSIT_CONTRACT', '0x00000000219ab540356cBB839Cbe05303d7705Fa'))
 
-# Mellow contract address
-# Mainnet: TBD
-# Holesky: 0x4720ad6b59fb06c5b97b05e8b8f7538071302f00
-MELLOW_CONTRACT_ADDRESS = os.getenv('MELLOW_CONTRACT_ADDRESS', None)
-# Can be empty string - then skip
-if MELLOW_CONTRACT_ADDRESS:
-    # bot will throw exception if there is unexpected str and it's ok
-    MELLOW_CONTRACT_ADDRESS = Web3.to_checksum_address(MELLOW_CONTRACT_ADDRESS)
-VAULT_DIRECT_DEPOSIT_THRESHOLD = Web3.to_wei(*os.getenv('VAULT_DIRECT_DEPOSIT_THRESHOLD', '1 ether').split(' '))
-
 # rabbit / onchain_transport
 MESSAGE_TRANSPORTS = os.getenv('MESSAGE_TRANSPORTS', '').split(',')
 
@@ -52,11 +44,13 @@ RABBIT_MQ_URL = os.getenv('RABBIT_MQ_URL', 'ws://127.0.0.1:15674/ws')
 RABBIT_MQ_USERNAME = os.getenv('RABBIT_MQ_USERNAME', 'guest')
 RABBIT_MQ_PASSWORD = os.getenv('RABBIT_MQ_PASSWORD', 'guest')
 
+QUORUM_RETENTION_MINUTES: int = int(os.getenv('QUORUM_RETENTION_MINUTES', 5))
+
 # data bus
 # gnosis nodes
 ONCHAIN_TRANSPORT_RPC_ENDPOINTS = os.getenv('ONCHAIN_TRANSPORT_RPC_ENDPOINTS', '').split(',')
 
-ONCHAIN_TRANSPORT_ADDRESS = os.getenv('ONCHAIN_TRANSPORT_ADDRESS', None)
+ONCHAIN_TRANSPORT_ADDRESS = os.getenv('ONCHAIN_TRANSPORT_ADDRESS')
 if ONCHAIN_TRANSPORT_ADDRESS:
     # bot will throw exception if there is unexpected str and it's ok
     # Expecting onchain databus contract address
@@ -91,7 +85,20 @@ HEALTHCHECK_SERVER_PORT = int(os.getenv('HEALTHCHECK_SERVER_PORT', os.getenv('PU
 MAX_CYCLE_LIFETIME_IN_SECONDS = int(os.getenv('MAX_CYCLE_LIFETIME_IN_SECONDS', '1200'))
 
 # List of ids of staking modules in which the depositor bot will make deposits
-DEPOSIT_MODULES_WHITELIST = [int(module_id) for module_id in os.getenv('DEPOSIT_MODULES_WHITELIST', '1').split(',')]
+_env_whitelist = os.getenv('DEPOSIT_MODULES_WHITELIST', '').strip()
+DEPOSIT_MODULES_WHITELIST = [int(module_id) for module_id in _env_whitelist.split(',')] if _env_whitelist else []
+
+"""
+GAS_ADDENDUM is used to increase number of deposits during to calm market. The value should be increased if bot
+wants to deposit more often.
+The value 6 was calculated this way:
+profit_per_val = 32 * 10**9 * 0.03(APR) / 12 / 30
+gas_per_validator = 112176
+x = profit_per_val / gas_per_validator
+
+x / 4(we assume that chances of significant gas drop during 8 hours are low)
+"""
+GAS_ADDENDUM = Web3.to_wei(*os.getenv('GAS_ADDENDUM', '6 gwei').split(' '))
 
 # All non-private env variables to the logs in main
 PUBLIC_ENV_VARS = {
@@ -113,8 +120,6 @@ PUBLIC_ENV_VARS = {
     'MAX_CYCLE_LIFETIME_IN_SECONDS': MAX_CYCLE_LIFETIME_IN_SECONDS,
     'DEPOSIT_MODULES_WHITELIST': DEPOSIT_MODULES_WHITELIST,
     'ACCOUNT': '' if ACCOUNT is None else ACCOUNT.address,
-    'MELLOW_CONTRACT_ADDRESS': MELLOW_CONTRACT_ADDRESS,
-    'VAULT_DIRECT_DEPOSIT_THRESHOLD': VAULT_DIRECT_DEPOSIT_THRESHOLD,
     'ONCHAIN_TRANSPORT_ADDRESS': ONCHAIN_TRANSPORT_ADDRESS,
 }
 

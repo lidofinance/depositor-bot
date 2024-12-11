@@ -29,34 +29,15 @@ jobs:
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
 
-      - name: Integration tests with pytest, holesky fork
-        run: |
-          poetry run pytest tests -m integration_holesky
-        env:
-          WEB3_RPC_ENDPOINTS: ${{ secrets.HOLESKY_WEB3_RPC_ENDPOINT }}
-          DEPOSIT_CONTRACT: "0x4242424242424242424242424242424242424242"
-          LIDO_LOCATOR: "0x28FAB2059C713A7F9D8c86Db49f9bb0e96Af1ef8"
-          MELLOW_CONTRACT_ADDRESS: "0x182Cb3A76B0EFaCb25255F9594B5807460882fa4"
-          ANVIL_PATH: ""
-
-      - name: Integration tests with pytest, chiado testnet
-        run: |
-          poetry run pytest tests -m integration_chiado
-        env:
-          WEB3_RPC_ENDPOINTS: "https://gnosis-chiado-rpc.publicnode.com"
-          ONCHAIN_TRANSPORT_RPC_ENDPOINTS: "https://gnosis-chiado-rpc.publicnode.com"
-          ONCHAIN_TRANSPORT_ADDRESS: "0x42E1DEfC18388E3AA1fCADa851499A11405cf37f"
-          DEPOSIT_CONTRACT: "0x4242424242424242424242424242424242424242"
-          LIDO_LOCATOR: "0x28FAB2059C713A7F9D8c86Db49f9bb0e96Af1ef8"
-          MELLOW_CONTRACT_ADDRESS: "0x182Cb3A76B0EFaCb25255F9594B5807460882fa4"
-          ANVIL_PATH: ""
-
-      - name: Integration tests with pytest, mainnet fork
+      - name: Integration tests with pytest
         if: success() || failure()
         run: |
           poetry run pytest tests -m integration
         env:
           WEB3_RPC_ENDPOINTS: ${{ secrets.WEB3_RPC_ENDPOINT }}
+          TESTNET_WEB3_RPC_ENDPOINTS: 'https://ethereum-holesky-rpc.publicnode.com'
           DEPOSIT_CONTRACT: "0x00000000219ab540356cBB839Cbe05303d7705Fa"
           LIDO_LOCATOR: "0xC1d0b3DE6792Bf6b4b37EccdcC24e45978Cfd2Eb"
+          ONCHAIN_TRANSPORT_RPC_ENDPOINTS: "https://gnosis-chiado-rpc.publicnode.com"
+          ONCHAIN_TRANSPORT_ADDRESS: "0x42E1DEfC18388E3AA1fCADa851499A11405cf37f"
           ANVIL_PATH: ""

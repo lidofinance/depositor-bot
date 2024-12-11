@@ -1,6 +1,7 @@
 import logging
 
 from blockchain.contracts.base_interface import ContractInterface
+from eth_account.account import VRS
 from eth_typing import ChecksumAddress, Hash32
 from metrics.metrics import CAN_DEPOSIT
 from web3.contract.contract import ContractFunction
@@ -79,7 +80,7 @@ class DepositSecurityModuleContract(ContractInterface):
         logger.info(
             {
                 'msg': f'Build `depositBufferedEther({block_number}, {block_hash}, {deposit_root}, {staking_module_id}, '
-                       f'{nonce}, {deposit_call_data}, {guardian_signatures})` tx.'  # noqa
+                f'{nonce}, {deposit_call_data}, {guardian_signatures})` tx.'  # noqa
             }
         )
         return tx
@@ -99,7 +100,7 @@ class DepositSecurityModuleContract(ContractInterface):
         self,
         block_number: int,
         staking_module_id: int,
-        guardian_signature: tuple[str, str],
+        guardian_signature: tuple[VRS, str],
     ) -> ContractFunction:
         """
         Pauses deposits for staking module given that both conditions are satisfied (reverts otherwise):
@@ -221,7 +222,7 @@ class DepositSecurityModuleContractV2(DepositSecurityModuleContract):
         logger.info(
             {
                 'msg': f'Build `unvetSigningKeys({block_number}, {block_hash}, {staking_module_id}, {nonce}, '
-                       f'{operator_ids}, {vetted_keys_by_operator}, {guardian_signature})` tx.'  # noqa
+                f'{operator_ids}, {vetted_keys_by_operator}, {guardian_signature})` tx.'  # noqa
             }
         )
         return tx
@@ -234,6 +235,17 @@ class DepositSecurityModuleContractV2(DepositSecurityModuleContract):
         logger.info(
             {
                 'msg': 'Call `isDepositsPaused()`.',
+                'value': response,
+                'block_identifier': repr(block_identifier),
+            }
+        )
+        return response
+
+    def get_max_operators_per_unvetting(self, block_identifier: BlockIdentifier = 'latest') -> int:
+        response = self.functions.getMaxOperatorsPerUnvetting().call(block_identifier=block_identifier)
+        logger.info(
+            {
+                'msg': 'Call `getMaxOperatorsPerUnvetting()`.',
                 'value': response,
                 'block_identifier': repr(block_identifier),
             }

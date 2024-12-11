@@ -99,7 +99,8 @@ class RabbitProvider(BaseMessageProvider):
 
     def _process_msg(self, msg: str) -> Optional[dict]:
         parsed = self._parse_message(msg)
-        parsed['transport'] = 'rabbit'
+        if parsed:
+            parsed['transport'] = 'rabbit'
         return parsed
 
     @staticmethod

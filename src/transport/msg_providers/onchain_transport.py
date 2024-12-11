@@ -2,9 +2,10 @@ import abc
 import logging
 from typing import Callable, List, Optional
 
+import variables
+from blockchain.web3_extentions.middleware import add_cache_middleware
 from eth_typing import ChecksumAddress
 from eth_utils import to_bytes
-from metrics.metrics import GUARDIAN_BALANCE
 from schema import Schema
 from transport.msg_providers.common import BaseMessageProvider
 from transport.msg_providers.rabbit import MessageType
@@ -17,6 +18,7 @@ from web3 import Web3
 from web3._utils.events import get_event_data
 from web3.exceptions import BlockNotFound
 from web3.types import EventData, FilterParams, LogReceipt
+from web3_multi_provider import FallbackProvider
 
 logger = logging.getLogger(__name__)
 
@@ -278,9 +280,6 @@ class OnchainTransportProvider(BaseMessageProvider):
             address=self._onchain_address,
             topics=[event_ids, addresses_with_padding],
         )
-        for guard in guardians:
-            balance = self._w3.eth.get_balance(guard)
-            GUARDIAN_BALANCE.labels(address=guard, chain_id=self._chain_id).set(balance)
         try:
             logs = self._w3.eth.get_logs(filter_params)
             if logs:
@@ -305,8 +304,9 @@ class OnchainTransportProvider(BaseMessageProvider):
 
     def _process_msg(self, log: LogReceipt) -> Optional[dict]:
         parsed = self._parse_log(log)
-        parsed['chain_id'] = self._chain_id
-        parsed['transport'] = 'onchain'
+        if parsed:
+            parsed['chain_id'] = self._chain_id
+            parsed['transport'] = 'onchain'
         return parsed
 
     def _parse_log(self, log: LogReceipt) -> Optional[dict]:
@@ -323,3 +323,7 @@ class OnchainTransportProvider(BaseMessageProvider):
                     }
                 )
         return None
+
+    @staticmethod
+    def create_ochain_transport_w3() -> Web3:
+        return add_cache_middleware(Web3(FallbackProvider(variables.ONCHAIN_TRANSPORT_RPC_ENDPOINTS)))

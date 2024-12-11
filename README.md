@@ -34,13 +34,13 @@ Unvetting is the proces of decreasing approved depositable signing keys.
 
 ## Running Daemon
 
-1. Create `.env` file 
+1. Create `.env` file
 2. Setup variables
-   - Set WEB3_RPC_ENDPOINTS
-   - Set WALLET_PRIVATE_KEY
-   - Set CREATE_TRANSACTIONS to true
-   - Set MESSAGE_TRANSPORTS to rabbit
-   - Set RABBIT_MQ_URL, RABBIT_MQ_USERNAME and RABBIT_MQ_PASSWORD
+    - Set WEB3_RPC_ENDPOINTS
+    - Set WALLET_PRIVATE_KEY
+    - Set CREATE_TRANSACTIONS to true
+    - Set MESSAGE_TRANSPORTS to rabbit
+    - Set RABBIT_MQ_URL, RABBIT_MQ_USERNAME and RABBIT_MQ_PASSWORD
 3. ```docker-compose up```
 4. Send metrics and logs to grafana
 5. Setup alerts
@@ -76,13 +76,14 @@ Unvetting is the proces of decreasing approved depositable signing keys.
 | GAS_FEE_PERCENTILE_1              | 20            | Percentile for first recommended fee calculation                                                                         |
 | GAS_FEE_PERCENTILE_DAYS_HISTORY_1 | 1             | Percentile for first recommended calculates from N days of the fee history                                               |
 | GAS_PRIORITY_FEE_PERCENTILE       | 25            | Priority transaction will be N percentile from priority fees in last block (min MIN_PRIORITY_FEE - max MAX_PRIORITY_FEE) |
+| GAS_ADDENDUM                      | 6 gwei        | Addendum to the GAS_PRIORITY_FEE_PERCENTILE percentile value                                                             |
 | MAX_BUFFERED_ETHERS               | 5000 ether    | Maximum amount of ETH in the buffer, after which the bot deposits at any gas                                             |
 | PROMETHEUS_PORT                   | 9000          | Port with metrics server                                                                                                 |
 | PROMETHEUS_PREFIX                 | depositor_bot | Prefix for the metrics                                                                                                   |
 | HEALTHCHECK_SERVER_PORT           | 9010          | Port with bot`s status server                                                                                            |
 | MAX_CYCLE_LIFETIME_IN_SECONDS     | 1200          | Max lifetime of usual cycle. If cycle will not end in this time, bot will crush                                          |
-| MELLOW_CONTRACT_ADDRESS           | None          | If variable is set then deposit can go to predifined module                                                              |
-| VAULT_DIRECT_DEPOSIT_THRESHOLD    | 1 ether       | If mellow vault has VAULT_DIRECT_DEPOSIT_THRESHOLD ethers then direct deposit will be sent                               |
+| ONCHAIN_TRANSPORT_RPC_ENDPOINTS   | -             | RPC endpoint for the databus RPC, Gnosis at the moment                                                                   |
+| QUORUM_RETENTION_MINUTES          | 5             | TTL of quorum collection for marking module as healthy                                                                   |
 
 ## Metrics and logs
 
@@ -96,17 +97,18 @@ Prometheus server hosted on `http://localhost:${{PROMETHEUS_PORT}}/`.
 ```bash
 git clone git@github.com:lidofinance/depositor-bot.git
 cd depositor-bot
-poetry install
+poetry install --with dev
+poetry run pre-commit install
 ```
 
 To run bot
 
 ```bash
-poetry run python main depositor
+poetry run python src/main.py depositor
 
-poetry run python main pauser
+poetry run python src/main.py pauser
 
-poetry run python main unvetter
+poetry run python src/main.py unvetter
 ```
 
 ### Tests
@@ -118,6 +120,8 @@ poetry run pytest tests -m unit
 ```
 
 #### Run integration tests.
+
+TESTNET_WEB3_RPC_ENDPOINTS - set this variable for the Ethereum EL testnet RPC, Holesky only.
 
 Install Anvil
 

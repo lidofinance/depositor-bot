@@ -1,5 +1,5 @@
 import logging
-from typing import Callable, Optional
+from typing import Callable, Optional, TypedDict
 
 import variables
 from blockchain.executor import Executor
@@ -16,7 +16,6 @@ from transport.msg_types.unvet import UnvetMessage, UnvetMessageSchema
 from transport.types import TransportType
 from utils.bytes import from_hex_string_to_bytes
 from web3.types import BlockData
-from web3_multi_provider import FallbackProvider
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +55,7 @@ class UnvetterBot:
         if TransportType.ONCHAIN_TRANSPORT in variables.MESSAGE_TRANSPORTS:
             transports.append(
                 OnchainTransportProvider(
-                    w3=Web3(FallbackProvider(variables.ONCHAIN_TRANSPORT_RPC_ENDPOINTS)),
+                    w3=OnchainTransportProvider.create_ochain_transport_w3(),
                     onchain_address=variables.ONCHAIN_TRANSPORT_ADDRESS,
                     message_schema=Schema(Or(UnvetMessageSchema, PingMessageSchema)),
                     parsers_providers=[UnvetParser, PingParser],
@@ -72,7 +71,6 @@ class UnvetterBot:
             filters=[
                 message_metrics_filter,
                 to_check_sum_address,
-                get_messages_sign_filter(self.w3),
             ],
         )
 
@@ -95,7 +93,9 @@ class UnvetterBot:
             return []
 
         actualize_filter = self._get_message_actualize_filter()
-        return self.message_storage.get_messages(actualize_filter)
+        prefix = self.w3.lido.deposit_security_module.get_unvet_message_prefix()
+        sign_filter = get_messages_sign_filter(prefix)
+        return self.message_storage.get_messages_and_actualize(lambda x: sign_filter(x) and actualize_filter(x))
 
     def _get_message_actualize_filter(self) -> Callable[[UnvetMessage], bool]:
         modules = self.w3.lido.staking_router.get_staking_module_ids()
@@ -126,6 +126,19 @@ class UnvetterBot:
 
         self._clear_outdated_messages_for_module(module_id, actual_nonce)
 
+        operator_ids = from_hex_string_to_bytes(message['operatorIds'])
+        max_operators_per_unvetting = self.w3.lido.deposit_security_module.get_max_operators_per_unvetting()
+        node_operators_count = len(operator_ids) / 8
+        if node_operators_count > max_operators_per_unvetting:
+            logger.error(
+                {
+                    'msg': 'max_operators_per_unvetting check failed.',
+                    'node_operators_count': node_operators_count,
+                    'max_operators_per_unvetting': max_operators_per_unvetting,
+                }
+            )
+            return False
+
         unvet_tx = self.w3.lido.deposit_security_module.unvet_signing_keys(
             message['blockNumber'],
             message['blockHash'],
@@ -143,8 +156,12 @@ class UnvetterBot:
         logger.info({'msg': f'Transaction send. Result is {result}.', 'value': result})
         return result
 
-    def _clear_outdated_messages_for_module(self, module_id: int, nonce: int) -> None:
-        if self.message_storage is None:
-            return
+    def _clear_outdated_messages_for_module(self, module_id: int, nonce: int):
+        prefix = self.w3.lido.deposit_security_module.get_unvet_message_prefix()
+        is_message_signed_filter = get_messages_sign_filter(prefix)
 
-        self.message_storage.get_messages(lambda message: message['stakingModuleId'] != module_id or message['nonce'] >= nonce)
+        def is_unvet_message_relevant(msg: TypedDict) -> bool:
+            is_message_relevant = msg['stakingModuleId'] != module_id or int(msg['nonce']) >= nonce
+            return is_message_relevant and is_message_signed_filter(msg)
+
+        self.message_storage.get_messages_and_actualize(is_unvet_message_relevant)

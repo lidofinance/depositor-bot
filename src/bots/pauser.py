@@ -17,7 +17,6 @@ from transport.msg_types.pause import PauseMessage, PauseMessageSchema
 from transport.msg_types.ping import PingMessageSchema, to_check_sum_address
 from transport.types import TransportType
 from web3.types import BlockData
-from web3_multi_provider import FallbackProvider
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +50,7 @@ class PauserBot:
         if TransportType.ONCHAIN_TRANSPORT in variables.MESSAGE_TRANSPORTS:
             transports.append(
                 OnchainTransportProvider(
-                    w3=Web3(FallbackProvider(variables.ONCHAIN_TRANSPORT_RPC_ENDPOINTS)),
+                    w3=OnchainTransportProvider.create_ochain_transport_w3(),
                     onchain_address=variables.ONCHAIN_TRANSPORT_ADDRESS,
                     message_schema=Schema(Or(PauseMessageSchema, PingMessageSchema)),
                     parsers_providers=[PauseV2Parser, PauseV3Parser, PingParser],
@@ -67,12 +66,12 @@ class PauserBot:
             filters=[
                 message_metrics_filter,
                 to_check_sum_address,
-                get_messages_sign_filter(self.w3),
             ],
         )
 
     def execute(self, block: BlockData) -> bool:
-        messages = self.receive_pause_messages()
+        filters = self._message_filters()
+        messages = self.message_storage.get_messages_and_actualize(filters)
         logger.info({'msg': f'Received {len(messages)} pause messages.'})
 
         for message in messages:
@@ -80,9 +79,12 @@ class PauserBot:
 
         return True
 
-    def receive_pause_messages(self) -> list[PauseMessage]:
+    def _message_filters(self):
+        sign_filter = self._sign_filter()
+
         actualize_filter = self._get_message_actualize_filter()
-        return self.message_storage.get_messages(actualize_filter)
+
+        return lambda x: sign_filter(x) and actualize_filter(x)
 
     def _get_message_actualize_filter(self) -> Callable[[PauseMessage], bool]:
         current_block = self.w3.eth.get_block('latest')
@@ -101,14 +103,11 @@ class PauserBot:
     def _send_pause_message(self, message: PauseMessage) -> bool:
         if self.w3.lido.deposit_security_module.__class__.__name__ == 'DepositSecurityModuleContractV2':
             logger.warning({'msg': 'Handle pause message.', 'value': message})
-
-            if message.get('stakingModuleId', -1) == -1:
+            if 'stakingModuleId' not in message:
                 return self._send_pause_v2(message)
-
         else:
-            if message.get('stakingModuleId', -1) != -1:
+            if 'stakingModuleId' in message:
                 return self._send_pause(message)
-
         logger.error({'msg': 'Unsupported message. Outdated schema.', 'value': message})
         return True
 
@@ -147,4 +146,9 @@ class PauserBot:
         return result
 
     def _clear_outdated_messages_for_module(self, module_id: int) -> None:
-        self.message_storage.get_messages(lambda message: message['stakingModuleId'] != module_id)
+        sign_filter = self._sign_filter()
+        self.message_storage.get_messages_and_actualize(lambda message: sign_filter(message) and message['stakingModuleId'] != module_id)
+
+    def _sign_filter(self) -> Callable:
+        prefix = self.w3.lido.deposit_security_module.get_pause_message_prefix()
+        return get_messages_sign_filter(prefix)

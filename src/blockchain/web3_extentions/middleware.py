@@ -1,16 +1,17 @@
 import logging
-from typing import Any, Callable
+from typing import Any, Callable, Set, cast
 from urllib.parse import urlparse
 
 from metrics.metrics import ETH_RPC_REQUESTS, ETH_RPC_REQUESTS_DURATION
 from requests import HTTPError, Response
 from web3 import Web3
+from web3.middleware import construct_simple_cache_middleware
 from web3.types import RPCEndpoint, RPCResponse
 
 logger = logging.getLogger(__name__)
 
 
-def add_requests_metric_middleware(web3: Web3):
+def add_requests_metric_middleware(web3: Web3) -> Web3:
     """
     Works correctly with MultiProvider and vanilla Providers.
 
@@ -50,4 +51,31 @@ def add_requests_metric_middleware(web3: Web3):
 
         return middleware
 
-    web3.middleware_onion.add(metrics_collector)
+    web3.middleware_onion.inject(metrics_collector, layer=0)
+    return web3
+
+
+def add_cache_middleware(web3: Web3) -> Web3:
+    web3.middleware_onion.inject(
+        construct_simple_cache_middleware(
+            rpc_whitelist=cast(
+                Set[RPCEndpoint],
+                {
+                    'eth_chainId',
+                },
+            )
+        ),
+        layer=0,
+    )
+    return web3
+
+
+def add_middlewares(web3: Web3) -> Web3:
+    """
+    Cache middleware should go first to avoid rewriting metrics for cached requests.
+    If middleware has level = 0, the middleware will be appended to the end of the middleware list.
+    So we need [..., cache, other middlewares]
+    """
+    add_cache_middleware(web3)
+    add_requests_metric_middleware(web3)
+    return web3
