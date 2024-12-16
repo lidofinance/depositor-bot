@@ -22,21 +22,19 @@ def add_requests_metric_middleware(web3: Web3) -> Web3:
 
     def metrics_collector(make_request: Callable[[RPCEndpoint, Any], RPCResponse], w3: Web3) -> Callable[[RPCEndpoint, Any], RPCResponse]:
         """Constructs a middleware which measure requests parameters"""
-        metrics = ETH_RPC_REQUESTS
-        if chain_id != 1:
-            metrics = ONCHAIN_TRANSPORT_ETH_RPC_REQUESTS
+        metric = ETH_RPC_REQUESTS if chain_id == 1 else ONCHAIN_TRANSPORT_ETH_RPC_REQUESTS
 
         def middleware(method: RPCEndpoint, params: Any) -> RPCResponse:
-            labeled_metric = metrics.labels(
-                method=method,
-                domain=urlparse(web3.provider.endpoint_uri).netloc,  # pyright: ignore
-            )
             try:
                 with ETH_RPC_REQUESTS_DURATION.time():
                     response = make_request(method, params)
             except HTTPError as ex:
                 failed: Response = ex.response
-                labeled_metric.labels(code=failed.status_code).inc()
+                metric.labels(
+                    method=method,
+                    code=failed.status_code,
+                    domain=urlparse(web3.provider.endpoint_uri).netloc,  # pyright: ignore
+                ).inc()
                 raise
 
             # https://www.jsonrpc.org/specification#error_object
@@ -46,7 +44,11 @@ def add_requests_metric_middleware(web3: Web3) -> Web3:
             if isinstance(error, dict):
                 code = error.get('code') or code
 
-            labeled_metric.labels(code=code).inc()
+            metric.labels(
+                method=method,
+                code=code,
+                domain=urlparse(web3.provider.endpoint_uri).netloc,  # pyright: ignore
+            ).inc()
             return response
 
         return middleware
