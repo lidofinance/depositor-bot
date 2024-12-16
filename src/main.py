@@ -11,6 +11,7 @@ from bots.pauser import run_pauser
 from bots.unvetter import run_unvetter
 from metrics.healthcheck_pulse import start_pulse_server
 from metrics.logging import logging
+from metrics.metrics import ETH_RPC_REQUESTS
 from prometheus_client import start_http_server
 from web3_multi_provider import FallbackProvider
 
@@ -49,7 +50,7 @@ def main(bot_name: str):
     )
 
     logger.info({'msg': 'Add metrics to web3 requests.'})
-    add_middlewares(w3)
+    add_middlewares(w3, ETH_RPC_REQUESTS)
 
     if bot_name == BotModule.DEPOSITOR:
         run_depositor(w3)
