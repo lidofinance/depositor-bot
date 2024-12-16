@@ -50,7 +50,7 @@ class PauserBot:
         if TransportType.ONCHAIN_TRANSPORT in variables.MESSAGE_TRANSPORTS:
             transports.append(
                 OnchainTransportProvider(
-                    w3=OnchainTransportProvider.create_ochain_transport_w3(),
+                    w3=OnchainTransportProvider.create_onchain_transport_w3(),
                     onchain_address=variables.ONCHAIN_TRANSPORT_ADDRESS,
                     message_schema=Schema(Or(PauseMessageSchema, PingMessageSchema)),
                     parsers_providers=[PauseV2Parser, PauseV3Parser, PingParser],
