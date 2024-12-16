@@ -2,7 +2,7 @@ import logging
 from typing import Any, Callable, Set, cast
 from urllib.parse import urlparse
 
-from metrics.metrics import ETH_RPC_REQUESTS, ETH_RPC_REQUESTS_DURATION
+from metrics.metrics import ETH_RPC_REQUESTS, ETH_RPC_REQUESTS_DURATION, ONCHAIN_TRANSPORT_ETH_RPC_REQUESTS
 from requests import HTTPError, Response
 from web3 import Web3
 from web3.middleware import construct_simple_cache_middleware
@@ -21,18 +21,22 @@ def add_requests_metric_middleware(web3: Web3) -> Web3:
 
     def metrics_collector(make_request: Callable[[RPCEndpoint, Any], RPCResponse], w3: Web3) -> Callable[[RPCEndpoint, Any], RPCResponse]:
         """Constructs a middleware which measure requests parameters"""
+        chain_id = w3.eth.chain_id
+        metrics = ETH_RPC_REQUESTS
+        if chain_id != 1:
+            metrics = ONCHAIN_TRANSPORT_ETH_RPC_REQUESTS
 
         def middleware(method: RPCEndpoint, params: Any) -> RPCResponse:
+            labeled_metric = metrics.labels(
+                method=method,
+                domain=urlparse(web3.provider.endpoint_uri).netloc,  # pyright: ignore
+            )
             try:
                 with ETH_RPC_REQUESTS_DURATION.time():
                     response = make_request(method, params)
             except HTTPError as ex:
                 failed: Response = ex.response
-                ETH_RPC_REQUESTS.labels(
-                    method=method,
-                    code=failed.status_code,
-                    domain=urlparse(web3.provider.endpoint_uri).netloc,  # pyright: ignore
-                ).inc()
+                labeled_metric.labels(code=failed.status_code).inc()
                 raise
 
             # https://www.jsonrpc.org/specification#error_object
@@ -42,11 +46,7 @@ def add_requests_metric_middleware(web3: Web3) -> Web3:
             if isinstance(error, dict):
                 code = error.get('code') or code
 
-            ETH_RPC_REQUESTS.labels(
-                method=method,
-                code=code,
-                domain=urlparse(web3.provider.endpoint_uri).netloc,  # pyright: ignore
-            ).inc()
+            labeled_metric.labels(code=code).inc()
             return response
 
         return middleware

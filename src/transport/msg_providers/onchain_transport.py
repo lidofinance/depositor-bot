@@ -3,7 +3,7 @@ import logging
 from typing import Callable, List, Optional
 
 import variables
-from blockchain.web3_extentions.middleware import add_cache_middleware
+from blockchain.web3_extentions.middleware import add_middlewares
 from eth_typing import ChecksumAddress
 from eth_utils import to_bytes
 from schema import Schema
@@ -325,5 +325,6 @@ class OnchainTransportProvider(BaseMessageProvider):
         return None
 
     @staticmethod
-    def create_ochain_transport_w3() -> Web3:
-        return add_cache_middleware(Web3(FallbackProvider(variables.ONCHAIN_TRANSPORT_RPC_ENDPOINTS)))
+    def create_onchain_transport_w3() -> Web3:
+        w3 = Web3(FallbackProvider(variables.ONCHAIN_TRANSPORT_RPC_ENDPOINTS))
+        return add_middlewares(w3)

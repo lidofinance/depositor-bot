@@ -114,6 +114,13 @@ ETH_RPC_REQUESTS = Counter(
     namespace=PROMETHEUS_PREFIX,
 )
 
+ONCHAIN_TRANSPORT_ETH_RPC_REQUESTS = Counter(
+    'onchain_transport_rpc_requests',
+    'Total count of requests to onchain transport RPC',
+    ['method', 'code', 'domain'],
+    namespace=PROMETHEUS_PREFIX,
+)
+
 UNEXPECTED_EXCEPTIONS = Counter(
     'unexpected_exceptions',
     'Total count of unexpected exceptions',
