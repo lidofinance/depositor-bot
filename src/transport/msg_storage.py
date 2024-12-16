@@ -46,8 +46,9 @@ class MessageStorage:
         """
         messages = self.messages
         for transport in self._transports:
-            messages.extend(transport.get_messages())
-        self.messages = list(filter(lambda x: self._filter(x) and actualize_filter(x), messages))
+            filtered_messages = list(filter(lambda x: self._filter(x), transport.get_messages()))
+            messages.extend(filtered_messages)
+        self.messages = list(filter(lambda x: actualize_filter(x), messages))
         return self.messages
 
     def clear(self):
