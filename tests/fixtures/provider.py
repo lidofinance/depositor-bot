@@ -6,6 +6,7 @@ import variables
 from blockchain.web3_extentions.lido_contracts import LidoContracts
 from blockchain.web3_extentions.middleware import add_middlewares
 from blockchain.web3_extentions.transaction import TransactionUtils
+from metrics.metrics import ETH_RPC_REQUESTS
 from web3 import HTTPProvider, Web3
 
 from tests.fork import anvil_fork
@@ -35,7 +36,7 @@ def web3_provider_integration(request) -> Web3:
 
     with anvil_fork(anvil_path, rpc_endpoint, block_num):
         w3 = Web3(HTTPProvider('http://127.0.0.1:8545', request_kwargs={'timeout': 3600}))
-        add_middlewares(w3)
+        add_middlewares(w3, ETH_RPC_REQUESTS)
         assert w3.is_connected(), 'Failed to connect to the Web3 provider.'
         yield w3
 
