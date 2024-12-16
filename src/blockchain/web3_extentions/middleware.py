@@ -18,10 +18,10 @@ def add_requests_metric_middleware(web3: Web3) -> Web3:
     ETH_RPC_REQUESTS_DURATION - HISTOGRAM with requests time.
     ETH_RPC_REQUESTS - Counter with requests count, response codes and request domain.
     """
+    chain_id = web3.eth.chain_id
 
     def metrics_collector(make_request: Callable[[RPCEndpoint, Any], RPCResponse], w3: Web3) -> Callable[[RPCEndpoint, Any], RPCResponse]:
         """Constructs a middleware which measure requests parameters"""
-        chain_id = w3.eth.chain_id
         metrics = ETH_RPC_REQUESTS
         if chain_id != 1:
             metrics = ONCHAIN_TRANSPORT_ETH_RPC_REQUESTS
