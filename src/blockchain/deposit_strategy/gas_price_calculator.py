@@ -29,7 +29,9 @@ class GasPriceCalculator:
         return Wei(int(numpy.percentile(gas_history, variables.GAS_FEE_PERCENTILE_1))) + variables.GAS_ADDENDUM
 
     def _fetch_gas_fee_history(self, days: int) -> list[Wei]:
-        latest_block_num = self.w3.eth.get_block('latest')['number']
+        latest_block = self.w3.eth.get_block('latest')
+        
+        latest_block_num = latest_block['number']
         logger.info({'msg': 'Fetch gas fee history.', 'value': {'block_number': latest_block_num}})
 
         total_blocks_to_fetch = self._BLOCKS_IN_ONE_DAY * days
@@ -40,6 +42,9 @@ class GasPriceCalculator:
 
         for _ in range(requests_count):
             stats = self.w3.eth.fee_history(self._REQUEST_SIZE, last_block, [])
-            last_block = BlockNumber(stats['oldestBlock'] - 2)
+            # TODO: review and make fix for devnet without day history
+            stat_item = last_block if stats['oldestBlock'] == 0 else stats['oldestBlock'] - 2
+            last_block = BlockNumber(stat_item)
+
             gas_fees = stats['baseFeePerGas'] + gas_fees
         return gas_fees[: days * self._BLOCKS_IN_ONE_DAY]
