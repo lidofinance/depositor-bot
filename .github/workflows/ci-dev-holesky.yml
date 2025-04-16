@@ -1,10 +1,10 @@
-name: CI Dev Hoodi
+name: CI Dev Holesky
 
 on:
   workflow_dispatch:
   push:
     branches:
-      - develop
+      - holesky
     paths-ignore:
       - ".github/**"
 
@@ -21,5 +21,5 @@ jobs:
           APP_ID: ${{ secrets.APP_ID }}
           APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
           TARGET_REPO: "lidofinance/infra-mainnet"
-          TARGET_WORKFLOW: "deploy_hoodi_testnet_depositor_bot_staking_router.yaml"
-          TARGET: "develop"
+          TARGET_WORKFLOW: "deploy_holesky_testnet_depositor_bot_staking_router.yaml"
+          TARGET: "holesky"
