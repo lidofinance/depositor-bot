@@ -98,7 +98,7 @@ def _verification_data_unvet(prefix: bytes, msg: UnvetMessage) -> tuple[List[Any
     data = [
         prefix,
         msg['blockNumber'],
-        from_hex_string_to_bytes(msg['blockHash']),
+        msg['blockHash'],
         msg['stakingModuleId'],
         msg['nonce'],
         from_hex_string_to_bytes(msg['operatorIds']),
