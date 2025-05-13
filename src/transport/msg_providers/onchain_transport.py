@@ -170,6 +170,33 @@ class UnvetParser(EventParser):
 
     def _create_message(self, parsed_data: tuple, guardian: str) -> UnvetMessage:
         block_number, block_hash, staking_module_id, nonce, operator_ids, vetted_keys_by_operator, (r, vs), (version,) = parsed_data
+        return self.build_message(
+            block_number=block_number,
+            block_hash=block_hash,
+            guardian=guardian,
+            operator_ids=operator_ids,
+            staking_module_id=staking_module_id,
+            vetted_keys_by_operator=vetted_keys_by_operator,
+            nonce=nonce,
+            r=r,
+            vs=vs,
+            version=version,
+        )
+
+    @staticmethod
+    def build_message(
+        *,
+        block_number: int,
+        block_hash: bytes,
+        guardian: str,
+        operator_ids: bytes,
+        staking_module_id: int,
+        vetted_keys_by_operator: bytes,
+        nonce: int,
+        r: bytes,
+        vs: bytes,
+        version: bytes,
+    ) -> UnvetMessage:
         return UnvetMessage(
             type=MessageType.UNVET,
             nonce=nonce,
