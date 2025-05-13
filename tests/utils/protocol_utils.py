@@ -2,7 +2,6 @@ from cryptography.verify_signature import compute_vs
 from transport.msg_providers.onchain_transport import DepositParser
 from transport.msg_types.deposit import DepositMessage
 from utils.bytes import from_hex_string_to_bytes
-from web3 import Web3
 
 
 def get_deposit_message(web3, account_address, pk, module_id) -> DepositMessage:
@@ -17,7 +16,7 @@ def get_deposit_message(web3, account_address, pk, module_id) -> DepositMessage:
 
     msg_hash = web3.solidity_keccak(
         ['bytes32', 'uint256', 'bytes32', 'bytes32', 'uint256', 'uint256'],
-        [prefix, block_number, Web3.to_hex(latest.hash), deposit_root, module_id, nonce],
+        [prefix, block_number, latest.hash, deposit_root, module_id, nonce],
     )
     signed = web3.eth.account._sign_hash(msg_hash, private_key=pk)
 
