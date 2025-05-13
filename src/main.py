@@ -2,16 +2,15 @@ import sys
 from enum import StrEnum
 
 import variables
+import web3_multi_provider
 from blockchain.typings import Web3
 from blockchain.web3_extentions.lido_contracts import LidoContracts
-from blockchain.web3_extentions.middleware import add_middlewares
 from blockchain.web3_extentions.transaction import TransactionUtils
 from bots.depositor import run_depositor
 from bots.pauser import run_pauser
 from bots.unvetter import run_unvetter
 from metrics.healthcheck_pulse import start_pulse_server
 from metrics.logging import logging
-from metrics.metrics import ETH_RPC_REQUESTS
 from prometheus_client import start_http_server
 from web3_multi_provider import FallbackProvider
 
@@ -38,7 +37,7 @@ def main(bot_name: str):
     start_http_server(variables.PROMETHEUS_PORT)
 
     logger.info({'msg': 'Connect MultiHTTPProviders.', 'rpc_count': len(variables.WEB3_RPC_ENDPOINTS)})
-    w3 = Web3(FallbackProvider(variables.WEB3_RPC_ENDPOINTS))
+    w3 = Web3(FallbackProvider(variables.WEB3_RPC_ENDPOINTS, cache_allowed_requests=True))
     logger.info({'msg': 'Current chain_id', 'chain_id': w3.eth.chain_id})
 
     logger.info({'msg': 'Initialize Lido contracts.'})
@@ -50,7 +49,7 @@ def main(bot_name: str):
     )
 
     logger.info({'msg': 'Add metrics to web3 requests.'})
-    add_middlewares(w3, ETH_RPC_REQUESTS)
+    web3_multi_provider.init_metrics()
 
     if bot_name == BotModule.DEPOSITOR:
         run_depositor(w3)

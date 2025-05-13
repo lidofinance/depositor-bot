@@ -24,8 +24,9 @@ from web3.types import EventData
 
 from tests.transport.onchain_sender import OnchainTransportSender
 
-_DEFAULT_GUARDIAN = '0xf060ab3d5dCfdC6a0DFd5ca0645ac569b8f105CA'
+_DEFAULT_GUARDIAN = '0x4E93C8c7B06F1CEEb03A8e13B0371b35F93d3257'
 _ANVIL_GUARDIAN = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266'
+_FAKE_GUARDIAN = '0x4E93C8c7B06F1CEEb03A8e13B0371b35F0000000'
 
 
 # Started with config: {
@@ -51,7 +52,7 @@ def test_data_bus_provider(
         onchain_address=variables.ONCHAIN_TRANSPORT_ADDRESS,
         message_schema=Schema(Or(DepositMessageSchema, PingMessageSchema)),
         parsers_providers=[DepositParser, PingParser],
-        allowed_guardians_provider=lambda: [Web3.to_checksum_address(_DEFAULT_GUARDIAN[:-1] + '7')],
+        allowed_guardians_provider=lambda: [Web3.to_checksum_address(_FAKE_GUARDIAN)],
     )
     messages = provider.get_messages()
     assert not messages

@@ -1,4 +1,4 @@
-from prometheus_client.metrics import Counter, Gauge, Histogram, Info
+from prometheus_client.metrics import Counter, Gauge, Info
 from variables import DEPOSIT_MODULES_WHITELIST, PROMETHEUS_PREFIX, PUBLIC_ENV_VARS
 
 GAS_FEE = Gauge(
@@ -98,26 +98,6 @@ DEPOSIT_AMOUNT_OK = Gauge(
     'is_deposit_amount_ok',
     'Represents is_deposit_amount_ok check.',
     ['module_id'],
-    namespace=PROMETHEUS_PREFIX,
-)
-
-ETH_RPC_REQUESTS_DURATION = Histogram(
-    'eth_rpc_requests_duration',
-    'Duration of requests to ETH1 RPC',
-    namespace=PROMETHEUS_PREFIX,
-)
-
-ETH_RPC_REQUESTS = Counter(
-    'eth_rpc_requests',
-    'Total count of requests to ETH1 RPC',
-    ['method', 'code', 'domain'],
-    namespace=PROMETHEUS_PREFIX,
-)
-
-ONCHAIN_TRANSPORT_ETH_RPC_REQUESTS = Counter(
-    'onchain_transport_rpc_requests',
-    'Total count of requests to onchain transport RPC',
-    ['method', 'code', 'domain'],
     namespace=PROMETHEUS_PREFIX,
 )
 
