@@ -118,7 +118,7 @@ class TransactionUtils(Module):
 
     def classic_send(self, signed_tx: SignedTransaction, timeout_in_blocks: int) -> bool:
         try:
-            tx_hash = self.w3.eth.send_raw_transaction(signed_tx.rawTransaction)
+            tx_hash = self.w3.eth.send_raw_transaction(signed_tx.raw_transaction)
         except Exception as error:
             logger.error({'msg': 'Transaction reverted.', 'value': str(error)})
             return False

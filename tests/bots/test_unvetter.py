@@ -27,7 +27,7 @@ def get_unvet_message(web3) -> UnvetMessage:
         [
             prefix,
             block_number,
-            latest.hash.hex(),
+            Web3.to_hex(latest.hash),
             1,
             nonce,
             from_hex_string_to_bytes('0x1234'),

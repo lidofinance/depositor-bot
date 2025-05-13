@@ -37,7 +37,7 @@ class Sender:
 
     def _prepare_general_tx(self, quorum: list[DepositMessage]):
         block_number = quorum[0]['blockNumber']
-        block_hash = Hash32(bytes.fromhex(quorum[0]['blockHash'][2:]))
+        block_hash = Hash32(bytes.fromhex(quorum[0]['blockHash']))
         deposit_root = Hash32(bytes.fromhex(quorum[0]['depositRoot'][2:]))
         staking_module_id = quorum[0]['stakingModuleId']
         staking_module_nonce = quorum[0]['nonce']
