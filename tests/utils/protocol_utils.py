@@ -1,13 +1,16 @@
 from cryptography.verify_signature import compute_vs
+from transport.msg_providers.onchain_transport import DepositParser
+from transport.msg_types.deposit import DepositMessage
+from utils.bytes import from_hex_string_to_bytes
 from web3 import Web3
 
 
-def get_deposit_message(web3, account_address, pk, module_id):
+def get_deposit_message(web3, account_address, pk, module_id) -> DepositMessage:
     latest = web3.eth.get_block('latest')
 
     prefix = web3.lido.deposit_security_module.get_attest_message_prefix()
     block_number = latest.number
-    deposit_root = '0x' + web3.lido.deposit_contract.get_deposit_root().hex()
+    deposit_root = web3.lido.deposit_contract.get_deposit_root()
     nonce = web3.lido.staking_router.get_staking_module_nonce(module_id)
 
     # | ATTEST_MESSAGE_PREFIX | blockNumber | blockHash | depositRoot | stakingModuleId | nonce |
@@ -18,19 +21,14 @@ def get_deposit_message(web3, account_address, pk, module_id):
     )
     signed = web3.eth.account._sign_hash(msg_hash, private_key=pk)
 
-    return {
-        'type': 'deposit',
-        'depositRoot': deposit_root,
-        'nonce': nonce,
-        'blockNumber': latest.number,
-        'blockHash': latest.hash.hex(),
-        'guardianAddress': account_address,
-        'guardianIndex': 8,
-        'stakingModuleId': module_id,
-        'signature': {
-            'r': '0x' + signed.r.to_bytes(32, 'big').hex(),
-            's': '0x' + signed.s.to_bytes(32, 'big').hex(),
-            'v': signed.v,
-            '_vs': compute_vs(signed.v, '0x' + signed.s.to_bytes(32, 'big').hex()),
-        },
-    }
+    return DepositParser.build_message(
+        block_number=latest.number,
+        block_hash=latest.hash,
+        guardian=account_address,
+        deposit_root=deposit_root,
+        staking_module_id=module_id,
+        nonce=nonce,
+        r=signed.r.to_bytes(32, 'big'),
+        vs=from_hex_string_to_bytes(compute_vs(signed.v, '0x' + signed.s.to_bytes(32, 'big').hex())),
+        version=b'1',
+    )

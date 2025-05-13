@@ -116,6 +116,31 @@ class DepositParser(EventParser):
 
     def _create_message(self, parsed_data: tuple, guardian: str) -> DepositMessage:
         block_number, block_hash, deposit_root, staking_module_id, nonce, (r, vs), (version,) = parsed_data
+        return DepositParser.build_message(
+            block_number=block_number,
+            block_hash=block_hash,
+            guardian=guardian,
+            deposit_root=deposit_root,
+            staking_module_id=staking_module_id,
+            nonce=nonce,
+            r=r,
+            vs=vs,
+            version=version,
+        )
+
+    @staticmethod
+    def build_message(
+        *,
+        block_number: int,
+        block_hash: bytes,
+        guardian: str,
+        deposit_root: bytes,
+        staking_module_id: int,
+        nonce: int,
+        r: bytes,
+        vs: bytes,
+        version: bytes,
+    ) -> DepositMessage:
         return DepositMessage(
             type=MessageType.DEPOSIT,
             depositRoot=bytes_to_hex_string(deposit_root),
