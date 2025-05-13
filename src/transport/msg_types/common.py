@@ -72,14 +72,7 @@ def _verification_data(prefix: bytes, msg: BotMessage) -> tuple[List[Any], List[
 
 
 def _verification_data_deposit(prefix: bytes, msg: DepositMessage) -> tuple[List[Any], List[str]]:
-    data = [
-        prefix,
-        msg['blockNumber'],
-        from_hex_string_to_bytes(msg['blockHash']),
-        msg['depositRoot'],
-        msg['stakingModuleId'],
-        msg['nonce'],
-    ]
+    data = [prefix, msg['blockNumber'], msg['blockHash'], msg['depositRoot'], msg['stakingModuleId'], msg['nonce']]
     abi = ['bytes32', 'uint256', 'bytes32', 'bytes32', 'uint256', 'uint256']
     return data, abi
 

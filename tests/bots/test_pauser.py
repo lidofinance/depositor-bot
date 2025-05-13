@@ -5,6 +5,8 @@ import pytest
 import variables
 from bots.pauser import PauserBot
 from cryptography.verify_signature import compute_vs
+from transport.msg_providers.onchain_transport import PauseV3Parser
+from utils.bytes import from_hex_string_to_bytes
 
 from tests.conftest import DSM_OWNER
 from tests.fixtures import upgrade_staking_router_to_v2
@@ -81,7 +83,7 @@ def get_pause_message(web3, module_id):
     }
 
 
-def get_pause_message_v2(web3):
+def get_pause_message_v3(web3):
     latest = web3.eth.get_block('latest')
 
     prefix = web3.lido.deposit_security_module.get_pause_message_prefix()
@@ -91,18 +93,13 @@ def get_pause_message_v2(web3):
     msg_hash = web3.solidity_keccak(['bytes32', 'uint256'], [prefix, block_number])
     signed = web3.eth.account._sign_hash(msg_hash, private_key=COUNCIL_PK)
 
-    return {
-        'blockHash': latest.hash.hex(),
-        'blockNumber': latest.number,
-        'guardianAddress': COUNCIL_ADDRESS,
-        'signature': {
-            'r': '0x' + signed.r.to_bytes(32, 'big').hex(),
-            's': '0x' + signed.s.to_bytes(32, 'big').hex(),
-            'v': signed.v,
-            '_vs': compute_vs(signed.v, '0x' + signed.s.to_bytes(32, 'big').hex()),
-        },
-        'type': 'pause',
-    }
+    return PauseV3Parser.build_message(
+        block_number=block_number,
+        guardian=COUNCIL_ADDRESS,
+        version=b'0x1',
+        r=signed.r.to_bytes(32, 'big'),
+        vs=from_hex_string_to_bytes(compute_vs(signed.v, '0x' + signed.s.to_bytes(32, 'big').hex())),
+    )
 
 
 @pytest.mark.unit
@@ -202,14 +199,14 @@ def test_pauser_bot(web3_lido_integration, web3_provider_integration, add_accoun
     # Check pause message cleaned
     assert not pb.message_storage.messages
 
-    pb.message_storage.messages = [get_pause_message_v2(web3_lido_integration)]
+    pb.message_storage.messages = [get_pause_message_v3(web3_lido_integration)]
     pb.execute(latest)
     assert pb.message_storage.messages
 
     upgrade_staking_router_to_v2(web3_lido_integration)
     web3_lido_integration.lido.deposit_security_module.get_guardians = Mock(return_value=[COUNCIL_ADDRESS])
     # recreate signature
-    pb.message_storage.messages = [get_pause_message_v2(web3_lido_integration)]
+    pb.message_storage.messages = [get_pause_message_v3(web3_lido_integration)]
     pb.execute(latest)
     assert pb.message_storage.messages
     assert [

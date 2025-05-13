@@ -26,6 +26,7 @@ from tests.transport.onchain_sender import OnchainTransportSender
 
 _DEFAULT_GUARDIAN = '0x4E93C8c7B06F1CEEb03A8e13B0371b35F93d3257'
 _ANVIL_GUARDIAN = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266'
+_FAKE_GUARDIAN = '0x4E93C8c7B06F1CEEb03A8e13B0371b35F0000000'
 
 
 # Started with config: {
@@ -46,13 +47,12 @@ def test_data_bus_provider(
     """
     variables.ONCHAIN_TRANSPORT_ADDRESS = ChecksumAddress(HexAddress(HexStr('0x37De961D6bb5865867aDd416be07189D2Dd960e6')))
     web3_transaction_integration.eth.get_balance = Mock(return_value=1)
-    last_digit = str((int(_DEFAULT_GUARDIAN[-1]) + 1) % 10)
     provider = OnchainTransportProvider(
         w3=web3_transaction_integration,
         onchain_address=variables.ONCHAIN_TRANSPORT_ADDRESS,
         message_schema=Schema(Or(DepositMessageSchema, PingMessageSchema)),
         parsers_providers=[DepositParser, PingParser],
-        allowed_guardians_provider=lambda: [Web3.to_checksum_address(_DEFAULT_GUARDIAN[:-1] + last_digit)],
+        allowed_guardians_provider=lambda: [Web3.to_checksum_address(_FAKE_GUARDIAN)],
     )
     messages = provider.get_messages()
     assert not messages
