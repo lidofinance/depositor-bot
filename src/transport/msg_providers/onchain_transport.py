@@ -286,6 +286,28 @@ class PauseV3Parser(EventParser):
             },
         )
 
+    @staticmethod
+    def build_message(
+        *,
+        block_number: int,
+        guardian: str,
+        r: bytes,
+        vs: bytes,
+        version: bytes,
+    ) -> PauseMessage:
+        return PauseMessage(
+            type=MessageType.PAUSE,
+            blockNumber=block_number,
+            guardianAddress=guardian,
+            signature={
+                'r': bytes_to_hex_string(r),
+                '_vs': bytes_to_hex_string(vs),
+            },
+            app={
+                'version': _decode_version(version),
+            },
+        )
+
 
 def _32padding_address(address: ChecksumAddress) -> bytes:
     address_bytes = to_bytes(hexstr=address)
