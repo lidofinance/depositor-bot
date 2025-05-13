@@ -82,7 +82,7 @@ class PrivateRelayClient:
         """
         return [
             {
-                'tx': tx.rawTransaction.hex(),
+                'tx': tx.raw_transaction.hex(),
                 'maxBlockNumber': hex(self.w3.eth.get_block('pending')['number'] + timeout_in_blocks),
                 'preferences': {
                     'builders': [

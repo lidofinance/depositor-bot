@@ -1,4 +1,5 @@
 from cryptography.verify_signature import compute_vs
+from web3 import Web3
 
 
 def get_deposit_message(web3, account_address, pk, module_id):
@@ -13,7 +14,7 @@ def get_deposit_message(web3, account_address, pk, module_id):
 
     msg_hash = web3.solidity_keccak(
         ['bytes32', 'uint256', 'bytes32', 'bytes32', 'uint256', 'uint256'],
-        [prefix, block_number, latest.hash.hex(), deposit_root, module_id, nonce],
+        [prefix, block_number, Web3.to_hex(latest.hash), deposit_root, module_id, nonce],
     )
     signed = web3.eth.account._sign_hash(msg_hash, private_key=pk)
 
