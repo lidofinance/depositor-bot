@@ -46,12 +46,13 @@ def test_data_bus_provider(
     """
     variables.ONCHAIN_TRANSPORT_ADDRESS = ChecksumAddress(HexAddress(HexStr('0x37De961D6bb5865867aDd416be07189D2Dd960e6')))
     web3_transaction_integration.eth.get_balance = Mock(return_value=1)
+    last_digit = str((int(_DEFAULT_GUARDIAN[-1]) + 1) % 10)
     provider = OnchainTransportProvider(
         w3=web3_transaction_integration,
         onchain_address=variables.ONCHAIN_TRANSPORT_ADDRESS,
         message_schema=Schema(Or(DepositMessageSchema, PingMessageSchema)),
         parsers_providers=[DepositParser, PingParser],
-        allowed_guardians_provider=lambda: [Web3.to_checksum_address(_DEFAULT_GUARDIAN[:-1] + '8')],
+        allowed_guardians_provider=lambda: [Web3.to_checksum_address(_DEFAULT_GUARDIAN[:-1] + last_digit)],
     )
     messages = provider.get_messages()
     assert not messages
