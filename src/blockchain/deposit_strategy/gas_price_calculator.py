@@ -42,4 +42,8 @@ class GasPriceCalculator:
             stats = self.w3.eth.fee_history(self._REQUEST_SIZE, last_block, [])
             last_block = BlockNumber(stats['oldestBlock'] - 2)
             gas_fees = stats['baseFeePerGas'] + gas_fees
+
+            if last_block < 1:
+                break
+
         return gas_fees[: days * self._BLOCKS_IN_ONE_DAY]
