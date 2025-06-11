@@ -25,7 +25,7 @@ def run_unvetter(w3: Web3):
     e = Executor(
         w3,
         unvetter.execute,
-        1,
+        variables.BLOCKS_BETWEEN_EXECUTION,
         variables.MAX_CYCLE_LIFETIME_IN_SECONDS,
     )
     logger.info({'msg': 'Execute unvetter as daemon.'})

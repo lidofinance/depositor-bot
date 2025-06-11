@@ -6,6 +6,7 @@ import variables
 from blockchain.typings import Web3
 from bots.unvetter import UnvetterBot
 from cryptography.verify_signature import compute_vs
+from transport.msg_providers.onchain_transport import UnvetParser
 from transport.msg_types.common import get_messages_sign_filter
 from transport.msg_types.unvet import UnvetMessage
 from utils.bytes import from_hex_string_to_bytes
@@ -22,36 +23,35 @@ def get_unvet_message(web3) -> UnvetMessage:
     prefix = web3.lido.deposit_security_module.get_unvet_message_prefix()
     nonce = web3.lido.staking_router.functions.getStakingModuleNonce(1).call()
 
+    operator_ids = from_hex_string_to_bytes('0x1234')
+    vetted_keys_by_operator = from_hex_string_to_bytes('0001')
+
     msg_hash = web3.solidity_keccak(
         ['bytes32', 'uint256', 'bytes32', 'uint256', 'uint256', 'bytes', 'bytes'],
         [
             prefix,
             block_number,
-            latest.hash.hex(),
+            latest.hash,
             1,
             nonce,
-            from_hex_string_to_bytes('0x1234'),
-            from_hex_string_to_bytes('0001'),
+            operator_ids,
+            vetted_keys_by_operator,
         ],
     )
     signed = web3.eth.account._sign_hash(msg_hash, private_key=COUNCIL_PK)
 
-    unvet_message = {
-        'blockNumber': block_number,
-        'blockHash': latest.hash.hex(),
-        'guardianAddress': COUNCIL_ADDRESS,
-        'stakingModuleId': 1,
-        'nonce': nonce,
-        'operatorIds': '0x1234',
-        'vettedKeysByOperator': '0001',
-        'signature': {
-            'r': '0x' + signed.r.to_bytes(32, 'big').hex(),
-            's': '0x' + signed.s.to_bytes(32, 'big').hex(),
-            'v': signed.v,
-            '_vs': compute_vs(signed.v, '0x' + signed.s.to_bytes(32, 'big').hex()),
-        },
-        'type': 'unvet',
-    }
+    unvet_message = UnvetParser.build_message(
+        block_number=block_number,
+        block_hash=latest.hash,
+        guardian=COUNCIL_ADDRESS,
+        staking_module_id=1,
+        nonce=nonce,
+        operator_ids=operator_ids,
+        vetted_keys_by_operator=vetted_keys_by_operator,
+        r=signed.r.to_bytes(32, 'big'),
+        vs=from_hex_string_to_bytes(compute_vs(signed.v, '0x' + signed.s.to_bytes(32, 'big').hex())),
+        version=b'0x1',
+    )
     prefix = web3.lido.deposit_security_module.get_unvet_message_prefix()
     assert list(filter(get_messages_sign_filter(prefix), [unvet_message]))
 

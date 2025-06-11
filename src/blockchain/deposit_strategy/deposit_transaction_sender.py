@@ -6,6 +6,7 @@ from blockchain.typings import Web3
 from eth_account.account import VRS
 from eth_typing import Hash32
 from transport.msg_types.deposit import DepositMessage
+from utils.bytes import from_hex_string_to_bytes
 from web3.contract.contract import ContractFunction
 
 logger = logging.getLogger(__name__)
@@ -37,8 +38,8 @@ class Sender:
 
     def _prepare_general_tx(self, quorum: list[DepositMessage]):
         block_number = quorum[0]['blockNumber']
-        block_hash = Hash32(bytes.fromhex(quorum[0]['blockHash'][2:]))
-        deposit_root = Hash32(bytes.fromhex(quorum[0]['depositRoot'][2:]))
+        block_hash = Hash32(from_hex_string_to_bytes(quorum[0]['blockHash']))
+        deposit_root = Hash32(from_hex_string_to_bytes(quorum[0]['depositRoot']))
         staking_module_id = quorum[0]['stakingModuleId']
         staking_module_nonce = quorum[0]['nonce']
         payload = b''

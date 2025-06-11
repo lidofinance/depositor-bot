@@ -26,7 +26,7 @@ def run_pauser(w3: Web3):
     e = Executor(
         w3,
         pause.execute,
-        1,
+        variables.BLOCKS_BETWEEN_EXECUTION,
         variables.MAX_CYCLE_LIFETIME_IN_SECONDS,
     )
     logger.info({'msg': 'Execute pauser as daemon.'})
