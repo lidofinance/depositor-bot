@@ -42,7 +42,7 @@ class PulseRequestHandler(SimpleHTTPRequestHandler):
 
 def start_pulse_server():
     server = HTTPServer(
-        ('localhost', variables.HEALTHCHECK_SERVER_PORT),
+        ('0.0.0.0', variables.HEALTHCHECK_SERVER_PORT),
         RequestHandlerClass=PulseRequestHandler,
     )
     thread = threading.Thread(target=server.serve_forever, daemon=True)
