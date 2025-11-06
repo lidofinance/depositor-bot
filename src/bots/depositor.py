@@ -114,12 +114,10 @@ class DepositorBot:
                 logger.exception({'msg': 'Unexpected exception.', 'error': str(error)})
                 logger.warning({'msg': 'Deposit to module failed. Try next module.'})
                 continue
-            else:
-                if result:
-                    logger.info({'msg': f'Deposit to module with id: {module_id} was successful.'})
-                    return True
-                else:
-                    logger.warning({'msg': f'Deposit to module with id: {module_id} failed.'})
+            if result:
+                logger.info({'msg': f'Deposit to module with id: {module_id} was successful.'})
+                return True
+            logger.warning({'msg': f'Deposit to module with id: {module_id} failed.'})
 
         return False
 

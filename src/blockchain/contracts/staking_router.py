@@ -93,6 +93,23 @@ class StakingRouterContract(ContractInterface):
         )
         return response
 
+    def get_staking_module_is_deposits_paused(
+        self,
+        staking_module_id: int,
+        block_identifier: BlockIdentifier = 'latest',
+    ) -> int:
+        response = self.functions.getStakingModuleIsDepositsPaused(
+            staking_module_id,
+        ).call(block_identifier=block_identifier)
+        logger.info(
+            {
+                'msg': f'Call `getStakingModuleIsDepositsPaused({staking_module_id})`.',
+                'value': response,
+                'block_identifier': repr(block_identifier),
+            }
+        )
+        return response
+
 
 class StakingRouterContractV2(StakingRouterContract):
     abi_path = './interfaces/StakingRouterV2.json'

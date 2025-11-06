@@ -2,8 +2,6 @@ import logging
 from unittest.mock import Mock
 
 import pytest
-import variables
-from blockchain.typings import Web3
 from bots.unvetter import UnvetterBot
 from cryptography.verify_signature import compute_vs
 from transport.msg_providers.onchain_transport import UnvetParser
@@ -63,15 +61,12 @@ def get_unvet_message(web3) -> UnvetMessage:
     'web3_provider_integration',
     [
         {
-            'block': 21318213,
+            'block': None,  # Fork from latest block
         }
     ],
     indirect=['web3_provider_integration'],
 )
 def test_unvetter(web3_provider_integration, web3_lido_integration, caplog):
-    # explicitly set v2 address
-    variables.LIDO_LOCATOR = Web3.to_checksum_address('0x3ABc4764f0237923d52056CFba7E9AEBf87113D3')
-
     latest = web3_lido_integration.eth.get_block('latest')
 
     ub = UnvetterBot(web3_lido_integration)
