@@ -51,10 +51,6 @@ def run_depositor(w3):
     e.execute_as_daemon()
 
 
-class ModuleNotSupportedError(Exception):
-    pass
-
-
 class DepositorBot:
     _flashbots_works = True
 
@@ -111,12 +107,21 @@ class DepositorBot:
 
         for module_id in self._get_preferred_to_deposit_modules():
             logger.info({'msg': f'Do deposit to module with id: {module_id}.'})
-            try:
-                self._deposit_to_module(module_id)
-            except ModuleNotSupportedError as error:
-                logger.warning({'msg': 'Module not supported exception.', 'error': str(error)})
 
-        return True
+            try:
+                result = self._deposit_to_module(module_id)
+            except Exception as error:
+                logger.exception({'msg': 'Unexpected exception.', 'error': str(error)})
+                logger.warning({'msg': 'Deposit to module failed. Try next module.'})
+                continue
+            else:
+                if result:
+                    logger.info({'msg': f'Deposit to module with id: {module_id} was successful.'})
+                    return True
+                else:
+                    logger.warning({'msg': f'Deposit to module with id: {module_id} failed.'})
+
+        return False
 
     def _check_balance(self):
         if variables.ACCOUNT:
