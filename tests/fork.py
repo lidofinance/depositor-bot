@@ -89,7 +89,7 @@ class anvil_fork:
             raise RuntimeError(f'Anvil failed to start. Exit code: {poll_result}. Error: {stderr}')
 
         # Wait for the port to be accessible and Anvil to respond to RPC calls
-        max_attempts = 30  # Increased from 10
+        max_attempts = 30
         base_sleep = 0.5
 
         for attempt in range(max_attempts):
