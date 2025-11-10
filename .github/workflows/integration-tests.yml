@@ -32,7 +32,7 @@ jobs:
       - name: Integration tests with pytest
         if: success() || failure()
         run: |
-          poetry run pytest tests -m integration
+          poetry run pytest tests -m integration -v -s --log-cli-level=INFO --tb=short
         env:
           WEB3_RPC_ENDPOINTS: ${{ secrets.WEB3_RPC_ENDPOINT }}
           TESTNET_WEB3_RPC_ENDPOINTS: 'https://ethereum-holesky-rpc.publicnode.com'
