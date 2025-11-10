@@ -89,6 +89,10 @@ _env_whitelist = os.getenv('DEPOSIT_MODULES_WHITELIST', '').strip()
 DEPOSIT_MODULES_WHITELIST = [int(module_id) for module_id in _env_whitelist.split(',')] if _env_whitelist else []
 BLOCKS_BETWEEN_EXECUTION = int(os.getenv('BLOCKS_BETWEEN_EXECUTION', 1))
 
+# Maximum number of retries per module before moving to the next one
+# Default is 1 (will try 2 times total: initial attempt + 1 retry)
+MAX_DEPOSIT_RETRIES = int(os.getenv('MAX_DEPOSIT_RETRIES', 1))
+
 """
 GAS_ADDENDUM is used to increase number of deposits during to calm market. The value should be increased if bot
 wants to deposit more often.
@@ -123,6 +127,7 @@ PUBLIC_ENV_VARS = {
     'ACCOUNT': '' if ACCOUNT is None else ACCOUNT.address,
     'ONCHAIN_TRANSPORT_ADDRESS': ONCHAIN_TRANSPORT_ADDRESS,
     'BLOCKS_BETWEEN_EXECUTION': BLOCKS_BETWEEN_EXECUTION,
+    'MAX_DEPOSIT_RETRIES': MAX_DEPOSIT_RETRIES,
 }
 
 PRIVATE_ENV_VARS = {

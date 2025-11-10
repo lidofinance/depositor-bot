@@ -109,18 +109,74 @@ class DepositorBot:
     def execute(self, block: BlockData) -> bool:
         self._check_balance()
 
+        max_retries = variables.MAX_DEPOSIT_RETRIES
+
         for module_id in self._get_preferred_to_deposit_modules():
             logger.info({'msg': f'Do deposit to module with id: {module_id}.'})
 
-            try:
-                result = self._deposit_to_module(module_id)
-            except ModuleNotSupportedError as error:
-                logger.warning({'msg': 'Module not supported exception.', 'error': str(error)})
-                continue
-            if result:
-                logger.info({'msg': f'Deposit to module with id: {module_id} was successful.'})
-                return True
-            logger.warning({'msg': f'Deposit to module with id: {module_id} failed.'})
+            # Try depositing to this module with retries
+            for attempt in range(max_retries + 1):
+                is_retry = attempt > 0
+                if is_retry:
+                    logger.info({'msg': f'Retrying deposit to module with id: {module_id}.', 'attempt': attempt + 1})
+
+                try:
+                    result = self._deposit_to_module(module_id)
+                except ModuleNotSupportedError as error:
+                    logger.warning(
+                        {
+                            'msg': 'Module not supported. Skipping to next module.',
+                            'error': str(error),
+                            'module_id': module_id,
+                        }
+                    )
+                    break  # Don't retry for unsupported modules, go to next module
+                except Exception as error:
+                    logger.exception(
+                        {
+                            'msg': 'Exception during deposit.',
+                            'error': str(error),
+                            'error_type': type(error).__name__,
+                            'module_id': module_id,
+                            'attempt': attempt + 1,
+                        }
+                    )
+
+                    # If this was the last attempt, move to next module
+                    if attempt == max_retries:
+                        logger.warning(
+                            {
+                                'msg': 'All retry attempts exhausted for module. Trying next module.',
+                                'module_id': module_id,
+                            }
+                        )
+                        break
+                    # Otherwise, retry the same module
+                    continue
+
+                # No exception, check result
+                if result:
+                    logger.info({'msg': f'Deposit to module with id: {module_id} was successful.'})
+                    return True
+
+                # Deposit returned False
+                if attempt == max_retries:
+                    # Last attempt failed, move to next module
+                    logger.warning(
+                        {
+                            'msg': f'Deposit to module with id: {module_id} failed after {max_retries + 1} attempts.',
+                            'module_id': module_id,
+                        }
+                    )
+                else:
+                    # Will retry
+                    logger.warning(
+                        {
+                            'msg': f'Deposit to module with id: {module_id} failed. Will retry.',
+                            'module_id': module_id,
+                            'attempt': attempt + 1,
+                        }
+                    )
 
         return False
 
