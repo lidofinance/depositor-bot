@@ -33,6 +33,10 @@ from web3.types import BlockData
 logger = logging.getLogger(__name__)
 
 
+class ModuleNotSupportedError(Exception):
+    pass
+
+
 def run_depositor(w3):
     logger.info({'msg': 'Initialize Depositor bot.'})
     sender = Sender(w3)
@@ -49,10 +53,6 @@ def run_depositor(w3):
     )
     logger.info({'msg': 'Execute depositor as daemon.'})
     e.execute_as_daemon()
-
-
-class ModuleNotSupportedError(Exception):
-    pass
 
 
 class DepositorBot:
@@ -111,12 +111,18 @@ class DepositorBot:
 
         for module_id in self._get_preferred_to_deposit_modules():
             logger.info({'msg': f'Do deposit to module with id: {module_id}.'})
+
             try:
-                self._deposit_to_module(module_id)
+                result = self._deposit_to_module(module_id)
             except ModuleNotSupportedError as error:
                 logger.warning({'msg': 'Module not supported exception.', 'error': str(error)})
+                continue
+            if result:
+                logger.info({'msg': f'Deposit to module with id: {module_id} was successful.'})
+                return True
+            logger.warning({'msg': f'Deposit to module with id: {module_id} failed.'})
 
-        return True
+        return False
 
     def _check_balance(self):
         if variables.ACCOUNT:

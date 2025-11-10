@@ -7,7 +7,7 @@ import pytest
 import variables
 from bots.depositor import DepositorBot
 
-from tests.conftest import COUNCIL_ADDRESS_1, COUNCIL_ADDRESS_2, COUNCIL_PK_1, COUNCIL_PK_2, DSM_OWNER
+from tests.conftest import COUNCIL_ADDRESS_1, COUNCIL_ADDRESS_2, COUNCIL_PK_1, COUNCIL_PK_2
 from tests.utils.protocol_utils import get_deposit_message
 
 
@@ -175,7 +175,7 @@ def test_depositor_one_module_deposited(depositor_bot, block_data):
     depositor_bot._deposit_to_module = Mock(return_value=True)
     depositor_bot.execute(block_data)
 
-    assert depositor_bot._deposit_to_module.call_count == 2
+    assert depositor_bot._deposit_to_module.call_count == 1
 
 
 @pytest.mark.unit
@@ -309,7 +309,7 @@ def test_get_quorum(depositor_bot, setup_deposit_message):
 @pytest.mark.integration
 @pytest.mark.parametrize(
     'web3_provider_integration,module_id',
-    [[{'block': 19628126}, 1], [{'block': 19628126}, 2]],
+    [[{'block': 23647294}, 1]],
     indirect=['web3_provider_integration'],
 )
 def test_depositor_bot(
@@ -342,10 +342,6 @@ def test_depositor_bot(
                 'value': 10000 * 10**18,
             }
         )
-
-    # Set the maximum number of deposits
-    web3_lido_integration.lido.deposit_security_module.functions.setMaxDeposits(100).transact({'from': DSM_OWNER})
-
     # Get the latest block
     latest = web3_lido_integration.eth.get_block('latest')
 

@@ -32,6 +32,16 @@ def web3_provider_integration(request) -> Web3:
     block_num = params.get('block', None)
     anvil_path = os.getenv('ANVIL_PATH', '')
 
+    # If block_num is None, use a recent finalized block instead of latest
+    # This avoids issues with state not being fully available at the very latest block
+    if block_num is None:
+        temp_w3 = Web3(HTTPProvider(rpc_endpoint, request_kwargs={'timeout': 60}))
+        if temp_w3.is_connected():
+            current_block = temp_w3.eth.block_number
+            # Use a block ~20 blocks ago to ensure it's finalized and state is available
+            block_num = current_block - 20
+            print(f'Using recent finalized block: {block_num} (current: {current_block})')
+
     with anvil_fork(anvil_path, rpc_endpoint, block_num):
         w3 = Web3(HTTPProvider('http://127.0.0.1:8545', request_kwargs={'timeout': 3600}, cache_allowed_requests=True))
         assert w3.is_connected(), 'Failed to connect to the Web3 provider.'
