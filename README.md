@@ -68,7 +68,6 @@ Unvetting is the proces of decreasing approved depositable signing keys.
 | Variable                          | Default       | Description                                                                                                              |
 |-----------------------------------|---------------|--------------------------------------------------------------------------------------------------------------------------|
 | BLOCKS_BETWEEN_EXECUTION          | 1             | Number of blocks in the interval of bot execution                                                                        |
-| MAX_DEPOSIT_RETRIES               | 1             | Maximum number of retries per module before moving to next (0 = no retries, 1 = 2 total attempts)                      |
 | MIN_PRIORITY_FEE                  | 50 mwei       | Min priority fee that will be used in tx                                                                                 |
 | MAX_PRIORITY_FEE                  | 10 gwei       | Max priority fee that will be used in tx                                                                                 |
 | MAX_GAS_FEE                       | 100 gwei      | Bot will wait for a lower price. Treshold for gas_fee                                                                    |
