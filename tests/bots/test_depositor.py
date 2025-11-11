@@ -379,3 +379,27 @@ def test_depositor_bot(
     db.message_storage.messages = deposit_messages
     assert db.execute(latest)
     assert web3_lido_integration.lido.staking_router.get_staking_module_nonce(module_id) == old_module_nonce + 1
+
+
+@pytest.mark.unit
+def test_depositor_execute(web3_lido_unit, depositor_bot):
+    depositor_bot._check_balance = Mock()
+
+    depositor_bot._get_preferred_to_deposit_modules = Mock(return_value=[1, 2])
+
+    # Check unsuccess deposit to first module only
+    variables.DEPOSIT_TO_FIST_HEALTHY_MODULE_ONLY = True
+    depositor_bot._deposit_to_module = Mock(return_value=False)
+    depositor_bot.execute(None)
+    assert depositor_bot._deposit_to_module.call_count == 1
+
+    # Check deposit to both modules
+    variables.DEPOSIT_TO_FIST_HEALTHY_MODULE_ONLY = False
+    depositor_bot._deposit_to_module = Mock(return_value=False)
+    depositor_bot.execute(None)
+    assert depositor_bot._deposit_to_module.call_count == 2
+
+    # Check success to first module
+    depositor_bot._deposit_to_module = Mock(return_value=True)
+    depositor_bot.execute(None)
+    assert depositor_bot._deposit_to_module.call_count == 1
