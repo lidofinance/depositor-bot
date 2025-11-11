@@ -111,7 +111,7 @@ class DepositorBot:
             result = self._deposit_to_module(module_id)
             logger.info({'msg': f'Deposit status to Module[{module_id}]: {result}.', 'value': result})
 
-            if variables.DEPOSIT_TO_FIST_HEALTHY_MODULE_ONLY or result:
+            if variables.DEPOSIT_TO_FIRST_HEALTHY_MODULE_ONLY or result:
                 return result
 
             logger.warning({'msg': f'Deposit to module with id: {module_id} failed.'})

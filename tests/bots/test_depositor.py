@@ -388,13 +388,13 @@ def test_depositor_execute(web3_lido_unit, depositor_bot):
     depositor_bot._get_preferred_to_deposit_modules = Mock(return_value=[1, 2])
 
     # Check unsuccess deposit to first module only
-    variables.DEPOSIT_TO_FIST_HEALTHY_MODULE_ONLY = True
+    variables.DEPOSIT_TO_FIRST_HEALTHY_MODULE_ONLY = True
     depositor_bot._deposit_to_module = Mock(return_value=False)
     depositor_bot.execute(None)
     assert depositor_bot._deposit_to_module.call_count == 1
 
     # Check deposit to both modules
-    variables.DEPOSIT_TO_FIST_HEALTHY_MODULE_ONLY = False
+    variables.DEPOSIT_TO_FIRST_HEALTHY_MODULE_ONLY = False
     depositor_bot._deposit_to_module = Mock(return_value=False)
     depositor_bot.execute(None)
     assert depositor_bot._deposit_to_module.call_count == 2
