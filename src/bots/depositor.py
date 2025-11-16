@@ -105,16 +105,20 @@ class DepositorBot:
     def execute(self, block: BlockData) -> bool:
         self._check_balance()
 
-        for module_id in self._get_preferred_to_deposit_modules():
+        modules_to_deposit = self._get_preferred_to_deposit_modules()
+
+        if not modules_to_deposit:
+            # No modules expected. Long sleep.
+            return True
+
+        for module_id in modules_to_deposit:
             logger.info({'msg': f'Do deposit to module with id: {module_id}.'})
 
             result = self._deposit_to_module(module_id)
             logger.info({'msg': f'Deposit status to Module[{module_id}]: {result}.', 'value': result})
 
-            if variables.DEPOSIT_TO_FIRST_HEALTHY_MODULE_ONLY or result:
+            if result:
                 return result
-
-            logger.warning({'msg': f'Deposit to module with id: {module_id} failed.'})
 
         return False
 
@@ -251,18 +255,19 @@ class DepositorBot:
         return self.message_storage.get_messages_and_actualize(lambda x: sign_filter(x) and actualize_filter(x))
 
     def _get_preferred_to_deposit_modules(self) -> list[int]:
-        # gather quorum
-        now = datetime.now()
-        for module_id in variables.DEPOSIT_MODULES_WHITELIST:
-            if self._get_quorum(module_id):
-                self._module_last_heart_beat[module_id] = now
-
         # filter out non allow-listed modules
         module_ids = [
             module_id
             for module_id in self.w3.lido.staking_router.get_staking_module_ids()
             if module_id in variables.DEPOSIT_MODULES_WHITELIST
         ]
+
+        # gather quorum
+        now = datetime.now()
+        for module_id in module_ids:
+            if self._get_quorum(module_id):
+                self._module_last_heart_beat[module_id] = now
+
         # get digests for all the modules
         module_digests = self.w3.lido.staking_router.get_staking_module_digests(module_ids)
         # sort modules by validator count
@@ -305,4 +310,7 @@ class DepositorBot:
             module_ids.append(module_id)
             if is_healthy:
                 break
+        else:
+            # If all modules are unhealthy
+            return []
         return module_ids

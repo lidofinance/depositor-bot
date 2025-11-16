@@ -41,6 +41,7 @@ markers = [
 line-length = 140
 
 [tool.ruff.lint]
+ignore = ["B019"]
 extend-select = [
     # pycodestyle
     "E",

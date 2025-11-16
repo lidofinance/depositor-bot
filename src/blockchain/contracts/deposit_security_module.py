@@ -1,11 +1,11 @@
 import logging
+from functools import lru_cache
 
 from blockchain.contracts.base_interface import ContractInterface
 from eth_account.account import VRS
 from eth_typing import ChecksumAddress, Hash32
 from metrics.metrics import CAN_DEPOSIT
 from web3.contract.contract import ContractFunction
-from web3.exceptions import ABIFunctionNotFound, ContractLogicError
 from web3.types import BlockIdentifier
 
 logger = logging.getLogger(__name__)
@@ -14,18 +14,21 @@ logger = logging.getLogger(__name__)
 class DepositSecurityModuleContract(ContractInterface):
     abi_path = './interfaces/DepositSecurityModule.json'
 
+    @lru_cache(maxsize=1)
     def get_guardian_quorum(self, block_identifier: BlockIdentifier = 'latest') -> int:
         """Returns number of valid guardian signatures required to vet (depositRoot, nonce) pair."""
         response = self.functions.getGuardianQuorum().call(block_identifier=block_identifier)
         logger.info({'msg': 'Call `getGuardianQuorum()`.', 'value': response, 'block_identifier': repr(block_identifier)})
         return response
 
+    @lru_cache(maxsize=1)
     def get_guardians(self, block_identifier: BlockIdentifier = 'latest') -> list[ChecksumAddress]:
         """Returns guardian committee member list."""
         response = self.functions.getGuardians().call(block_identifier=block_identifier)
         logger.info({'msg': 'Call `getGuardians()`.', 'value': response, 'block_identifier': repr(block_identifier)})
         return response
 
+    @lru_cache(maxsize=1)
     def get_attest_message_prefix(self, block_identifier: BlockIdentifier = 'latest') -> bytes:
         response = self.functions.ATTEST_MESSAGE_PREFIX().call(block_identifier=block_identifier)
         logger.info({'msg': 'Call `ATTEST_MESSAGE_PREFIX()`.', 'value': response.hex(), 'block_identifier': repr(block_identifier)})
@@ -85,11 +88,13 @@ class DepositSecurityModuleContract(ContractInterface):
         )
         return tx
 
+    @lru_cache(maxsize=1)
     def get_pause_message_prefix(self, block_identifier: BlockIdentifier = 'latest') -> bytes:
         response = self.functions.PAUSE_MESSAGE_PREFIX().call(block_identifier=block_identifier)
         logger.info({'msg': 'Call `PAUSE_MESSAGE_PREFIX()`.', 'value': response.hex(), 'block_identifier': repr(block_identifier)})
         return response
 
+    @lru_cache(maxsize=1)
     def get_pause_intent_validity_period_blocks(self, block_identifier: BlockIdentifier = 'latest') -> int:
         """Returns current `pauseIntentValidityPeriodBlocks` contract parameter (see `pauseDeposits`)."""
         response = self.functions.getPauseIntentValidityPeriodBlocks().call(block_identifier=block_identifier)
@@ -120,18 +125,9 @@ class DepositSecurityModuleContract(ContractInterface):
         logger.info({'msg': f'Build `pauseDeposits({block_number}, {staking_module_id}, {guardian_signature})` tx.'})
         return tx
 
+    @lru_cache(maxsize=1)
     def version(self, block_identifier: BlockIdentifier = 'latest') -> int:
-        try:
-            response = self.functions.VERSION().call(block_identifier=block_identifier)
-        except (ContractLogicError, ABIFunctionNotFound):
-            logger.info(
-                {
-                    'msg': 'Call `VERSION()`.',
-                    'value': 'Error: Contract logic error',
-                    'block_identifier': repr(block_identifier),
-                }
-            )
-            return 1
+        response = self.functions.VERSION().call(block_identifier=block_identifier)
 
         logger.info(
             {
@@ -195,6 +191,7 @@ class DepositSecurityModuleContractV2(DepositSecurityModuleContract):
         logger.info({'msg': f'Build `pauseDeposits({block_number}, {guardian_signature})` tx.'})
         return tx
 
+    @lru_cache(maxsize=1)
     def get_unvet_message_prefix(self, block_identifier: BlockIdentifier = 'latest') -> bytes:
         response = self.functions.UNVET_MESSAGE_PREFIX().call(block_identifier=block_identifier)
         logger.info({'msg': 'Call `UNVET_MESSAGE_PREFIX()`.', 'value': response.hex(), 'block_identifier': repr(block_identifier)})
@@ -241,6 +238,7 @@ class DepositSecurityModuleContractV2(DepositSecurityModuleContract):
         )
         return response
 
+    @lru_cache(maxsize=1)
     def get_max_operators_per_unvetting(self, block_identifier: BlockIdentifier = 'latest') -> int:
         response = self.functions.getMaxOperatorsPerUnvetting().call(block_identifier=block_identifier)
         logger.info(
