@@ -45,6 +45,14 @@ Unvetting is the proces of decreasing approved depositable signing keys.
 4. Send metrics and logs to grafana
 5. Setup alerts
 
+## Redeployment
+
+Next cases requires bot restart:
+- Contract update
+- New staking module added or removed
+- DSM contract update
+- New guardian added or removed
+
 ## Variables
 
 ### Required variables
