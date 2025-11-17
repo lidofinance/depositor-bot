@@ -48,6 +48,7 @@ class TestGetPreferredToDepositModules(unittest.TestCase):
             [0, 0, [3], [10, 16]],  # Module 3: 6 active validators
         ]
         self.bot._get_quorum = Mock()
+        self.bot._select_strategy = Mock()
 
         # Mock module healthiness and quorum
         # Module ID:                                          2      1      3
@@ -171,6 +172,7 @@ def test_depositor_one_module_deposited(depositor_bot, block_data):
             (0, 0, (2,), (0, 10, 10)),
         ]
     )
+    depositor_bot._general_strategy.is_gas_price_ok = Mock(return_value=True)
     depositor_bot._general_strategy.deposited_keys_amount = Mock(return_value=10)
     depositor_bot._check_balance = Mock()
     depositor_bot._deposit_to_module = Mock(return_value=True)
