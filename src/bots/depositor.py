@@ -132,11 +132,13 @@ class DepositorBot:
 
         guardians = self.w3.lido.deposit_security_module.get_guardians()
         providers = [self.w3]
+
         if self._onchain_transport_w3 is not None:
             providers.append(self._onchain_transport_w3)
+
         for address in guardians:
             for provider in providers:
-                balance = self.w3.eth.get_balance(address)
+                balance = provider.eth.get_balance(address)
                 GUARDIAN_BALANCE.labels(address=address, chain_id=provider.eth.chain_id).set(balance)
 
     def _deposit_to_module(self, module_id: int) -> bool:
