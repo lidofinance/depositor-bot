@@ -267,6 +267,9 @@ class DepositorBot:
         # gather quorum
         now = datetime.now()
         for module_id in module_ids:
+            # Just for metrics
+            self._select_strategy(module_id).is_gas_price_ok(module_id)
+
             if self._get_quorum(module_id):
                 self._module_last_heart_beat[module_id] = now
 
@@ -284,6 +287,7 @@ class DepositorBot:
         # take all the modules in sorted order until the first healthy one(including)
         result = self._take_until_first_healthy_module(modules_healthiness)
         logger.info({'msg': f'Module iteration order {result}.'})
+
         return result
 
     def _is_module_healthy(self, module_id: int) -> bool:
