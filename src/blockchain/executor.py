@@ -47,8 +47,10 @@ class Executor:
     def _wait_for_new_block_and_execute(self) -> Any:
         healthcheck_pulse.pulse()
 
-        if self.w3.lido.has_contract_address_changed():
-            logger.info({'msg': 'Contract addresses have been updated.'})
+        # To avoid re-fetching contract addresses every cycle and decrease consumtion
+        # Requires restart each protocol upgrade including DSM contract or Staking Modules.
+        # if self.w3.lido.has_contract_address_changed():
+        #     logger.info({'msg': 'Contract addresses have been updated.'})
 
         latest_block = self._exception_handler(self._wait_until_next_block)
         result = self._exception_handler(self._execute_function, latest_block)

@@ -43,20 +43,22 @@ class TestGetPreferredToDepositModules(unittest.TestCase):
         # Mock staking router module IDs and digests
         self.mock_w3.lido.staking_router.get_staking_module_ids.return_value = [1, 2, 3]
         self.mock_w3.lido.staking_router.get_staking_module_digests.return_value = [
-            [0, 0, [1], [5, 2]],  # Module 1: 3 validators
-            [0, 0, [2], [7, 6]],  # Module 2: 1 validator
-            [0, 0, [3], [10, 4]],  # Module 3: 6 validators
+            [0, 0, [1], [5, 8]],  # Module 1: 3 active validators
+            [0, 0, [2], [7, 8]],  # Module 2: 1 active validator
+            [0, 0, [3], [10, 16]],  # Module 3: 6 active validators
         ]
+        self.bot._get_quorum = Mock()
+        self.bot._select_strategy = Mock()
 
         # Mock module healthiness and quorum
-        self.bot._get_quorum = MagicMock(side_effect=[True, False, True])
+        # Module ID:                                          2      1      3
         self.bot._is_module_healthy = MagicMock(side_effect=[True, False, True])
 
         # Call the method
         result = self.bot._get_preferred_to_deposit_modules()
 
-        # Expected output: Module 3 (6 validators, healthy)
-        self.assertEqual([3], result)
+        # Expected output: Module 2 (1 active)
+        self.assertEqual([2], result)
 
         # Verify calls to dependent methods
         self.bot._get_quorum.assert_any_call(1)
@@ -84,27 +86,26 @@ class TestGetPreferredToDepositModules(unittest.TestCase):
         # Mock staking router module IDs and digests
         self.mock_w3.lido.staking_router.get_staking_module_ids.return_value = [1, 2]
         self.mock_w3.lido.staking_router.get_staking_module_digests.return_value = [
-            [0, 0, [1], [3, 1]],  # Module 1: 2 validators
-            [0, 0, [2], [7, 5]],  # Module 2: 2 validators
+            [0, 0, [1], [3, 5]],  # Module 1: 2 validators
+            [0, 0, [2], [7, 9]],  # Module 2: 2 validators
         ]
+        self.bot._get_quorum = Mock()
 
         # Mock module healthiness and quorum
-        self.bot._get_quorum = MagicMock(side_effect=[True, True, True])
         self.bot._is_module_healthy = MagicMock(side_effect=[False, False])
 
         # Call the method
         result = self.bot._get_preferred_to_deposit_modules()
 
-        # Expected output: Include all modules as no healthy modules are found
-        self.assertEqual([1, 2], result)
+        self.assertEqual([], result)
 
     def test_module_sorting_by_validator_difference(self):
         # Mock staking router module IDs and digests
         self.mock_w3.lido.staking_router.get_staking_module_ids.return_value = [1, 2, 3]
         self.mock_w3.lido.staking_router.get_staking_module_digests.return_value = [
-            [0, 0, [1], [6, 2]],  # Module 1: 4 validators
-            [0, 0, [2], [8, 3]],  # Module 2: 5 validators
-            [0, 0, [3], [7, 6]],  # Module 3: 1 validator
+            [0, 0, [1], [6, 10]],  # Module 1: 4 validators
+            [0, 0, [2], [8, 13]],  # Module 2: 5 validators
+            [0, 0, [3], [7, 8]],  # Module 3: 1 validator
         ]
 
         # Mock module healthiness and quorum
@@ -114,8 +115,8 @@ class TestGetPreferredToDepositModules(unittest.TestCase):
         # Call the method
         result = self.bot._get_preferred_to_deposit_modules()
 
-        # Expected output: Sorted by validator difference: Module 2, Module 1, Module 3
-        self.assertEqual([2], result)
+        # Expected output: Sorted by validator difference: Module 3, Module 1, Module 2
+        self.assertEqual([3], result)
 
 
 @pytest.fixture
@@ -171,11 +172,21 @@ def test_depositor_one_module_deposited(depositor_bot, block_data):
             (0, 0, (2,), (0, 10, 10)),
         ]
     )
+    depositor_bot._general_strategy.is_gas_price_ok = Mock(return_value=True)
+    depositor_bot._general_strategy.deposited_keys_amount = Mock(return_value=10)
     depositor_bot._check_balance = Mock()
     depositor_bot._deposit_to_module = Mock(return_value=True)
-    depositor_bot.execute(block_data)
+    assert depositor_bot.execute(block_data)
 
     assert depositor_bot._deposit_to_module.call_count == 1
+
+
+@pytest.mark.unit
+def test_depositor_no_modules_to_deposit(depositor_bot, block_data):
+    depositor_bot._check_balance = Mock()
+    depositor_bot._get_preferred_to_deposit_modules = Mock(return_value=[])
+    # Make sure if no modules are deposited, the bot goes to long sleep
+    assert depositor_bot.execute(block_data)
 
 
 @pytest.mark.unit
@@ -379,27 +390,3 @@ def test_depositor_bot(
     db.message_storage.messages = deposit_messages
     assert db.execute(latest)
     assert web3_lido_integration.lido.staking_router.get_staking_module_nonce(module_id) == old_module_nonce + 1
-
-
-@pytest.mark.unit
-def test_depositor_execute(web3_lido_unit, depositor_bot):
-    depositor_bot._check_balance = Mock()
-
-    depositor_bot._get_preferred_to_deposit_modules = Mock(return_value=[1, 2])
-
-    # Check unsuccess deposit to first module only
-    variables.DEPOSIT_TO_FIRST_HEALTHY_MODULE_ONLY = True
-    depositor_bot._deposit_to_module = Mock(return_value=False)
-    depositor_bot.execute(None)
-    assert depositor_bot._deposit_to_module.call_count == 1
-
-    # Check deposit to both modules
-    variables.DEPOSIT_TO_FIRST_HEALTHY_MODULE_ONLY = False
-    depositor_bot._deposit_to_module = Mock(return_value=False)
-    depositor_bot.execute(None)
-    assert depositor_bot._deposit_to_module.call_count == 2
-
-    # Check success to first module
-    depositor_bot._deposit_to_module = Mock(return_value=True)
-    depositor_bot.execute(None)
-    assert depositor_bot._deposit_to_module.call_count == 1
