@@ -6,7 +6,6 @@ from .contracts import (
     lido_locator,
     staking_router,
     staking_router_v2,
-    upgrade_staking_router_to_v2,
     weth,
 )
 from .provider import (
@@ -34,7 +33,6 @@ __all__ = [
     'deposit_security_module_v2',
     'staking_router',
     'staking_router_v2',
-    'upgrade_staking_router_to_v2',
     'web3_lido_unit',
     'web3_provider_integration',
     'web3_lido_integration',
