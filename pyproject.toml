@@ -14,7 +14,7 @@ package-mode = false
 python = ">=3.12,<4.0"
 numpy = "1.26.4"
 prometheus-client = "0.21.1"
-web3-multi-provider = { version = "^2.2.6", extras = ["metrics"] }
+web3-multi-provider = { version = "^2.2.7", extras = ["metrics"] }
 schema = "^0.7.5"
 websocket-client = "^1.4.1"
 confluent-kafka = "^2.2.0"
