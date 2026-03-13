@@ -8,7 +8,6 @@ from blockchain.contracts.erc20 import ERC20Contract
 from blockchain.contracts.lido import LidoContract
 from blockchain.contracts.lido_locator import LidoLocatorContract
 from blockchain.contracts.staking_router import StakingRouterContract, StakingRouterContractV2
-from blockchain.typings import Web3
 
 
 @pytest.fixture
