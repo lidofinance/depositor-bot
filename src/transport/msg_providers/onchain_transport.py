@@ -3,10 +3,8 @@ import logging
 from typing import Callable, List, Optional
 
 import variables
-from blockchain.web3_extentions.middleware import add_middlewares
 from eth_typing import ChecksumAddress
 from eth_utils import to_bytes
-from metrics.metrics import ONCHAIN_TRANSPORT_ETH_RPC_REQUESTS
 from schema import Schema
 from transport.msg_providers.common import BaseMessageProvider
 from transport.msg_providers.rabbit import MessageType
@@ -118,6 +116,31 @@ class DepositParser(EventParser):
 
     def _create_message(self, parsed_data: tuple, guardian: str) -> DepositMessage:
         block_number, block_hash, deposit_root, staking_module_id, nonce, (r, vs), (version,) = parsed_data
+        return DepositParser.build_message(
+            block_number=block_number,
+            block_hash=block_hash,
+            guardian=guardian,
+            deposit_root=deposit_root,
+            staking_module_id=staking_module_id,
+            nonce=nonce,
+            r=r,
+            vs=vs,
+            version=version,
+        )
+
+    @staticmethod
+    def build_message(
+        *,
+        block_number: int,
+        block_hash: bytes,
+        guardian: str,
+        deposit_root: bytes,
+        staking_module_id: int,
+        nonce: int,
+        r: bytes,
+        vs: bytes,
+        version: bytes,
+    ) -> DepositMessage:
         return DepositMessage(
             type=MessageType.DEPOSIT,
             depositRoot=bytes_to_hex_string(deposit_root),
@@ -147,6 +170,33 @@ class UnvetParser(EventParser):
 
     def _create_message(self, parsed_data: tuple, guardian: str) -> UnvetMessage:
         block_number, block_hash, staking_module_id, nonce, operator_ids, vetted_keys_by_operator, (r, vs), (version,) = parsed_data
+        return self.build_message(
+            block_number=block_number,
+            block_hash=block_hash,
+            guardian=guardian,
+            operator_ids=operator_ids,
+            staking_module_id=staking_module_id,
+            vetted_keys_by_operator=vetted_keys_by_operator,
+            nonce=nonce,
+            r=r,
+            vs=vs,
+            version=version,
+        )
+
+    @staticmethod
+    def build_message(
+        *,
+        block_number: int,
+        block_hash: bytes,
+        guardian: str,
+        operator_ids: bytes,
+        staking_module_id: int,
+        vetted_keys_by_operator: bytes,
+        nonce: int,
+        r: bytes,
+        vs: bytes,
+        version: bytes,
+    ) -> UnvetMessage:
         return UnvetMessage(
             type=MessageType.UNVET,
             nonce=nonce,
@@ -223,6 +273,28 @@ class PauseV3Parser(EventParser):
 
     def _create_message(self, parsed_data: tuple, guardian: str) -> dict:
         block_number, block_hash, (r, vs), (version,) = parsed_data
+        return PauseMessage(
+            type=MessageType.PAUSE,
+            blockNumber=block_number,
+            guardianAddress=guardian,
+            signature={
+                'r': bytes_to_hex_string(r),
+                '_vs': bytes_to_hex_string(vs),
+            },
+            app={
+                'version': _decode_version(version),
+            },
+        )
+
+    @staticmethod
+    def build_message(
+        *,
+        block_number: int,
+        guardian: str,
+        r: bytes,
+        vs: bytes,
+        version: bytes,
+    ) -> PauseMessage:
         return PauseMessage(
             type=MessageType.PAUSE,
             blockNumber=block_number,
@@ -327,5 +399,4 @@ class OnchainTransportProvider(BaseMessageProvider):
 
     @staticmethod
     def create_onchain_transport_w3() -> Web3:
-        w3 = Web3(FallbackProvider(variables.ONCHAIN_TRANSPORT_RPC_ENDPOINTS))
-        return add_middlewares(w3, ONCHAIN_TRANSPORT_ETH_RPC_REQUESTS)
+        return Web3(FallbackProvider(variables.ONCHAIN_TRANSPORT_RPC_ENDPOINTS, cache_allowed_requests=True))

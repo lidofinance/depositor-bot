@@ -44,7 +44,8 @@ RABBIT_MQ_URL = os.getenv('RABBIT_MQ_URL', 'ws://127.0.0.1:15674/ws')
 RABBIT_MQ_USERNAME = os.getenv('RABBIT_MQ_USERNAME', 'guest')
 RABBIT_MQ_PASSWORD = os.getenv('RABBIT_MQ_PASSWORD', 'guest')
 
-QUORUM_RETENTION_MINUTES: int = int(os.getenv('QUORUM_RETENTION_MINUTES', 5))
+QUORUM_RETENTION_MINUTES: int = int(os.getenv('QUORUM_RETENTION_MINUTES', 30))
+DEPOSIT_TO_FIRST_HEALTHY_MODULE_ONLY: bool = os.getenv('DEPOSIT_TO_FIRST_HEALTHY_MODULE_ONLY', 'true') == 'true'
 
 # data bus
 # gnosis nodes
@@ -87,6 +88,9 @@ MAX_CYCLE_LIFETIME_IN_SECONDS = int(os.getenv('MAX_CYCLE_LIFETIME_IN_SECONDS', '
 # List of ids of staking modules in which the depositor bot will make deposits
 _env_whitelist = os.getenv('DEPOSIT_MODULES_WHITELIST', '').strip()
 DEPOSIT_MODULES_WHITELIST = [int(module_id) for module_id in _env_whitelist.split(',')] if _env_whitelist else []
+# Same as min deposit block distance on mainnet for all modules
+# https://etherscan.io/address/0xFdDf38947aFB03C621C71b06C9C70bce73f12999#readProxyContract#F38
+BLOCKS_BETWEEN_EXECUTION = int(os.getenv('BLOCKS_BETWEEN_EXECUTION', 25))
 
 """
 GAS_ADDENDUM is used to increase number of deposits during to calm market. The value should be increased if bot
@@ -121,6 +125,9 @@ PUBLIC_ENV_VARS = {
     'DEPOSIT_MODULES_WHITELIST': DEPOSIT_MODULES_WHITELIST,
     'ACCOUNT': '' if ACCOUNT is None else ACCOUNT.address,
     'ONCHAIN_TRANSPORT_ADDRESS': ONCHAIN_TRANSPORT_ADDRESS,
+    'BLOCKS_BETWEEN_EXECUTION': BLOCKS_BETWEEN_EXECUTION,
+    'QUORUM_RETENTION_MINUTES': QUORUM_RETENTION_MINUTES,
+    'DEPOSIT_TO_FIRST_HEALTHY_MODULE_ONLY': DEPOSIT_TO_FIRST_HEALTHY_MODULE_ONLY,
 }
 
 PRIVATE_ENV_VARS = {

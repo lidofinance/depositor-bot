@@ -5,9 +5,10 @@ import pytest
 import variables
 from bots.pauser import PauserBot
 from cryptography.verify_signature import compute_vs
+from transport.msg_providers.onchain_transport import PauseV3Parser
+from utils.bytes import from_hex_string_to_bytes
 
 from tests.conftest import DSM_OWNER
-from tests.fixtures import upgrade_staking_router_to_v2
 
 # WARNING: These accounts, and their private keys, are publicly known.
 COUNCIL_ADDRESS = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8'
@@ -81,7 +82,7 @@ def get_pause_message(web3, module_id):
     }
 
 
-def get_pause_message_v2(web3):
+def get_pause_message_v3(web3):
     latest = web3.eth.get_block('latest')
 
     prefix = web3.lido.deposit_security_module.get_pause_message_prefix()
@@ -91,18 +92,13 @@ def get_pause_message_v2(web3):
     msg_hash = web3.solidity_keccak(['bytes32', 'uint256'], [prefix, block_number])
     signed = web3.eth.account._sign_hash(msg_hash, private_key=COUNCIL_PK)
 
-    return {
-        'blockHash': latest.hash.hex(),
-        'blockNumber': latest.number,
-        'guardianAddress': COUNCIL_ADDRESS,
-        'signature': {
-            'r': '0x' + signed.r.to_bytes(32, 'big').hex(),
-            's': '0x' + signed.s.to_bytes(32, 'big').hex(),
-            'v': signed.v,
-            '_vs': compute_vs(signed.v, '0x' + signed.s.to_bytes(32, 'big').hex()),
-        },
-        'type': 'pause',
-    }
+    return PauseV3Parser.build_message(
+        block_number=block_number,
+        guardian=COUNCIL_ADDRESS,
+        version=b'0x1',
+        r=signed.r.to_bytes(32, 'big'),
+        vs=from_hex_string_to_bytes(compute_vs(signed.v, '0x' + signed.s.to_bytes(32, 'big').hex())),
+    )
 
 
 @pytest.mark.unit
@@ -169,58 +165,42 @@ def test_pause_message_filtered_by_module_id(pause_bot, block_data, pause_messag
 @pytest.mark.integration
 @pytest.mark.parametrize(
     'web3_provider_integration,module_id',
-    [[{'block': 19628126}, 1], [{'block': 19628126}, 2]],
+    [[{'block': None}, 1], [{'block': None}, 2]],
     indirect=['web3_provider_integration'],
 )
 def test_pauser_bot(web3_lido_integration, web3_provider_integration, add_account_to_guardian, module_id, caplog):
     caplog.set_level(logging.INFO)
     latest = web3_lido_integration.eth.get_block('latest')
 
-    pm = get_pause_message(web3_lido_integration, module_id)
-
+    # Create PauserBot
     pb = PauserBot(web3_lido_integration)
     pb._get_message_actualize_filter = Mock(return_value=lambda x: True)
+    web3_lido_integration.lido.deposit_security_module.get_guardians = Mock(return_value=[COUNCIL_ADDRESS])
+
+    # Execute without messages - verify module is active
+    pb.execute(latest)
+    assert not web3_lido_integration.lido.deposit_security_module.is_deposits_paused(), "Shouldn't be paused before pause transaction"
+
+    # Mine a block to get fresh latest block
+    web3_lido_integration.provider.make_request('anvil_mine', [1])
+    latest = web3_lido_integration.eth.get_block('latest')
+
+    # Add pause message and execute
+    pause_message = get_pause_message_v3(web3_lido_integration)
+    pb.message_storage.messages = [pause_message]
     pb.execute(latest)
 
+    # Verify that pauseDeposits transaction was built (check logs contain the method call)
+    assert any('pauseDeposits' in msg for msg in caplog.messages), 'pauseDeposits transaction was not built'
+
+    # Mine a block to confirm transaction
     web3_lido_integration.provider.make_request('anvil_mine', [1])
 
-    # Check no pause
-    assert web3_lido_integration.lido.staking_router.is_staking_module_active(module_id)
+    # Verify module was actually paused
+    assert web3_lido_integration.lido.deposit_security_module.is_deposits_paused(), 'Module should be paused after pause transaction'
 
-    # Add pause message
-    pb.message_storage.messages = [pm]
-    web3_lido_integration.lido.deposit_security_module.get_guardians = Mock(return_value=[COUNCIL_ADDRESS])
+    # Execute again - messages should be cleared since module is already paused
+    latest = web3_lido_integration.eth.get_block('latest')
+    pb.message_storage.messages = [pause_message]
     pb.execute(latest)
-
-    web3_lido_integration.provider.make_request('anvil_mine', [1])
-
-    # Check there is pause message and module paused
-    assert not web3_lido_integration.lido.staking_router.is_staking_module_active(module_id)
-    assert len(pb.message_storage.messages) == 1
-
-    pb.execute(latest)
-    # Check pause message cleaned
-    assert not pb.message_storage.messages
-
-    pb.message_storage.messages = [get_pause_message_v2(web3_lido_integration)]
-    pb.execute(latest)
-    assert pb.message_storage.messages
-
-    upgrade_staking_router_to_v2(web3_lido_integration)
-    web3_lido_integration.lido.deposit_security_module.get_guardians = Mock(return_value=[COUNCIL_ADDRESS])
-    # recreate signature
-    pb.message_storage.messages = [get_pause_message_v2(web3_lido_integration)]
-    pb.execute(latest)
-    assert pb.message_storage.messages
-    assert [
-        msg
-        for msg in caplog.messages
-        if (
-            "Build `pauseDeposits(19628132, ('0xafd5cffaea441e00ec6aaf081589ea70ee665c827047071b28153e4472ce48fa', "
-            "'0x4c4ea8132ca88766d4beead65d47330b15e7921e7dc71de162fc2a971d8800b4'))` tx."
-        )
-        in msg
-    ]
-
-    pb.execute(latest)
-    assert not pb.message_storage.messages
+    assert not pb.message_storage.messages, 'Messages should be cleared after module is paused'

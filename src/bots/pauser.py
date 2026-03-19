@@ -26,6 +26,7 @@ def run_pauser(w3: Web3):
     e = Executor(
         w3,
         pause.execute,
+        # Always one due to high priority
         1,
         variables.MAX_CYCLE_LIFETIME_IN_SECONDS,
     )

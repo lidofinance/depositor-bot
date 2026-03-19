@@ -44,15 +44,11 @@ def run_depositor(w3):
     e = Executor(
         w3,
         depositor_bot.execute,
-        1,
+        variables.BLOCKS_BETWEEN_EXECUTION,
         variables.MAX_CYCLE_LIFETIME_IN_SECONDS,
     )
     logger.info({'msg': 'Execute depositor as daemon.'})
     e.execute_as_daemon()
-
-
-class ModuleNotSupportedError(Exception):
-    pass
 
 
 class DepositorBot:
@@ -109,14 +105,22 @@ class DepositorBot:
     def execute(self, block: BlockData) -> bool:
         self._check_balance()
 
-        for module_id in self._get_preferred_to_deposit_modules():
-            logger.info({'msg': f'Do deposit to module with id: {module_id}.'})
-            try:
-                self._deposit_to_module(module_id)
-            except ModuleNotSupportedError as error:
-                logger.warning({'msg': 'Module not supported exception.', 'error': str(error)})
+        modules_to_deposit = self._get_preferred_to_deposit_modules()
 
-        return True
+        if not modules_to_deposit:
+            # No modules expected. Long sleep.
+            return True
+
+        for module_id in modules_to_deposit:
+            logger.info({'msg': f'Do deposit to module with id: {module_id}.'})
+
+            result = self._deposit_to_module(module_id)
+            logger.info({'msg': f'Deposit status to Module[{module_id}]: {result}.', 'value': result})
+
+            if result:
+                return result
+
+        return False
 
     def _check_balance(self):
         if variables.ACCOUNT:
@@ -128,11 +132,13 @@ class DepositorBot:
 
         guardians = self.w3.lido.deposit_security_module.get_guardians()
         providers = [self.w3]
+
         if self._onchain_transport_w3 is not None:
             providers.append(self._onchain_transport_w3)
+
         for address in guardians:
             for provider in providers:
-                balance = self.w3.eth.get_balance(address)
+                balance = provider.eth.get_balance(address)
                 GUARDIAN_BALANCE.labels(address=address, chain_id=provider.eth.chain_id).set(balance)
 
     def _deposit_to_module(self, module_id: int) -> bool:
@@ -251,18 +257,22 @@ class DepositorBot:
         return self.message_storage.get_messages_and_actualize(lambda x: sign_filter(x) and actualize_filter(x))
 
     def _get_preferred_to_deposit_modules(self) -> list[int]:
-        # gather quorum
-        now = datetime.now()
-        for module_id in variables.DEPOSIT_MODULES_WHITELIST:
-            if self._get_quorum(module_id):
-                self._module_last_heart_beat[module_id] = now
-
         # filter out non allow-listed modules
         module_ids = [
             module_id
             for module_id in self.w3.lido.staking_router.get_staking_module_ids()
             if module_id in variables.DEPOSIT_MODULES_WHITELIST
         ]
+
+        # gather quorum
+        now = datetime.now()
+        for module_id in module_ids:
+            # Just for metrics
+            self._select_strategy(module_id).is_gas_price_ok(module_id)
+
+            if self._get_quorum(module_id):
+                self._module_last_heart_beat[module_id] = now
+
         # get digests for all the modules
         module_digests = self.w3.lido.staking_router.get_staking_module_digests(module_ids)
         # sort modules by validator count
@@ -277,6 +287,7 @@ class DepositorBot:
         # take all the modules in sorted order until the first healthy one(including)
         result = self._take_until_first_healthy_module(modules_healthiness)
         logger.info({'msg': f'Module iteration order {result}.'})
+
         return result
 
     def _is_module_healthy(self, module_id: int) -> bool:
@@ -305,4 +316,7 @@ class DepositorBot:
             module_ids.append(module_id)
             if is_healthy:
                 break
+        else:
+            # If all modules are unhealthy
+            return []
         return module_ids

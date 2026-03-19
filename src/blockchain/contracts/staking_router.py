@@ -1,4 +1,5 @@
 import logging
+from functools import lru_cache
 
 from blockchain.contracts.base_interface import ContractInterface
 from web3.types import BlockIdentifier, Wei
@@ -9,6 +10,7 @@ logger = logging.getLogger(__name__)
 class StakingRouterContract(ContractInterface):
     abi_path = './interfaces/StakingRouter.json'
 
+    @lru_cache(maxsize=1)
     def get_contract_version(self, block_identifier: BlockIdentifier = 'latest') -> int:
         response = self.functions.getContractVersion().call(block_identifier=block_identifier)
         logger.info(
@@ -20,6 +22,7 @@ class StakingRouterContract(ContractInterface):
         )
         return response
 
+    @lru_cache(maxsize=1)
     def get_staking_module_ids(self, block_identifier: BlockIdentifier = 'latest') -> list[int]:
         """Returns the ids of all registered staking modules"""
         response = self.functions.getStakingModuleIds().call(block_identifier=block_identifier)
