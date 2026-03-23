@@ -1,0 +1,904 @@
+[
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_lidoLocator",
+        "type": "address"
+      },
+      {
+        "internalType": "GIndex",
+        "name": "_gIFirstValidatorPrev",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "GIndex",
+        "name": "_gIFirstValidatorCurr",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint64",
+        "name": "_pivotSlot",
+        "type": "uint64"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_slotsPerEpoch",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "constructor"
+  },
+  {
+    "inputs": [],
+    "name": "AccessControlBadConfirmation",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "account",
+        "type": "address"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "neededRole",
+        "type": "bytes32"
+      }
+    ],
+    "name": "AccessControlUnauthorizedAccount",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "DuplicateValidatorIndex",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "IndexOutOfRange",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidInitialization",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidPubkeyLength",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidSignLength",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidSlot",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "MaxValidatorsPerTopUpExceeded",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "MinBlockDistanceNotMet",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "MinTopUpExceedsTarget",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "NotInitializing",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "RootIsTooOld",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "RootNotFound",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "RootPrecedesLastTopUp",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "TooLargeValue",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ValidatorIsNotActivated",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "WrongArrayLength",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "WrongPubkeyLength",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "WrongWithdrawalCredentials",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ZeroValue",
+    "type": "error"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint64",
+        "name": "version",
+        "type": "uint64"
+      }
+    ],
+    "name": "Initialized",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "newValue",
+        "type": "uint256"
+      }
+    ],
+    "name": "LastTopUpChanged",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "newValue",
+        "type": "uint256"
+      }
+    ],
+    "name": "MaxRootAgeChanged",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "newValue",
+        "type": "uint256"
+      }
+    ],
+    "name": "MaxValidatorsPerTopUpChanged",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "newValue",
+        "type": "uint256"
+      }
+    ],
+    "name": "MinBlockDistanceChanged",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "role",
+        "type": "bytes32"
+      },
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "previousAdminRole",
+        "type": "bytes32"
+      },
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "newAdminRole",
+        "type": "bytes32"
+      }
+    ],
+    "name": "RoleAdminChanged",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "role",
+        "type": "bytes32"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "account",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "sender",
+        "type": "address"
+      }
+    ],
+    "name": "RoleGranted",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "role",
+        "type": "bytes32"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "account",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "sender",
+        "type": "address"
+      }
+    ],
+    "name": "RoleRevoked",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "targetBalanceGwei",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "minTopUpGwei",
+        "type": "uint256"
+      }
+    ],
+    "name": "TopUpBalanceLimitsChanged",
+    "type": "event"
+  },
+  {
+    "inputs": [],
+    "name": "BEACON_ROOTS",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "DEFAULT_ADMIN_ROLE",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "GI_FIRST_VALIDATOR_CURR",
+    "outputs": [
+      {
+        "internalType": "GIndex",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "GI_FIRST_VALIDATOR_PREV",
+    "outputs": [
+      {
+        "internalType": "GIndex",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "GI_STATE_ROOT",
+    "outputs": [
+      {
+        "internalType": "GIndex",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "MANAGE_LIMITS_ROLE",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "PIVOT_SLOT",
+    "outputs": [
+      {
+        "internalType": "uint64",
+        "name": "",
+        "type": "uint64"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "SLOTS_PER_EPOCH",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "TOP_UP_ROLE",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_stakingModuleId",
+        "type": "uint256"
+      }
+    ],
+    "name": "canTopUp",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getLastTopUpTimestamp",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getMaxRootAge",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getMaxValidatorsPerTopUp",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getMinBlockDistance",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getMinTopUpGwei",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "role",
+        "type": "bytes32"
+      }
+    ],
+    "name": "getRoleAdmin",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "role",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint256",
+        "name": "index",
+        "type": "uint256"
+      }
+    ],
+    "name": "getRoleMember",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "role",
+        "type": "bytes32"
+      }
+    ],
+    "name": "getRoleMemberCount",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "role",
+        "type": "bytes32"
+      }
+    ],
+    "name": "getRoleMembers",
+    "outputs": [
+      {
+        "internalType": "address[]",
+        "name": "",
+        "type": "address[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getTargetBalanceGwei",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "role",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "address",
+        "name": "account",
+        "type": "address"
+      }
+    ],
+    "name": "grantRole",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "role",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "address",
+        "name": "account",
+        "type": "address"
+      }
+    ],
+    "name": "hasRole",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_admin",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_maxValidatorsPerTopUp",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_minBlockDistance",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_maxRootAgeSec",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_targetBalanceGwei",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_minTopUpGwei",
+        "type": "uint256"
+      }
+    ],
+    "name": "initialize",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "role",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "address",
+        "name": "callerConfirmation",
+        "type": "address"
+      }
+    ],
+    "name": "renounceRole",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "role",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "address",
+        "name": "account",
+        "type": "address"
+      }
+    ],
+    "name": "revokeRole",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_newValue",
+        "type": "uint256"
+      }
+    ],
+    "name": "setMaxRootAge",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_newValue",
+        "type": "uint256"
+      }
+    ],
+    "name": "setMaxValidatorsPerTopUp",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_newValue",
+        "type": "uint256"
+      }
+    ],
+    "name": "setMinBlockDistance",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_targetBalanceGwei",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_minTopUpGwei",
+        "type": "uint256"
+      }
+    ],
+    "name": "setTopUpBalanceLimits",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes4",
+        "name": "interfaceId",
+        "type": "bytes4"
+      }
+    ],
+    "name": "supportsInterface",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "uint256",
+            "name": "moduleId",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256[]",
+            "name": "keyIndices",
+            "type": "uint256[]"
+          },
+          {
+            "internalType": "uint256[]",
+            "name": "operatorIds",
+            "type": "uint256[]"
+          },
+          {
+            "internalType": "uint256[]",
+            "name": "validatorIndices",
+            "type": "uint256[]"
+          },
+          {
+            "components": [
+              {
+                "internalType": "uint64",
+                "name": "childBlockTimestamp",
+                "type": "uint64"
+              },
+              {
+                "internalType": "uint64",
+                "name": "slot",
+                "type": "uint64"
+              },
+              {
+                "internalType": "uint64",
+                "name": "proposerIndex",
+                "type": "uint64"
+              }
+            ],
+            "internalType": "struct BeaconRootData",
+            "name": "beaconRootData",
+            "type": "tuple"
+          },
+          {
+            "components": [
+              {
+                "internalType": "bytes32[]",
+                "name": "proofValidator",
+                "type": "bytes32[]"
+              },
+              {
+                "internalType": "bytes",
+                "name": "pubkey",
+                "type": "bytes"
+              },
+              {
+                "internalType": "uint64",
+                "name": "effectiveBalance",
+                "type": "uint64"
+              },
+              {
+                "internalType": "uint64",
+                "name": "activationEligibilityEpoch",
+                "type": "uint64"
+              },
+              {
+                "internalType": "uint64",
+                "name": "activationEpoch",
+                "type": "uint64"
+              },
+              {
+                "internalType": "uint64",
+                "name": "exitEpoch",
+                "type": "uint64"
+              },
+              {
+                "internalType": "uint64",
+                "name": "withdrawableEpoch",
+                "type": "uint64"
+              },
+              {
+                "internalType": "bool",
+                "name": "slashed",
+                "type": "bool"
+              }
+            ],
+            "internalType": "struct ValidatorWitness[]",
+            "name": "validatorWitness",
+            "type": "tuple[]"
+          },
+          {
+            "internalType": "uint256[]",
+            "name": "pendingBalanceGwei",
+            "type": "uint256[]"
+          }
+        ],
+        "internalType": "struct TopUpData",
+        "name": "_topUps",
+        "type": "tuple"
+      }
+    ],
+    "name": "topUp",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  }
+]

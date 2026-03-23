@@ -104,6 +104,10 @@ x / 4(we assume that chances of significant gas drop during 8 hours are low)
 """
 GAS_ADDENDUM = Web3.to_wei(*os.getenv('GAS_ADDENDUM', '6 gwei').split(' '))
 
+# Top-up providers
+KEYS_API_URLS = [url for url in os.getenv('KEYS_API_URLS', '').split(',') if url]
+CL_API_URLS = [url for url in os.getenv('CL_API_URLS', '').split(',') if url]
+
 # All non-private env variables to the logs in main
 PUBLIC_ENV_VARS = {
     'LIDO_LOCATOR': LIDO_LOCATOR,
