@@ -24,21 +24,15 @@ logger = logging.getLogger(__name__)
 class LidoContracts(Module):
     def __init__(self, w3: Web3):
         super().__init__(w3)
+        self.staking_router_version: int | None = None
+        self.topup_gateway: TopUpGatewayContract | None = None
         self._load_contracts()
 
     def has_contract_address_changed(self) -> bool:
         """If contracts changed all cache related to contracts should be cleared"""
-        addresses = [
-            contract.address
-            for contract in self.__dict__.values()
-            if isinstance(contract, Contract)
-        ]
+        addresses = [contract.address for contract in self.__dict__.values() if isinstance(contract, Contract)]
         self._load_contracts()
-        new_addresses = [
-            contract.address
-            for contract in self.__dict__.values()
-            if isinstance(contract, Contract)
-        ]
+        new_addresses = [contract.address for contract in self.__dict__.values() if isinstance(contract, Contract)]
         return addresses != new_addresses
 
     def _load_contracts(self):
@@ -66,8 +60,10 @@ class LidoContracts(Module):
             ),
         )
         self._load_staking_router()
-        self._load_dsm()
-        self._load_topup_gateway()
+        if self.w3.eth.chain_id != 32382:
+            self._load_dsm()
+        if self.staking_router_version == 4:
+            self._load_topup_gateway()
 
     def _load_staking_router(self):
         staking_router_address = self.lido_locator.staking_router()
@@ -81,10 +77,10 @@ class LidoContracts(Module):
                 decode_tuples=True,
             ),
         )
-        sr_version = sr.get_contract_version()
+        self.staking_router_version = sr.get_contract_version()
 
-        if sr_version == 4:
-            logger.debug({"msg": "Use staking router V4."})
+        if self.staking_router_version == 4:
+            logger.debug({'msg': 'Use staking router V4.'})
             self.staking_router = cast(
                 StakingRouterContractV4,
                 self.w3.eth.contract(
@@ -93,11 +89,11 @@ class LidoContracts(Module):
                     decode_tuples=True,
                 ),
             )
-        elif sr_version == 3:
-            logger.debug({"msg": "Use staking router V3."})
+        elif self.staking_router_version == 3:
+            logger.debug({'msg': 'Use staking router V3.'})
             self.staking_router = sr
         else:
-            raise ValueError(f"Unsupported StakingRouter version: {sr_version}")
+            raise ValueError(f'Unsupported StakingRouter version: {self.staking_router_version}')
 
     def _load_dsm(self):
         dsm_address = self.lido_locator.deposit_security_module()
@@ -111,7 +107,7 @@ class LidoContracts(Module):
         )
 
         dsm_version = self.deposit_security_module.version()
-        logger.debug({"msg": f"Use deposit security module V{dsm_version}."})
+        logger.debug({'msg': f'Use deposit security module V{dsm_version}.'})
         if dsm_version == 1:
             self.deposit_security_module = cast(
                 DepositSecurityModuleContract,
@@ -130,4 +126,4 @@ class LidoContracts(Module):
                 ContractFactoryClass=TopUpGatewayContract,
             ),
         )
-        logger.debug({"msg": "Loaded TopUpGateway.", "address": topup_gateway_address})
+        logger.debug({'msg': 'Loaded TopUpGateway.', 'address': topup_gateway_address})

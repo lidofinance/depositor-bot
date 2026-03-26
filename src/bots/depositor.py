@@ -5,6 +5,8 @@ from datetime import datetime, timedelta
 from typing import Callable, Dict, List, Optional, Tuple, cast
 
 import variables
+from blockchain.contracts.staking_router import StakingRouterContractV4
+from blockchain.contracts.base_interface import ContractInterface
 from blockchain.deposit_strategy.base_deposit_strategy import (
     CSMDepositStrategy,
     DefaultDepositStrategy,
@@ -12,9 +14,8 @@ from blockchain.deposit_strategy.base_deposit_strategy import (
 from blockchain.deposit_strategy.deposit_transaction_sender import Sender
 from blockchain.deposit_strategy.gas_price_calculator import GasPriceCalculator
 from blockchain.deposit_strategy.strategy import DepositStrategy
-from blockchain.contracts.staking_router import StakingRouterContractV4
-from blockchain.topup.cmv2_strategy import get_cmv2_topup_candidates
 from blockchain.executor import Executor
+from blockchain.topup.cmv2_strategy import get_cmv2_topup_candidates
 from blockchain.typings import Web3
 from metrics.metrics import (
     ACCOUNT_BALANCE,
@@ -25,6 +26,8 @@ from metrics.metrics import (
     UNEXPECTED_EXCEPTIONS,
 )
 from metrics.transport_message_metrics import message_metrics_filter
+from providers.consensus import ConsensusClient
+from providers.keys_api import KeysAPIClient
 from schema import Or, Schema
 from transport.msg_providers.onchain_transport import (
     DepositParser,
@@ -36,8 +39,6 @@ from transport.msg_storage import MessageStorage
 from transport.msg_types.common import BotMessage, get_messages_sign_filter
 from transport.msg_types.deposit import DepositMessage, DepositMessageSchema
 from transport.msg_types.ping import PingMessageSchema, to_check_sum_address
-from providers.consensus import ConsensusClient
-from providers.keys_api import KeysAPIClient
 from transport.types import TransportType
 from web3.types import BlockData, Wei
 
@@ -45,7 +46,7 @@ logger = logging.getLogger(__name__)
 
 
 def run_depositor(w3):
-    logger.info({"msg": "Initialize Depositor bot."})
+    logger.info({'msg': 'Initialize Depositor bot.'})
     sender = Sender(w3)
     gas_price_calculator = GasPriceCalculator(w3)
     base_deposit_strategy = DefaultDepositStrategy(w3, gas_price_calculator)
@@ -67,7 +68,7 @@ def run_depositor(w3):
         variables.BLOCKS_BETWEEN_EXECUTION,
         variables.MAX_CYCLE_LIFETIME_IN_SECONDS,
     )
-    logger.info({"msg": "Execute depositor as daemon."})
+    logger.info({'msg': 'Execute depositor as daemon.'})
     e.execute_as_daemon()
 
 
@@ -90,9 +91,7 @@ class DepositorBot:
         self._keys_api = keys_api
         self._cl = cl
         now = datetime.now()
-        self._module_last_heart_beat: Dict[int, datetime] = {
-            module_id: now for module_id in variables.DEPOSIT_MODULES_WHITELIST
-        }
+        self._module_last_heart_beat: Dict[int, datetime] = {module_id: now for module_id in variables.DEPOSIT_MODULES_WHITELIST}
 
         transports = []
 
@@ -106,9 +105,7 @@ class DepositorBot:
 
         self._onchain_transport_w3 = None
         if TransportType.ONCHAIN_TRANSPORT in variables.MESSAGE_TRANSPORTS:
-            self._onchain_transport_w3 = (
-                OnchainTransportProvider.create_onchain_transport_w3()
-            )
+            self._onchain_transport_w3 = OnchainTransportProvider.create_onchain_transport_w3()
             transports.append(
                 OnchainTransportProvider(
                     w3=self._onchain_transport_w3,
@@ -122,8 +119,8 @@ class DepositorBot:
         if not transports:
             logger.warning(
                 {
-                    "msg": "No transports found. Dry mode activated.",
-                    "value": variables.MESSAGE_TRANSPORTS,
+                    'msg': 'No transports found. Dry mode activated.',
+                    'value': variables.MESSAGE_TRANSPORTS,
                 }
             )
 
@@ -145,35 +142,31 @@ class DepositorBot:
             return True
 
         for module_id in modules_to_deposit:
-            logger.info({"msg": f"Do deposit to module with id: {module_id}."})
+            logger.info({'msg': f'Do deposit to module with id: {module_id}.'})
 
             result = self._deposit_to_module(module_id)
             logger.info(
                 {
-                    "msg": f"Deposit status to Module[{module_id}]: {result}.",
-                    "value": result,
+                    'msg': f'Deposit status to Module[{module_id}]: {result}.',
+                    'value': result,
                 }
             )
 
             if result:
                 return result
 
-        logger.info(
-            {"msg": "No seed deposits in modules. Checking top-up eligibility."}
-        )
+        logger.info({'msg': 'No seed deposits in modules. Checking top-up eligibility.'})
         return self._try_topup()
 
     def _try_topup(self) -> bool:
         sr_version = self.w3.lido.staking_router.get_contract_version()
         if sr_version < 4:
-            logger.info(
-                {"msg": "SR version < 4, top-ups not supported.", "value": sr_version}
-            )
+            logger.info({'msg': 'SR version < 4, top-ups not supported.', 'value': sr_version})
             return False
 
         depositable_ether = self.w3.lido.lido.get_depositable_ether()
         if depositable_ether == 0:
-            logger.info({"msg": "No depositable ether. Skip top-up."})
+            logger.info({'msg': 'No depositable ether. Skip top-up.'})
             return False
 
         modules_to_topup = self._get_preferred_to_topup_modules(depositable_ether)
@@ -181,13 +174,13 @@ class DepositorBot:
             return False
 
         for module_id, module_address in modules_to_topup:
-            logger.info({"msg": f"Do top-up to module {module_id}."})
+            logger.info({'msg': f'Do top-up to module {module_id}.'})
 
             result = self._topup_module(module_id, module_address, depositable_ether)
             logger.info(
                 {
-                    "msg": f"Top up status to Module[{module_id}]: {result}.",
-                    "value": result,
+                    'msg': f'Top up status to Module[{module_id}]: {result}.',
+                    'value': result,
                 }
             )
 
@@ -199,71 +192,61 @@ class DepositorBot:
     def _topup_module(self, module_id: int, module_address: str, depositable_ether: Wei) -> bool:
         # re-check canTopUp
         if not self.w3.lido.topup_gateway.can_top_up(module_id):
-            logger.info({"msg": "canTopUp failed.", "module_id": module_id})
+            logger.info({'msg': 'canTopUp failed.', 'module_id': module_id})
             return False
 
         # re-check allocation
         sr_v4 = cast(StakingRouterContractV4, self.w3.lido.staking_router)
-        total_allocated, allocated, _ = sr_v4.get_deposit_allocations(
-            depositable_ether, is_top_up=True
-        )
-        module_ids = [
-            mid
-            for mid in self.w3.lido.staking_router.get_staking_module_ids()
-            if mid in variables.DEPOSIT_MODULES_WHITELIST
-        ]
+        total_allocated, allocated, _ = sr_v4.get_deposit_allocations(depositable_ether, is_top_up=True)
+        module_ids = [mid for mid in self.w3.lido.staking_router.get_staking_module_ids() if mid in variables.DEPOSIT_MODULES_WHITELIST]
         idx = module_ids.index(module_id)
         module_allocation = allocated[idx]
         if module_allocation == 0:
-            logger.info({"msg": "Module allocation is 0.", "module_id": module_id})
+            logger.info({'msg': 'Module allocation is 0.', 'module_id': module_id})
             return False
 
         # determine module type
         module_type = self._get_module_type(module_address)
-        logger.info({"msg": "Module type.", "module_id": module_id, "type": module_type})
+        logger.info({'msg': 'Module type.', 'module_id': module_id, 'type': module_type})
 
         if module_type == self.MODULE_TYPE_CMV2:
             if not self._keys_api or not self._cl:
-                logger.warning({"msg": "Keys API or CL not configured. Skip top-up."})
+                logger.warning({'msg': 'Keys API or CL not configured. Skip top-up.'})
                 return False
 
             proof_data = get_cmv2_topup_candidates(
-                self.w3, self._keys_api, self._cl, module_id, module_address, module_allocation,
+                self.w3,
+                self._keys_api,
+                self._cl,
+                module_id,
+                module_address,
+                module_allocation,
             )
             if not proof_data:
-                logger.info({"msg": "No top-up candidates.", "module_id": module_id})
+                logger.info({'msg': 'No top-up candidates.', 'module_id': module_id})
                 return False
 
             tx = self.w3.lido.topup_gateway.top_up(module_id, proof_data)
             success = self.w3.transaction.check(tx) and self.w3.transaction.send(tx, False, 6)
-            logger.info({"msg": f"Top-up tx result: {success}.", "module_id": module_id})
+            logger.info({'msg': f'Top-up tx result: {success}.', 'module_id': module_id})
             return success
 
-        logger.info({"msg": "Unknown module type, skip.", "module_id": module_id, "type": module_type})
+        logger.info({'msg': 'Unknown module type, skip.', 'module_id': module_id, 'type': module_type})
         return False
 
     MODULE_TYPE_CMV2 = b'curated-onchain-v2\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00'
+    GET_TYPE_ABI = ContractInterface.load_abi('./interfaces/IStakingModule.json')
 
     def _get_module_type(self, module_address: str) -> bytes:
         """Call IStakingModule.getType() on the module contract."""
         module = self.w3.eth.contract(
             address=self.w3.to_checksum_address(module_address),
-            abi=[{
-                "inputs": [],
-                "name": "getType",
-                "outputs": [{"internalType": "bytes32", "name": "", "type": "bytes32"}],
-                "stateMutability": "view",
-                "type": "function",
-            }],
+            abi=self.GET_TYPE_ABI,
         )
         return module.functions.getType().call()
 
     def _get_preferred_to_topup_modules(self, depositable_ether: Wei) -> list[Tuple[int, str]]:
-        module_ids = [
-            mid
-            for mid in self.w3.lido.staking_router.get_staking_module_ids()
-            if mid in variables.DEPOSIT_MODULES_WHITELIST
-        ]
+        module_ids = [mid for mid in self.w3.lido.staking_router.get_staking_module_ids() if mid in variables.DEPOSIT_MODULES_WHITELIST]
         if not module_ids:
             return []
 
@@ -272,17 +255,15 @@ class DepositorBot:
         # digest[2][13] - withdrawalCredentialsType
         compounding_vals_modules_digest = [d for d in digests if d[2][13] == 2]
         if not compounding_vals_modules_digest:
-            logger.info({"msg": "No 0x02 modules. Skip top-up."})
+            logger.info({'msg': 'No 0x02 modules. Skip top-up.'})
             return []
 
         # sr_version >= 4 is checked in _try_topup before calling this method
         # todo: find how to do withotu cast
         sr_v4 = cast(StakingRouterContractV4, self.w3.lido.staking_router)
-        total_allocated, allocated, _new_allocations = sr_v4.get_deposit_allocations(
-            depositable_ether, is_top_up=True
-        )
+        total_allocated, allocated, _new_allocations = sr_v4.get_deposit_allocations(depositable_ether, is_top_up=True)
         if total_allocated == 0:
-            logger.info({"msg": "No ETH allocated for top-up."})
+            logger.info({'msg': 'No ETH allocated for top-up.'})
             return []
 
         # sort by allocation desc
@@ -304,18 +285,16 @@ class DepositorBot:
         else:
             return []
 
-        logger.info({"msg": f"Top-up module order {result}."})
+        logger.info({'msg': f'Top-up module order {result}.'})
         return result
 
     def _check_balance(self):
         if variables.ACCOUNT:
             balance = self.w3.eth.get_balance(variables.ACCOUNT.address)
-            ACCOUNT_BALANCE.labels(variables.ACCOUNT.address, self.w3.eth.chain_id).set(
-                balance
-            )
-            logger.info({"msg": "Check account balance.", "value": balance})
+            ACCOUNT_BALANCE.labels(variables.ACCOUNT.address, self.w3.eth.chain_id).set(balance)
+            logger.info({'msg': 'Check account balance.', 'value': balance})
 
-        logger.info({"msg": "Check guardians balances."})
+        logger.info({'msg': 'Check guardians balances.'})
 
         guardians = self.w3.lido.deposit_security_module.get_guardians()
         providers = [self.w3]
@@ -326,36 +305,34 @@ class DepositorBot:
         for address in guardians:
             for provider in providers:
                 balance = provider.eth.get_balance(address)
-                GUARDIAN_BALANCE.labels(
-                    address=address, chain_id=provider.eth.chain_id
-                ).set(balance)
+                GUARDIAN_BALANCE.labels(address=address, chain_id=provider.eth.chain_id).set(balance)
 
     def _deposit_to_module(self, module_id: int) -> bool:
         can_deposit = self.w3.lido.deposit_security_module.can_deposit(module_id)
-        logger.info({"msg": "Can deposit to module.", "value": can_deposit})
+        logger.info({'msg': 'Can deposit to module.', 'value': can_deposit})
 
         quorum = self._get_quorum(module_id)
-        logger.info({"msg": "Build quorum.", "value": quorum})
+        logger.info({'msg': 'Build quorum.', 'value': quorum})
 
         strategy = self._select_strategy(module_id)
         gas_is_ok = strategy.is_gas_price_ok(module_id)
-        logger.info({"msg": "Calculate gas recommendations.", "value": gas_is_ok})
+        logger.info({'msg': 'Calculate gas recommendations.', 'value': gas_is_ok})
 
         is_deposit_amount_ok = strategy.can_deposit_keys_based_on_ether(module_id)
         logger.info(
             {
-                "msg": "Calculations deposit recommendations.",
-                "value": is_deposit_amount_ok,
+                'msg': 'Calculations deposit recommendations.',
+                'value': is_deposit_amount_ok,
             }
         )
 
         if can_deposit and quorum and gas_is_ok and is_deposit_amount_ok:
-            logger.info({"msg": "Checks passed. Prepare deposit tx."})
+            logger.info({'msg': 'Checks passed. Prepare deposit tx.'})
             success = self.prepare_and_send_tx(module_id, quorum)
             self._flashbots_works = not self._flashbots_works or success
             return success
 
-        logger.info({"msg": "Checks failed. Skip deposit."})
+        logger.info({'msg': 'Checks failed. Skip deposit.'})
         return False
 
     def _select_strategy(self, module_id) -> DepositStrategy:
@@ -376,17 +353,13 @@ class DepositorBot:
         filtered_messages = list(filter(module_filter, messages))
 
         # Get the required quorum size
-        min_signs_to_deposit = (
-            self.w3.lido.deposit_security_module.get_guardian_quorum()
-        )
-        CURRENT_QUORUM_SIZE.labels("required").set(min_signs_to_deposit)
+        min_signs_to_deposit = self.w3.lido.deposit_security_module.get_guardian_quorum()
+        CURRENT_QUORUM_SIZE.labels('required').set(min_signs_to_deposit)
 
         # Group messages by block hash and guardian address
         messages_by_block_hash = defaultdict(dict)
         for message in filtered_messages:
-            messages_by_block_hash[message["blockHash"]][
-                message["guardianAddress"]
-            ] = message
+            messages_by_block_hash[message['blockHash']][message['guardianAddress']] = message
 
         # Evaluate quorum for each block hash
         max_quorum_size = 0
@@ -396,7 +369,7 @@ class DepositorBot:
 
             if quorum_size >= min_signs_to_deposit:
                 # Cache and return the quorum
-                CURRENT_QUORUM_SIZE.labels("current").set(quorum_size)
+                CURRENT_QUORUM_SIZE.labels('current').set(quorum_size)
                 QUORUM.labels(module_id).set(1)
                 return unified_messages
 
@@ -404,51 +377,46 @@ class DepositorBot:
             max_quorum_size = max(quorum_size, max_quorum_size)
 
         # Update metrics and indicate no quorum
-        CURRENT_QUORUM_SIZE.labels("current").set(max_quorum_size)
+        CURRENT_QUORUM_SIZE.labels('current').set(max_quorum_size)
         QUORUM.labels(module_id).set(0)
         return None
 
     def _get_message_actualize_filter(self) -> Callable[[DepositMessage], bool]:
-        latest = self.w3.eth.get_block("latest")
-        deposit_root = "0x" + self.w3.lido.deposit_contract.get_deposit_root().hex()
+        latest = self.w3.eth.get_block('latest')
+        deposit_root = '0x' + self.w3.lido.deposit_contract.get_deposit_root().hex()
         guardians_list = self.w3.lido.deposit_security_module.get_guardians()
 
         def message_filter(message: DepositMessage) -> bool:
-            if message["guardianAddress"] not in guardians_list:
-                UNEXPECTED_EXCEPTIONS.labels("unexpected_guardian_address").inc()
+            if message['guardianAddress'] not in guardians_list:
+                UNEXPECTED_EXCEPTIONS.labels('unexpected_guardian_address').inc()
                 return False
 
-            if message["blockNumber"] < latest["number"] - 200:
+            if message['blockNumber'] < latest['number'] - 200:
                 return False
 
             # Message from council is newer than depositor node latest block
-            if message["blockNumber"] > latest["number"]:
+            if message['blockNumber'] > latest['number']:
                 # can't be verified, so skip
                 return True
 
-            if message["depositRoot"] != deposit_root:
+            if message['depositRoot'] != deposit_root:
                 return False
 
             return True
 
         return message_filter
 
-    def _get_module_messages_filter(
-        self, module_id: int
-    ) -> Callable[[DepositMessage], bool]:
+    def _get_module_messages_filter(self, module_id: int) -> Callable[[DepositMessage], bool]:
         nonce = self.w3.lido.staking_router.get_staking_module_nonce(module_id)
-        return (
-            lambda message: message["stakingModuleId"] == module_id
-            and message["nonce"] >= nonce
-        )
+        return lambda message: message['stakingModuleId'] == module_id and message['nonce'] >= nonce
 
     def prepare_and_send_tx(self, module_id: int, quorum: list[DepositMessage]) -> bool:
         success = self._sender.prepare_and_send(
             quorum,
             self._flashbots_works,
         )
-        logger.info({"msg": f"Tx send. Result is {success}."})
-        label = "success" if success else "failure"
+        logger.info({'msg': f'Tx send. Result is {success}.'})
+        label = 'success' if success else 'failure'
         MODULE_TX_SEND.labels(label, module_id).inc()
         return success
 
@@ -458,9 +426,7 @@ class DepositorBot:
         prefix = self.w3.lido.deposit_security_module.get_attest_message_prefix()
         sign_filter = get_messages_sign_filter(prefix)
 
-        return self.message_storage.get_messages_and_actualize(
-            lambda x: sign_filter(x) and actualize_filter(x)
-        )
+        return self.message_storage.get_messages_and_actualize(lambda x: sign_filter(x) and actualize_filter(x))
 
     def _get_preferred_to_deposit_modules(self) -> list[int]:
         # filter out non allow-listed modules
@@ -480,9 +446,7 @@ class DepositorBot:
                 self._module_last_heart_beat[module_id] = now
 
         # get digests for all the modules
-        module_digests = self.w3.lido.staking_router.get_staking_module_digests(
-            module_ids
-        )
+        module_digests = self.w3.lido.staking_router.get_staking_module_digests(module_ids)
         # sort modules by validator count
         sorted_module_digests = sorted(
             module_digests,
@@ -490,37 +454,26 @@ class DepositorBot:
         )
         # decide if modules are healthy
         # module[2][0] - module_id
-        modules_healthiness = [
-            (module[2][0], self._is_module_healthy(module[2][0]))
-            for module in sorted_module_digests
-        ]
+        modules_healthiness = [(module[2][0], self._is_module_healthy(module[2][0])) for module in sorted_module_digests]
 
         # take all the modules in sorted order until the first healthy one(including)
         result = self._take_until_first_healthy_module(modules_healthiness)
-        logger.info({"msg": f"Module iteration order {result}."})
+        logger.info({'msg': f'Module iteration order {result}.'})
 
         return result
 
     def _is_module_healthy(self, module_id: int) -> bool:
         # Check if the quorum cache is valid
         last_quorum_time = self._module_last_heart_beat[module_id]
-        is_valid_quorum = (datetime.now() - last_quorum_time) <= timedelta(
-            minutes=variables.QUORUM_RETENTION_MINUTES
-        )
-        logger.info(
-            {"msg": f"Is valid quorum {is_valid_quorum}.", "module_id": module_id}
-        )
+        is_valid_quorum = (datetime.now() - last_quorum_time) <= timedelta(minutes=variables.QUORUM_RETENTION_MINUTES)
+        logger.info({'msg': f'Is valid quorum {is_valid_quorum}.', 'module_id': module_id})
 
         # Check if module is available for deposits
         can_deposit = self.w3.lido.deposit_security_module.can_deposit(module_id)
-        logger.info({"msg": f"Can deposit {can_deposit}.", "module_id": module_id})
+        logger.info({'msg': f'Can deposit {can_deposit}.', 'module_id': module_id})
 
         strategy = self._select_strategy(module_id)
-        return (
-            can_deposit
-            and is_valid_quorum
-            and strategy.deposited_keys_amount(module_id) >= 1
-        )
+        return can_deposit and is_valid_quorum and strategy.deposited_keys_amount(module_id) >= 1
 
     @staticmethod
     def get_active_validators_count(module: list) -> int:
@@ -543,9 +496,7 @@ class DepositorBot:
         return module_ids
 
     @staticmethod
-    def _get_module_allocation(
-        digest, module_ids: list[int], allocated: list[int]
-    ) -> int:
+    def _get_module_allocation(digest, module_ids: list[int], allocated: list[int]) -> int:
         # digest[2][0] - module id
         module_id = digest[2][0]
         idx = module_ids.index(module_id)

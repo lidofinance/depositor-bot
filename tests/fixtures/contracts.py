@@ -2,12 +2,15 @@ from typing import cast
 
 import pytest
 import variables
+from blockchain.contracts.base_interface import ContractInterface
+from blockchain.contracts.cmv2 import CMV2Contract
 from blockchain.contracts.deposit import DepositContract
 from blockchain.contracts.deposit_security_module import DepositSecurityModuleContract, DepositSecurityModuleContractV2
 from blockchain.contracts.erc20 import ERC20Contract
 from blockchain.contracts.lido import LidoContract
 from blockchain.contracts.lido_locator import LidoLocatorContract
-from blockchain.contracts.staking_router import StakingRouterContract, StakingRouterContractV2
+from blockchain.contracts.staking_router import StakingRouterContractV3, StakingRouterContractV4
+from blockchain.contracts.topup_gateway import TopUpGatewayContract
 
 
 @pytest.fixture
@@ -66,25 +69,59 @@ def deposit_security_module_v2(web3_lido_integration, lido_locator):
 
 
 @pytest.fixture
-def staking_router(web3_provider_integration, lido_locator):
+def staking_router_v3(web3_provider_integration, lido_locator):
     yield cast(
-        StakingRouterContract,
+        StakingRouterContractV3,
         web3_provider_integration.eth.contract(
             address=lido_locator.staking_router(),
-            ContractFactoryClass=StakingRouterContract,
+            ContractFactoryClass=StakingRouterContractV3,
         ),
     )
 
 
 @pytest.fixture
-def staking_router_v2(web3_provider_integration, lido_locator):
+def staking_router_v4(web3_provider_integration, lido_locator):
     yield cast(
-        StakingRouterContractV2,
+        StakingRouterContractV4,
         web3_provider_integration.eth.contract(
             address=lido_locator.staking_router(),
-            ContractFactoryClass=StakingRouterContractV2,
+            ContractFactoryClass=StakingRouterContractV4,
         ),
     )
+
+
+@pytest.fixture
+def topup_gateway(web3_lido_integration):
+    if web3_lido_integration.lido.topup_gateway is None:
+        pytest.skip('TopUpGateway is not available on the current RPC target.')
+
+    yield cast(TopUpGatewayContract, web3_lido_integration.lido.topup_gateway)
+
+
+@pytest.fixture
+def cmv2_contract(web3_lido_integration):
+    # if web3_lido_integration.eth.chain_id != 32382:
+    pytest.skip('CMV2 contract test is supported currently only on chainId 32382.')
+
+    module_ids = web3_lido_integration.lido.staking_router.get_staking_module_ids()
+    module_digests = web3_lido_integration.lido.staking_router.get_staking_module_digests(module_ids)
+    module_type_abi = ContractInterface.load_abi('./interfaces/IStakingModule.json')
+    cmv2_type = b'curated-onchain-v2\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00'
+
+    for digest in module_digests:
+        module_address = digest[2][1]
+        module = web3_lido_integration.eth.contract(address=module_address, abi=module_type_abi)
+        if module.functions.getType().call() == cmv2_type:
+            yield cast(
+                CMV2Contract,
+                web3_lido_integration.eth.contract(
+                    address=module_address,
+                    ContractFactoryClass=CMV2Contract,
+                ),
+            )
+            return
+
+    pytest.skip('No CMV2 module found on the current RPC target.')
 
 
 @pytest.fixture

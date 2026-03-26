@@ -22,9 +22,11 @@ class CMV2Contract(ContractInterface):
         response = self.functions.getDepositsAllocation(
             deposit_amount,
         ).call(block_identifier=block_identifier)
-        logger.info({
-            'msg': f'Call `getDepositsAllocation({deposit_amount})`.',
-            'value': response,
-            'block_identifier': repr(block_identifier),
-        })
+        logger.info(
+            {
+                'msg': f'Call `getDepositsAllocation({deposit_amount})`.',
+                'value': response,
+                'block_identifier': repr(block_identifier),
+            }
+        )
         return response

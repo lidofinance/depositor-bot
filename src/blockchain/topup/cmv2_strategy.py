@@ -1,36 +1,27 @@
 import logging
-from dataclasses import dataclass
 from typing import List, Optional, cast
 
-from blockchain.beacon_state.state import BeaconStateData, load_beacon_state_data
-from blockchain.topup.proofs import TopUpProofData, build_topup_proofs
 from blockchain.beacon_state.ssz_types import (
-    STATE_VALIDATORS,
-    STATE_BALANCES,
-    VALIDATOR_ACTIVATION_EPOCH,
-    VALIDATOR_SLASHED,
-    VALIDATOR_EXIT_EPOCH,
     FAR_FUTURE_EPOCH,
     SLOTS_PER_EPOCH,
+    STATE_BALANCES,
+    STATE_VALIDATORS,
+    VALIDATOR_ACTIVATION_EPOCH,
+    VALIDATOR_EXIT_EPOCH,
+    VALIDATOR_SLASHED,
 )
+from blockchain.beacon_state.state import BeaconStateData, load_beacon_state_data
 from blockchain.contracts.cmv2 import CMV2Contract
+from blockchain.topup.proofs import build_topup_proofs
+from blockchain.topup.types import TopUpCandidate, TopUpProofData
 from blockchain.typings import Web3
 from providers.consensus import ConsensusClient
 from providers.keys_api import KeysAPIClient, LidoKey
 from web3.types import Wei
 
 logger = logging.getLogger(__name__)
-
+# todo: maybe read from the contract
 MAX_TOP_UP_BALANCE_GWEI = 2_045_750_000_000  # 2045.75 ETH
-
-
-@dataclass
-class TopUpCandidate:
-    validator_index: int
-    key_index: int
-    operator_id: int
-    pubkey: bytes
-    pending_balance: int  # gwei
 
 
 def get_cmv2_topup_candidates(
@@ -50,35 +41,29 @@ def get_cmv2_topup_candidates(
             ContractFactoryClass=CMV2Contract,
         ),
     )
-    allocated, operator_ids, allocations = cmv2.get_deposits_allocation(
-        module_allocation
-    )
+    allocated, operator_ids, allocations = cmv2.get_deposits_allocation(module_allocation)
 
     if allocated == 0:
-        logger.info({"msg": "No allocation from CMv2.", "module_id": module_id})
+        logger.info({'msg': 'No allocation from CMv2.', 'module_id': module_id})
         return None
 
-    operators_with_allocation = [
-        (op_id, alloc) for op_id, alloc in zip(operator_ids, allocations) if alloc > 0
-    ]
+    operators_with_allocation = [(op_id, alloc) for op_id, alloc in zip(operator_ids, allocations) if alloc > 0]
     if not operators_with_allocation:
-        logger.info({"msg": "No operators with allocation.", "module_id": module_id})
+        logger.info({'msg': 'No operators with allocation.', 'module_id': module_id})
         return None
 
     logger.info(
         {
-            "msg": "CMv2 operator allocations.",
-            "module_id": module_id,
-            "operators": operators_with_allocation,
+            'msg': 'CMv2 operator allocations.',
+            'module_id': module_id,
+            'operators': operators_with_allocation,
         }
     )
 
     # Step 2: keys from Keys API
     # TODO: optimize — fetches all module keys then filters by operator
     active_operator_ids = [op_id for op_id, _ in operators_with_allocation]
-    keys_by_operator = keys_api.get_module_operator_used_keys(
-        module_id, active_operator_ids
-    )
+    keys_by_operator = keys_api.get_module_operator_used_keys(module_id, active_operator_ids)
 
     # Step 3: load beacon state
     all_pubkeys = _collect_pubkeys(keys_by_operator)
@@ -92,13 +77,13 @@ def get_cmv2_topup_candidates(
         candidates.extend(op_candidates)
 
     if not candidates:
-        logger.info({"msg": "No eligible candidates.", "module_id": module_id})
+        logger.info({'msg': 'No eligible candidates.', 'module_id': module_id})
         return None
 
-    logger.info({"msg": "CMv2 candidates selected.", "module_id": module_id, "count": len(candidates)})
+    logger.info({'msg': 'CMv2 candidates selected.', 'module_id': module_id, 'count': len(candidates)})
 
     # Step 5: build proofs
-    return build_topup_proofs(cl, beacon_data, candidates)
+    return build_topup_proofs(beacon_data, candidates)
 
 
 def _collect_pubkeys(keys_by_operator: dict[int, List[LidoKey]]) -> set[bytes]:
@@ -124,9 +109,7 @@ def _select_operator_candidates(
     return _take_up_to_allocation(eligible, allocation, beacon_data)
 
 
-def _check_key_eligibility(
-    key: LidoKey, beacon_data: BeaconStateData
-) -> Optional[TopUpCandidate]:
+def _check_key_eligibility(key: LidoKey, beacon_data: BeaconStateData) -> Optional[TopUpCandidate]:
     pubkey = _key_to_bytes(key)
 
     validator_index = beacon_data.pubkey_to_index.get(pubkey)
@@ -192,6 +175,6 @@ def _take_up_to_allocation(
 
 def _key_to_bytes(key: LidoKey) -> bytes:
     k = key.key
-    if k.startswith("0x"):
+    if k.startswith('0x'):
         k = k[2:]
     return bytes.fromhex(k)

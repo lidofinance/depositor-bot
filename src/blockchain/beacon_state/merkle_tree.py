@@ -17,7 +17,7 @@ def next_power_of_two(n: int) -> int:
     return 1 << (n - 1).bit_length()
 
 
-ZERO_HASHES: List[bytes] = [b"\x00" * 32]
+ZERO_HASHES: List[bytes] = [b'\x00' * 32]
 for _i in range(1, 64):
     ZERO_HASHES.append(sha256(ZERO_HASHES[-1] + ZERO_HASHES[-1]))
 
@@ -31,10 +31,7 @@ class MerkleTree:
         self.limit = limit
         self.original_length = len(chunks)
 
-        if limit is not None:
-            target_len = next_power_of_two(limit)
-        else:
-            target_len = next_power_of_two(len(chunks)) if chunks else 1
+        target_len = next_power_of_two(limit) if limit is not None else next_power_of_two(len(chunks)) if chunks else 1
 
         self.depth = target_len.bit_length() - 1 if target_len > 1 else 0
 
@@ -68,44 +65,72 @@ class MerkleTree:
             idx //= 2
         return proof
 
-    def build_sparse_list_proof(
-        self, chunks: List[bytes], index: int, depth: int
-    ) -> List[bytes]:
+
+def build_sparse_list_proof(chunks: List[bytes], index: int, depth: int) -> List[bytes]:
+    """
+    Build Merkle proof for item at index.
+    Efficient: computes only sibling subtree roots needed for the path.
+    """
+
+    n = len(chunks)
+    nodes_cache = {}
+
+    def node_hash(level: int, pos: int) -> bytes:
         """
-        Build Merkle proof for item at index.
-        Efficient: computes only sibling subtree roots needed for the path.
+        Return hash of node at `level` (0 = leaf level), position `pos`.
+        Tree is virtually padded with zero chunks up to `depth`.
         """
 
-        n = len(chunks)
-        nodes_cache = {}
+        key = (level, pos)
+        if key in nodes_cache:
+            return nodes_cache[key]
 
-        def node_hash(level: int, pos: int) -> bytes:
-            """
-            Return hash of node at `level` (0 = leaf level), position `pos`.
-            Tree is virtually padded with zero chunks up to `depth`.
-            """
+        # This subtree starts beyond available leaves -> pure zero subtree.
+        if (pos << level) >= n:
+            return ZERO_HASHES[level]
 
-            key = (level, pos)
-            if key in nodes_cache:
-                return nodes_cache[key]
+        if level == 0:
+            h = chunks[pos]
+        else:
+            left = node_hash(level - 1, pos * 2)
+            right = node_hash(level - 1, pos * 2 + 1)
+            h = hash_concat(left, right)
 
-            # This subtree starts beyond available leaves -> pure zero subtree.
-            if (pos << level) >= n:
-                return ZERO_HASHES[level]
+        nodes_cache[key] = h
+        return h
 
-            if level == 0:
-                h = chunks[pos]
-            else:
-                left = node_hash(level - 1, pos * 2)
-                right = node_hash(level - 1, pos * 2 + 1)
-                h = hash_concat(left, right)
+    proof = []
+    for level in range(depth):
+        sibling_pos = (index >> level) ^ 1
+        proof.append(node_hash(level, sibling_pos))
 
-            nodes_cache[key] = h
-            return h
+    return proof
 
-        proof = []
-        for level in range(depth):
-            sibling_pos = (index >> level) ^ 1
-            proof.append(node_hash(level, sibling_pos))
 
-        return proof
+def compute_merkle_root_sparse(chunks: List[bytes], depth: int) -> bytes:
+    """Compute a sparse Merkle root using zero hashes for missing leaves."""
+    if not chunks:
+        return ZERO_HASHES[depth]
+
+    layer = list(chunks)
+    for level in range(depth):
+        next_layer = []
+        for i in range(0, len(layer), 2):
+            left = layer[i]
+            right = layer[i + 1] if i + 1 < len(layer) else ZERO_HASHES[level]
+            next_layer.append(hash_concat(left, right))
+        layer = next_layer or [ZERO_HASHES[level + 1]]
+
+    return layer[0]
+
+
+def verify_merkle_proof_by_index(leaf: bytes, proof: List[bytes], index: int, root: bytes) -> bool:
+    """Verify a bottom-up proof against a simple leaf index."""
+    computed = leaf
+    current_index = index
+
+    for sibling in proof:
+        computed = hash_concat(computed, sibling) if current_index % 2 == 0 else hash_concat(sibling, computed)
+        current_index //= 2
+
+    return computed == root

@@ -51,7 +51,7 @@ class ConsensusClient(HTTPProvider):
         )
         return data['header']['message']
 
-    def get_beacon_state_ssz(self, slot: int) -> bytes:
+    def get_beacon_state_ssz(self, state_id: str) -> bytes:
         """
         GET /eth/v2/debug/beacon/states/{slot} with Accept: application/octet-stream
         Returns raw SSZ bytes.
@@ -60,7 +60,7 @@ class ConsensusClient(HTTPProvider):
         errors = []
         for host in self.hosts:
             try:
-                url = self._urljoin(host, self.API_GET_STATE.format(slot))
+                url = self._urljoin(host, self.API_GET_STATE.format(state_id))
                 response = self.session.get(
                     url,
                     headers={'Accept': 'application/octet-stream'},
@@ -72,15 +72,17 @@ class ConsensusClient(HTTPProvider):
                         status=response.status_code,
                         text=response.text,
                     )
-                logger.info({
-                    'msg': 'Fetched beacon state SSZ.',
-                    'slot': slot,
-                    'size_bytes': len(response.content),
-                })
+                logger.info(
+                    {
+                        'msg': 'Fetched beacon state SSZ.',
+                        'state_id': state_id,
+                        'size_bytes': len(response.content),
+                    }
+                )
                 return response.content
             except Exception as e:
                 errors.append(e)
-                logger.warning({'msg': f'SSZ fetch failed from host.', 'error': str(e)})
+                logger.warning({'msg': 'SSZ fetch failed from host.', 'error': str(e)})
 
         raise errors[-1]
 

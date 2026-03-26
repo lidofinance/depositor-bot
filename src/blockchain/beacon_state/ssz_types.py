@@ -5,17 +5,17 @@ Used for deserializing beacon state and building Merkle proofs.
 Based on the Ethereum consensus-specs.
 """
 
+from ssz.sedes.bitvector import Bitvector
+from ssz.sedes.boolean import boolean
 from ssz.sedes.byte_vector import ByteVector
 from ssz.sedes.container import Container
+from ssz.sedes.list import List as SSZList
 from ssz.sedes.uint import (
     uint8,
     uint64,
     uint256,
 )
-from ssz.sedes.boolean import boolean
 from ssz.sedes.vector import Vector
-from ssz.sedes.bitvector import Bitvector
-from ssz.sedes.list import List as SSZList
 
 # ============================================
 # Constants (Mainnet)
@@ -181,12 +181,8 @@ BeaconState = Container(
         uint64,  # 32: consolidation_balance_to_consume
         uint64,  # 33: earliest_consolidation_epoch
         SSZList(PendingDeposit, PENDING_DEPOSITS_LIMIT),  # 34: pending_deposits
-        SSZList(
-            PendingPartialWithdrawal, PENDING_PARTIAL_WITHDRAWALS_LIMIT
-        ),  # 35: pending_partial_withdrawals
-        SSZList(
-            PendingConsolidation, PENDING_CONSOLIDATIONS_LIMIT
-        ),  # 36: pending_consolidations
+        SSZList(PendingPartialWithdrawal, PENDING_PARTIAL_WITHDRAWALS_LIMIT),  # 35: pending_partial_withdrawals
+        SSZList(PendingConsolidation, PENDING_CONSOLIDATIONS_LIMIT),  # 36: pending_consolidations
         # Fulu [37]
         Vector(uint64, PROPOSER_LOOKAHEAD_SIZE),  # 37: proposer_lookahead
     )

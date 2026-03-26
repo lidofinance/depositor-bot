@@ -28,8 +28,7 @@ class ProviderConsistencyModule(ABC):
                 chain_id = curr_chain_id
             elif chain_id != curr_chain_id:
                 raise InconsistentProviders(
-                    f'Different chain ids detected for {provider_index=}. '
-                    f'Expected {curr_chain_id=}, got {chain_id=}.'
+                    f'Different chain ids detected for {provider_index=}. ' f'Expected {curr_chain_id=}, got {chain_id=}.'
                 )
 
         return chain_id
@@ -37,9 +36,9 @@ class ProviderConsistencyModule(ABC):
     @abstractmethod
     def get_all_providers(self) -> list[Any]:
         """Returns list of hosts or providers."""
-        raise NotImplementedError("get_all_providers should be implemented")
+        raise NotImplementedError('get_all_providers should be implemented')
 
     @abstractmethod
     def _get_chain_id_with_provider(self, provider_index: int) -> int:
         """Does a health check call and returns chain_id for current host."""
-        raise NotImplementedError("_get_chain_id_with_provider should be implemented")
+        raise NotImplementedError('_get_chain_id_with_provider should be implemented')

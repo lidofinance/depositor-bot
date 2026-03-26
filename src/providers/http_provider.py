@@ -41,17 +41,17 @@ def data_is_any(data: Any, meta: dict, *, endpoint: str):
 
 def data_is_dict(data: Any, meta: dict, *, endpoint: str):
     if not isinstance(data, dict):
-        raise ValueError(f"Expected mapping response from {endpoint}")
+        raise ValueError(f'Expected mapping response from {endpoint}')
 
 
 def data_is_list(data: Any, meta: dict, *, endpoint: str):
     if not isinstance(data, list):
-        raise ValueError(f"Expected list response from {endpoint}")
+        raise ValueError(f'Expected list response from {endpoint}')
 
 
 def data_is_transient_dict(data: Any, meta: dict, *, endpoint: str):
     if not isinstance(data, TransientStreamingJSONObject):
-        raise ValueError(f"Expected mapping response from {endpoint}")
+        raise ValueError(f'Expected mapping response from {endpoint}')
 
 
 class HTTPProvider(ProviderConsistencyModule, ABC):
@@ -72,7 +72,7 @@ class HTTPProvider(ProviderConsistencyModule, ABC):
         retry_backoff_factor: int,
     ):
         if not hosts:
-            raise NoHostsProvided(f"No hosts provided for {self.__class__.__name__}")
+            raise NoHostsProvided(f'No hosts provided for {self.__class__.__name__}')
 
         self.hosts = hosts
         self.request_timeout = request_timeout
@@ -87,13 +87,13 @@ class HTTPProvider(ProviderConsistencyModule, ABC):
 
         adapter = HTTPAdapter(max_retries=retry_strategy)
         self.session = Session()
-        self.session.mount("https://", adapter)
-        self.session.mount("http://", adapter)
+        self.session.mount('https://', adapter)
+        self.session.mount('http://', adapter)
 
     @staticmethod
     def _urljoin(host, url):
-        if not host.endswith("/"):
-            host += "/"
+        if not host.endswith('/'):
+            host += '/'
         return urljoin(host, url)
 
     def _get(
@@ -132,9 +132,9 @@ class HTTPProvider(ProviderConsistencyModule, ABC):
 
                 logger.warning(
                     {
-                        "msg": f"[{self.__class__.__name__}] Host [{urlparse(host).netloc}] responded with error",
-                        "error": str(e),
-                        "provider": urlparse(host).netloc,
+                        'msg': f'[{self.__class__.__name__}] Host [{urlparse(host).netloc}] responded with error',
+                        'error': str(e),
+                        'provider': urlparse(host).netloc,
                     }
                 )
 
@@ -164,15 +164,13 @@ class HTTPProvider(ProviderConsistencyModule, ABC):
                     stream=stream,
                 )
             except Exception as error:
-                logger.error({"msg": str(error)})
+                logger.error({'msg': str(error)})
                 t.labels(
                     endpoint=endpoint,
                     code=0,
                     domain=urlparse(host).netloc,
                 )
-                raise self.PROVIDER_EXCEPTION(
-                    status=0, text="Response error."
-                ) from error
+                raise self.PROVIDER_EXCEPTION(status=0, text='Response error.') from error
 
             t.labels(
                 endpoint=endpoint,
@@ -182,13 +180,10 @@ class HTTPProvider(ProviderConsistencyModule, ABC):
 
             if response.status_code != HTTPStatus.OK:
                 response_fail_msg = (
-                    f"Response from {complete_endpoint} [{response.status_code}]"
-                    f' with text: "{str(response.text)}" returned.'
+                    f'Response from {complete_endpoint} [{response.status_code}]' f' with text: "{str(response.text)}" returned.'
                 )
-                logger.debug({"msg": response_fail_msg})
-                raise self.PROVIDER_EXCEPTION(
-                    response_fail_msg, status=response.status_code, text=response.text
-                )
+                logger.debug({'msg': response_fail_msg})
+                raise self.PROVIDER_EXCEPTION(response_fail_msg, status=response.status_code, text=response.text)
 
             try:
                 if stream:
@@ -197,17 +192,15 @@ class HTTPProvider(ProviderConsistencyModule, ABC):
                     json_response = response.json()
             except JSONDecodeError as error:
                 response_fail_msg = f'Failed to decode JSON response from {complete_endpoint} with text: "{str(response.text)}"'
-                logger.debug({"msg": response_fail_msg})
-                raise self.PROVIDER_EXCEPTION(
-                    status=0, text="JSON decode error."
-                ) from error
+                logger.debug({'msg': response_fail_msg})
+                raise self.PROVIDER_EXCEPTION(status=0, text='JSON decode error.') from error
 
         try:
-            data = json_response["data"]
+            data = json_response['data']
             meta = {}
 
             if not stream:
-                del json_response["data"]
+                del json_response['data']
                 meta = json_response
         except KeyError:
             data = json_response
@@ -220,4 +213,4 @@ class HTTPProvider(ProviderConsistencyModule, ABC):
         return self.hosts
 
     def _get_chain_id_with_provider(self, provider_index: int) -> int:
-        raise NotImplementedError("_chain_id should be implemented")
+        raise NotImplementedError('_chain_id should be implemented')

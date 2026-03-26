@@ -115,9 +115,11 @@ class StakingRouterContractV4(StakingRouterContractV3):
             deposit_amount,
             is_top_up,
         ).call(block_identifier=block_identifier)
-        logger.info({
-            'msg': f'Call `getDepositAllocations({deposit_amount}, {is_top_up})`.',
-            'value': response,
-            'block_identifier': repr(block_identifier),
-        })
+        logger.info(
+            {
+                'msg': f'Call `getDepositAllocations({deposit_amount}, {is_top_up})`.',
+                'value': response,
+                'block_identifier': repr(block_identifier),
+            }
+        )
         return response
