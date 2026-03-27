@@ -5,8 +5,8 @@ from datetime import datetime, timedelta
 from typing import Callable, Dict, List, Optional, Tuple, cast
 
 import variables
-from blockchain.contracts.staking_router import StakingRouterContractV4
 from blockchain.contracts.base_interface import ContractInterface
+from blockchain.contracts.staking_router import StakingRouterContractV4
 from blockchain.deposit_strategy.base_deposit_strategy import (
     CSMDepositStrategy,
     DefaultDepositStrategy,
@@ -58,7 +58,12 @@ def run_depositor(w3):
 
     cl = None
     if variables.CL_API_URLS:
-        cl = ConsensusClient(hosts=variables.CL_API_URLS)
+        cl = ConsensusClient(
+            hosts=variables.CL_API_URLS,
+            request_timeout=variables.HTTP_REQUEST_TIMEOUT_CONSENSUS,
+            retry_total=variables.HTTP_REQUEST_RETRY_COUNT_CONSENSUS,
+            retry_backoff_factor=variables.HTTP_REQUEST_SLEEP_BEFORE_RETRY_IN_SECONDS_CONSENSUS,
+        )
 
     depositor_bot = DepositorBot(w3, sender, base_deposit_strategy, csm_strategy, keys_api, cl)
 

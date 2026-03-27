@@ -1,6 +1,6 @@
 import logging
 import os
-from typing import Optional
+from typing import Final, Optional
 
 from eth_account import Account
 from eth_account.signers.local import LocalAccount
@@ -107,6 +107,9 @@ GAS_ADDENDUM = Web3.to_wei(*os.getenv('GAS_ADDENDUM', '6 gwei').split(' '))
 # Top-up providers
 KEYS_API_URLS = [url for url in os.getenv('KEYS_API_URLS', '').split(',') if url]
 CL_API_URLS = [url for url in os.getenv('CL_API_URLS', '').split(',') if url]
+HTTP_REQUEST_TIMEOUT_CONSENSUS: Final = int(os.getenv('HTTP_REQUEST_TIMEOUT_CONSENSUS', 5 * 60))
+HTTP_REQUEST_RETRY_COUNT_CONSENSUS: Final = int(os.getenv('HTTP_REQUEST_RETRY_COUNT_CONSENSUS', 5))
+HTTP_REQUEST_SLEEP_BEFORE_RETRY_IN_SECONDS_CONSENSUS: Final = int(os.getenv('HTTP_REQUEST_SLEEP_BEFORE_RETRY_IN_SECONDS_CONSENSUS', 5))
 
 # All non-private env variables to the logs in main
 PUBLIC_ENV_VARS = {
