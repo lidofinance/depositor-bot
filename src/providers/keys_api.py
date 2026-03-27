@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 from prometheus_client import Histogram
 
-from src.providers.http_provider import HTTPProvider, data_is_dict
+from providers.http_provider import HTTPProvider, data_is_dict
 
 logger = logging.getLogger(__name__)
 
