@@ -80,6 +80,7 @@ def run_depositor(w3):
 class DepositorBot:
     _flashbots_works = True
 
+    # todo: fix optional, should be required
     def __init__(
         self,
         w3: Web3,
@@ -203,7 +204,7 @@ class DepositorBot:
         # re-check allocation
         sr_v4 = cast(StakingRouterContractV4, self.w3.lido.staking_router)
         total_allocated, allocated, _ = sr_v4.get_deposit_allocations(depositable_ether, is_top_up=True)
-        module_ids = [mid for mid in self.w3.lido.staking_router.get_staking_module_ids() if mid in variables.DEPOSIT_MODULES_WHITELIST]
+        module_ids = [mid for mid in self.w3.lido.staking_router.get_staking_module_ids()]
         idx = module_ids.index(module_id)
         module_allocation = allocated[idx]
         if module_allocation == 0:
@@ -251,39 +252,38 @@ class DepositorBot:
         return module.functions.getType().call()
 
     def _get_preferred_to_topup_modules(self, depositable_ether: Wei) -> list[Tuple[int, str]]:
-        module_ids = [mid for mid in self.w3.lido.staking_router.get_staking_module_ids() if mid in variables.DEPOSIT_MODULES_WHITELIST]
-        if not module_ids:
-            return []
-
-        digests = self.w3.lido.staking_router.get_staking_module_digests(module_ids)
-
-        # digest[2][13] - withdrawalCredentialsType
-        compounding_vals_modules_digest = [d for d in digests if d[2][13] == 2]
-        if not compounding_vals_modules_digest:
-            logger.info({'msg': 'No 0x02 modules. Skip top-up.'})
-            return []
+        digests = self.w3.lido.staking_router.get_all_staking_module_digests()
 
         # sr_version >= 4 is checked in _try_topup before calling this method
-        # todo: find how to do withotu cast
+        # todo: find how to do without cast
         sr_v4 = cast(StakingRouterContractV4, self.w3.lido.staking_router)
         total_allocated, allocated, _new_allocations = sr_v4.get_deposit_allocations(depositable_ether, is_top_up=True)
         if total_allocated == 0:
             logger.info({'msg': 'No ETH allocated for top-up.'})
             return []
 
+        digest_allocations = [
+            (digest, allocation)
+            for digest, allocation in zip(digests, allocated, strict=False)
+            if digest[2][13] == 2 and digest[2][0] in variables.DEPOSIT_MODULES_WHITELIST
+        ]
+        if not digest_allocations:
+            logger.info({'msg': 'No 0x02 modules. Skip top-up.'})
+            return []
+
         # sort by allocation desc
-        sorted_digests = sorted(
-            compounding_vals_modules_digest,
-            key=lambda d: self._get_module_allocation(d, module_ids, allocated),
+        sorted_digest_allocations = sorted(
+            digest_allocations,
+            key=lambda item: item[1],
             reverse=True,
         )
 
         # take modules until first canTopUp == True (including)
         # digest[2][0] - module id, digest[2][1] - stakingModuleAddress
         result = []
-        for d in sorted_digests:
-            module_id = d[2][0]
-            module_address = d[2][1]
+        for digest, _allocation in sorted_digest_allocations:
+            module_id = digest[2][0]
+            module_address = digest[2][1]
             result.append((module_id, module_address))
             if self.w3.lido.topup_gateway.can_top_up(module_id):
                 break
@@ -499,10 +499,3 @@ class DepositorBot:
             # If all modules are unhealthy
             return []
         return module_ids
-
-    @staticmethod
-    def _get_module_allocation(digest, module_ids: list[int], allocated: list[int]) -> int:
-        # digest[2][0] - module id
-        module_id = digest[2][0]
-        idx = module_ids.index(module_id)
-        return allocated[idx]

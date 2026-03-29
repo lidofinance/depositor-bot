@@ -119,6 +119,141 @@ class TestGetPreferredToDepositModules(unittest.TestCase):
         self.assertEqual([3], result)
 
 
+@pytest.mark.unit
+class TestGetPreferredToTopupModules(unittest.TestCase):
+    def setUp(self):
+        self.mock_w3 = MagicMock()
+        self.mock_sender = MagicMock()
+        self.mock_general_strategy = MagicMock()
+        self.mock_csm_strategy = MagicMock()
+        self.mock_keys_api = MagicMock()
+        self.mock_cl = MagicMock()
+
+        self.bot = DepositorBot(
+            w3=self.mock_w3,
+            sender=self.mock_sender,
+            base_deposit_strategy=self.mock_general_strategy,
+            csm_strategy=self.mock_csm_strategy,
+            keys_api=self.mock_keys_api,
+            cl=self.mock_cl,
+        )
+
+        variables.DEPOSIT_MODULES_WHITELIST = [1, 2, 3]
+
+    def test_no_allocation(self):
+        # digest[2] is StakingModule tuple: (id, address, fee, treasuryFee, stakeShareLimit, status,
+        #   name, lastDepositAt, lastDepositBlock, exitedValidatorsCount, priorityExitShareThreshold,
+        #   maxDepositsPerBlock, minDepositBlockDistance, withdrawalCredentialsType, validatorsBalanceGwei, pendingBalanceGwei)
+        self.mock_w3.lido.staking_router.get_all_staking_module_digests.return_value = [
+            (10, 5, (1, '0xAddr1', 500, 500, 1000, 0, 'module1', 0, 0, 0, 0, 150, 25, 2, 0, 0), (0, 100, 10)),
+        ]
+        self.mock_w3.lido.staking_router.get_deposit_allocations.return_value = (0, [0], [0])
+
+        result = self.bot._get_preferred_to_topup_modules(100 * 10**18)
+
+        self.assertEqual([], result)
+
+    def test_no_0x02_modules(self):
+        # All modules have withdrawalCredentialsType == 1 (not 0x02)
+        self.mock_w3.lido.staking_router.get_all_staking_module_digests.return_value = [
+            (10, 5, (1, '0xAddr1', 500, 500, 1000, 0, 'module1', 0, 0, 0, 0, 150, 25, 1, 0, 0), (0, 100, 10)),
+            (8, 3, (2, '0xAddr2', 500, 500, 1000, 0, 'module2', 0, 0, 0, 0, 150, 25, 0, 0, 0), (0, 50, 5)),
+        ]
+        self.mock_w3.lido.staking_router.get_deposit_allocations.return_value = (100, [60, 40], [60, 40])
+
+        result = self.bot._get_preferred_to_topup_modules(100 * 10**18)
+
+        self.assertEqual([], result)
+
+    def test_0x02_module_not_in_whitelist(self):
+        # Module 4 is 0x02 but not in DEPOSIT_MODULES_WHITELIST = [1, 2, 3]
+        self.mock_w3.lido.staking_router.get_all_staking_module_digests.return_value = [
+            (10, 5, (1, '0xAddr1', 500, 500, 1000, 0, 'module1', 0, 0, 0, 0, 150, 25, 1, 0, 0), (0, 100, 10)),
+            (8, 3, (4, '0xAddr4', 500, 500, 1000, 0, 'module4', 0, 0, 0, 0, 150, 25, 2, 0, 0), (0, 50, 5)),
+        ]
+        self.mock_w3.lido.staking_router.get_deposit_allocations.return_value = (100, [60, 40], [60, 40])
+
+        result = self.bot._get_preferred_to_topup_modules(100 * 10**18)
+
+        self.assertEqual([], result)
+
+    def test_no_can_top_up(self):
+        # Two 0x02 modules in whitelist, but canTopUp is False for both
+        self.mock_w3.lido.staking_router.get_all_staking_module_digests.return_value = [
+            (10, 5, (1, '0xAddr1', 500, 500, 1000, 0, 'module1', 0, 0, 0, 0, 150, 25, 2, 0, 0), (0, 100, 10)),
+            (8, 3, (2, '0xAddr2', 500, 500, 1000, 0, 'module2', 0, 0, 0, 0, 150, 25, 2, 0, 0), (0, 50, 5)),
+        ]
+        self.mock_w3.lido.staking_router.get_deposit_allocations.return_value = (100, [60, 40], [60, 40])
+        self.mock_w3.lido.topup_gateway.can_top_up.return_value = False
+
+        result = self.bot._get_preferred_to_topup_modules(100 * 10**18)
+
+        self.assertEqual([], result)
+
+    def test_one_module_can_top_up(self):
+        # One 0x02 module in whitelist, canTopUp is True
+        self.mock_w3.lido.staking_router.get_all_staking_module_digests.return_value = [
+            (10, 5, (1, '0xAddr1', 500, 500, 1000, 0, 'module1', 0, 0, 0, 0, 150, 25, 2, 0, 0), (0, 100, 10)),
+        ]
+        self.mock_w3.lido.staking_router.get_deposit_allocations.return_value = (60, [60], [60])
+        self.mock_w3.lido.topup_gateway.can_top_up.return_value = True
+
+        result = self.bot._get_preferred_to_topup_modules(100 * 10**18)
+
+        self.assertEqual([(1, '0xAddr1')], result)
+
+    def test_can_top_up_on_second_module(self):
+        # Two 0x02 modules, canTopUp False for first (by allocation), True for second
+        self.mock_w3.lido.staking_router.get_all_staking_module_digests.return_value = [
+            (10, 5, (1, '0xAddr1', 500, 500, 1000, 0, 'module1', 0, 0, 0, 0, 150, 25, 2, 0, 0), (0, 100, 10)),
+            (8, 3, (2, '0xAddr2', 500, 500, 1000, 0, 'module2', 0, 0, 0, 0, 150, 25, 2, 0, 0), (0, 50, 5)),
+        ]
+        # Module 1 has higher allocation (60 > 40), so it comes first after sorting
+        self.mock_w3.lido.staking_router.get_deposit_allocations.return_value = (100, [60, 40], [60, 40])
+        self.mock_w3.lido.topup_gateway.can_top_up.side_effect = [False, True]
+
+        result = self.bot._get_preferred_to_topup_modules(100 * 10**18)
+
+        self.assertEqual([(1, '0xAddr1'), (2, '0xAddr2')], result)
+
+    def test_sorting_by_allocation_desc(self):
+        # Three 0x02 modules with different allocations, canTopUp True on first (highest allocation)
+        self.mock_w3.lido.staking_router.get_all_staking_module_digests.return_value = [
+            (10, 5, (1, '0xAddr1', 500, 500, 1000, 0, 'module1', 0, 0, 0, 0, 150, 25, 2, 0, 0), (0, 100, 10)),
+            (8, 3, (2, '0xAddr2', 500, 500, 1000, 0, 'module2', 0, 0, 0, 0, 150, 25, 2, 0, 0), (0, 50, 5)),
+            (6, 2, (3, '0xAddr3', 500, 500, 1000, 0, 'module3', 0, 0, 0, 0, 150, 25, 2, 0, 0), (0, 80, 8)),
+        ]
+        # Allocations: module1=10, module2=50, module3=30 → sorted desc: module2, module3, module1
+        self.mock_w3.lido.staking_router.get_deposit_allocations.return_value = (90, [10, 50, 30], [10, 50, 30])
+        self.mock_w3.lido.topup_gateway.can_top_up.return_value = True
+
+        result = self.bot._get_preferred_to_topup_modules(100 * 10**18)
+
+        # First module by allocation is module2 (50), canTopUp=True → stops
+        self.assertEqual([(2, '0xAddr2')], result)
+
+    def test_mixed_modules(self):
+        # Module 1: 0x02, in whitelist
+        # Module 2: not 0x02 (type=1), in whitelist
+        # Module 4: 0x02, NOT in whitelist [1, 2, 3]
+        # Module 3: 0x02, in whitelist
+        self.mock_w3.lido.staking_router.get_all_staking_module_digests.return_value = [
+            (10, 5, (1, '0xAddr1', 500, 500, 1000, 0, 'module1', 0, 0, 0, 0, 150, 25, 2, 0, 0), (0, 100, 10)),
+            (8, 3, (2, '0xAddr2', 500, 500, 1000, 0, 'module2', 0, 0, 0, 0, 150, 25, 1, 0, 0), (0, 50, 5)),
+            (6, 2, (4, '0xAddr4', 500, 500, 1000, 0, 'module4', 0, 0, 0, 0, 150, 25, 2, 0, 0), (0, 80, 8)),
+            (4, 1, (3, '0xAddr3', 500, 500, 1000, 0, 'module3', 0, 0, 0, 0, 150, 25, 2, 0, 0), (0, 60, 6)),
+        ]
+        # Allocations match digest order: module1=10, module2=20, module4=50, module3=30
+        self.mock_w3.lido.staking_router.get_deposit_allocations.return_value = (110, [10, 20, 50, 30], [10, 20, 50, 30])
+        self.mock_w3.lido.topup_gateway.can_top_up.return_value = True
+
+        result = self.bot._get_preferred_to_topup_modules(100 * 10**18)
+
+        # Only module1 (0x02, whitelist, alloc=10) and module3 (0x02, whitelist, alloc=30) pass filters
+        # Sorted desc by allocation: module3 (30) first, canTopUp=True → stops
+        self.assertEqual([(3, '0xAddr3')], result)
+
+
 @pytest.fixture
 def depositor_bot(
     web3_lido_unit,
