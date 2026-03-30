@@ -2,7 +2,6 @@ import logging
 from dataclasses import dataclass
 
 from prometheus_client import Histogram
-
 from providers.http_provider import HTTPProvider, data_is_dict
 
 logger = logging.getLogger(__name__)
@@ -69,6 +68,7 @@ class KeysAPIClient(HTTPProvider):
             retry_backoff_factor=retry_backoff_factor,
         )
 
+    # todo: add in kapi filter by operators' ids + used keys
     def get_module_used_keys(self, module_id: int) -> list[LidoKey]:
         """
         Get all used (deposited) keys for a staking module.

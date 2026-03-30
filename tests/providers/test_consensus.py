@@ -6,7 +6,6 @@ from unittest.mock import Mock
 import pytest
 import requests
 import variables
-
 from providers.consensus import ConsensusClient
 
 
