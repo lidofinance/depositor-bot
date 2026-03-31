@@ -266,6 +266,7 @@ def depositor_bot(
         variables.MESSAGE_TRANSPORTS = ''
         variables.DEPOSIT_MODULES_WHITELIST = [1, 2]
         web3_lido_unit.lido.staking_router.get_staking_module_ids = Mock(return_value=[1, 2])
+        web3_lido_unit.lido.staking_router.get_contract_version = Mock(return_value=3)
         web3_lido_unit.eth.get_block = Mock(return_value=block_data)
         yield DepositorBot(web3_lido_unit, deposit_transaction_sender, base_deposit_strategy, csm_strategy)
 
@@ -320,8 +321,10 @@ def test_depositor_one_module_deposited(depositor_bot, block_data):
 def test_depositor_no_modules_to_deposit(depositor_bot, block_data):
     depositor_bot._check_balance = Mock()
     depositor_bot._get_preferred_to_deposit_modules = Mock(return_value=[])
-    # Make sure if no modules are deposited, the bot goes to long sleep
+    depositor_bot._try_topup = Mock(return_value=True)
+    # If no modules are selected for seed deposits, the bot should try top-ups.
     assert depositor_bot.execute(block_data)
+    depositor_bot._try_topup.assert_called_once_with()
 
 
 @pytest.mark.unit
