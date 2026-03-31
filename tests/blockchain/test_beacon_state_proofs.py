@@ -150,9 +150,7 @@ def test_state_helpers_match_fixture_state(top_up_proof_fixtures):
     for pending_deposit in state[STATE_PENDING_DEPOSITS]:
         pubkey = bytes(pending_deposit[PENDING_DEPOSIT_PUBKEY])
         if pubkey in pubkeys:
-            expected_pending_deposits[pubkey] = expected_pending_deposits.get(pubkey, 0) + int(
-                pending_deposit[PENDING_DEPOSIT_AMOUNT]
-            )
+            expected_pending_deposits[pubkey] = expected_pending_deposits.get(pubkey, 0) + int(pending_deposit[PENDING_DEPOSIT_AMOUNT])
 
     validator_indices = set(expected_pubkey_to_index.values())
     expected_consolidation_targets = {

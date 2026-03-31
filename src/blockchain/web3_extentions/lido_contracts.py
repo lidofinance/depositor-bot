@@ -4,7 +4,6 @@ from typing import cast
 import variables
 from blockchain.contracts.deposit import DepositContract
 from blockchain.contracts.deposit_security_module import (
-    DepositSecurityModuleContract,
     DepositSecurityModuleContractV2,
 )
 from blockchain.contracts.lido import LidoContract
@@ -60,8 +59,7 @@ class LidoContracts(Module):
             ),
         )
         self._load_staking_router()
-        if self.w3.eth.chain_id != 32382:
-            self._load_dsm()
+        self._load_dsm()
         if self.staking_router_version == 4:
             self._load_topup_gateway()
 
@@ -105,17 +103,6 @@ class LidoContracts(Module):
                 ContractFactoryClass=DepositSecurityModuleContractV2,
             ),
         )
-
-        dsm_version = self.deposit_security_module.version()
-        logger.debug({'msg': f'Use deposit security module V{dsm_version}.'})
-        if dsm_version == 1:
-            self.deposit_security_module = cast(
-                DepositSecurityModuleContract,
-                self.w3.eth.contract(
-                    address=dsm_address,
-                    ContractFactoryClass=DepositSecurityModuleContract,
-                ),
-            )
 
     def _load_topup_gateway(self):
         topup_gateway_address = self.lido_locator.top_up_gateway()

@@ -68,11 +68,6 @@
   },
   {
     "inputs": [],
-    "name": "CannotDeposit",
-    "type": "error"
-  },
-  {
-    "inputs": [],
     "name": "DirectETHTransfer",
     "type": "error"
   },
@@ -84,6 +79,11 @@
   {
     "inputs": [],
     "name": "ExitedValidatorsCountCannotDecrease",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InconsistentFeeSum",
     "type": "error"
   },
   {
@@ -148,6 +148,11 @@
     "type": "error"
   },
   {
+    "inputs": [],
+    "name": "OracleExtraDataNotSubmitted",
+    "type": "error"
+  },
+  {
     "inputs": [
       {
         "internalType": "uint256",
@@ -166,6 +171,11 @@
   {
     "inputs": [],
     "name": "StakingModuleAddressExists",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "StakingModuleNotActive",
     "type": "error"
   },
   {
@@ -218,6 +228,22 @@
       }
     ],
     "name": "UnexpectedFinalExitedValidatorsCount",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "expectedId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "actualId",
+        "type": "uint256"
+      }
+    ],
+    "name": "UnexpectedModuleId",
     "type": "error"
   },
   {
@@ -1215,11 +1241,6 @@
                 "internalType": "uint64",
                 "name": "validatorsBalanceGwei",
                 "type": "uint64"
-              },
-              {
-                "internalType": "uint64",
-                "name": "pendingBalanceGwei",
-                "type": "uint64"
               }
             ],
             "internalType": "struct StakingModule",
@@ -1299,6 +1320,25 @@
         "internalType": "uint256[]",
         "name": "newAllocations",
         "type": "uint256[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "moduleId",
+        "type": "uint256"
+      }
+    ],
+    "name": "getModuleValidatorsBalance",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
       }
     ],
     "stateMutability": "view",
@@ -1749,11 +1789,6 @@
             "internalType": "uint64",
             "name": "validatorsBalanceGwei",
             "type": "uint64"
-          },
-          {
-            "internalType": "uint64",
-            "name": "pendingBalanceGwei",
-            "type": "uint64"
           }
         ],
         "internalType": "struct StakingModule",
@@ -1777,25 +1812,6 @@
       {
         "internalType": "uint256",
         "name": "activeValidatorsCount",
-        "type": "uint256"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "moduleId",
-        "type": "uint256"
-      }
-    ],
-    "name": "getStakingModuleBalance",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
         "type": "uint256"
       }
     ],
@@ -1899,11 +1915,6 @@
               {
                 "internalType": "uint64",
                 "name": "validatorsBalanceGwei",
-                "type": "uint64"
-              },
-              {
-                "internalType": "uint64",
-                "name": "pendingBalanceGwei",
                 "type": "uint64"
               }
             ],
@@ -2125,11 +2136,6 @@
       {
         "internalType": "uint64",
         "name": "validatorsBalanceGwei",
-        "type": "uint64"
-      },
-      {
-        "internalType": "uint64",
-        "name": "pendingBalanceGwei",
         "type": "uint64"
       },
       {
@@ -2392,11 +2398,6 @@
             "internalType": "uint64",
             "name": "validatorsBalanceGwei",
             "type": "uint64"
-          },
-          {
-            "internalType": "uint64",
-            "name": "pendingBalanceGwei",
-            "type": "uint64"
           }
         ],
         "internalType": "struct StakingModule[]",
@@ -2468,7 +2469,7 @@
   },
   {
     "inputs": [],
-    "name": "getTotalStakingModulesBalance",
+    "name": "getTotalModulesValidatorsBalance",
     "outputs": [
       {
         "internalType": "uint256",
@@ -2687,29 +2688,6 @@
   {
     "inputs": [
       {
-        "internalType": "uint256",
-        "name": "_stakingModuleId",
-        "type": "uint256"
-      },
-      {
-        "internalType": "bytes",
-        "name": "_nodeOperatorIds",
-        "type": "bytes"
-      },
-      {
-        "internalType": "bytes",
-        "name": "_totalBalancesGwei",
-        "type": "bytes"
-      }
-    ],
-    "name": "reportStakingModuleOperatorBalances",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
         "internalType": "uint256[]",
         "name": "_stakingModuleIds",
         "type": "uint256[]"
@@ -2717,11 +2695,6 @@
       {
         "internalType": "uint256[]",
         "name": "_validatorBalancesGwei",
-        "type": "uint256[]"
-      },
-      {
-        "internalType": "uint256[]",
-        "name": "_pendingBalancesGwei",
         "type": "uint256[]"
       }
     ],
@@ -2918,6 +2891,24 @@
     "inputs": [
       {
         "internalType": "uint256[]",
+        "name": "_stakingModuleFees",
+        "type": "uint256[]"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "_treasuryFees",
+        "type": "uint256[]"
+      }
+    ],
+    "name": "updateAllStakingModulesFees",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256[]",
         "name": "_stakingModuleIds",
         "type": "uint256[]"
       },
@@ -3030,6 +3021,24 @@
     "name": "updateTargetValidatorsLimits",
     "outputs": [],
     "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256[]",
+        "name": "_stakingModuleIds",
+        "type": "uint256[]"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "_validatorBalancesGwei",
+        "type": "uint256[]"
+      }
+    ],
+    "name": "validateReportValidatorBalancesByStakingModule",
+    "outputs": [],
+    "stateMutability": "view",
     "type": "function"
   },
   {
