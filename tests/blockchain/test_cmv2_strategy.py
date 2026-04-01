@@ -196,11 +196,11 @@ def test_select_operator_candidates_sorts_by_key_index():
 
 @pytest.mark.unit
 def test_take_up_to_allocation_respects_remaining_and_skips_zero_topup():
-    state = [None] * (STATE_BALANCES + 1)
+    state: list[Any] = [None] * (STATE_BALANCES + 1)
     state[STATE_BALANCES] = [
-        MAX_TOP_UP_BALANCE_GWEI - 10,
-        MAX_TOP_UP_BALANCE_GWEI - 20,
-        MAX_TOP_UP_BALANCE_GWEI,
+        MAX_TOP_UP_BALANCE_GWEI - 10,  # needs 10 Gwei
+        MAX_TOP_UP_BALANCE_GWEI - 20,  # needs 20 Gwei
+        MAX_TOP_UP_BALANCE_GWEI,  # needs 0 Gwei — skip
     ]
     beacon_data = Mock(state=state)
     candidates = [
@@ -209,6 +209,29 @@ def test_take_up_to_allocation_respects_remaining_and_skips_zero_topup():
         TopUpCandidate(2, 3, 11, b'c', 0),
     ]
 
-    result = _take_up_to_allocation(candidates, 15, beacon_data)
+    # 15 Gwei in Wei — enough for candidate 0 (10 Gwei), then 10+20=30 > 15 so stops after candidate 1
+    result = _take_up_to_allocation(candidates, 15 * 10**9, beacon_data)
 
     assert result == candidates[:2]
+
+
+@pytest.mark.unit
+def test_take_up_to_allocation_log_scenario_1216_eth():
+    """Reproduces devnet log: allocation=1216 ETH, 25 validators each with 32 ETH balance.
+    topup per validator = 2045.75 - 32 = 2013.75 ETH > 1216 ETH allocation,
+    so only 1 candidate should be selected.
+    """
+    balance_gwei = 32 * 10**9  # 32 ETH in Gwei
+    state: list[Any] = [None] * (STATE_BALANCES + 1)
+    state[STATE_BALANCES] = [balance_gwei] * 25
+    beacon_data = Mock(state=state)
+
+    candidates = [TopUpCandidate(i, i, 0, bytes([i]), 0) for i in range(25)]
+
+    # 1216 ETH in Wei — from the log
+    allocation_wei = 1216 * 10**18
+    result = _take_up_to_allocation(candidates, allocation_wei, beacon_data)
+
+    # topup per validator = 2_013_750_000_000 Gwei (2013.75 ETH) > 1216 ETH allocation
+    # first candidate exhausts allocation → only 1 selected
+    assert len(result) == 1

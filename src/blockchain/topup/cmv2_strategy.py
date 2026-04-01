@@ -156,11 +156,11 @@ def _is_exiting(validator) -> bool:
 
 def _take_up_to_allocation(
     candidates: List[TopUpCandidate],
-    allocation: int,
+    allocation_wei: int,
     beacon_data: BeaconStateData,
 ) -> List[TopUpCandidate]:
     result = []
-    remaining = allocation
+    remaining = allocation_wei // 10**9
     for c in candidates:
         balance = int(beacon_data.state[STATE_BALANCES][c.validator_index])
         topup_amount = MAX_TOP_UP_BALANCE_GWEI - (balance + c.pending_balance)
