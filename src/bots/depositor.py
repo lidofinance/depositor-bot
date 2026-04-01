@@ -213,7 +213,13 @@ class DepositorBot:
 
         # determine module type
         module_type = self._get_module_type(module_address)
-        logger.info({'msg': 'Module type.', 'module_id': module_id, 'type': module_type})
+        logger.info(
+            {
+                'msg': 'Module type.',
+                'module_id': module_id,
+                'type': module_type.rstrip(b'\x00').decode('ascii', errors='replace'),
+            }
+        )
 
         if module_type == self.MODULE_TYPE_CMV2:
             if not self._keys_api or not self._cl:
@@ -237,7 +243,13 @@ class DepositorBot:
             logger.info({'msg': f'Top-up tx result: {success}.', 'module_id': module_id})
             return success
 
-        logger.info({'msg': 'Unknown module type, skip.', 'module_id': module_id, 'type': module_type})
+        logger.info(
+            {
+                'msg': 'Unknown module type, skip.',
+                'module_id': module_id,
+                'type': module_type.rstrip(b'\x00').decode('ascii', errors='replace'),
+            }
+        )
         return False
 
     MODULE_TYPE_CMV2 = b'curated-onchain-v2\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00'
