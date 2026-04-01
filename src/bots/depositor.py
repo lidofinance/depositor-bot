@@ -144,8 +144,8 @@ class DepositorBot:
         modules_to_deposit = self._get_preferred_to_deposit_modules()
 
         if not modules_to_deposit:
-            # No modules expected. Long sleep.
-            return True
+            logger.info({'msg': 'No modules selected for seed deposits. Checking top-up eligibility.'})
+            return self._try_topup()
 
         for module_id in modules_to_deposit:
             logger.info({'msg': f'Do deposit to module with id: {module_id}.'})
