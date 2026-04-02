@@ -36,6 +36,7 @@ def test_build_sparse_list_proof_matches_fixture_for_first_validator(top_up_proo
         chunks=validator_chunks,
         index=validator_index,
         depth=VALIDATORS_LIST_DEPTH,
+        nodes_cache={},
     )
 
     assert actual_list_proof == expected_list_proof

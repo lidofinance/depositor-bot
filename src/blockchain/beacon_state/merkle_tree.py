@@ -66,14 +66,13 @@ class MerkleTree:
         return proof
 
 
-def build_sparse_list_proof(chunks: List[bytes], index: int, depth: int) -> List[bytes]:
+def build_sparse_list_proof(chunks: List[bytes], index: int, depth: int, nodes_cache: dict) -> List[bytes]:
     """
     Build Merkle proof for item at index.
     Efficient: computes only sibling subtree roots needed for the path.
     """
 
     n = len(chunks)
-    nodes_cache = {}
 
     def node_hash(level: int, pos: int) -> bytes:
         """

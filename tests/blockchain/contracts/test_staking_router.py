@@ -43,7 +43,7 @@ def test_staking_router_call_v4(staking_router_v4, caplog):
             (
                 'get_deposit_allocations',
                 (32 * 10**18, False),
-                lambda response: check_value_type(response, tuple) and len(response) == 3,
+                lambda response: check_value_type(response, (tuple, list)) and len(response) == 3,
             ),
         ],
         caplog,

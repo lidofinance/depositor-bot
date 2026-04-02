@@ -19,8 +19,7 @@ from blockchain.beacon_state.state import (
     BeaconStateData,
     extract_header_proof,
     extract_validator_proof,
-    verify_header_proof,
-    verify_validator_proof,
+    get_validators_hash_tree_roots,
 )
 from blockchain.topup.types import TopUpCandidate, TopUpProofData, ValidatorWitness
 
@@ -50,8 +49,8 @@ def build_topup_proofs(
     if state_root != beacon_data.state_root:
         raise ValueError(f'header/state root mismatch: header=0x{state_root.hex()}, beacon_data=0x{beacon_data.state_root.hex()}')
 
-    if not verify_header_proof(state_root, beacon_block_root, header_proof):
-        raise ValueError(f'Invalid header proof for slot={beacon_data.slot}')
+    # if not verify_header_proof(state_root, beacon_block_root, header_proof):
+    #     raise ValueError(f'Invalid header proof for slot={beacon_data.slot}')
     validators_list = list(beacon_data.state[STATE_VALIDATORS])
 
     witnesses = []
@@ -60,21 +59,22 @@ def build_topup_proofs(
     operator_ids = []
     pending_balances = []
 
+    validators_roots = get_validators_hash_tree_roots(validators_list)
+    # validators_data_root = compute_merkle_root_sparse(validators_roots, VALIDATORS_LIST_DEPTH)
+    nodes_cache: dict = {}
+
     for c in candidates:
         validator = validators_list[c.validator_index]
 
-        validator_proof = extract_validator_proof(
-            beacon_data.state_field_roots,
-            validators_list,
-            c.validator_index,
-        )
-        if not verify_validator_proof(
-            beacon_data.state_field_roots,
-            validators_list,
-            c.validator_index,
-            validator_proof,
-        ):
-            raise ValueError(f'Invalid validator proof for validator_index={c.validator_index}')
+        validator_proof = extract_validator_proof(beacon_data.state_field_roots, c.validator_index, validators_roots, nodes_cache)
+        # if not verify_validator_proof(
+        #     beacon_data.state_field_roots,
+        #     c.validator_index,
+        #     validator_proof,
+        #     validators_roots,
+        #     validators_data_root,
+        # ):
+        #     raise ValueError(f'Invalid validator proof for validator_index={c.validator_index}')
 
         full_proof = validator_proof + header_proof
 

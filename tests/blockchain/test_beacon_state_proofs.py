@@ -27,6 +27,7 @@ from blockchain.beacon_state.state import (
     extract_header_proof,
     extract_pending_deposits,
     extract_validator_proof,
+    get_validators_hash_tree_roots,
     load_beacon_state_data,
     verify_header_proof,
     verify_validator_proof,
@@ -82,15 +83,16 @@ def test_verify_validator_and_header_proofs():
     )
     beacon_block_root = BeaconBlockHeader.get_hash_tree_root(header)
 
-    validator_proof = extract_validator_proof(state_field_roots, validators_list, 1)
+    nodes_cache: dict = {}
+    validator_proof = extract_validator_proof(state_field_roots, 1, validator_chunks, nodes_cache)
     header_proof = extract_header_proof(header)
 
-    assert verify_validator_proof(state_field_roots, validators_list, 1, validator_proof)
+    assert verify_validator_proof(state_field_roots, 1, validator_proof, validator_chunks, validators_data_root)
     assert verify_header_proof(state_root, beacon_block_root, header_proof)
 
     broken_validator_proof = list(validator_proof)
     broken_validator_proof[0] = _flip_first_bit(broken_validator_proof[0])
-    assert not verify_validator_proof(state_field_roots, validators_list, 1, broken_validator_proof)
+    assert not verify_validator_proof(state_field_roots, 1, broken_validator_proof, validator_chunks, validators_data_root)
 
     broken_header_proof = list(header_proof)
     broken_header_proof[0] = _flip_first_bit(broken_header_proof[0])
@@ -172,18 +174,24 @@ def test_extract_validator_proof_matches_fixture_for_first_validator(top_up_proo
     expected_validator_proof = [bytes.fromhex(item[2:]) for item in validator_witness['proofs'][:-3]]
     validators_list = list(top_up_proof_fixtures['decoded_beacon_state'][STATE_VALIDATORS])
 
+    validator_chunks = get_validators_hash_tree_roots(validators_list)
+    validators_data_root = compute_merkle_root_sparse(validator_chunks, VALIDATORS_LIST_DEPTH)
+    nodes_cache: dict = {}
+
     validator_proof = extract_validator_proof(
         top_up_proof_fixtures['beacon_state_field_roots'],
-        validators_list,
         validator_index,
+        validator_chunks,
+        nodes_cache,
     )
 
     assert validator_proof == expected_validator_proof
     assert verify_validator_proof(
         top_up_proof_fixtures['beacon_state_field_roots'],
-        validators_list,
         validator_index,
         validator_proof,
+        validator_chunks,
+        validators_data_root,
     )
 
 

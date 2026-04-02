@@ -100,8 +100,8 @@ def topup_gateway(web3_lido_integration):
 
 @pytest.fixture
 def cmv2_contract(web3_lido_integration):
-    # if web3_lido_integration.eth.chain_id != 32382:
-    pytest.skip('CMV2 contract test is supported currently only on chainId 32382.')
+    if web3_lido_integration.eth.chain_id != 32382:
+        pytest.skip('CMV2 contract test is supported currently only on chainId 32382.')
 
     module_ids = web3_lido_integration.lido.staking_router.get_staking_module_ids()
     module_digests = web3_lido_integration.lido.staking_router.get_staking_module_digests(module_ids)

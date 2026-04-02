@@ -11,7 +11,6 @@ from typing import Any
 from blockchain.beacon_state.merkle_tree import (
     MerkleTree,
     build_sparse_list_proof,
-    compute_merkle_root_sparse,
     hash_concat,
     verify_merkle_proof_by_index,
 )
@@ -73,7 +72,7 @@ def load_beacon_state_data(w3: Web3, cl: ConsensusClient, pubkeys: set[bytes]) -
     slot = header[0]
     state_root = header[3]
     # State SSZ
-    ssz_bytes = cl.get_beacon_state_ssz('0x' + state_root.hex())
+    ssz_bytes = cl.get_beacon_state_ssz(int(header_message['slot']))  #'0x' + state_root.hex())
     state = decode(ssz_bytes, BeaconState)
     del ssz_bytes
 
@@ -163,10 +162,16 @@ def compute_state_field_roots(state) -> list[bytes]:
     return field_roots
 
 
+def get_validators_hash_tree_roots(validators_list: list) -> list[bytes]:
+    validator_chunks = []
+    for v in validators_list:
+        chunk = Validator.get_hash_tree_root(v)
+        validator_chunks.append(chunk)
+    return validator_chunks
+
+
 def extract_validator_proof(
-    state_field_roots: list[bytes],
-    validators_list: list,
-    validator_index: int,
+    state_field_roots: list[bytes], validator_index: int, validator_chunks: list[bytes], nodes_cache: dict
 ) -> list[bytes]:
     """
     Full proof for a validator from BeaconState.
@@ -175,21 +180,13 @@ def extract_validator_proof(
         2. length add
         3. validators field -> state_root (state tree proof)
     """
-    # Step 1: compute validator chunks
-    validator_chunks = []
-    for v in validators_list:
-        chunk = Validator.get_hash_tree_root(v)
-        validator_chunks.append(chunk)
-
     # Step 2: validator -> validators_data_root (sparse proof, depth 40)
     validator_proof = build_sparse_list_proof(
-        chunks=validator_chunks,
-        index=validator_index,
-        depth=VALIDATORS_LIST_DEPTH,
+        chunks=validator_chunks, index=validator_index, depth=VALIDATORS_LIST_DEPTH, nodes_cache=nodes_cache
     )
 
     # Step 3: length add
-    length_bytes = len(validators_list).to_bytes(32, 'little')
+    length_bytes = len(validator_chunks).to_bytes(32, 'little')
     validator_proof.append(length_bytes)
 
     # Step 4: state tree proof from validators field to state root
@@ -202,18 +199,17 @@ def extract_validator_proof(
 
 def verify_validator_proof(
     state_field_roots: list[bytes],
-    validators_list: list,
     validator_index: int,
     validator_proof: list[bytes],
+    validator_chunks: list[bytes],
+    validators_data_root: bytes,
 ) -> bool:
     """Verify a full validator proof from validator leaf to BeaconState root."""
     expected_length = VALIDATORS_LIST_DEPTH + 1
     if len(validator_proof) < expected_length:
         return False
 
-    validator_root = Validator.get_hash_tree_root(validators_list[validator_index])
-    validator_chunks = [Validator.get_hash_tree_root(v) for v in validators_list]
-    validators_data_root = compute_merkle_root_sparse(validator_chunks, VALIDATORS_LIST_DEPTH)
+    validator_root = validator_chunks[validator_index]
 
     list_proof = validator_proof[:VALIDATORS_LIST_DEPTH]
     if not verify_merkle_proof_by_index(validator_root, list_proof, validator_index, validators_data_root):

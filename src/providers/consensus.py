@@ -1,7 +1,6 @@
 import logging
 
 from prometheus_client import Histogram
-
 from providers.http_provider import HTTPProvider, NotOkResponse, data_is_dict
 
 logger = logging.getLogger(__name__)
@@ -51,7 +50,7 @@ class ConsensusClient(HTTPProvider):
         )
         return data['header']['message']
 
-    def get_beacon_state_ssz(self, state_id: str) -> bytes:
+    def get_beacon_state_ssz(self, state_id: str | int) -> bytes:
         """
         GET /eth/v2/debug/beacon/states/{slot} with Accept: application/octet-stream
         Returns raw SSZ bytes.
