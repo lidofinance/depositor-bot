@@ -101,4 +101,4 @@ class CSMDepositStrategy(BaseDepositStrategy):
         return True
 
     def _depositable_keys_threshold(self) -> int:
-        return 2
+        return 1
