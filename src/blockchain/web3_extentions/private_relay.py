@@ -68,7 +68,7 @@ class PrivateRelayClient:
             'method': method,
             'params': params,
         }
-        message = encode_defunct(primitive=Web3.keccak(text=json.dumps(body)))
+        message = encode_defunct(text=Web3.keccak(text=json.dumps(body)).hex())
         signature = signer.address + ':' + signer.sign_message(message).signature.hex()  # pyright: ignore
         headers = {
             'Content-Type': 'application/json',
