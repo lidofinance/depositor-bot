@@ -10,7 +10,8 @@ import requests
 from eth_account import Account
 from eth_account.datastructures import SignedTransaction
 from eth_account.messages import encode_defunct
-from eth_typing import URI
+from eth_account.signers.local import LocalAccount
+from eth_typing import URI, HexStr
 from web3 import Web3
 
 
@@ -31,7 +32,7 @@ class PrivateRelayClient:
     ):
         self.w3 = w3
         self.rpc_url = rpc_url
-        self.account = Account.from_key(sign_account)
+        self.account: LocalAccount = Account.from_key(sign_account)
 
     def send_private_tx(self, tx: SignedTransaction, timeout_in_blocks: int):
         req_params = self._build_mev_send_bundle_params(tx, timeout_in_blocks)
@@ -51,7 +52,7 @@ class PrivateRelayClient:
         method: str,
         params: list[dict],
     ):
-        headers, signature, body = self._get_rpc_request(method, params, self.account)
+        headers, body = self._get_rpc_request(method, params, self.account)
 
         return requests.post(
             url=self.rpc_url,
@@ -61,20 +62,20 @@ class PrivateRelayClient:
         ).json()
 
     @staticmethod
-    def _get_rpc_request(method: str, params: list[dict], signer: Account):
+    def _get_rpc_request(method: str, params: list[dict], signer: LocalAccount):
         body = {
             'jsonrpc': '2.0',
             'id': '1',
             'method': method,
             'params': params,
         }
-        message = encode_defunct(text=Web3.keccak(text=json.dumps(body)).hex())
-        signature = signer.address + ':' + signer.sign_message(message).signature.hex()  # pyright: ignore
+        message = encode_defunct(text=Web3.to_hex(hexstr=HexStr(Web3.keccak(text=json.dumps(body)).hex())))
+        signature = signer.address + ':' + Web3.to_hex(hexstr=HexStr(signer.sign_message(message).signature.hex()))
         headers = {
             'Content-Type': 'application/json',
             'X-Flashbots-Signature': signature,
         }
-        return headers, signature, body
+        return headers, body
 
     def _build_mev_send_bundle_params(self, tx: SignedTransaction, timeout_in_blocks: int) -> list[dict]:
         """
