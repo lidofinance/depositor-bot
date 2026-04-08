@@ -32,7 +32,7 @@ class PrivateRelayClient:
     ):
         self.w3 = w3
         self.rpc_url = rpc_url
-        self.account = Account.from_key(sign_account)
+        self.account: LocalAccount = Account.from_key(sign_account)
 
     def send_private_tx(self, tx: SignedTransaction, timeout_in_blocks: int):
         req_params = self._build_mev_send_bundle_params(tx, timeout_in_blocks)

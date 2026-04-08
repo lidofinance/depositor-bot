@@ -40,10 +40,11 @@ def test_flashbots_signature_signs_hash_bytes():
 
     assert correct_sig != wrong_sig, 'The two approaches must differ so this test is meaningful'
 
-    headers, signature, _ = PrivateRelayClient._get_rpc_request(method, params, signer)
+    headers, _ = PrivateRelayClient._get_rpc_request(method, params, signer)
+
+    signature = headers['X-Flashbots-Signature']
 
     signing_address, relay_sig = signature.split(':')
     assert signing_address == signer.address
     assert relay_sig == correct_sig, 'Relay signature must match personal_sign(keccak256(body))'
     assert relay_sig != wrong_sig
-    assert headers['X-Flashbots-Signature'] == signature
