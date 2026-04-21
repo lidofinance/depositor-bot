@@ -4,17 +4,19 @@ from typing import List, Optional, cast
 from blockchain.beacon_state.ssz_types import (
     FAR_FUTURE_EPOCH,
     SLOTS_PER_EPOCH,
-    STATE_BALANCES,
     STATE_VALIDATORS,
     VALIDATOR_ACTIVATION_EPOCH,
+    VALIDATOR_EFFECTIVE_BALANCE,
     VALIDATOR_EXIT_EPOCH,
     VALIDATOR_SLASHED,
 )
 from blockchain.beacon_state.state import BeaconStateData, load_beacon_state_data
 from blockchain.contracts.cmv2 import CMV2Contract
 from blockchain.topup.proofs import build_topup_proofs
+from blockchain.topup.strategy import TopUpStrategy
 from blockchain.topup.types import TopUpCandidate, TopUpProofData
 from blockchain.typings import Web3
+from eth_typing import HexStr
 from providers.consensus import ConsensusClient
 from providers.keys_api import KeysAPIClient, LidoKey
 from web3.types import Wei
@@ -24,73 +26,77 @@ logger = logging.getLogger(__name__)
 MAX_TOP_UP_BALANCE_GWEI = 2_045_750_000_000  # 2045.75 ETH
 
 
-def get_cmv2_topup_candidates(
-    w3: Web3,
-    keys_api: KeysAPIClient,
-    cl: ConsensusClient,
-    module_id: int,
-    module_address: str,
-    module_allocation: Wei,
-) -> Optional[TopUpProofData]:
-    """Select validators for top-up in a CMv2 module."""
-    # Step 1: operator allocation
-    cmv2 = cast(
-        CMV2Contract,
-        w3.eth.contract(
-            address=w3.to_checksum_address(module_address),
-            ContractFactoryClass=CMV2Contract,
-        ),
-    )
-    allocated, operator_ids, allocations = cmv2.get_deposits_allocation(module_allocation)
+class CMv2TopUpStrategy(TopUpStrategy):
+    def get_topup_candidates(
+        self,
+        keys_api: KeysAPIClient,
+        cl: ConsensusClient,
+        module_id: int,
+        module_address: str,
+        module_allocation: Wei,
+        max_validators: int,
+    ) -> Optional[TopUpProofData]:
+        """Select validators for top-up in a CMv2 module."""
+        # Step 1: operator allocation
+        cmv2 = cast(
+            CMV2Contract,
+            self.w3.eth.contract(
+                address=self.w3.to_checksum_address(module_address),
+                ContractFactoryClass=CMV2Contract,
+            ),
+        )
+        allocated, operator_ids, allocations = cmv2.get_deposits_allocation(module_allocation)
 
-    if allocated == 0:
-        logger.info({'msg': 'No allocation from CMv2.', 'module_id': module_id})
-        return None
+        if allocated == 0:
+            logger.info({'msg': 'No allocation from CMv2.', 'module_id': module_id})
+            return None
 
-    operators_with_allocation = [(op_id, alloc) for op_id, alloc in zip(operator_ids, allocations) if alloc > 0]
-    if not operators_with_allocation:
-        logger.info({'msg': 'No operators with allocation.', 'module_id': module_id})
-        return None
+        allocation_by_operator: dict[int, int] = {op_id: alloc for op_id, alloc in zip(operator_ids, allocations) if alloc > 0}
+        if not allocation_by_operator:
+            logger.info({'msg': 'No operators with allocation.', 'module_id': module_id})
+            return None
 
-    logger.info(
-        {
-            'msg': 'CMv2 operator allocations.',
-            'module_id': module_id,
-            'operators': operators_with_allocation,
-        }
-    )
+        logger.info(
+            {
+                'msg': 'CMv2 operator allocations.',
+                'module_id': module_id,
+                'operators': allocation_by_operator,
+            }
+        )
 
-    # Step 2: keys from Keys API
-    # TODO: optimize — fetches all module keys then filters by operator
-    active_operator_ids = [op_id for op_id, _ in operators_with_allocation]
-    keys_by_operator = keys_api.get_module_operator_used_keys(module_id, active_operator_ids)
+        # Step 2: keys from Keys API
+        # TODO: optimize — fetches all module keys then filters by operator
+        keys_by_operator = keys_api.get_module_operator_used_keys(module_id, list(allocation_by_operator.keys()))
 
-    # Step 3: load beacon state
-    all_pubkeys = _collect_pubkeys(keys_by_operator)
-    beacon_data = load_beacon_state_data(w3, cl, all_pubkeys)
+        # Step 3: load beacon state
+        all_pubkeys = _collect_pubkeys(keys_by_operator)
+        beacon_data = load_beacon_state_data(self.w3, cl, all_pubkeys)
 
-    # Step 4: select candidates per operator
-    candidates = []
-    for op_id, op_allocation in operators_with_allocation:
-        op_keys = keys_by_operator[op_id]
-        op_candidates = _select_operator_candidates(op_keys, op_allocation, beacon_data)
-        candidates.extend(op_candidates)
+        # Step 4: select candidates per operator
+        candidates: list[TopUpCandidate] = []
+        for op_id, op_allocation in allocation_by_operator.items():
+            op_keys = keys_by_operator[op_id]
+            candidates.extend(_select_operator_candidates(op_keys, op_allocation, beacon_data))
 
-    if not candidates:
-        logger.info({'msg': 'No eligible candidates.', 'module_id': module_id})
-        return None
+        if not candidates:
+            logger.info({'msg': 'No eligible candidates.', 'module_id': module_id})
+            return None
 
-    logger.info({'msg': 'CMv2 candidates selected.', 'module_id': module_id, 'count': len(candidates)})
+        logger.info({'msg': 'CMv2 candidates selected.', 'module_id': module_id, 'count': len(candidates)})
 
-    # Step 5: build proofs
-    return build_topup_proofs(beacon_data, candidates)
+        # Step 5: TopUpGateway requires strictly ascending validator_indices across operators
+        candidates.sort(key=lambda c: c.validator_index)
+        # Step 6: limit to max_validators
+        candidates = candidates[:max_validators]
+        # Step 7: build proofs
+        return build_topup_proofs(beacon_data, candidates)
 
 
 def _collect_pubkeys(keys_by_operator: dict[int, List[LidoKey]]) -> set[bytes]:
     result = set()
     for keys in keys_by_operator.values():
         for k in keys:
-            result.add(_key_to_bytes(k))
+            result.add(Web3.to_bytes(hexstr=HexStr(k.key)))
     return result
 
 
@@ -105,20 +111,20 @@ def _select_operator_candidates(
         if candidate is not None:
             eligible.append(candidate)
 
-    eligible.sort(key=lambda c: c.key_index)
+    eligible.sort(key=lambda c: c.validator_index)
     return _take_up_to_allocation(eligible, allocation, beacon_data)
 
 
 def _check_key_eligibility(key: LidoKey, beacon_data: BeaconStateData) -> Optional[TopUpCandidate]:
-    pubkey = _key_to_bytes(key)
+    pubkey = Web3.to_bytes(hexstr=HexStr(key.key))
 
     validator_index = beacon_data.pubkey_to_index.get(pubkey)
     if validator_index is None:
         return None
 
     validator = beacon_data.state[STATE_VALIDATORS][validator_index]
-    # TODO: on contract side check via effective balance, do ween here actual? or need consistency ?
-    balance = int(beacon_data.state[STATE_BALANCES][validator_index])
+    # As on TopUpgateway side effective balance is checked, here also will check effective balance
+    balance = int(beacon_data.state[STATE_VALIDATORS][validator_index][VALIDATOR_EFFECTIVE_BALANCE])
     pending = beacon_data.pending_deposits.get(pubkey, 0)
     current_epoch = beacon_data.slot // SLOTS_PER_EPOCH
 
@@ -162,7 +168,7 @@ def _take_up_to_allocation(
     result = []
     remaining = allocation_wei // 10**9
     for c in candidates:
-        balance = int(beacon_data.state[STATE_BALANCES][c.validator_index])
+        balance = int(beacon_data.state[STATE_VALIDATORS][c.validator_index][VALIDATOR_EFFECTIVE_BALANCE])
         topup_amount = MAX_TOP_UP_BALANCE_GWEI - (balance + c.pending_balance)
         if topup_amount <= 0:
             continue
@@ -171,10 +177,3 @@ def _take_up_to_allocation(
         if remaining <= 0:
             break
     return result
-
-
-def _key_to_bytes(key: LidoKey) -> bytes:
-    k = key.key
-    if k.startswith('0x'):
-        k = k[2:]
-    return bytes.fromhex(k)

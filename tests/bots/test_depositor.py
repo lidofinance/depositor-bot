@@ -22,7 +22,13 @@ class TestGetPreferredToDepositModules(unittest.TestCase):
 
         # Initialize the bot
         self.bot = DepositorBot(
-            w3=self.mock_w3, sender=self.mock_sender, base_deposit_strategy=self.mock_general_strategy, csm_strategy=self.mock_csm_strategy
+            w3=self.mock_w3,
+            sender=self.mock_sender,
+            base_deposit_strategy=self.mock_general_strategy,
+            csm_strategy=self.mock_csm_strategy,
+            gas_price_calculator=MagicMock(),
+            keys_api=MagicMock(),
+            cl=MagicMock(),
         )
 
         # Set up initial state
@@ -134,6 +140,7 @@ class TestGetPreferredToTopupModules(unittest.TestCase):
             sender=self.mock_sender,
             base_deposit_strategy=self.mock_general_strategy,
             csm_strategy=self.mock_csm_strategy,
+            gas_price_calculator=MagicMock(),
             keys_api=self.mock_keys_api,
             cl=self.mock_cl,
         )
@@ -261,6 +268,7 @@ def depositor_bot(
     base_deposit_strategy,
     block_data,
     csm_strategy,
+    gas_price_calculator,
 ):
     with mock.patch('web3.eth.Eth.chain_id', new_callable=mock.PropertyMock) as _:
         variables.MESSAGE_TRANSPORTS = ''
@@ -268,7 +276,9 @@ def depositor_bot(
         web3_lido_unit.lido.staking_router.get_staking_module_ids = Mock(return_value=[1, 2])
         web3_lido_unit.lido.staking_router.get_contract_version = Mock(return_value=3)
         web3_lido_unit.eth.get_block = Mock(return_value=block_data)
-        yield DepositorBot(web3_lido_unit, deposit_transaction_sender, base_deposit_strategy, csm_strategy)
+        yield DepositorBot(
+            web3_lido_unit, deposit_transaction_sender, base_deposit_strategy, csm_strategy, gas_price_calculator, Mock(), Mock()
+        )
 
 
 @pytest.fixture
@@ -473,6 +483,7 @@ def test_depositor_bot(
 ):
     # Define the whitelist of deposit modules
     variables.DEPOSIT_MODULES_WHITELIST = [1, 2]
+    variables.ENABLE_TOP_UP = False
 
     # Set the balance for the first account
     web3_lido_integration.provider.make_request(
@@ -515,6 +526,9 @@ def test_depositor_bot(
         deposit_transaction_sender_integration,
         base_deposit_strategy_integration,
         csm_strategy_integration,
+        gas_price_calculator_integration,
+        Mock(),
+        Mock(),
     )
 
     # Clear the message storage and execute the bot without any messages

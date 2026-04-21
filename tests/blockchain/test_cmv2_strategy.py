@@ -7,17 +7,18 @@ from blockchain.beacon_state.ssz_types import (
     STATE_BALANCES,
     STATE_VALIDATORS,
     VALIDATOR_ACTIVATION_EPOCH,
+    VALIDATOR_EFFECTIVE_BALANCE,
     VALIDATOR_EXIT_EPOCH,
     VALIDATOR_SLASHED,
 )
 from blockchain.beacon_state.state import BeaconStateData
 from blockchain.topup.cmv2_strategy import (
     MAX_TOP_UP_BALANCE_GWEI,
+    CMv2TopUpStrategy,
     _check_key_eligibility,
     _collect_pubkeys,
     _select_operator_candidates,
     _take_up_to_allocation,
-    get_cmv2_topup_candidates,
 )
 from blockchain.topup.types import TopUpCandidate
 from providers.keys_api import LidoKey
@@ -53,6 +54,28 @@ def _build_beacon_state_data(top_up_proof_fixtures) -> BeaconStateData:
     )
 
 
+def _make_validator(
+    pubkey=b'\x00' * 48,
+    withdrawal_credentials=b'\x00' * 32,
+    effective_balance=0,
+    slashed=False,
+    activation_eligibility_epoch=0,
+    activation_epoch=0,
+    exit_epoch=FAR_FUTURE_EPOCH,
+    withdrawable_epoch=FAR_FUTURE_EPOCH,
+):
+    return [
+        pubkey,
+        withdrawal_credentials,
+        effective_balance,
+        slashed,
+        activation_eligibility_epoch,
+        activation_epoch,
+        exit_epoch,
+        withdrawable_epoch,
+    ]
+
+
 def _make_key(pubkey: str, key_index: int, operator_index: int) -> LidoKey:
     return LidoKey(
         index=key_index,
@@ -86,14 +109,16 @@ def test_get_cmv2_topup_candidates_builds_proofs_from_fixture_data(top_up_proof_
     keys_api.get_module_operator_used_keys.return_value = {11: [key_1], 12: [key_2]}
     cl = Mock()
 
+    strategy = CMv2TopUpStrategy(w3=w3, gas_price_calculator=Mock())
+
     with patch('blockchain.topup.cmv2_strategy.load_beacon_state_data', return_value=beacon_data) as load_beacon_state_data:
-        result = get_cmv2_topup_candidates(
-            w3=w3,
+        result = strategy.get_topup_candidates(
             keys_api=keys_api,
             cl=cl,
             module_id=1,
             module_address='0x0000000000000000000000000000000000000002',
             module_allocation=Wei(32 * 10**18),
+            max_validators=50,
         )
 
     assert result is not None
@@ -164,9 +189,9 @@ def test_check_key_eligibility_rejects_invalid_cases(top_up_proof_fixtures):
     assert _check_key_eligibility(key, beacon_data) is None
 
     validator[VALIDATOR_ACTIVATION_EPOCH] = 0
+    validator[VALIDATOR_EFFECTIVE_BALANCE] = MAX_TOP_UP_BALANCE_GWEI
     beacon_data.state[STATE_VALIDATORS][validator_index] = tuple(validator)
     beacon_data.pending_deposits = {pubkey: 1}
-    beacon_data.state[STATE_BALANCES][validator_index] = MAX_TOP_UP_BALANCE_GWEI
     assert _check_key_eligibility(key, beacon_data) is None
 
 
@@ -196,11 +221,11 @@ def test_select_operator_candidates_sorts_by_key_index():
 
 @pytest.mark.unit
 def test_take_up_to_allocation_respects_remaining_and_skips_zero_topup():
-    state: list[Any] = [None] * (STATE_BALANCES + 1)
-    state[STATE_BALANCES] = [
-        MAX_TOP_UP_BALANCE_GWEI - 10,  # needs 10 Gwei
-        MAX_TOP_UP_BALANCE_GWEI - 20,  # needs 20 Gwei
-        MAX_TOP_UP_BALANCE_GWEI,  # needs 0 Gwei — skip
+    state: list[Any] = [None] * (STATE_VALIDATORS + 1)
+    state[STATE_VALIDATORS] = [
+        _make_validator(effective_balance=MAX_TOP_UP_BALANCE_GWEI - 10),  # needs 10 Gwei
+        _make_validator(effective_balance=MAX_TOP_UP_BALANCE_GWEI - 20),  # needs 20 Gwei
+        _make_validator(effective_balance=MAX_TOP_UP_BALANCE_GWEI),  # needs 0 Gwei — skip
     ]
     beacon_data = Mock(state=state)
     candidates = [
@@ -222,8 +247,8 @@ def test_take_up_to_allocation_log_scenario_1216_eth():
     so only 1 candidate should be selected.
     """
     balance_gwei = 32 * 10**9  # 32 ETH in Gwei
-    state: list[Any] = [None] * (STATE_BALANCES + 1)
-    state[STATE_BALANCES] = [balance_gwei] * 25
+    state: list[Any] = [None] * (STATE_VALIDATORS + 1)
+    state[STATE_VALIDATORS] = [_make_validator(effective_balance=balance_gwei) for _ in range(25)]
     beacon_data = Mock(state=state)
 
     candidates = [TopUpCandidate(i, i, 0, bytes([i]), 0) for i in range(25)]

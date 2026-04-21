@@ -4,7 +4,6 @@ from typing import Any
 from unittest.mock import Mock
 
 import pytest
-
 from providers.consistency import InconsistentProviders, NotHealthyProvider, ProviderConsistencyModule
 
 

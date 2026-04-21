@@ -23,13 +23,13 @@ def devnet_only():
 @pytest.fixture
 def keys_api_client(request) -> KeysAPIClient:
     params = getattr(request, 'param', {})
-    hosts = params.get('hosts', variables.KEYS_API_URLS)
-    if not hosts:
-        pytest.skip('KEYS_API_URLS is not configured.')
-    print(f'Using KAPI hosts: {hosts}')
+    host = params.get('host', variables.KEYS_API_URL)
+    if not host:
+        pytest.skip('KEYS_API_URL is not configured.')
+    print(f'Using KAPI host: {host}')
 
     return KeysAPIClient(
-        hosts=hosts,
+        host=host,
         request_timeout=30,
         retry_total=3,
         retry_backoff_factor=1,
@@ -59,8 +59,8 @@ def _print_keys_sample(keys: list[LidoKey], limit: int = 3) -> None:
     print(f'Fetched {len(keys)} used keys. Sample: {sample}')
 
 
-def _print_kapi_curl(hosts: list[str], module_id: int) -> None:
-    host = hosts[0].rstrip('/')
+def _print_kapi_curl(host: str, module_id: int) -> None:
+    host = host.rstrip('/')
     endpoint = f'v1/modules/{module_id}/operators/keys'
     url = f'{host}/{endpoint}?used=true'
     print(f'KAPI curl: curl "{url}"')

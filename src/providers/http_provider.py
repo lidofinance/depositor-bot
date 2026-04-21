@@ -8,11 +8,10 @@ from urllib.parse import urljoin, urlparse
 from json_stream import requests as json_stream_requests  # type: ignore
 from json_stream.base import TransientStreamingJSONObject  # type: ignore
 from prometheus_client import Histogram
+from providers.consistency import ProviderConsistencyModule
 from requests import JSONDecodeError, Session
 from requests.adapters import HTTPAdapter
 from urllib3 import Retry
-
-from providers.consistency import ProviderConsistencyModule
 
 logger = logging.getLogger(__name__)
 
@@ -104,7 +103,7 @@ class HTTPProvider(ProviderConsistencyModule, ABC):
         force_raise: Callable[..., Exception | None] = lambda _: None,
         retval_validator: ReturnValueValidator = data_is_any,
         stream: bool = False,
-    ) -> tuple[Any, dict]:
+    ) -> tuple[Any, Any]:
         """
         Get plain or streamed request with fallbacks.
         Returns (data, meta) or raises exception.
@@ -148,7 +147,7 @@ class HTTPProvider(ProviderConsistencyModule, ABC):
         query_params: dict | None = None,
         stream: bool = False,
         retval_validator: ReturnValueValidator = data_is_any,
-    ) -> tuple[Any, dict]:
+    ) -> tuple[Any, Any]:
         """
         Simple get request without fallbacks.
         Returns (data, meta) or raises an exception.
@@ -186,10 +185,7 @@ class HTTPProvider(ProviderConsistencyModule, ABC):
                 raise self.PROVIDER_EXCEPTION(response_fail_msg, status=response.status_code, text=response.text)
 
             try:
-                if stream:
-                    json_response = json_stream_requests.load(response)
-                else:
-                    json_response = response.json()
+                json_response = json_stream_requests.load(response) if stream else response.json()
             except JSONDecodeError as error:
                 response_fail_msg = f'Failed to decode JSON response from {complete_endpoint} with text: "{str(response.text)}"'
                 logger.debug({'msg': response_fail_msg})

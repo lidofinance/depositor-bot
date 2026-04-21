@@ -1,10 +1,9 @@
 from unittest.mock import MagicMock, Mock
 
 import pytest
-from requests import Response
-
-from providers.http_provider import HTTPProvider, NoHostsProvided, NotOkResponse, data_is_any
 from providers.consensus import CL_REQUESTS_DURATION
+from providers.http_provider import HTTPProvider, NoHostsProvided, NotOkResponse, data_is_any
+from requests import Response
 
 
 @pytest.mark.unit
@@ -39,7 +38,7 @@ def test_all_fallbacks_ok():
 def test_all_fallbacks_bad():
     provider = HTTPProvider(['http://localhost:1', 'http://localhost:2'], 5 * 60, 1, 1)
 
-    with pytest.raises(Exception):
+    with pytest.raises(Exception):  # noqa: B017
         provider._get('test')
 
 

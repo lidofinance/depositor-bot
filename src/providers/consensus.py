@@ -57,13 +57,13 @@ class ConsensusClient(HTTPProvider):
         """
         # SSZ request bypasses _get because it needs custom Accept header and raw bytes
         errors = []
-        for host in self.hosts:
+        for host_index, host in enumerate(self.hosts):
             try:
                 url = self._urljoin(host, self.API_GET_STATE.format(state_id))
                 response = self.session.get(
                     url,
                     headers={'Accept': 'application/octet-stream'},
-                    timeout=300,
+                    timeout=self.request_timeout,
                 )
                 if response.status_code != 200:
                     raise ConsensusClientError(
@@ -81,7 +81,7 @@ class ConsensusClient(HTTPProvider):
                 return response.content
             except Exception as e:
                 errors.append(e)
-                logger.warning({'msg': 'SSZ fetch failed from host.', 'error': str(e)})
+                logger.warning({'msg': f'SSZ fetch failed from CL_API_URLS[{host_index}].', 'error': str(e)})
 
         raise errors[-1]
 

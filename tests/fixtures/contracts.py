@@ -5,7 +5,7 @@ import variables
 from blockchain.contracts.base_interface import ContractInterface
 from blockchain.contracts.cmv2 import CMV2Contract
 from blockchain.contracts.deposit import DepositContract
-from blockchain.contracts.deposit_security_module import DepositSecurityModuleContract, DepositSecurityModuleContractV2
+from blockchain.contracts.deposit_security_module import DepositSecurityModuleContract
 from blockchain.contracts.erc20 import ERC20Contract
 from blockchain.contracts.lido import LidoContract
 from blockchain.contracts.lido_locator import LidoLocatorContract
@@ -58,17 +58,6 @@ def deposit_security_module(web3_provider_integration, lido_locator):
 
 
 @pytest.fixture
-def deposit_security_module_v2(web3_lido_integration, lido_locator):
-    yield cast(
-        DepositSecurityModuleContractV2,
-        web3_lido_integration.eth.contract(
-            address=lido_locator.deposit_security_module(),
-            ContractFactoryClass=DepositSecurityModuleContractV2,
-        ),
-    )
-
-
-@pytest.fixture
 def staking_router_v3(web3_provider_integration, lido_locator):
     yield cast(
         StakingRouterContractV3,
@@ -106,7 +95,7 @@ def cmv2_contract(web3_lido_integration):
     module_ids = web3_lido_integration.lido.staking_router.get_staking_module_ids()
     module_digests = web3_lido_integration.lido.staking_router.get_staking_module_digests(module_ids)
     module_type_abi = ContractInterface.load_abi('./interfaces/IStakingModule.json')
-    cmv2_type = b'curated-onchain-v2\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00'
+    cmv2_type = b'curated-onchain-v2'.ljust(32, b'\x00')
 
     for digest in module_digests:
         module_address = digest[2][1]

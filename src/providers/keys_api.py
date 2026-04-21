@@ -56,13 +56,13 @@ class KeysAPIClient(HTTPProvider):
 
     def __init__(
         self,
-        hosts: list[str],
+        host: str,
         request_timeout: int = 30,
         retry_total: int = 3,
         retry_backoff_factor: int = 1,
     ):
         super().__init__(
-            hosts=hosts,
+            hosts=[host],
             request_timeout=request_timeout,
             retry_total=retry_total,
             retry_backoff_factor=retry_backoff_factor,

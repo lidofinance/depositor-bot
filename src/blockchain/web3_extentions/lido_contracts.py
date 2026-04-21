@@ -3,9 +3,7 @@ from typing import cast
 
 import variables
 from blockchain.contracts.deposit import DepositContract
-from blockchain.contracts.deposit_security_module import (
-    DepositSecurityModuleContractV2,
-)
+from blockchain.contracts.deposit_security_module import DepositSecurityModuleContract
 from blockchain.contracts.lido import LidoContract
 from blockchain.contracts.lido_locator import LidoLocatorContract
 from blockchain.contracts.staking_router import (
@@ -97,10 +95,10 @@ class LidoContracts(Module):
         dsm_address = self.lido_locator.deposit_security_module()
 
         self.deposit_security_module = cast(
-            DepositSecurityModuleContractV2,
+            DepositSecurityModuleContract,
             self.w3.eth.contract(
                 address=dsm_address,
-                ContractFactoryClass=DepositSecurityModuleContractV2,
+                ContractFactoryClass=DepositSecurityModuleContract,
             ),
         )
 

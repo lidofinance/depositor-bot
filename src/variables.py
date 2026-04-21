@@ -10,9 +10,9 @@ from web3 import Web3
 logger = logging.getLogger(__name__)
 
 # EL node
-WEB3_RPC_ENDPOINTS = os.getenv('WEB3_RPC_ENDPOINTS', '').split(',')
+WEB3_RPC_ENDPOINTS = [url for url in os.getenv('WEB3_RPC_ENDPOINTS', '').split(',') if url]
 
-TESTNET_WEB3_RPC_ENDPOINTS = os.getenv('TESTNET_WEB3_RPC_ENDPOINTS', '').split(',')
+TESTNET_WEB3_RPC_ENDPOINTS = [url for url in os.getenv('TESTNET_WEB3_RPC_ENDPOINTS', '').split(',') if url]
 
 # Account private key
 WALLET_PRIVATE_KEY = os.getenv('WALLET_PRIVATE_KEY', None)
@@ -104,8 +104,12 @@ x / 4(we assume that chances of significant gas drop during 8 hours are low)
 """
 GAS_ADDENDUM = Web3.to_wei(*os.getenv('GAS_ADDENDUM', '6 gwei').split(' '))
 
-# Top-up providers
-KEYS_API_URLS = [url for url in os.getenv('KEYS_API_URLS', '').split(',') if url]
+# Top-up settings
+ENABLE_TOP_UP = os.getenv('ENABLE_TOP_UP', 'false').lower() == 'true'
+MAX_VALIDATORS_PER_TOP_UP = int(os.getenv('MAX_VALIDATORS_PER_TOP_UP', 50))
+
+# Providers
+KEYS_API_URL = os.getenv('KEYS_API_URL', '')
 CL_API_URLS = [url for url in os.getenv('CL_API_URLS', '').split(',') if url]
 HTTP_REQUEST_TIMEOUT_CONSENSUS: Final = int(os.getenv('HTTP_REQUEST_TIMEOUT_CONSENSUS', 5 * 60))
 HTTP_REQUEST_RETRY_COUNT_CONSENSUS: Final = int(os.getenv('HTTP_REQUEST_RETRY_COUNT_CONSENSUS', 5))
@@ -135,6 +139,8 @@ PUBLIC_ENV_VARS = {
     'BLOCKS_BETWEEN_EXECUTION': BLOCKS_BETWEEN_EXECUTION,
     'QUORUM_RETENTION_MINUTES': QUORUM_RETENTION_MINUTES,
     'DEPOSIT_TO_FIRST_HEALTHY_MODULE_ONLY': DEPOSIT_TO_FIRST_HEALTHY_MODULE_ONLY,
+    'ENABLE_TOP_UP': ENABLE_TOP_UP,
+    'MAX_VALIDATORS_PER_TOP_UP': MAX_VALIDATORS_PER_TOP_UP,
 }
 
 PRIVATE_ENV_VARS = {
