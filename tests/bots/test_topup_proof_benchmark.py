@@ -7,7 +7,7 @@ Run:
     BENCH_TOPUP=1 \
     WEB3_RPC_ENDPOINTS=https://... \
     CL_API_URLS=https://... \
-    KEYS_API_URLS=https://... \
+    KEYS_API_URL=https://... \
     poetry run pytest tests/bots/test_topup_proof_benchmark.py -v -s
 
 Results are written to tests/bots/topup_bench_results.json
@@ -45,10 +45,10 @@ def w3() -> Web3:
 
 @pytest.fixture(scope='module')
 def keys_api() -> KeysAPIClient:
-    if not variables.KEYS_API_URLS:
-        pytest.skip('KEYS_API_URLS is not configured.')
+    if not variables.KEYS_API_URL:
+        pytest.skip('KEYS_API_URL is not configured.')
     return KeysAPIClient(
-        hosts=variables.KEYS_API_URLS,
+        host=variables.KEYS_API_URL,
         request_timeout=60,
         retry_total=3,
         retry_backoff_factor=2,

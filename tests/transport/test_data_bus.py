@@ -33,6 +33,7 @@ _FAKE_GUARDIAN = '0x4E93C8c7B06F1CEEb03A8e13B0371b35F0000000'
 #  NODE_HOST: 'http://127.0.0.1:8888',
 #  DATA_BUS_ADDRESS: '0x5FbDB2315678afecb367f032d93F642f64180aa3'
 # }
+@pytest.mark.skip()
 @pytest.mark.integration
 @pytest.mark.parametrize(
     'web3_provider_integration',

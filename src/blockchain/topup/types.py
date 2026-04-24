@@ -21,6 +21,18 @@ class ValidatorWitness:
     withdrawable_epoch: int
     slashed: bool
 
+    def tuple(self):
+        return (
+            self.proofs,
+            self.pubkey,
+            self.effective_balance,
+            self.activation_eligibility_epoch,
+            self.activation_epoch,
+            self.exit_epoch,
+            self.withdrawable_epoch,
+            self.slashed,
+        )
+
 
 @dataclass
 class TopUpProofData:

@@ -1,5 +1,6 @@
 import logging
 from dataclasses import dataclass
+from typing import NamedTuple
 
 from prometheus_client import Histogram
 from providers.http_provider import HTTPProvider, data_is_dict
@@ -13,26 +14,23 @@ KEYS_API_REQUESTS_DURATION = Histogram(
 )
 
 
-@dataclass
-class LidoKey:
+class LidoKey(NamedTuple):
+    """Minimal Lido key representation — only fields used downstream.
+
+    Always access via named attributes (.key, .index, .operatorIndex);
+    don't rely on tuple-like behavior (positional index, == with plain tuple).
+    """
+
+    key: str
     index: int
     operatorIndex: int
-    depositSignature: str
-    key: str
-    used: bool
-    moduleAddress: str
-    vetted: bool
 
     @classmethod
     def from_response(cls, **kwargs) -> 'LidoKey':
         return cls(
+            key=kwargs['key'].lower(),
             index=kwargs['index'],
             operatorIndex=kwargs['operatorIndex'],
-            depositSignature=kwargs['depositSignature'],
-            key=kwargs['key'].lower(),
-            used=kwargs['used'],
-            moduleAddress=kwargs['moduleAddress'],
-            vetted=kwargs['vetted'],
         )
 
 
@@ -56,26 +54,25 @@ class KeysAPIClient(HTTPProvider):
 
     def __init__(
         self,
-        hosts: list[str],
+        host: str,
         request_timeout: int = 30,
         retry_total: int = 3,
         retry_backoff_factor: int = 1,
     ):
         super().__init__(
-            hosts=hosts,
+            hosts=[host],
             request_timeout=request_timeout,
             retry_total=retry_total,
             retry_backoff_factor=retry_backoff_factor,
         )
 
-    # todo: add in kapi filter by operators' ids + used keys
     def get_module_used_keys(self, module_id: int) -> list[LidoKey]:
         """
         Get all used (deposited) keys for a staking module.
-        GET /v1/modules/{module_id}/operators/keys?used=true
+        GET /v1/modules/{module_id}/keys?used=true
         """
         data, _ = self._get(
-            endpoint='v1/modules/{}/operators/keys',
+            endpoint='v1/modules/{}/keys',
             path_params=[module_id],
             query_params={'used': 'true'},
             retval_validator=data_is_dict,

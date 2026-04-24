@@ -3,12 +3,10 @@ from __future__ import annotations
 import logging
 
 from blockchain.typings import Web3
-from cryptography.verify_signature import recover_vs
 from eth_account.account import VRS
 from eth_typing import Hash32
 from transport.msg_types.deposit import DepositMessage
 from utils.bytes import from_hex_string_to_bytes
-from web3 import Web3 as BaseWeb3
 from web3.contract.contract import ContractFunction
 
 logger = logging.getLogger(__name__)
@@ -46,51 +44,7 @@ class Sender:
         staking_module_nonce = quorum[0]['nonce']
         payload = b''
         guardian_signs = self._prepare_signs_for_deposit(quorum)
-        attest_message_prefix = None
-        msg_hash = None
-        recovered_guardians = []
-        try:
-            prefix = self._w3.lido.deposit_security_module.get_attest_message_prefix()
-            if isinstance(prefix, bytes):
-                attest_message_prefix = prefix.hex()
-                msg_hash = BaseWeb3.solidity_keccak(
-                    ['bytes32', 'uint256', 'bytes32', 'bytes32', 'uint256', 'uint256'],
-                    [prefix, block_number, block_hash, deposit_root, staking_module_id, staking_module_nonce],
-                )
-                for msg in quorum:
-                    try:
-                        signature = msg['signature']
-                        if '_vs' in signature and signature.get('r'):
-                            v, s = recover_vs(signature['_vs'])
-                            recovered_guardians.append(
-                                BaseWeb3().eth.account._recover_hash(
-                                    msg_hash,
-                                    vrs=(v, signature['r'], hex(s)),
-                                )
-                            )
-                        else:
-                            recovered_guardians.append(None)
-                    except Exception:
-                        recovered_guardians.append(None)
-            else:
-                recovered_guardians = [None] * len(quorum)
-        except Exception:
-            recovered_guardians = [None] * len(quorum)
-        logger.info(
-            {
-                'msg': 'Prepare depositBufferedEther tx.',
-                'block_number': block_number,
-                'block_hash': block_hash.hex(),
-                'deposit_root': deposit_root.hex(),
-                'staking_module_id': staking_module_id,
-                'staking_module_nonce': staking_module_nonce,
-                'quorum_size': len(quorum),
-                'attest_message_prefix': attest_message_prefix,
-                'attest_message_hash': msg_hash.hex() if msg_hash is not None else None,
-                'guardian_addresses': [msg['guardianAddress'] for msg in quorum],
-                'recovered_guardians': recovered_guardians,
-            }
-        )
+
         return self._w3.lido.deposit_security_module.deposit_buffered_ether(
             block_number,
             block_hash,

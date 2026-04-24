@@ -15,7 +15,8 @@ from blockchain.deposit_strategy.deposit_transaction_sender import Sender
 from blockchain.deposit_strategy.gas_price_calculator import GasPriceCalculator
 from blockchain.deposit_strategy.strategy import DepositStrategy
 from blockchain.executor import Executor
-from blockchain.topup.cmv2_strategy import get_cmv2_topup_candidates
+from blockchain.topup.cmv2_strategy import CMv2TopUpStrategy
+from blockchain.topup.strategy import TopUpStrategy
 from blockchain.typings import Web3
 from metrics.metrics import (
     ACCOUNT_BALANCE,
@@ -45,27 +46,14 @@ from web3.types import BlockData, Wei
 logger = logging.getLogger(__name__)
 
 
-def run_depositor(w3):
+def run_depositor(w3, keys_api: KeysAPIClient, cl: ConsensusClient):
     logger.info({'msg': 'Initialize Depositor bot.'})
     sender = Sender(w3)
     gas_price_calculator = GasPriceCalculator(w3)
     base_deposit_strategy = DefaultDepositStrategy(w3, gas_price_calculator)
     csm_strategy = CSMDepositStrategy(w3, gas_price_calculator)
 
-    keys_api = None
-    if variables.KEYS_API_URLS:
-        keys_api = KeysAPIClient(hosts=variables.KEYS_API_URLS)
-
-    cl = None
-    if variables.CL_API_URLS:
-        cl = ConsensusClient(
-            hosts=variables.CL_API_URLS,
-            request_timeout=variables.HTTP_REQUEST_TIMEOUT_CONSENSUS,
-            retry_total=variables.HTTP_REQUEST_RETRY_COUNT_CONSENSUS,
-            retry_backoff_factor=variables.HTTP_REQUEST_SLEEP_BEFORE_RETRY_IN_SECONDS_CONSENSUS,
-        )
-
-    depositor_bot = DepositorBot(w3, sender, base_deposit_strategy, csm_strategy, keys_api, cl)
+    depositor_bot = DepositorBot(w3, sender, base_deposit_strategy, csm_strategy, gas_price_calculator, keys_api, cl)
 
     e = Executor(
         w3,
@@ -80,20 +68,22 @@ def run_depositor(w3):
 class DepositorBot:
     _flashbots_works = True
 
-    # todo: fix optional, should be required
     def __init__(
         self,
         w3: Web3,
         sender: Sender,
         base_deposit_strategy: DefaultDepositStrategy,
         csm_strategy: CSMDepositStrategy,
-        keys_api: Optional['KeysAPIClient'] = None,
-        cl: Optional['ConsensusClient'] = None,
+        gas_price_calculator: GasPriceCalculator,
+        keys_api: KeysAPIClient,
+        cl: ConsensusClient,
     ):
         self.w3 = w3
         self._sender = sender
         self._general_strategy = base_deposit_strategy
         self._csm_strategy = csm_strategy
+        self._gas_price_calculator = gas_price_calculator
+        self._cmv2_topup_strategy = CMv2TopUpStrategy(w3, gas_price_calculator)
         self._keys_api = keys_api
         self._cl = cl
         now = datetime.now()
@@ -143,10 +133,6 @@ class DepositorBot:
 
         modules_to_deposit = self._get_preferred_to_deposit_modules()
 
-        if not modules_to_deposit:
-            logger.info({'msg': 'No modules selected for seed deposits. Checking top-up eligibility.'})
-            return self._try_topup()
-
         for module_id in modules_to_deposit:
             logger.info({'msg': f'Do deposit to module with id: {module_id}.'})
 
@@ -165,6 +151,9 @@ class DepositorBot:
         return self._try_topup()
 
     def _try_topup(self) -> bool:
+        if not variables.ENABLE_TOP_UP:
+            return False
+
         sr_version = self.w3.lido.staking_router.get_contract_version()
         if sr_version < 4:
             logger.info({'msg': 'SR version < 4, top-ups not supported.', 'value': sr_version})
@@ -173,6 +162,13 @@ class DepositorBot:
         depositable_ether = self.w3.lido.lido.get_depositable_ether()
         if depositable_ether == 0:
             logger.info({'msg': 'No depositable ether. Skip top-up.'})
+            return False
+
+        # Check if buffer is reserved for seed deposits
+        sr_v4 = cast(StakingRouterContractV4, self.w3.lido.staking_router)
+        total_seed, _, _ = sr_v4.get_deposit_allocations(depositable_ether, is_top_up=False)
+        if total_seed > 0:
+            logger.info({'msg': 'Seed deposits available, buffer is reserved. Skip top-up.', 'total_seed': total_seed})
             return False
 
         modules_to_topup = self._get_preferred_to_topup_modules(depositable_ether)
@@ -211,49 +207,53 @@ class DepositorBot:
             logger.info({'msg': 'Module allocation is 0.', 'module_id': module_id})
             return False
 
-        # determine module type
+        # determine module type and select strategy
         module_type = self._get_module_type(module_address)
-        logger.info(
-            {
-                'msg': 'Module type.',
-                'module_id': module_id,
-                'type': module_type.rstrip(b'\x00').decode('ascii', errors='replace'),
-            }
-        )
-
-        if module_type == self.MODULE_TYPE_CMV2:
-            if not self._keys_api or not self._cl:
-                logger.warning({'msg': 'Keys API or CL not configured. Skip top-up.'})
-                return False
-
-            proof_data = get_cmv2_topup_candidates(
-                self.w3,
-                self._keys_api,
-                self._cl,
-                module_id,
-                module_address,
-                module_allocation,
+        strategy = self._select_topup_strategy(module_type)
+        if strategy is None:
+            logger.info(
+                {
+                    'msg': 'Unknown module type, skip.',
+                    'module_id': module_id,
+                    'type': module_type.rstrip(b'\x00').decode('ascii', errors='replace'),
+                }
             )
-            if not proof_data:
-                logger.info({'msg': 'No top-up candidates.', 'module_id': module_id})
-                return False
+            return False
 
-            tx = self.w3.lido.topup_gateway.top_up(module_id, proof_data)
-            success = self.w3.transaction.check(tx) and self.w3.transaction.send(tx, False, 6)
-            logger.info({'msg': f'Top-up tx result: {success}.', 'module_id': module_id})
-            return success
+        # gas check per module
+        if not strategy.is_gas_price_ok():
+            logger.info({'msg': 'Gas price too high for top-up.', 'module_id': module_id})
+            return False
 
-        logger.info(
-            {
-                'msg': 'Unknown module type, skip.',
-                'module_id': module_id,
-                'type': module_type.rstrip(b'\x00').decode('ascii', errors='replace'),
-            }
+        max_validators = min(
+            variables.MAX_VALIDATORS_PER_TOP_UP,
+            self.w3.lido.topup_gateway.get_max_validators_per_top_up(),
         )
-        return False
 
-    MODULE_TYPE_CMV2 = b'curated-onchain-v2\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00'
+        proof_data = strategy.get_topup_candidates(
+            self._keys_api,
+            self._cl,
+            module_id,
+            module_address,
+            module_allocation,
+            max_validators,
+        )
+        if not proof_data:
+            logger.info({'msg': 'No top-up candidates.', 'module_id': module_id})
+            return False
+
+        tx = self.w3.lido.topup_gateway.top_up(module_id, proof_data)
+        success = self.w3.transaction.check(tx) and self.w3.transaction.send(tx, False, 6)
+        logger.info({'msg': f'Top-up tx result: {success}.', 'module_id': module_id})
+        return success
+
+    MODULE_TYPE_CMV2 = b'curated-onchain-v2'.ljust(32, b'\x00')
     GET_TYPE_ABI = ContractInterface.load_abi('./interfaces/IStakingModule.json')
+
+    def _select_topup_strategy(self, module_type: bytes) -> Optional[TopUpStrategy]:
+        if module_type == self.MODULE_TYPE_CMV2:
+            return self._cmv2_topup_strategy
+        return None
 
     def _get_module_type(self, module_address: str) -> bytes:
         """Call IStakingModule.getType() on the module contract."""
@@ -284,6 +284,7 @@ class DepositorBot:
             return []
 
         # sort by allocation desc
+        # TODO: check when second 0x02 module will be added
         sorted_digest_allocations = sorted(
             digest_allocations,
             key=lambda item: item[1],
@@ -298,12 +299,10 @@ class DepositorBot:
             module_address = digest[2][1]
             result.append((module_id, module_address))
             if self.w3.lido.topup_gateway.can_top_up(module_id):
-                break
-        else:
-            return []
+                logger.info({'msg': f'Top-up module order {result}.'})
+                return result
 
-        logger.info({'msg': f'Top-up module order {result}.'})
-        return result
+        return []
 
     def _check_balance(self):
         if variables.ACCOUNT:

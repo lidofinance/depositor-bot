@@ -1,5 +1,16 @@
 import pytest
-from blockchain.beacon_state.state import BeaconStateData
+from blockchain.beacon_state.ssz_types import (
+    STATE_VALIDATORS,
+    VALIDATOR_ACTIVATION_ELIGIBILITY_EPOCH,
+    VALIDATOR_ACTIVATION_EPOCH,
+    VALIDATOR_EFFECTIVE_BALANCE,
+    VALIDATOR_EXIT_EPOCH,
+    VALIDATOR_PUBKEY,
+    VALIDATOR_SLASHED,
+    VALIDATOR_WITHDRAWABLE_EPOCH,
+    Validator,
+)
+from blockchain.beacon_state.state import BeaconStateData, ValidatorFields
 from blockchain.topup.proofs import build_topup_proofs
 from blockchain.topup.types import TopUpCandidate
 
@@ -8,6 +19,25 @@ def _build_beacon_state_data(top_up_proof_fixtures) -> BeaconStateData:
     beacon_block_header = top_up_proof_fixtures['beacon_block_header']
     execution_block = top_up_proof_fixtures['execution_block']
     decoded_beacon_state = top_up_proof_fixtures['decoded_beacon_state']
+    pubkeys = {bytes.fromhex(w['pubkey'][2:]) for w in top_up_proof_fixtures['validator_witnesses']}
+
+    pubkey_to_index: dict[bytes, int] = {}
+    validators_roots: list[bytes] = []
+    validators_fields: dict[int, ValidatorFields] = {}
+    for index, validator in enumerate(decoded_beacon_state[STATE_VALIDATORS]):
+        validators_roots.append(Validator.get_hash_tree_root(validator))
+        pubkey = bytes(validator[VALIDATOR_PUBKEY])
+        if pubkey in pubkeys:
+            pubkey_to_index[pubkey] = index
+            validators_fields[index] = ValidatorFields(
+                pubkey=pubkey,
+                effective_balance=int(validator[VALIDATOR_EFFECTIVE_BALANCE]),
+                slashed=bool(validator[VALIDATOR_SLASHED]),
+                activation_eligibility_epoch=int(validator[VALIDATOR_ACTIVATION_ELIGIBILITY_EPOCH]),
+                activation_epoch=int(validator[VALIDATOR_ACTIVATION_EPOCH]),
+                exit_epoch=int(validator[VALIDATOR_EXIT_EPOCH]),
+                withdrawable_epoch=int(validator[VALIDATOR_WITHDRAWABLE_EPOCH]),
+            )
 
     return BeaconStateData(
         slot=beacon_block_header[0],
@@ -15,11 +45,12 @@ def _build_beacon_state_data(top_up_proof_fixtures) -> BeaconStateData:
         parent_beacon_block_root=bytes.fromhex(execution_block['parentBeaconBlockRoot'][2:]),
         state_root=beacon_block_header[3],
         header=beacon_block_header,
-        state=decoded_beacon_state,
         state_field_roots=top_up_proof_fixtures['beacon_state_field_roots'],
-        pubkey_to_index={},
+        pubkey_to_index=pubkey_to_index,
         pending_deposits={},
         consolidation_targets=set(),
+        validators_roots=validators_roots,
+        validators_fields=validators_fields,
     )
 
 

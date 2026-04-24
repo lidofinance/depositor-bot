@@ -4,22 +4,11 @@ Build Merkle proofs and assemble witness data for TopUpGateway.topUp().
 
 import logging
 
-from blockchain.beacon_state.ssz_types import (
-    STATE_VALIDATORS,
-    VALIDATOR_ACTIVATION_ELIGIBILITY_EPOCH,
-    VALIDATOR_ACTIVATION_EPOCH,
-    VALIDATOR_EFFECTIVE_BALANCE,
-    VALIDATOR_EXIT_EPOCH,
-    VALIDATOR_PUBKEY,
-    VALIDATOR_SLASHED,
-    VALIDATOR_WITHDRAWABLE_EPOCH,
-    BeaconBlockHeader,
-)
+from blockchain.beacon_state.ssz_types import BeaconBlockHeader
 from blockchain.beacon_state.state import (
     BeaconStateData,
     extract_header_proof,
     extract_validator_proof,
-    get_validators_hash_tree_roots,
 )
 from blockchain.topup.types import TopUpCandidate, TopUpProofData, ValidatorWitness
 
@@ -51,7 +40,6 @@ def build_topup_proofs(
 
     # if not verify_header_proof(state_root, beacon_block_root, header_proof):
     #     raise ValueError(f'Invalid header proof for slot={beacon_data.slot}')
-    validators_list = list(beacon_data.state[STATE_VALIDATORS])
 
     witnesses = []
     validator_indices = []
@@ -59,12 +47,11 @@ def build_topup_proofs(
     operator_ids = []
     pending_balances = []
 
-    validators_roots = get_validators_hash_tree_roots(validators_list)
-    # validators_data_root = compute_merkle_root_sparse(validators_roots, VALIDATORS_LIST_DEPTH)
+    validators_roots = beacon_data.validators_roots
     nodes_cache: dict = {}
 
     for c in candidates:
-        validator = validators_list[c.validator_index]
+        fields = beacon_data.validators_fields[c.validator_index]
 
         validator_proof = extract_validator_proof(beacon_data.state_field_roots, c.validator_index, validators_roots, nodes_cache)
         # if not verify_validator_proof(
@@ -81,13 +68,13 @@ def build_topup_proofs(
         witnesses.append(
             ValidatorWitness(
                 proofs=full_proof,
-                pubkey=bytes(validator[VALIDATOR_PUBKEY]),
-                effective_balance=int(validator[VALIDATOR_EFFECTIVE_BALANCE]),
-                activation_eligibility_epoch=int(validator[VALIDATOR_ACTIVATION_ELIGIBILITY_EPOCH]),
-                activation_epoch=int(validator[VALIDATOR_ACTIVATION_EPOCH]),
-                exit_epoch=int(validator[VALIDATOR_EXIT_EPOCH]),
-                withdrawable_epoch=int(validator[VALIDATOR_WITHDRAWABLE_EPOCH]),
-                slashed=bool(validator[VALIDATOR_SLASHED]),
+                pubkey=fields.pubkey,
+                effective_balance=fields.effective_balance,
+                activation_eligibility_epoch=fields.activation_eligibility_epoch,
+                activation_epoch=fields.activation_epoch,
+                exit_epoch=fields.exit_epoch,
+                withdrawable_epoch=fields.withdrawable_epoch,
+                slashed=fields.slashed,
             )
         )
         validator_indices.append(c.validator_index)
