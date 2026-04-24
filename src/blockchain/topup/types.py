@@ -21,7 +21,7 @@ class ValidatorWitness:
     withdrawable_epoch: int
     slashed: bool
 
-    def to_tuple(self):
+    def tuple(self):
         return (
             self.proofs,
             self.pubkey,

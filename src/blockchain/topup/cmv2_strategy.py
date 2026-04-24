@@ -4,13 +4,8 @@ from typing import List, Optional, cast
 from blockchain.beacon_state.ssz_types import (
     FAR_FUTURE_EPOCH,
     SLOTS_PER_EPOCH,
-    STATE_VALIDATORS,
-    VALIDATOR_ACTIVATION_EPOCH,
-    VALIDATOR_EFFECTIVE_BALANCE,
-    VALIDATOR_EXIT_EPOCH,
-    VALIDATOR_SLASHED,
 )
-from blockchain.beacon_state.state import BeaconStateData, load_beacon_state_data
+from blockchain.beacon_state.state import BeaconStateData, ValidatorFields, load_beacon_state_data
 from blockchain.contracts.cmv2 import CMV2Contract
 from blockchain.topup.proofs import build_topup_proofs
 from blockchain.topup.strategy import TopUpStrategy
@@ -65,7 +60,6 @@ class CMv2TopUpStrategy(TopUpStrategy):
         )
 
         # Step 2: keys from Keys API
-        # TODO: optimize — fetches all module keys then filters by operator
         keys_by_operator = keys_api.get_module_operator_used_keys(module_id, list(allocation_by_operator.keys()))
 
         # Step 3: load beacon state
@@ -75,8 +69,10 @@ class CMv2TopUpStrategy(TopUpStrategy):
         # Step 4: select candidates per operator
         candidates: list[TopUpCandidate] = []
         for op_id, op_allocation in allocation_by_operator.items():
-            op_keys = keys_by_operator[op_id]
-            candidates.extend(_select_operator_candidates(op_keys, op_allocation, beacon_data))
+            candidates.extend(_select_operator_candidates(keys_by_operator[op_id], op_allocation, beacon_data))
+
+        # LidoKey instances are no longer needed; free before the memory-heavy proof build.
+        del keys_by_operator
 
         if not candidates:
             logger.info({'msg': 'No eligible candidates.', 'module_id': module_id})
@@ -122,21 +118,20 @@ def _check_key_eligibility(key: LidoKey, beacon_data: BeaconStateData) -> Option
     if validator_index is None:
         return None
 
-    validator = beacon_data.state[STATE_VALIDATORS][validator_index]
-    # As on TopUpgateway side effective balance is checked, here also will check effective balance
-    balance = int(beacon_data.state[STATE_VALIDATORS][validator_index][VALIDATOR_EFFECTIVE_BALANCE])
+    fields = beacon_data.validators_fields[validator_index]
     pending = beacon_data.pending_deposits.get(pubkey, 0)
     current_epoch = beacon_data.slot // SLOTS_PER_EPOCH
 
-    if not _is_active(validator, current_epoch):
+    if not _is_active(fields, current_epoch):
         return None
-    if _is_slashed(validator):
+    if _is_slashed(fields):
         return None
-    if _is_exiting(validator):
+    if _is_exiting(fields):
         return None
     if validator_index in beacon_data.consolidation_targets:
         return None
-    if balance + pending > MAX_TOP_UP_BALANCE_GWEI:
+    # TopUpGateway also checks effective balance on-chain
+    if fields.effective_balance + pending > MAX_TOP_UP_BALANCE_GWEI:
         return None
 
     return TopUpCandidate(
@@ -148,16 +143,16 @@ def _check_key_eligibility(key: LidoKey, beacon_data: BeaconStateData) -> Option
     )
 
 
-def _is_active(validator, current_epoch: int) -> bool:
-    return int(validator[VALIDATOR_ACTIVATION_EPOCH]) <= current_epoch
+def _is_active(fields: ValidatorFields, current_epoch: int) -> bool:
+    return fields.activation_epoch <= current_epoch
 
 
-def _is_slashed(validator) -> bool:
-    return bool(validator[VALIDATOR_SLASHED])
+def _is_slashed(fields: ValidatorFields) -> bool:
+    return fields.slashed
 
 
-def _is_exiting(validator) -> bool:
-    return int(validator[VALIDATOR_EXIT_EPOCH]) != FAR_FUTURE_EPOCH
+def _is_exiting(fields: ValidatorFields) -> bool:
+    return fields.exit_epoch != FAR_FUTURE_EPOCH
 
 
 def _take_up_to_allocation(
@@ -168,7 +163,7 @@ def _take_up_to_allocation(
     result = []
     remaining = allocation_wei // 10**9
     for c in candidates:
-        balance = int(beacon_data.state[STATE_VALIDATORS][c.validator_index][VALIDATOR_EFFECTIVE_BALANCE])
+        balance = beacon_data.validators_fields[c.validator_index].effective_balance
         topup_amount = MAX_TOP_UP_BALANCE_GWEI - (balance + c.pending_balance)
         if topup_amount <= 0:
             continue

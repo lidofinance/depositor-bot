@@ -36,7 +36,7 @@ class TopUpGatewayContract(ContractInterface):
             proof_data.operator_ids,
             proof_data.validator_indices,
             (proof_data.child_block_timestamp, proof_data.slot, proof_data.proposer_index),
-            [w.to_tuple() for w in proof_data.witnesses],
+            [w.tuple() for w in proof_data.witnesses],
             proof_data.pending_balances_gwei,
         )
         logger.info({'msg': 'Build `topUp()` tx.', 'module_id': module_id, 'validators': len(proof_data.witnesses)})

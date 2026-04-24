@@ -76,17 +76,16 @@ def main(bot_name: str):
     logger.info({'msg': 'Add metrics to web3 requests.'})
     web3_multi_provider.init_metrics()
 
-    keys_api = KeysAPIClient(host=variables.KEYS_API_URL)
-    cl = ConsensusClient(
-        hosts=variables.CL_API_URLS,
-        request_timeout=variables.HTTP_REQUEST_TIMEOUT_CONSENSUS,
-        retry_total=variables.HTTP_REQUEST_RETRY_COUNT_CONSENSUS,
-        retry_backoff_factor=variables.HTTP_REQUEST_SLEEP_BEFORE_RETRY_IN_SECONDS_CONSENSUS,
-    )
-
-    check_providers_chain_ids(w3, cl, keys_api)
-
     if bot_name == BotModule.DEPOSITOR:
+        keys_api = KeysAPIClient(host=variables.KEYS_API_URL)
+        cl = ConsensusClient(
+            hosts=variables.CL_API_URLS,
+            request_timeout=variables.HTTP_REQUEST_TIMEOUT_CONSENSUS,
+            retry_total=variables.HTTP_REQUEST_RETRY_COUNT_CONSENSUS,
+            retry_backoff_factor=variables.HTTP_REQUEST_SLEEP_BEFORE_RETRY_IN_SECONDS_CONSENSUS,
+        )
+
+        check_providers_chain_ids(w3, cl, keys_api)
         run_depositor(w3, keys_api, cl)
     elif bot_name == BotModule.PAUSER:
         run_pauser(w3)

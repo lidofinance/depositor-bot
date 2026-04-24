@@ -6,12 +6,16 @@ from blockchain.beacon_state.ssz_types import (
     FAR_FUTURE_EPOCH,
     STATE_BALANCES,
     STATE_VALIDATORS,
+    VALIDATOR_ACTIVATION_ELIGIBILITY_EPOCH,
     VALIDATOR_ACTIVATION_EPOCH,
     VALIDATOR_EFFECTIVE_BALANCE,
     VALIDATOR_EXIT_EPOCH,
+    VALIDATOR_PUBKEY,
     VALIDATOR_SLASHED,
+    VALIDATOR_WITHDRAWABLE_EPOCH,
+    Validator,
 )
-from blockchain.beacon_state.state import BeaconStateData
+from blockchain.beacon_state.state import BeaconStateData, ValidatorFields
 from blockchain.topup.cmv2_strategy import (
     MAX_TOP_UP_BALANCE_GWEI,
     CMv2TopUpStrategy,
@@ -34,11 +38,23 @@ def _build_beacon_state_data(top_up_proof_fixtures) -> BeaconStateData:
     state[STATE_BALANCES] = list(decoded_beacon_state[STATE_BALANCES])
     pubkeys = {bytes.fromhex(w['pubkey'][2:]) for w in top_up_proof_fixtures['validator_witnesses']}
 
-    pubkey_to_index = {}
+    pubkey_to_index: dict[bytes, int] = {}
+    validators_roots: list[bytes] = []
+    validators_fields: dict[int, ValidatorFields] = {}
     for index, validator in enumerate(state[STATE_VALIDATORS]):
-        pubkey = bytes(validator[0])
+        validators_roots.append(Validator.get_hash_tree_root(validator))
+        pubkey = bytes(validator[VALIDATOR_PUBKEY])
         if pubkey in pubkeys:
             pubkey_to_index[pubkey] = index
+            validators_fields[index] = ValidatorFields(
+                pubkey=pubkey,
+                effective_balance=int(validator[VALIDATOR_EFFECTIVE_BALANCE]),
+                slashed=bool(validator[VALIDATOR_SLASHED]),
+                activation_eligibility_epoch=int(validator[VALIDATOR_ACTIVATION_ELIGIBILITY_EPOCH]),
+                activation_epoch=int(validator[VALIDATOR_ACTIVATION_EPOCH]),
+                exit_epoch=int(validator[VALIDATOR_EXIT_EPOCH]),
+                withdrawable_epoch=int(validator[VALIDATOR_WITHDRAWABLE_EPOCH]),
+            )
 
     return BeaconStateData(
         slot=beacon_block_header[0],
@@ -46,46 +62,29 @@ def _build_beacon_state_data(top_up_proof_fixtures) -> BeaconStateData:
         parent_beacon_block_root=bytes.fromhex(execution_block['parentBeaconBlockRoot'][2:]),
         state_root=beacon_block_header[3],
         header=beacon_block_header,
-        state=state,
         state_field_roots=top_up_proof_fixtures['beacon_state_field_roots'],
         pubkey_to_index=pubkey_to_index,
         pending_deposits={},
         consolidation_targets=set(),
+        validators_roots=validators_roots,
+        validators_fields=validators_fields,
     )
 
 
-def _make_validator(
-    pubkey=b'\x00' * 48,
-    withdrawal_credentials=b'\x00' * 32,
-    effective_balance=0,
-    slashed=False,
-    activation_eligibility_epoch=0,
-    activation_epoch=0,
-    exit_epoch=FAR_FUTURE_EPOCH,
-    withdrawable_epoch=FAR_FUTURE_EPOCH,
-):
-    return [
-        pubkey,
-        withdrawal_credentials,
-        effective_balance,
-        slashed,
-        activation_eligibility_epoch,
-        activation_epoch,
-        exit_epoch,
-        withdrawable_epoch,
-    ]
+def _make_fields(effective_balance: int) -> ValidatorFields:
+    return ValidatorFields(
+        pubkey=b'\x00' * 48,
+        effective_balance=effective_balance,
+        slashed=False,
+        activation_eligibility_epoch=0,
+        activation_epoch=0,
+        exit_epoch=FAR_FUTURE_EPOCH,
+        withdrawable_epoch=FAR_FUTURE_EPOCH,
+    )
 
 
 def _make_key(pubkey: str, key_index: int, operator_index: int) -> LidoKey:
-    return LidoKey(
-        index=key_index,
-        operatorIndex=operator_index,
-        depositSignature='0x',
-        key=pubkey,
-        used=True,
-        moduleAddress='0x0000000000000000000000000000000000000001',
-        vetted=True,
-    )
+    return LidoKey(key=pubkey, index=key_index, operatorIndex=operator_index)
 
 
 @pytest.mark.unit
@@ -173,24 +172,23 @@ def test_check_key_eligibility_rejects_invalid_cases(top_up_proof_fixtures):
     assert _check_key_eligibility(key, beacon_data) is None
     beacon_data.consolidation_targets = set()
 
-    validator = list(beacon_data.state[STATE_VALIDATORS][validator_index])
-    validator[VALIDATOR_SLASHED] = True
-    beacon_data.state[STATE_VALIDATORS][validator_index] = tuple(validator)
+    fields = beacon_data.validators_fields[validator_index]
+
+    beacon_data.validators_fields[validator_index] = fields._replace(slashed=True)
     assert _check_key_eligibility(key, beacon_data) is None
 
-    validator[VALIDATOR_SLASHED] = False
-    validator[VALIDATOR_EXIT_EPOCH] = 1
-    beacon_data.state[STATE_VALIDATORS][validator_index] = tuple(validator)
+    beacon_data.validators_fields[validator_index] = fields._replace(exit_epoch=1)
     assert _check_key_eligibility(key, beacon_data) is None
 
-    validator[VALIDATOR_EXIT_EPOCH] = FAR_FUTURE_EPOCH
-    validator[VALIDATOR_ACTIVATION_EPOCH] = beacon_data.slot + 1
-    beacon_data.state[STATE_VALIDATORS][validator_index] = tuple(validator)
+    beacon_data.validators_fields[validator_index] = fields._replace(
+        exit_epoch=FAR_FUTURE_EPOCH,
+        activation_epoch=beacon_data.slot + 1,
+    )
     assert _check_key_eligibility(key, beacon_data) is None
 
-    validator[VALIDATOR_ACTIVATION_EPOCH] = 0
-    validator[VALIDATOR_EFFECTIVE_BALANCE] = MAX_TOP_UP_BALANCE_GWEI
-    beacon_data.state[STATE_VALIDATORS][validator_index] = tuple(validator)
+    beacon_data.validators_fields[validator_index] = fields._replace(
+        effective_balance=MAX_TOP_UP_BALANCE_GWEI,
+    )
     beacon_data.pending_deposits = {pubkey: 1}
     assert _check_key_eligibility(key, beacon_data) is None
 
@@ -221,13 +219,13 @@ def test_select_operator_candidates_sorts_by_key_index():
 
 @pytest.mark.unit
 def test_take_up_to_allocation_respects_remaining_and_skips_zero_topup():
-    state: list[Any] = [None] * (STATE_VALIDATORS + 1)
-    state[STATE_VALIDATORS] = [
-        _make_validator(effective_balance=MAX_TOP_UP_BALANCE_GWEI - 10),  # needs 10 Gwei
-        _make_validator(effective_balance=MAX_TOP_UP_BALANCE_GWEI - 20),  # needs 20 Gwei
-        _make_validator(effective_balance=MAX_TOP_UP_BALANCE_GWEI),  # needs 0 Gwei — skip
-    ]
-    beacon_data = Mock(state=state)
+    beacon_data = Mock(
+        validators_fields={
+            0: _make_fields(MAX_TOP_UP_BALANCE_GWEI - 10),  # needs 10 Gwei
+            1: _make_fields(MAX_TOP_UP_BALANCE_GWEI - 20),  # needs 20 Gwei
+            2: _make_fields(MAX_TOP_UP_BALANCE_GWEI),  # needs 0 Gwei — skip
+        }
+    )
     candidates = [
         TopUpCandidate(0, 1, 11, b'a', 0),
         TopUpCandidate(1, 2, 11, b'b', 0),
@@ -247,9 +245,7 @@ def test_take_up_to_allocation_log_scenario_1216_eth():
     so only 1 candidate should be selected.
     """
     balance_gwei = 32 * 10**9  # 32 ETH in Gwei
-    state: list[Any] = [None] * (STATE_VALIDATORS + 1)
-    state[STATE_VALIDATORS] = [_make_validator(effective_balance=balance_gwei) for _ in range(25)]
-    beacon_data = Mock(state=state)
+    beacon_data = Mock(validators_fields={i: _make_fields(balance_gwei) for i in range(25)})
 
     candidates = [TopUpCandidate(i, i, 0, bytes([i]), 0) for i in range(25)]
 
