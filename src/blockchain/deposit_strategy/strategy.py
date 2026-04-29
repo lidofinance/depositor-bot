@@ -7,6 +7,10 @@ class DepositStrategy(abc.ABC):
         pass
 
     @abc.abstractmethod
+    def can_deposit_keys_based_on_allocation(self, module_id: int) -> bool:
+        pass
+
+    @abc.abstractmethod
     def is_gas_price_ok(self, module_id: int) -> bool:
         pass
 

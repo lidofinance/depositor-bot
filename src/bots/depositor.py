@@ -136,10 +136,7 @@ class DepositorBot:
             logger.info({'msg': 'SR version < 4, execute legacy', 'value': sr_version})
             return self._execute_legacy()
 
-        if self._execute_phase1():
-            return True
-
-        return self._execute_phase2()
+        return self._execute_actual()
 
     def _execute_legacy(self) -> bool:
         modules_to_deposit = self._get_preferred_to_deposit_modules()
@@ -147,7 +144,7 @@ class DepositorBot:
         for module_id in modules_to_deposit:
             logger.info({'msg': f'Do deposit to module with id: {module_id}.'})
 
-            result = self._deposit_to_module(module_id)
+            result = self._deposit_to_module(module_id, is_top_up_allocation=False)
             logger.info(
                 {
                     'msg': f'Deposit status to Module[{module_id}]: {result}.',
@@ -160,61 +157,52 @@ class DepositorBot:
 
         return False
 
-    def _execute_phase1(self):
-        """
-        Try to perform seed deposits in 0x02 module
-        """
-
-        modules_to_deposit = self._get_preferred_to_seed_deposits_modules()
-        for module_id in modules_to_deposit:
-            logger.info({'msg': f'Do seed deposit to module with id: {module_id}.'})
-
-            result = self._deposit_to_module(module_id)
-            logger.info(
-                {
-                    'msg': f'Deposit status to Module[{module_id}]: {result}.',
-                    'value': result,
-                }
-            )
-
-            if result:
-                return result
-
-        return False
-
-    def _execute_phase2(self):
-        """
-        Try to perform full deposits in 0x01 module or topup in 0x02 module
-        """
-        modules = self._get_preferred_to_full_deposits_or_topup_modules()
+    def _execute_actual(self) -> bool:
+        modules = self._prefered_modules()
         for module in modules:
-            module_id, wc_type, _module_address, _allocation = module
+            module_id, _module_address, wc_type, is_top_up = module
 
-            if wc_type == 2:
+            if is_top_up:
                 logger.info({'msg': f'Do top-up to module with id: {module_id}.'})
                 result = self._top_up_to_module(module)
             else:
-                logger.info({'msg': f'Do full deposit to module with id: {module_id}.'})
-                result = self._deposit_to_module(module_id)
+                # 0x01 -> full deposit (allocation from getDepositAllocation(eth, True))
+                # 0x02 -> seed deposit (allocation from getDepositAllocation(eth, False))
+                is_top_up_allocation = wc_type != 2
+                logger.info({'msg': f'Do deposit to module with id: {module_id}.'})
+                result = self._deposit_to_module(module_id, is_top_up_allocation)
 
-            logger.info(
-                {
-                    'msg': f'Phase 2 status for Module[{module_id}]: {result}.',
-                    'value': result,
-                }
-            )
+            logger.info({'msg': f'Result for Module[{module_id}]: {result}.', 'value': result})
 
             if result:
                 return result
 
         return False
 
-    def _top_up_to_module(self, module: tuple[int, int, str, Wei]) -> bool:
+    def _top_up_to_module(self, module: tuple[int, str, int, bool]) -> bool:
         # re-check canTopUp
-        module_id, _wc_type, module_address, module_allocation = module
+        # module_id, _wc_type, module_address, module_allocation = module
+        module_id, module_address, _wc_type, _is_top_up = module
 
         if not self.w3.lido.topup_gateway.can_top_up(module_id):
             logger.info({'msg': 'canTopUp failed.', 'module_id': module_id})
+            return False
+
+        depositable_ether = self.w3.lido.lido.get_depositable_ether()
+        if depositable_ether == 0:
+            logger.info({'msg': 'No depositable ether for top-up.', 'module_id': module_id})
+            return False
+
+        sr_v4 = cast(StakingRouterContractV4, self.w3.lido.staking_router)
+        _total, allocated, _new = sr_v4.get_deposit_allocations(depositable_ether, is_top_up=True)
+        digests = self.w3.lido.staking_router.get_all_staking_module_digests()
+        module_allocation: Wei = Wei(0)
+        for i, digest in enumerate(digests):
+            if digest[2][0] == module_id:
+                module_allocation = allocated[i]
+                break
+        if module_allocation == 0:
+            logger.info({'msg': 'Top-up allocation is zero.', 'module_id': module_id})
             return False
 
         # determine module type and select strategy
@@ -292,7 +280,7 @@ class DepositorBot:
                 balance = provider.eth.get_balance(address)
                 GUARDIAN_BALANCE.labels(address=address, chain_id=provider.eth.chain_id).set(balance)
 
-    def _deposit_to_module(self, module_id: int) -> bool:
+    def _deposit_to_module(self, module_id: int, is_top_up_allocation: bool) -> bool:
         can_deposit = self.w3.lido.deposit_security_module.can_deposit(module_id)
         logger.info({'msg': 'Can deposit to module.', 'value': can_deposit})
 
@@ -303,13 +291,13 @@ class DepositorBot:
         gas_is_ok = strategy.is_gas_price_ok(module_id)
         logger.info({'msg': 'Calculate gas recommendations.', 'value': gas_is_ok})
 
-        is_deposit_amount_ok = strategy.can_deposit_keys_based_on_ether(module_id)
-        logger.info(
-            {
-                'msg': 'Calculations deposit recommendations.',
-                'value': is_deposit_amount_ok,
-            }
-        )
+        if is_top_up_allocation:
+            # 0x01: keys count derived from getDepositsAllocation(_, True)
+            is_deposit_amount_ok = strategy.can_deposit_keys_based_on_allocation(module_id)
+        else:
+            # 0x02 seed: getStakingModuleMaxDepositsCount - use underhood  getDepositAllocations(eth, False) / 32
+            is_deposit_amount_ok = strategy.can_deposit_keys_based_on_ether(module_id)
+        logger.info({'msg': 'Calculations deposit recommendations.', 'value': is_deposit_amount_ok})
 
         if can_deposit and quorum and gas_is_ok and is_deposit_amount_ok:
             logger.info({'msg': 'Checks passed. Prepare deposit tx.'})
@@ -413,13 +401,18 @@ class DepositorBot:
 
         return self.message_storage.get_messages_and_actualize(lambda x: sign_filter(x) and actualize_filter(x))
 
-    def _get_preferred_to_seed_deposits_modules(self) -> list[int]:
-        # get digests for all SR modules — order matches allocated/new_allocations
-        module_digests = self.w3.lido.staking_router.get_all_staking_module_digests()
+    def _prefered_modules(self) -> list[tuple[int, str, int, bool]]:
+        """
+        Build a single ordered list of modules to act on.
+        Each entry: (module_id, module_address, wc_type, is_top_up).
+          is_top_up=True  -> topup path (_top_up_to_module)
+          is_top_up=False -> deposit path (_deposit_to_module)
+        """
+        digests = self.w3.lido.staking_router.get_all_staking_module_digests()
 
-        # gather quorum for whitelisted modules
+        # gas metrics + quorum heartbeat refresh (single pass for both blocks)
         now = datetime.now()
-        for digest in module_digests:
+        for digest in digests:
             module_id = digest[2][0]
             if module_id not in variables.DEPOSIT_MODULES_WHITELIST:
                 continue
@@ -431,103 +424,90 @@ class DepositorBot:
 
         depositable_ether = self.w3.lido.lido.get_depositable_ether()
         if depositable_ether == 0:
-            logger.info({'msg': 'No depositable ether. Skip phase 1.'})
+            logger.info({'msg': 'No depositable ether.'})
             return []
 
-        # Check if buffer is reserved for seed deposits
         sr_v4 = cast(StakingRouterContractV4, self.w3.lido.staking_router)
-        total, allocated, new_allocations = sr_v4.get_deposit_allocations(depositable_ether, is_top_up=False)
-        if total == 0:
-            logger.info({'msg': 'Seed deposits unavailable, switched to phase 2', 'total': total})
-            return []
+        _seed_total, seed_allocated, seed_new = sr_v4.get_deposit_allocations(depositable_ether, is_top_up=False)
+        _full_total, full_allocated, full_new = sr_v4.get_deposit_allocations(depositable_ether, is_top_up=True)
 
-        candidates: list[tuple[int, int]] = []
-        for i, digest in enumerate(module_digests):
+        seed_list, seed_has_healthy = self._build_seed_list(digests, seed_allocated, seed_new)
+        if seed_has_healthy:
+            logger.info({'msg': f'Prefered modules iteration order {seed_list}.'})
+            return seed_list
+
+        full_list, _ = self._build_full_list(digests, full_allocated, full_new)
+        result = seed_list + full_list
+        logger.info({'msg': f'Prefered modules iteration order {result}.'})
+        return result
+
+    def _build_seed_list(
+        self,
+        digests: list,
+        allocated: list,
+        new_allocations: list,
+    ) -> tuple[list[tuple[int, str, int, bool]], bool]:
+        """
+        Block 1: seed deposits to 0x02 modules using is_top_up=False allocation.
+        Returns (candidates, has_healthy):
+          has_healthy=True  -> healthy anchor found, list cut up to and including it
+          has_healthy=False -> all unhealthy, all candidates returned for second-attempt pass
+        """
+        candidates: list[tuple[int, str, int, Wei]] = []
+        for i, digest in enumerate(digests):
             module_id = digest[2][0]
             wc_type = digest[2][13]
             if wc_type != 2:
                 continue
+            if module_id not in variables.DEPOSIT_MODULES_WHITELIST:
+                continue
             if allocated[i] == 0:
                 continue
-            if module_id not in variables.DEPOSIT_MODULES_WHITELIST:
-                continue
-            candidates.append((module_id, new_allocations[i] - allocated[i]))
+            stake = new_allocations[i] - allocated[i]
+            candidates.append((module_id, digest[2][1], wc_type, stake))
 
-        candidates.sort(key=lambda c: c[1])
+        candidates.sort(key=lambda c: c[3])
 
-        modules_healthiness = [(module[0], self._is_module_healthy(module[0])) for module in candidates]
-        result = self._take_until_first_healthy_module(modules_healthiness)
-        logger.info({'msg': f'Phase 1 module iteration order {result}.'})
-
-        return result
-
-    def _get_preferred_to_full_deposits_or_topup_modules(self) -> list[tuple[int, int, str, Wei]]:
-        # get digests for all SR modules — order matches allocated/new_allocations
-        module_digests = self.w3.lido.staking_router.get_all_staking_module_digests()
-
-        # gather quorum for whitelisted modules
-        now = datetime.now()
-        for digest in module_digests:
-            module_id = digest[2][0]
-            if module_id not in variables.DEPOSIT_MODULES_WHITELIST:
-                continue
-            # Just for metrics
-            self._select_strategy(module_id).is_gas_price_ok(module_id)
-
-            if self._get_quorum(module_id):
-                self._module_last_heart_beat[module_id] = now
-
-        depositable_ether = self.w3.lido.lido.get_depositable_ether()
-        if depositable_ether == 0:
-            logger.info({'msg': 'No depositable ether. Skip phase 2.'})
-            return []
-
-        sr_v4 = cast(StakingRouterContractV4, self.w3.lido.staking_router)
-        total, allocated, new_allocations = sr_v4.get_deposit_allocations(depositable_ether, is_top_up=True)
-        if total == 0:
-            logger.info({'msg': 'Full deposits/top ups unavailable, stop execution', 'total': total})
-            return []
-
-        # candidates: (module_id, wc_type, module_address, allocation, current_stake)
-        candidates: list[tuple[int, int, str, Wei, Wei]] = []
-        for i, digest in enumerate(module_digests):
-            module_id = digest[2][0]
-            if allocated[i] == 0:
-                continue
-            if module_id not in variables.DEPOSIT_MODULES_WHITELIST:
-                continue
-            if not variables.ENABLE_TOP_UP and digest[2][13] == 2:
-                continue
-            candidates.append(
-                (
-                    module_id,
-                    digest[2][13],
-                    digest[2][1],
-                    allocated[i],
-                    new_allocations[i] - allocated[i],
-                )
-            )
-
-        candidates.sort(key=lambda c: c[4])
-
-        # take modules until first healthy
-        result: list[tuple[int, int, str, Wei]] = []
-        for module_id, wc_type, module_address, allocation, _ in candidates:
-            if wc_type == 2:
-                if not self.w3.lido.topup_gateway.can_top_up(module_id):
-                    continue
-                result.append((module_id, wc_type, module_address, allocation))
-                logger.info({'msg': f'Phase 2 module iteration order {result}.'})
-                return result
-
-            result.append((module_id, wc_type, module_address, allocation))
+        result: list[tuple[int, str, int, bool]] = []
+        for module_id, module_address, wc_type, _stake in candidates:
+            result.append((module_id, module_address, wc_type, False))  # seed -> deposit path
             if self._is_module_healthy(module_id):
-                logger.info({'msg': f'Phase 2 module iteration order {result}.'})
-                return result
+                return result, True
+        return result, False
 
-        logger.info({'msg': f'Phase 2 module iteration order {result}.'})
-        # all unhealthy
-        return []
+    def _build_full_list(
+        self,
+        digests: list,
+        allocated: list,
+        new_allocations: list,
+    ) -> tuple[list[tuple[int, str, int, bool]], bool]:
+        """
+        Block 2: full deposits to 0x01 + topups to 0x02 using is_top_up=True allocation.
+        Returns (candidates, has_healthy) — same semantics as _build_seed_list.
+        """
+        candidates: list[tuple[int, str, int, Wei]] = []
+        for i, digest in enumerate(digests):
+            module_id = digest[2][0]
+            wc_type = digest[2][13]
+            if module_id not in variables.DEPOSIT_MODULES_WHITELIST:
+                continue
+            if not variables.ENABLE_TOP_UP and wc_type == 2:
+                continue
+            if allocated[i] == 0:
+                continue
+            stake = new_allocations[i] - allocated[i]
+            candidates.append((module_id, digest[2][1], wc_type, stake))
+
+        candidates.sort(key=lambda c: c[3])
+
+        result: list[tuple[int, str, int, bool]] = []
+        for module_id, module_address, wc_type, _stake in candidates:
+            is_top_up = wc_type == 2
+            result.append((module_id, module_address, wc_type, is_top_up))
+            healthy = self.w3.lido.topup_gateway.can_top_up(module_id) if is_top_up else self._is_module_healthy(module_id)
+            if healthy:
+                return result, True
+        return result, False
 
     def _get_preferred_to_deposit_modules(self) -> list[int]:
         # filter out non allow-listed modules
