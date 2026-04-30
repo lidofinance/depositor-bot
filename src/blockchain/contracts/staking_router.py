@@ -7,8 +7,8 @@ from web3.types import BlockIdentifier, Wei
 logger = logging.getLogger(__name__)
 
 
-class StakingRouterContract(ContractInterface):
-    abi_path = './interfaces/StakingRouter.json'
+class StakingRouterContractV3(ContractInterface):
+    abi_path = './interfaces/StakingRouterV3.json'
 
     @lru_cache(maxsize=1)
     def get_contract_version(self, block_identifier: BlockIdentifier = 'latest') -> int:
@@ -29,6 +29,18 @@ class StakingRouterContract(ContractInterface):
         logger.info(
             {
                 'msg': 'Call `getStakingModuleIds()`.',
+                'value': response,
+                'block_identifier': block_identifier.__repr__(),
+            }
+        )
+        return response
+
+    def get_all_staking_module_digests(self, block_identifier: BlockIdentifier = 'latest') -> list[list]:
+        """Returns staking module digest for passed staking module ids"""
+        response = self.functions.getAllStakingModuleDigests().call(block_identifier=block_identifier)
+        logger.info(
+            {
+                'msg': 'Call getAllStakingModuleDigests().',
                 'value': response,
                 'block_identifier': block_identifier.__repr__(),
             }
@@ -97,5 +109,29 @@ class StakingRouterContract(ContractInterface):
         return response
 
 
-class StakingRouterContractV2(StakingRouterContract):
-    abi_path = './interfaces/StakingRouterV2.json'
+class StakingRouterContractV4(StakingRouterContractV3):
+    abi_path = './interfaces/StakingRouterV4.json'
+
+    def get_deposit_allocations(
+        self,
+        deposit_amount: Wei,
+        is_top_up: bool,
+        block_identifier: BlockIdentifier = 'latest',
+    ) -> tuple:
+        """Returns deposit allocations across modules.
+
+        Returns:
+            (totalAllocated, allocated[], newAllocations[])
+        """
+        response = self.functions.getDepositAllocations(
+            deposit_amount,
+            is_top_up,
+        ).call(block_identifier=block_identifier)
+        logger.info(
+            {
+                'msg': f'Call `getDepositAllocations({deposit_amount}, {is_top_up})`.',
+                'value': response,
+                'block_identifier': repr(block_identifier),
+            }
+        )
+        return response

@@ -65,6 +65,9 @@ Next cases requires bot restart:
 | LIDO_LOCATOR              | 0xC1d0b3DE6792Bf6b4b37EccdcC24e45978Cfd2Eb | Lido Locator address. Mainnet by default. Other networks could be found [here](https://docs.lido.fi/deployed-contracts/) |
 | DEPOSIT_CONTRACT          | 0x00000000219ab540356cBB839Cbe05303d7705Fa | Ethereum deposit contract address                                                                                        |
 | DEPOSIT_MODULES_WHITELIST | 1                                          | List of staking module's ids in which the depositor bot will make deposits                                               |
+| KEYS_API_URL              | -                                          | URL of the Keys API                                                                                                      |
+| CL_API_URLS               | -                                          | Comma-separated list of Consensus Layer client URIs                                                                      |
+| ENABLE_TOP_UP             | false                                      | Enable top-up functionality. Must be disabled until Node Operators submit consolidation requests                         |
 | ---                       | ---	                                       | ---                                                                                                                      |
 | MESSAGE_TRANSPORTS        | -                                          | Transports used in bot. One of/or both: rabbit/onchain_transport                                                         |
 | RABBIT_MQ_URL             | -                                          | RabbitMQ url                                                                                                             |
@@ -93,6 +96,10 @@ Next cases requires bot restart:
 | MAX_CYCLE_LIFETIME_IN_SECONDS     | 1200          | Max lifetime of usual cycle. If cycle will not end in this time, bot will crush                                          |
 | ONCHAIN_TRANSPORT_RPC_ENDPOINTS   | -             | RPC endpoint for the databus RPC, Gnosis at the moment                                                                   |
 | QUORUM_RETENTION_MINUTES          | 5             | TTL of quorum collection for marking module as healthy                                                                   |
+| MAX_VALIDATORS_PER_TOP_UP         | 50            | Maximum number of validators per top-up transaction                                                                      |
+| HTTP_REQUEST_TIMEOUT_CONSENSUS    | 300           | Timeout in seconds for CL HTTP requests                                                                                  |
+| HTTP_REQUEST_RETRY_COUNT_CONSENSUS | 5            | Number of retries for CL HTTP requests                                                                                   |
+| HTTP_REQUEST_SLEEP_BEFORE_RETRY_IN_SECONDS_CONSENSUS | 5 | Backoff factor in seconds between CL request retries                                                              |
 
 ## Metrics and logs
 
