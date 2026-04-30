@@ -5,10 +5,10 @@ import pytest
 
 @pytest.mark.unit
 def test_csm_deposit_strategy(csm_strategy):
-    csm_strategy.deposited_keys_amount = Mock(return_value=1)
+    csm_strategy.deposited_keys_amount = Mock(return_value=0)
     assert not csm_strategy.can_deposit_keys_based_on_ether(3)
 
-    csm_strategy.deposited_keys_amount = Mock(return_value=2)
+    csm_strategy.deposited_keys_amount = Mock(return_value=1)
     csm_strategy._gas_price_calculator.get_pending_base_fee = Mock(return_value=10)
     assert csm_strategy.can_deposit_keys_based_on_ether(3)
 
@@ -97,7 +97,7 @@ def test_allocation_lookup_by_module_id_not_index(base_deposit_strategy):
 @pytest.mark.unit
 def test_csm_allocation_one_key_below_threshold_returns_false(csm_strategy):
     # CSM threshold = 2, so 1 key fails
-    _setup_allocation(csm_strategy, module_id=3, allocated_wei=32 * 10**18)
+    _setup_allocation(csm_strategy, module_id=3, allocated_wei=16 * 10**18)
 
     assert csm_strategy.can_deposit_keys_based_on_allocation(3) is False
 
