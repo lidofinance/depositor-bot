@@ -44,6 +44,7 @@ class Sender:
         staking_module_nonce = quorum[0]['nonce']
         payload = b''
         guardian_signs = self._prepare_signs_for_deposit(quorum)
+
         return self._w3.lido.deposit_security_module.deposit_buffered_ether(
             block_number,
             block_hash,

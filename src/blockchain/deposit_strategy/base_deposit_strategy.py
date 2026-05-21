@@ -1,7 +1,11 @@
 import abc
 import logging
+from typing import cast
 
 import variables
+from blockchain.contracts.staking_router import (
+    StakingRouterContractV4,
+)
 from blockchain.deposit_strategy.gas_price_calculator import GasPriceCalculator
 from blockchain.deposit_strategy.strategy import DepositStrategy
 from blockchain.typings import Web3
@@ -72,6 +76,39 @@ class BaseDepositStrategy(DepositStrategy):
         )
         POSSIBLE_DEPOSITS_AMOUNT.labels(module_id).set(possible_deposits_amount)
         return possible_deposits_amount
+
+    def can_deposit_keys_based_on_allocation(self, module_id: int) -> bool:
+        """
+        Allocation-based variant for 0x01 modules.
+        Uses getDepositsAllocation(_, is_top_up=True) instead of
+        getStakingModuleMaxDepositsCount.
+        """
+        possible_keys = self._allocated_keys_amount(module_id)
+        success = self._is_keys_amount_above_threshold(possible_keys, module_id)
+        if success:
+            base_fee_per_gas = self._gas_price_calculator.get_pending_base_fee()
+            success = self._is_deposit_recommended_based_on_keys_amount(possible_keys, base_fee_per_gas, module_id)
+        DEPOSIT_AMOUNT_OK.labels(module_id).set(int(success))
+        return success
+
+    def _allocated_keys_amount(self, module_id: int) -> int:
+        depositable_ether = self._depositable_ether()
+        if depositable_ether == 0:
+            return 0
+
+        sr_v4 = cast(StakingRouterContractV4, self.w3.lido.staking_router)
+        _total, allocated, _new = sr_v4.get_deposit_allocations(depositable_ether, is_top_up=True)
+        digests = self.w3.lido.staking_router.get_all_staking_module_digests()
+
+        keys = 0
+        for i, digest in enumerate(digests):
+            if digest[2][0] == module_id:
+                # 32 ETH per validator for 0x01 full deposits
+                keys = allocated[i] // (32 * 10**18)
+                break
+
+        POSSIBLE_DEPOSITS_AMOUNT.labels(module_id).set(keys)
+        return keys
 
     @staticmethod
     def _recommended_max_gas(deposits_amount: int, module_id: int):

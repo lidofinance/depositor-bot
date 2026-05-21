@@ -140,5 +140,5 @@ deposit_contract_cache/
 
 node_modules/
 
-# Claude Code
+# Claude
 .claude

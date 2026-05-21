@@ -3,10 +3,14 @@ from typing import cast
 
 import variables
 from blockchain.contracts.deposit import DepositContract
-from blockchain.contracts.deposit_security_module import DepositSecurityModuleContract, DepositSecurityModuleContractV2
+from blockchain.contracts.deposit_security_module import DepositSecurityModuleContract
 from blockchain.contracts.lido import LidoContract
 from blockchain.contracts.lido_locator import LidoLocatorContract
-from blockchain.contracts.staking_router import StakingRouterContract, StakingRouterContractV2
+from blockchain.contracts.staking_router import (
+    StakingRouterContractV3,
+    StakingRouterContractV4,
+)
+from blockchain.contracts.topup_gateway import TopUpGatewayContract
 from web3 import Web3
 from web3.contract.contract import Contract
 from web3.module import Module
@@ -17,6 +21,8 @@ logger = logging.getLogger(__name__)
 class LidoContracts(Module):
     def __init__(self, w3: Web3):
         super().__init__(w3)
+        self.staking_router_version: int | None = None
+        self.topup_gateway: TopUpGatewayContract | None = None
         self._load_contracts()
 
     def has_contract_address_changed(self) -> bool:
@@ -52,50 +58,57 @@ class LidoContracts(Module):
         )
         self._load_staking_router()
         self._load_dsm()
+        if self.staking_router_version == 4:
+            self._load_topup_gateway()
 
     def _load_staking_router(self):
         staking_router_address = self.lido_locator.staking_router()
 
-        self.staking_router = cast(
-            StakingRouterContract,
+        # Read version using V3 ABI (getContractVersion signature is the same across versions)
+        sr = cast(
+            StakingRouterContractV3,
             self.w3.eth.contract(
                 address=staking_router_address,
-                ContractFactoryClass=StakingRouterContract,
+                ContractFactoryClass=StakingRouterContractV3,
                 decode_tuples=True,
             ),
         )
+        self.staking_router_version = sr.get_contract_version()
 
-        if self.staking_router.get_contract_version() == 2:
-            logger.debug({'msg': 'Use staking router V2.'})
+        if self.staking_router_version == 4:
+            logger.debug({'msg': 'Use staking router V4.'})
             self.staking_router = cast(
-                StakingRouterContract,
+                StakingRouterContractV4,
                 self.w3.eth.contract(
                     address=staking_router_address,
-                    ContractFactoryClass=StakingRouterContractV2,
+                    ContractFactoryClass=StakingRouterContractV4,
                     decode_tuples=True,
                 ),
             )
+        elif self.staking_router_version == 3:
+            logger.debug({'msg': 'Use staking router V3.'})
+            self.staking_router = sr
         else:
-            logger.debug({'msg': 'Use staking router V1.'})
+            raise ValueError(f'Unsupported StakingRouter version: {self.staking_router_version}')
 
     def _load_dsm(self):
         dsm_address = self.lido_locator.deposit_security_module()
 
         self.deposit_security_module = cast(
-            DepositSecurityModuleContractV2,
+            DepositSecurityModuleContract,
             self.w3.eth.contract(
                 address=dsm_address,
-                ContractFactoryClass=DepositSecurityModuleContractV2,
+                ContractFactoryClass=DepositSecurityModuleContract,
             ),
         )
 
-        dsm_version = self.deposit_security_module.version()
-        logger.debug({'msg': f'Use deposit security module V{dsm_version}.'})
-        if dsm_version == 1:
-            self.deposit_security_module = cast(
-                DepositSecurityModuleContract,
-                self.w3.eth.contract(
-                    address=dsm_address,
-                    ContractFactoryClass=DepositSecurityModuleContract,
-                ),
-            )
+    def _load_topup_gateway(self):
+        topup_gateway_address = self.lido_locator.top_up_gateway()
+        self.topup_gateway: TopUpGatewayContract = cast(
+            TopUpGatewayContract,
+            self.w3.eth.contract(
+                address=topup_gateway_address,
+                ContractFactoryClass=TopUpGatewayContract,
+            ),
+        )
+        logger.debug({'msg': 'Loaded TopUpGateway.', 'address': topup_gateway_address})
