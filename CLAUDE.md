@@ -16,7 +16,7 @@ poetry run pytest tests -m unit
 poetry run pytest tests/bots/test_depositor.py -m unit
 poetry run pytest tests/bots/test_depositor.py::TestDepositorBot::test_name -m unit
 
-# Run integration tests (requires Holesky RPC in TESTNET_WEB3_RPC_ENDPOINTS and anvil installed)
+# Run integration tests (requires Hoodi RPC in TESTNET_WEB3_RPC_ENDPOINTS and anvil installed)
 poetry run pytest tests -m integration
 
 # Lint and format
@@ -31,10 +31,6 @@ poetry run python src/main.py depositor
 poetry run python src/main.py pauser
 poetry run python src/main.py unvetter
 ```
-
-## Git workflow
-
-PRs target `develop` (the integration branch), not `main`. `main` is reserved for releases and occasional hotfixes. Always use `develop` as the base when diffing, reviewing, or creating PRs.
 
 ## Protocol concepts
 
@@ -130,7 +126,7 @@ All environment variables are read in `src/variables.py`. When adding a new one:
 
 ## Testing
 
-Unit tests (`-m unit`) are fully offline and run on every commit via pre-commit hook. Integration tests (`-m integration`) fork Holesky via anvil and require `TESTNET_WEB3_RPC_ENDPOINTS`.
+Unit tests (`-m unit`) are fully offline and run on every commit via pre-commit hook. Integration tests (`-m integration`) fork Hoodi via anvil and require `TESTNET_WEB3_RPC_ENDPOINTS`.
 
 `tests/conftest.py` provides shared fixtures including a mock `BlockData`, test council addresses, and a DSM owner account. Tests for each bot are in `tests/bots/`. Transport message schema tests are in `tests/transport/`.
 
