@@ -29,6 +29,18 @@ class TopUpGatewayContract(ContractInterface):
         )
         return response
 
+    def is_block_distance_passed(self, staking_module_id: int, block_identifier: BlockIdentifier = 'latest') -> bool:
+        # TODO: isBlockDistancePassed is not yet deployed on Hoodi. Returning True with a warning
+        # until the contract is updated; then switch to the real on-chain call.
+        logger.warning(
+            {
+                'msg': f'`isBlockDistancePassed({staking_module_id})` not yet deployed — stubbing to True.',
+                'module_id': staking_module_id,
+                'block_identifier': repr(block_identifier),
+            }
+        )
+        return True
+
     def top_up(self, module_id: int, proof_data: 'TopUpProofData') -> ContractFunction:
         top_up_data = (
             module_id,
