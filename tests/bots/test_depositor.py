@@ -993,6 +993,7 @@ def test_get_quorum(depositor_bot, setup_deposit_message):
 # ─── Integration ───────────────────────────────────────────────────
 
 
+@pytest.mark.skip(reason='SR v4 with getDepositAllocations is not deployed on Hoodi yet; re-enable once the upgrade lands.')
 @pytest.mark.integration
 @pytest.mark.parametrize(
     'web3_provider_integration,module_id',

@@ -129,11 +129,14 @@ class DepositorBot:
         )
 
     def execute(self, block: BlockData) -> bool:
+        logger.info({'msg': 'Depositor iteration start.', 'block_number': block.get('number')})
         self._check_balance()
 
         sr_version = self.w3.lido.staking_router.get_contract_version()
-        logger.info({'msg': 'SR version', 'value': sr_version})
-        return self._execute_actual()
+        logger.info({'msg': 'SR version.', 'value': sr_version})
+        result = self._execute_actual()
+        logger.info({'msg': 'Depositor iteration finished.', 'value': result})
+        return result
 
     def _execute_actual(self) -> bool:
         # Step 0: refresh quorum + gas metrics for all whitelisted modules (also caches quorum-now per module).
@@ -141,6 +144,7 @@ class DepositorBot:
 
         # Read depositable ether once; if 0 — nothing to do this iteration.
         depositable_ether = self.w3.lido.lido.get_depositable_ether()
+        logger.info({'msg': 'Depositable ether.', 'value': depositable_ether})
         if depositable_ether == 0:
             logger.info({'msg': 'No depositable ether — skip iteration.'})
             return False
@@ -149,27 +153,50 @@ class DepositorBot:
         sr_v4 = cast(StakingRouterContractV4, self.w3.lido.staking_router)
         _total, seed_allocated, seed_new = sr_v4.get_deposit_allocations(depositable_ether, is_top_up=False)
         digests = self.w3.lido.staking_router.get_all_staking_module_digests()
+        logger.info(
+            {
+                'msg': 'Seed allocations computed.',
+                'is_top_up': False,
+                'allocated': list(seed_allocated),
+                'new': list(seed_new),
+            }
+        )
 
         # Phase A: seed deposits into 0x02 modules.
+        logger.info({'msg': 'Phase A start: seed deposits to 0x02 modules.'})
         done, success = self._phase_seed(seed_allocated, seed_new, digests)
+        logger.info({'msg': 'Phase A finished.', 'done': done, 'success': success})
         if done:
             return success
 
         # Phase B: top-ups (0x02) and full deposits (0x01).
         if not variables.ENABLE_TOP_UP:
+            logger.info({'msg': 'Phase B start: full deposits to 0x01 (top-up disabled).'})
             _done, success = self._phase_full(seed_allocated, seed_new, digests)
         else:
+            logger.info({'msg': 'Phase B start: full deposits to 0x01 + top-up to 0x02.'})
             _done, success = self._phase_full_and_topup(depositable_ether, seed_allocated, seed_new, digests)
+        logger.info({'msg': 'Phase B finished.', 'done': _done, 'success': success})
         return success
 
     def _refresh_modules_state(self) -> None:
         """Update last-quorum heart_beat (cooldown source) and run gas-price probe for metrics, for all whitelisted modules."""
         now = datetime.now()
+        logger.info(
+            {
+                'msg': 'Refresh modules state (quorum heartbeats + gas metrics).',
+                'whitelist': list(variables.DEPOSIT_MODULES_WHITELIST),
+            }
+        )
         for module_id in variables.DEPOSIT_MODULES_WHITELIST:
             # Probe gas-price strategy purely for metrics — gas is re-checked right before the tx is sent.
             self._select_strategy(module_id).is_gas_price_ok(module_id)
-            if self._get_quorum(module_id):
+            quorum = self._get_quorum(module_id)
+            if quorum:
                 self._module_last_heart_beat[module_id] = now
+                logger.info({'msg': 'Module has quorum — heartbeat refreshed.', 'module_id': module_id})
+            else:
+                logger.info({'msg': 'Module has no quorum right now.', 'module_id': module_id})
 
     def _is_in_cooldown(self, module_id: int) -> bool:
         """Quorum-retention cooldown for deposits: we had a quorum within the retention window."""
@@ -197,19 +224,24 @@ class DepositorBot:
             candidates.append((module_id, stake))
 
         candidates.sort(key=lambda c: c[1])
-        logger.info({'msg': 'Phase seed (0x02) candidates.', 'value': [c[0] for c in candidates]})
+        logger.info(
+            {
+                'msg': 'Phase A (seed 0x02) candidates sorted by stake asc.',
+                'candidates': [{'module_id': c[0], 'stake': int(c[1])} for c in candidates],
+            }
+        )
 
         for module_id, _stake in candidates:
             if not self.w3.lido.deposit_security_module.can_deposit(module_id):
-                logger.info({'msg': 'canDeposit failed, try next module.', 'module_id': module_id})
+                logger.info({'msg': 'Phase A: canDeposit=False — try next module.', 'module_id': module_id})
                 continue
             if self._get_quorum(module_id):
                 return True, self._deposit_to_module(module_id)
             # No quorum right now: if cooldown is still active, stop and wait for the next bot iteration.
             if self._is_in_cooldown(module_id):
-                logger.info({'msg': 'No quorum but cooldown active — wait next iteration.', 'module_id': module_id})
+                logger.info({'msg': 'Phase A: no quorum, cooldown active — wait next iteration.', 'module_id': module_id})
                 return True, False
-            logger.info({'msg': 'No quorum and cooldown expired — try next module.', 'module_id': module_id})
+            logger.info({'msg': 'Phase A: no quorum, cooldown expired — try next module.', 'module_id': module_id})
         return False, False
 
     def _phase_full(self, seed_allocated: list[int], seed_new: list[int], digests: list) -> tuple[bool, bool]:
@@ -228,18 +260,23 @@ class DepositorBot:
             candidates.append((module_id, stake))
 
         candidates.sort(key=lambda c: c[1])
-        logger.info({'msg': 'Phase full (0x01) candidates.', 'value': [c[0] for c in candidates]})
+        logger.info(
+            {
+                'msg': 'Phase B (full 0x01) candidates sorted by stake asc.',
+                'candidates': [{'module_id': c[0], 'stake': int(c[1])} for c in candidates],
+            }
+        )
 
         for module_id, _stake in candidates:
             if not self.w3.lido.deposit_security_module.can_deposit(module_id):
-                logger.info({'msg': 'canDeposit failed, try next module.', 'module_id': module_id})
+                logger.info({'msg': 'Phase B: canDeposit=False — try next module.', 'module_id': module_id})
                 continue
             if self._get_quorum(module_id):
                 return True, self._deposit_to_module(module_id)
             if self._is_in_cooldown(module_id):
-                logger.info({'msg': 'No quorum but cooldown active — wait next iteration.', 'module_id': module_id})
+                logger.info({'msg': 'Phase B: no quorum, cooldown active — wait next iteration.', 'module_id': module_id})
                 return True, False
-            logger.info({'msg': 'No quorum and cooldown expired — try next module.', 'module_id': module_id})
+            logger.info({'msg': 'Phase B: no quorum, cooldown expired — try next module.', 'module_id': module_id})
         return False, False
 
     def _phase_full_and_topup(
@@ -276,28 +313,33 @@ class DepositorBot:
                 candidates.append((module_id, module_address, wc_type, stake, Wei(0)))
 
         candidates.sort(key=lambda c: c[3])
-        logger.info({'msg': 'Phase full+topup candidates.', 'value': [(c[0], c[2]) for c in candidates]})
+        logger.info(
+            {
+                'msg': 'Phase B (full 0x01 + top-up 0x02) candidates sorted by stake asc.',
+                'candidates': [{'module_id': c[0], 'wc_type': c[2], 'stake': int(c[3])} for c in candidates],
+            }
+        )
 
         for module_id, module_address, wc_type, _stake, topup_alloc in candidates:
             if wc_type == 2:
                 # Top-up path: canTopUp + is_block_distance_passed (no quorum check for top-ups).
                 if not self.w3.lido.topup_gateway.can_top_up(module_id):
-                    logger.info({'msg': 'canTopUp failed, try next module.', 'module_id': module_id})
+                    logger.info({'msg': 'Phase B: canTopUp=False — try next module.', 'module_id': module_id})
                     continue
                 if not self.w3.lido.topup_gateway.is_block_distance_passed(module_id):
-                    logger.info({'msg': 'Top-up block distance not passed — wait next iteration.', 'module_id': module_id})
+                    logger.info({'msg': 'Phase B: top-up block distance not passed — wait next iteration.', 'module_id': module_id})
                     return True, False
                 return True, self._top_up_to_module(module_id, module_address, topup_alloc)
             # 0x01 full deposit path
             if not self.w3.lido.deposit_security_module.can_deposit(module_id):
-                logger.info({'msg': 'canDeposit failed, try next module.', 'module_id': module_id})
+                logger.info({'msg': 'Phase B: canDeposit=False — try next module.', 'module_id': module_id})
                 continue
             if self._get_quorum(module_id):
                 return True, self._deposit_to_module(module_id)
             if self._is_in_cooldown(module_id):
-                logger.info({'msg': 'No quorum but cooldown active — wait next iteration.', 'module_id': module_id})
+                logger.info({'msg': 'Phase B: no quorum, cooldown active — wait next iteration.', 'module_id': module_id})
                 return True, False
-            logger.info({'msg': 'No quorum and cooldown expired — try next module.', 'module_id': module_id})
+            logger.info({'msg': 'Phase B: no quorum, cooldown expired — try next module.', 'module_id': module_id})
         return False, False
 
     def _deposit_to_module(self, module_id: int) -> bool:
@@ -338,6 +380,14 @@ class DepositorBot:
         max_validators = min(
             variables.MAX_VALIDATORS_PER_TOP_UP,
             self.w3.lido.topup_gateway.get_max_validators_per_top_up(),
+        )
+        logger.info(
+            {
+                'msg': 'Top-up: collecting candidates.',
+                'module_id': module_id,
+                'module_allocation': int(module_allocation),
+                'max_validators': max_validators,
+            }
         )
 
         proof_data = strategy.get_topup_candidates(
