@@ -2,7 +2,7 @@
 import logging
 from collections import defaultdict
 from datetime import datetime, timedelta
-from typing import Callable, Dict, List, Optional, Tuple, cast
+from typing import Callable, Dict, List, Optional, cast
 
 import variables
 from blockchain.contracts.base_interface import ContractInterface
@@ -129,83 +129,238 @@ class DepositorBot:
         )
 
     def execute(self, block: BlockData) -> bool:
+        logger.info({'msg': 'Depositor iteration start.', 'block_number': block.get('number')})
         self._check_balance()
 
         sr_version = self.w3.lido.staking_router.get_contract_version()
-        if sr_version < 4:
-            logger.info({'msg': 'SR version < 4, execute legacy', 'value': sr_version})
-            return self._execute_legacy()
-
-        return self._execute_actual()
-
-    def _execute_legacy(self) -> bool:
-        modules_to_deposit = self._get_preferred_to_deposit_modules()
-
-        for module_id in modules_to_deposit:
-            logger.info({'msg': f'Do deposit to module with id: {module_id}.'})
-
-            result = self._deposit_to_module(module_id, is_top_up_allocation=False)
-            logger.info(
-                {
-                    'msg': f'Deposit status to Module[{module_id}]: {result}.',
-                    'value': result,
-                }
-            )
-
-            if result:
-                return result
-
-        return False
+        logger.info({'msg': 'SR version.', 'value': sr_version})
+        result = self._execute_actual()
+        logger.info({'msg': 'Depositor iteration finished.', 'value': result})
+        return result
 
     def _execute_actual(self) -> bool:
-        modules = self._prefered_modules()
-        for module in modules:
-            module_id, _module_address, wc_type, is_top_up = module
+        # Step 0: refresh quorum + gas metrics for all whitelisted modules (also caches quorum-now per module).
+        self._refresh_modules_state()
 
-            if is_top_up:
-                logger.info({'msg': f'Do top-up to module with id: {module_id}.'})
-                result = self._top_up_to_module(module)
-            else:
-                # 0x01 -> full deposit (allocation from getDepositAllocation(eth, True))
-                # 0x02 -> seed deposit (allocation from getDepositAllocation(eth, False))
-                is_top_up_allocation = wc_type != 2
-                logger.info({'msg': f'Do deposit to module with id: {module_id}.'})
-                result = self._deposit_to_module(module_id, is_top_up_allocation)
-
-            logger.info({'msg': f'Result for Module[{module_id}]: {result}.', 'value': result})
-
-            if result:
-                return result
-
-        return False
-
-    def _top_up_to_module(self, module: tuple[int, str, int, bool]) -> bool:
-        # re-check canTopUp
-        # module_id, _wc_type, module_address, module_allocation = module
-        module_id, module_address, _wc_type, _is_top_up = module
-
-        if not self.w3.lido.topup_gateway.can_top_up(module_id):
-            logger.info({'msg': 'canTopUp failed.', 'module_id': module_id})
-            return False
-
+        # Read depositable ether once; if 0 — nothing to do this iteration.
         depositable_ether = self.w3.lido.lido.get_depositable_ether()
+        logger.info({'msg': 'Depositable ether.', 'value': depositable_ether})
         if depositable_ether == 0:
-            logger.info({'msg': 'No depositable ether for top-up.', 'module_id': module_id})
+            logger.info({'msg': 'No depositable ether — skip iteration.'})
             return False
 
+        # Compute seed allocation + digests once; both phases use them for module ordering.
         sr_v4 = cast(StakingRouterContractV4, self.w3.lido.staking_router)
-        _total, allocated, _new = sr_v4.get_deposit_allocations(depositable_ether, is_top_up=True)
+        _total, seed_allocated, seed_new = sr_v4.get_deposit_allocations(depositable_ether, is_top_up=False)
         digests = self.w3.lido.staking_router.get_all_staking_module_digests()
-        module_allocation: Wei = Wei(0)
+        logger.info(
+            {
+                'msg': 'Seed allocations computed.',
+                'is_top_up': False,
+                'allocated': list(seed_allocated),
+                'new': list(seed_new),
+            }
+        )
+
+        # Phase A: seed deposits into 0x02 modules.
+        logger.info({'msg': 'Phase A start: seed deposits to 0x02 modules.'})
+        done, success = self._phase_seed(seed_allocated, seed_new, digests)
+        logger.info({'msg': 'Phase A finished.', 'done': done, 'success': success})
+        if done:
+            return success
+
+        # Phase B: top-ups (0x02) and full deposits (0x01).
+        if not variables.ENABLE_TOP_UP:
+            logger.info({'msg': 'Phase B start: full deposits to 0x01 (top-up disabled).'})
+            _done, success = self._phase_full(seed_allocated, seed_new, digests)
+        else:
+            logger.info({'msg': 'Phase B start: full deposits to 0x01 + top-up to 0x02.'})
+            _done, success = self._phase_full_and_topup(depositable_ether, seed_allocated, seed_new, digests)
+        logger.info({'msg': 'Phase B finished.', 'done': _done, 'success': success})
+        return success
+
+    def _refresh_modules_state(self) -> None:
+        """Update last-quorum heart_beat (cooldown source) and run gas-price probe for metrics, for all whitelisted modules."""
+        now = datetime.now()
+        logger.info(
+            {
+                'msg': 'Refresh modules state (quorum heartbeats + gas metrics).',
+                'whitelist': list(variables.DEPOSIT_MODULES_WHITELIST),
+            }
+        )
+        for module_id in variables.DEPOSIT_MODULES_WHITELIST:
+            # Probe gas-price strategy purely for metrics — gas is re-checked right before the tx is sent.
+            self._select_strategy(module_id).is_gas_price_ok(module_id)
+            quorum = self._get_quorum(module_id)
+            if quorum:
+                self._module_last_heart_beat[module_id] = now
+                logger.info({'msg': 'Module has quorum — heartbeat refreshed.', 'module_id': module_id})
+            else:
+                logger.info({'msg': 'Module has no quorum right now.', 'module_id': module_id})
+
+    def _is_in_cooldown(self, module_id: int) -> bool:
+        """Quorum-retention cooldown for deposits: we had a quorum within the retention window."""
+        last = self._module_last_heart_beat[module_id]
+        return (datetime.now() - last) <= timedelta(minutes=variables.QUORUM_RETENTION_MINUTES)
+
+    def _phase_seed(self, seed_allocated: list[int], seed_new: list[int], digests: list) -> tuple[bool, bool]:
+        """
+        Seed deposits into 0x02 modules using is_top_up=False allocations.
+        Returns (done, success):
+          done=True  -> caller stops (we acted or hit cooldown)
+          done=False -> phase produced nothing, caller continues to the next phase
+        """
+        candidates: list[tuple[int, Wei]] = []
         for i, digest in enumerate(digests):
-            if digest[2][0] == module_id:
-                module_allocation = allocated[i]
-                break
-        if module_allocation == 0:
-            logger.info({'msg': 'Top-up allocation is zero.', 'module_id': module_id})
+            module_id = digest[2][0]
+            wc_type = digest[2][13]
+            if wc_type != 2:
+                continue
+            if module_id not in variables.DEPOSIT_MODULES_WHITELIST:
+                continue
+            if seed_allocated[i] == 0:
+                continue
+            stake = Wei(seed_new[i] - seed_allocated[i])
+            candidates.append((module_id, stake))
+
+        candidates.sort(key=lambda c: c[1])
+        logger.info(
+            {
+                'msg': 'Phase A (seed 0x02) candidates sorted by stake asc.',
+                'candidates': [{'module_id': c[0], 'stake': int(c[1])} for c in candidates],
+            }
+        )
+
+        for module_id, _stake in candidates:
+            if not self.w3.lido.deposit_security_module.can_deposit(module_id):
+                logger.info({'msg': 'Phase A: canDeposit=False — try next module.', 'module_id': module_id})
+                continue
+            if self._get_quorum(module_id):
+                return True, self._deposit_to_module(module_id)
+            # No quorum right now: if cooldown is still active, stop and wait for the next bot iteration.
+            if self._is_in_cooldown(module_id):
+                logger.info({'msg': 'Phase A: no quorum, cooldown active — wait next iteration.', 'module_id': module_id})
+                return True, False
+            logger.info({'msg': 'Phase A: no quorum, cooldown expired — try next module.', 'module_id': module_id})
+        return False, False
+
+    def _phase_full(self, seed_allocated: list[int], seed_new: list[int], digests: list) -> tuple[bool, bool]:
+        """Full deposits to 0x01 modules using seed (is_top_up=False) allocations."""
+        candidates: list[tuple[int, Wei]] = []
+        for i, digest in enumerate(digests):
+            module_id = digest[2][0]
+            wc_type = digest[2][13]
+            if wc_type != 1:
+                continue
+            if module_id not in variables.DEPOSIT_MODULES_WHITELIST:
+                continue
+            if seed_allocated[i] == 0:
+                continue
+            stake = Wei(seed_new[i] - seed_allocated[i])
+            candidates.append((module_id, stake))
+
+        candidates.sort(key=lambda c: c[1])
+        logger.info(
+            {
+                'msg': 'Phase B (full 0x01) candidates sorted by stake asc.',
+                'candidates': [{'module_id': c[0], 'stake': int(c[1])} for c in candidates],
+            }
+        )
+
+        for module_id, _stake in candidates:
+            if not self.w3.lido.deposit_security_module.can_deposit(module_id):
+                logger.info({'msg': 'Phase B: canDeposit=False — try next module.', 'module_id': module_id})
+                continue
+            if self._get_quorum(module_id):
+                return True, self._deposit_to_module(module_id)
+            if self._is_in_cooldown(module_id):
+                logger.info({'msg': 'Phase B: no quorum, cooldown active — wait next iteration.', 'module_id': module_id})
+                return True, False
+            logger.info({'msg': 'Phase B: no quorum, cooldown expired — try next module.', 'module_id': module_id})
+        return False, False
+
+    def _phase_full_and_topup(
+        self,
+        depositable_ether: Wei,
+        seed_allocated: list[int],
+        seed_new: list[int],
+        digests: list,
+    ) -> tuple[bool, bool]:
+        """
+        Full deposits to 0x01 + top-ups to 0x02.
+        - 0x02 (top-up) candidates: from is_top_up=True allocations (top-up uses its own capacity).
+        - 0x01 (full)   candidates: from is_top_up=False (seed) allocations.
+        """
+        sr_v4 = cast(StakingRouterContractV4, self.w3.lido.staking_router)
+        _total, topup_allocated, topup_new = sr_v4.get_deposit_allocations(depositable_ether, is_top_up=True)
+
+        candidates: list[tuple[int, str, int, Wei, Wei]] = []  # (module_id, address, wc_type, stake, topup_allocation)
+        for i, digest in enumerate(digests):
+            module_id = digest[2][0]
+            module_address = digest[2][1]
+            wc_type = digest[2][13]
+            if module_id not in variables.DEPOSIT_MODULES_WHITELIST:
+                continue
+            if wc_type == 2:
+                if topup_allocated[i] == 0:
+                    continue
+                stake = Wei(topup_new[i] - topup_allocated[i])
+                candidates.append((module_id, module_address, wc_type, stake, Wei(topup_allocated[i])))
+            elif wc_type == 1:
+                if seed_allocated[i] == 0:
+                    continue
+                stake = Wei(seed_new[i] - seed_allocated[i])
+                candidates.append((module_id, module_address, wc_type, stake, Wei(0)))
+
+        candidates.sort(key=lambda c: c[3])
+        logger.info(
+            {
+                'msg': 'Phase B (full 0x01 + top-up 0x02) candidates sorted by stake asc.',
+                'candidates': [{'module_id': c[0], 'wc_type': c[2], 'stake': int(c[3])} for c in candidates],
+            }
+        )
+
+        for module_id, module_address, wc_type, _stake, topup_alloc in candidates:
+            if wc_type == 2:
+                # Top-up path: canTopUp + is_block_distance_passed (no quorum check for top-ups).
+                if not self.w3.lido.topup_gateway.can_top_up(module_id):
+                    logger.info({'msg': 'Phase B: canTopUp=False — try next module.', 'module_id': module_id})
+                    continue
+                if not self.w3.lido.topup_gateway.is_block_distance_passed(module_id):
+                    logger.info({'msg': 'Phase B: top-up block distance not passed — wait next iteration.', 'module_id': module_id})
+                    return True, False
+                return True, self._top_up_to_module(module_id, module_address, topup_alloc)
+            # 0x01 full deposit path
+            if not self.w3.lido.deposit_security_module.can_deposit(module_id):
+                logger.info({'msg': 'Phase B: canDeposit=False — try next module.', 'module_id': module_id})
+                continue
+            if self._get_quorum(module_id):
+                return True, self._deposit_to_module(module_id)
+            if self._is_in_cooldown(module_id):
+                logger.info({'msg': 'Phase B: no quorum, cooldown active — wait next iteration.', 'module_id': module_id})
+                return True, False
+            logger.info({'msg': 'Phase B: no quorum, cooldown expired — try next module.', 'module_id': module_id})
+        return False, False
+
+    def _deposit_to_module(self, module_id: int) -> bool:
+        """New simplified deposit path: gas check (no keys-count) + send."""
+        strategy = self._select_strategy(module_id)
+        if not strategy.is_gas_price_ok(module_id):
+            logger.info({'msg': 'Gas price too high — skip deposit.', 'module_id': module_id})
             return False
 
-        # determine module type and select strategy
+        quorum = self._get_quorum(module_id)
+        if not quorum:
+            logger.info({'msg': 'Quorum disappeared — skip deposit.', 'module_id': module_id})
+            return False
+
+        logger.info({'msg': 'Checks passed. Prepare deposit tx.', 'module_id': module_id})
+        success = self.prepare_and_send_tx(module_id, quorum)
+        self._flashbots_works = not self._flashbots_works or success
+        return success
+
+    def _top_up_to_module(self, module_id: int, module_address: str, module_allocation: Wei) -> bool:
+        """New simplified top-up path: gas check (no keys-count) + proof + send. Allocation is passed in."""
         module_type = self._get_module_type(module_address)
         strategy = self._select_topup_strategy(module_type)
         if strategy is None:
@@ -218,7 +373,6 @@ class DepositorBot:
             )
             return False
 
-        # gas check per module
         if not strategy.is_gas_price_ok():
             logger.info({'msg': 'Gas price too high for top-up.', 'module_id': module_id})
             return False
@@ -226,6 +380,14 @@ class DepositorBot:
         max_validators = min(
             variables.MAX_VALIDATORS_PER_TOP_UP,
             self.w3.lido.topup_gateway.get_max_validators_per_top_up(),
+        )
+        logger.info(
+            {
+                'msg': 'Top-up: collecting candidates.',
+                'module_id': module_id,
+                'module_allocation': int(module_allocation),
+                'max_validators': max_validators,
+            }
         )
 
         proof_data = strategy.get_topup_candidates(
@@ -284,34 +446,6 @@ class DepositorBot:
         GUARDIAN_BALANCE.clear()
         for (address, chain_id), balance in new_values.items():
             GUARDIAN_BALANCE.labels(address=address, chain_id=chain_id).set(balance)
-
-    def _deposit_to_module(self, module_id: int, is_top_up_allocation: bool) -> bool:
-        can_deposit = self.w3.lido.deposit_security_module.can_deposit(module_id)
-        logger.info({'msg': 'Can deposit to module.', 'value': can_deposit})
-
-        quorum = self._get_quorum(module_id)
-        logger.info({'msg': 'Build quorum.', 'value': quorum})
-
-        strategy = self._select_strategy(module_id)
-        gas_is_ok = strategy.is_gas_price_ok(module_id)
-        logger.info({'msg': 'Calculate gas recommendations.', 'value': gas_is_ok})
-
-        if is_top_up_allocation:
-            # 0x01: keys count derived from getDepositsAllocation(_, True)
-            is_deposit_amount_ok = strategy.can_deposit_keys_based_on_allocation(module_id)
-        else:
-            # 0x02 seed: getStakingModuleMaxDepositsCount - use underhood  getDepositAllocations(eth, False) / 32
-            is_deposit_amount_ok = strategy.can_deposit_keys_based_on_ether(module_id)
-        logger.info({'msg': 'Calculations deposit recommendations.', 'value': is_deposit_amount_ok})
-
-        if can_deposit and quorum and gas_is_ok and is_deposit_amount_ok:
-            logger.info({'msg': 'Checks passed. Prepare deposit tx.'})
-            success = self.prepare_and_send_tx(module_id, quorum)
-            self._flashbots_works = not self._flashbots_works or success
-            return success
-
-        logger.info({'msg': 'Checks failed. Skip deposit.'})
-        return False
 
     def _select_strategy(self, module_id) -> DepositStrategy:
         # todo: check by getType
@@ -405,184 +539,3 @@ class DepositorBot:
         sign_filter = get_messages_sign_filter(prefix)
 
         return self.message_storage.get_messages_and_actualize(lambda x: sign_filter(x) and actualize_filter(x))
-
-    def _prefered_modules(self) -> list[tuple[int, str, int, bool]]:
-        """
-        Build a single ordered list of modules to act on.
-        Each entry: (module_id, module_address, wc_type, is_top_up).
-          is_top_up=True  -> topup path (_top_up_to_module)
-          is_top_up=False -> deposit path (_deposit_to_module)
-        """
-        digests = self.w3.lido.staking_router.get_all_staking_module_digests()
-
-        # gas metrics + quorum heartbeat refresh (single pass for both blocks)
-        now = datetime.now()
-        for digest in digests:
-            module_id = digest[2][0]
-            if module_id not in variables.DEPOSIT_MODULES_WHITELIST:
-                continue
-            # Just for metrics
-            self._select_strategy(module_id).is_gas_price_ok(module_id)
-
-            if self._get_quorum(module_id):
-                self._module_last_heart_beat[module_id] = now
-
-        depositable_ether = self.w3.lido.lido.get_depositable_ether()
-        if depositable_ether == 0:
-            logger.info({'msg': 'No depositable ether.'})
-            return []
-
-        sr_v4 = cast(StakingRouterContractV4, self.w3.lido.staking_router)
-        _seed_total, seed_allocated, seed_new = sr_v4.get_deposit_allocations(depositable_ether, is_top_up=False)
-        _full_total, full_allocated, full_new = sr_v4.get_deposit_allocations(depositable_ether, is_top_up=True)
-
-        seed_list, seed_has_healthy = self._build_seed_list(digests, seed_allocated, seed_new)
-        if seed_has_healthy:
-            logger.info({'msg': f'Prefered modules iteration order {seed_list}.'})
-            return seed_list
-
-        full_list, _ = self._build_full_list(digests, full_allocated, full_new)
-        result = seed_list + full_list
-        logger.info({'msg': f'Prefered modules iteration order {result}.'})
-        return result
-
-    def _build_seed_list(
-        self,
-        digests: list,
-        allocated: list,
-        new_allocations: list,
-    ) -> tuple[list[tuple[int, str, int, bool]], bool]:
-        """
-        Block 1: seed deposits to 0x02 modules using is_top_up=False allocation.
-        Returns (candidates, has_healthy):
-          has_healthy=True  -> healthy anchor found, list cut up to and including it
-          has_healthy=False -> all unhealthy, all candidates returned for second-attempt pass
-        """
-        candidates: list[tuple[int, str, int, Wei]] = []
-        for i, digest in enumerate(digests):
-            module_id = digest[2][0]
-            wc_type = digest[2][13]
-            if wc_type != 2:
-                continue
-            if module_id not in variables.DEPOSIT_MODULES_WHITELIST:
-                continue
-            if allocated[i] == 0:
-                continue
-            stake = new_allocations[i] - allocated[i]
-            candidates.append((module_id, digest[2][1], wc_type, stake))
-
-        candidates.sort(key=lambda c: c[3])
-
-        result: list[tuple[int, str, int, bool]] = []
-        for module_id, module_address, wc_type, _stake in candidates:
-            result.append((module_id, module_address, wc_type, False))  # seed -> deposit path
-            if self._is_module_healthy(module_id):
-                return result, True
-        return result, False
-
-    def _build_full_list(
-        self,
-        digests: list,
-        allocated: list,
-        new_allocations: list,
-    ) -> tuple[list[tuple[int, str, int, bool]], bool]:
-        """
-        Block 2: full deposits to 0x01 + topups to 0x02 using is_top_up=True allocation.
-        Returns (candidates, has_healthy) — same semantics as _build_seed_list.
-        """
-        candidates: list[tuple[int, str, int, Wei]] = []
-        for i, digest in enumerate(digests):
-            module_id = digest[2][0]
-            wc_type = digest[2][13]
-            if module_id not in variables.DEPOSIT_MODULES_WHITELIST:
-                continue
-            if not variables.ENABLE_TOP_UP and wc_type == 2:
-                continue
-            if allocated[i] == 0:
-                continue
-            stake = new_allocations[i] - allocated[i]
-            candidates.append((module_id, digest[2][1], wc_type, stake))
-
-        candidates.sort(key=lambda c: c[3])
-
-        result: list[tuple[int, str, int, bool]] = []
-        for module_id, module_address, wc_type, _stake in candidates:
-            is_top_up = wc_type == 2
-            result.append((module_id, module_address, wc_type, is_top_up))
-            healthy = self.w3.lido.topup_gateway.can_top_up(module_id) if is_top_up else self._is_module_healthy(module_id)
-            if healthy:
-                return result, True
-        return result, False
-
-    def _get_preferred_to_deposit_modules(self) -> list[int]:
-        # filter out non allow-listed modules
-        module_ids = [
-            module_id
-            for module_id in self.w3.lido.staking_router.get_staking_module_ids()
-            if module_id in variables.DEPOSIT_MODULES_WHITELIST
-        ]
-
-        # gather quorum
-        now = datetime.now()
-        for module_id in module_ids:
-            # Just for metrics
-            self._select_strategy(module_id).is_gas_price_ok(module_id)
-
-            if self._get_quorum(module_id):
-                self._module_last_heart_beat[module_id] = now
-
-        # get digests for all the modules
-        module_digests = self.w3.lido.staking_router.get_staking_module_digests(module_ids)
-        # sort modules by validator count
-        sorted_module_digests = sorted(
-            module_digests,
-            key=lambda module_digest: self.get_active_validators_count(module_digest),
-        )
-        # decide if modules are healthy
-        # module[2][0] - module_id
-        modules_healthiness = [(module[2][0], self._is_module_healthy_keys_amount_check(module[2][0])) for module in sorted_module_digests]
-
-        # take all the modules in sorted order until the first healthy one(including)
-        result = self._take_until_first_healthy_module(modules_healthiness)
-        logger.info({'msg': f'Legacy module iteration order {result}.'})
-
-        return result
-
-    def _is_module_healthy_keys_amount_check(self, module_id: int) -> bool:
-        strategy = self._select_strategy(module_id)
-        return self._is_module_healthy(module_id) and strategy.deposited_keys_amount(module_id) >= 1
-
-    def _is_module_healthy(self, module_id: int) -> bool:
-        """
-        Check quorum and can deposit for non-zero allocation modules
-        """
-        # Check if the quorum cache is valid
-        last_quorum_time = self._module_last_heart_beat[module_id]
-        is_valid_quorum = (datetime.now() - last_quorum_time) <= timedelta(minutes=variables.QUORUM_RETENTION_MINUTES)
-        logger.info({'msg': f'Is valid quorum {is_valid_quorum}.', 'module_id': module_id})
-
-        # Check if module is available for deposits
-        can_deposit = self.w3.lido.deposit_security_module.can_deposit(module_id)
-        logger.info({'msg': f'Can deposit {can_deposit}.', 'module_id': module_id})
-
-        return can_deposit and is_valid_quorum
-
-    @staticmethod
-    def get_active_validators_count(module: list) -> int:
-        total_deposited = module[3][1]  # totalDepositedValidators
-        total_exited = module[3][0]  # totalExitedValidators
-        return total_deposited - total_exited
-
-    @staticmethod
-    def _take_until_first_healthy_module(
-        sorted_modules_healthiness: list[Tuple[int, bool]],
-    ) -> list[int]:
-        module_ids = []
-        for module_id, is_healthy in sorted_modules_healthiness:
-            module_ids.append(module_id)
-            if is_healthy:
-                break
-        else:
-            # If all modules are unhealthy
-            return []
-        return module_ids
