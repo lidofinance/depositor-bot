@@ -88,6 +88,7 @@ class DepositorBot:
         self._cl = cl
         now = datetime.now()
         self._module_last_heart_beat: Dict[int, datetime] = {module_id: now for module_id in variables.DEPOSIT_MODULES_WHITELIST}
+        self._module_type_cache: Dict[int, bytes] = {}
 
         transports = []
 
@@ -139,8 +140,11 @@ class DepositorBot:
         return result
 
     def _execute_actual(self) -> bool:
+        # Fetch digests first so _refresh_modules_state can populate the module-type cache.
+        digests = self.w3.lido.staking_router.get_all_staking_module_digests()
+
         # Step 0: refresh quorum + gas metrics for all whitelisted modules (also caches quorum-now per module).
-        self._refresh_modules_state()
+        self._refresh_modules_state(digests)
 
         # Read depositable ether once; if 0 — nothing to do this iteration.
         depositable_ether = self.w3.lido.lido.get_depositable_ether()
@@ -149,10 +153,9 @@ class DepositorBot:
             logger.info({'msg': 'No depositable ether — skip iteration.'})
             return False
 
-        # Compute seed allocation + digests once; both phases use them for module ordering.
+        # Compute seed allocation once; both phases use it for module ordering.
         sr_v4 = cast(StakingRouterContractV4, self.w3.lido.staking_router)
         _total, seed_allocated, seed_new = sr_v4.get_deposit_allocations(depositable_ether, is_top_up=False)
-        digests = self.w3.lido.staking_router.get_all_staking_module_digests()
         logger.info(
             {
                 'msg': 'Seed allocations computed.',
@@ -179,8 +182,14 @@ class DepositorBot:
         logger.info({'msg': 'Phase B finished.', 'done': _done, 'success': success})
         return success
 
-    def _refresh_modules_state(self) -> None:
+    def _refresh_modules_state(self, digests: list) -> None:
         """Update last-quorum heart_beat (cooldown source) and run gas-price probe for metrics, for all whitelisted modules."""
+        for digest in digests:
+            module_id = digest[2][0]
+            module_address = digest[2][1]
+            if module_id in variables.DEPOSIT_MODULES_WHITELIST and module_id not in self._module_type_cache:
+                self._module_type_cache[module_id] = self._get_module_type(module_address)
+
         now = datetime.now()
         logger.info(
             {
@@ -408,6 +417,7 @@ class DepositorBot:
         return success
 
     MODULE_TYPE_CMV2 = b'curated-onchain-v2'.ljust(32, b'\x00')
+    MODULE_TYPE_CSM = b'community-onchain-v1'.ljust(32, b'\x00')
     GET_TYPE_ABI = ContractInterface.load_abi('./interfaces/IStakingModule.json')
 
     def _select_topup_strategy(self, module_type: bytes) -> Optional[TopUpStrategy]:
@@ -447,9 +457,8 @@ class DepositorBot:
         for (address, chain_id), balance in new_values.items():
             GUARDIAN_BALANCE.labels(address=address, chain_id=chain_id).set(balance)
 
-    def _select_strategy(self, module_id) -> DepositStrategy:
-        # todo: check by getType
-        if module_id == 3:
+    def _select_strategy(self, module_id: int) -> DepositStrategy:
+        if self._module_type_cache.get(module_id) == self.MODULE_TYPE_CSM:
             return self._csm_strategy
         return self._general_strategy
 

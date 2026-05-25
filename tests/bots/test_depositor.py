@@ -51,7 +51,7 @@ class TestRefreshModulesState(unittest.TestCase):
         self.bot._get_quorum = Mock(return_value=None)
         self.bot._select_strategy = Mock(return_value=Mock())
 
-        self.bot._refresh_modules_state()
+        self.bot._refresh_modules_state([])
 
         called_ids = sorted(c.args[0] for c in self.bot._get_quorum.call_args_list)
         self.assertEqual([1, 2, 3], called_ids)
@@ -61,7 +61,7 @@ class TestRefreshModulesState(unittest.TestCase):
         strategy = Mock()
         self.bot._select_strategy = Mock(return_value=strategy)
 
-        self.bot._refresh_modules_state()
+        self.bot._refresh_modules_state([])
 
         # is_gas_price_ok called once per whitelisted module
         self.assertEqual(3, strategy.is_gas_price_ok.call_count)
@@ -73,7 +73,7 @@ class TestRefreshModulesState(unittest.TestCase):
         old = datetime.now() - timedelta(hours=2)
         self.bot._module_last_heart_beat = {1: old, 2: old, 3: old}
 
-        self.bot._refresh_modules_state()
+        self.bot._refresh_modules_state([])
 
         for module_id in [1, 2, 3]:
             self.assertGreater(self.bot._module_last_heart_beat[module_id], old)
@@ -85,7 +85,7 @@ class TestRefreshModulesState(unittest.TestCase):
         old = datetime.now() - timedelta(hours=2)
         self.bot._module_last_heart_beat = {1: old, 2: old, 3: old}
 
-        self.bot._refresh_modules_state()
+        self.bot._refresh_modules_state([])
 
         for module_id in [1, 2, 3]:
             self.assertEqual(old, self.bot._module_last_heart_beat[module_id])
@@ -95,7 +95,7 @@ class TestRefreshModulesState(unittest.TestCase):
         self.bot._get_quorum = Mock()
         self.bot._select_strategy = Mock()
 
-        self.bot._refresh_modules_state()
+        self.bot._refresh_modules_state([])
 
         self.bot._get_quorum.assert_not_called()
         self.bot._select_strategy.assert_not_called()
@@ -107,10 +107,49 @@ class TestRefreshModulesState(unittest.TestCase):
         self.bot._get_quorum = Mock(return_value=None)
         self.bot._select_strategy = Mock(return_value=Mock())
 
-        self.bot._refresh_modules_state()
+        self.bot._refresh_modules_state([])
 
         called_ids = sorted(c.args[0] for c in self.bot._get_quorum.call_args_list)
         self.assertEqual([1, 3], called_ids)
+
+    def test_populates_module_type_cache_from_digests(self):
+        self.bot._get_quorum = Mock(return_value=None)
+        self.bot._select_strategy = Mock(return_value=Mock())
+        cmv2_type = DepositorBot.MODULE_TYPE_CMV2
+        self.bot._get_module_type = Mock(return_value=cmv2_type)
+
+        digests = [_make_digest(1, '0xAddr1', 2), _make_digest(2, '0xAddr2', 1)]
+        self.bot._refresh_modules_state(digests)
+
+        self.assertEqual(cmv2_type, self.bot._module_type_cache[1])
+        self.assertEqual(cmv2_type, self.bot._module_type_cache[2])
+
+    def test_module_type_cache_not_refetched_if_already_present(self):
+        self.bot._get_quorum = Mock(return_value=None)
+        self.bot._select_strategy = Mock(return_value=Mock())
+        existing_type = b'some-other-type'.ljust(32, b'\x00')
+        self.bot._module_type_cache[1] = existing_type
+        self.bot._get_module_type = Mock(return_value=DepositorBot.MODULE_TYPE_CMV2)
+
+        self.bot._refresh_modules_state([_make_digest(1, '0xAddr1', 2)])
+
+        # Cache entry for module 1 must not be overwritten.
+        self.assertEqual(existing_type, self.bot._module_type_cache[1])
+        self.bot._get_module_type.assert_not_called()
+
+    def test_type_cache_only_populated_for_whitelisted(self):
+        variables.DEPOSIT_MODULES_WHITELIST = [1]
+        self.bot._module_last_heart_beat = {1: datetime.now()}
+        self.bot._get_quorum = Mock(return_value=None)
+        self.bot._select_strategy = Mock(return_value=Mock())
+        self.bot._get_module_type = Mock(return_value=DepositorBot.MODULE_TYPE_CMV2)
+
+        # module 2 is not whitelisted
+        digests = [_make_digest(1, '0xAddr1', 2), _make_digest(2, '0xAddr2', 2)]
+        self.bot._refresh_modules_state(digests)
+
+        self.assertIn(1, self.bot._module_type_cache)
+        self.assertNotIn(2, self.bot._module_type_cache)
 
 
 # ─── _is_in_cooldown ───────────────────────────────────────────────
@@ -712,15 +751,29 @@ def test_deposit_to_module_happy_path_sends_tx(depositor_bot):
 
 
 @pytest.mark.unit
-def test_deposit_to_module_csm_strategy_for_module_3(depositor_bot):
-    """_select_strategy returns CSM strategy for module_id == 3."""
+def test_deposit_to_module_csm_strategy_for_csm_module_type(depositor_bot):
+    """_select_strategy returns CSM strategy when the module type is MODULE_TYPE_CSM."""
+    depositor_bot._module_type_cache[4] = DepositorBot.MODULE_TYPE_CSM
     depositor_bot._csm_strategy.is_gas_price_ok = Mock(return_value=False)
     depositor_bot._general_strategy.is_gas_price_ok = Mock(return_value=False)
 
-    depositor_bot._deposit_to_module(3)
+    depositor_bot._deposit_to_module(4)
 
-    depositor_bot._csm_strategy.is_gas_price_ok.assert_called_once_with(3)
+    depositor_bot._csm_strategy.is_gas_price_ok.assert_called_once_with(4)
     depositor_bot._general_strategy.is_gas_price_ok.assert_not_called()
+
+
+@pytest.mark.unit
+def test_deposit_to_module_general_strategy_for_non_csm_module_type(depositor_bot):
+    """_select_strategy returns general strategy when the module type is not MODULE_TYPE_CSM."""
+    depositor_bot._module_type_cache[1] = b'curated-onchain-v1'.ljust(32, b'\x00')
+    depositor_bot._csm_strategy.is_gas_price_ok = Mock(return_value=False)
+    depositor_bot._general_strategy.is_gas_price_ok = Mock(return_value=False)
+
+    depositor_bot._deposit_to_module(1)
+
+    depositor_bot._general_strategy.is_gas_price_ok.assert_called_once_with(1)
+    depositor_bot._csm_strategy.is_gas_price_ok.assert_not_called()
 
 
 # ─── _top_up_to_module ─────────────────────────────────────────────
