@@ -51,7 +51,7 @@ class TestRefreshModulesState(unittest.TestCase):
         self.bot._get_quorum = Mock(return_value=None)
         self.bot._select_strategy = Mock(return_value=Mock())
 
-        self.bot._refresh_modules_state([])
+        self.bot._refresh_modules_state()
 
         called_ids = sorted(c.args[0] for c in self.bot._get_quorum.call_args_list)
         self.assertEqual([1, 2, 3], called_ids)
@@ -61,7 +61,7 @@ class TestRefreshModulesState(unittest.TestCase):
         strategy = Mock()
         self.bot._select_strategy = Mock(return_value=strategy)
 
-        self.bot._refresh_modules_state([])
+        self.bot._refresh_modules_state()
 
         # is_gas_price_ok called once per whitelisted module
         self.assertEqual(3, strategy.is_gas_price_ok.call_count)
@@ -73,7 +73,7 @@ class TestRefreshModulesState(unittest.TestCase):
         old = datetime.now() - timedelta(hours=2)
         self.bot._module_last_heart_beat = {1: old, 2: old, 3: old}
 
-        self.bot._refresh_modules_state([])
+        self.bot._refresh_modules_state()
 
         for module_id in [1, 2, 3]:
             self.assertGreater(self.bot._module_last_heart_beat[module_id], old)
@@ -85,7 +85,7 @@ class TestRefreshModulesState(unittest.TestCase):
         old = datetime.now() - timedelta(hours=2)
         self.bot._module_last_heart_beat = {1: old, 2: old, 3: old}
 
-        self.bot._refresh_modules_state([])
+        self.bot._refresh_modules_state()
 
         for module_id in [1, 2, 3]:
             self.assertEqual(old, self.bot._module_last_heart_beat[module_id])
@@ -95,7 +95,7 @@ class TestRefreshModulesState(unittest.TestCase):
         self.bot._get_quorum = Mock()
         self.bot._select_strategy = Mock()
 
-        self.bot._refresh_modules_state([])
+        self.bot._refresh_modules_state()
 
         self.bot._get_quorum.assert_not_called()
         self.bot._select_strategy.assert_not_called()
@@ -107,49 +107,11 @@ class TestRefreshModulesState(unittest.TestCase):
         self.bot._get_quorum = Mock(return_value=None)
         self.bot._select_strategy = Mock(return_value=Mock())
 
-        self.bot._refresh_modules_state([])
+        self.bot._refresh_modules_state()
 
         called_ids = sorted(c.args[0] for c in self.bot._get_quorum.call_args_list)
         self.assertEqual([1, 3], called_ids)
 
-    def test_populates_module_type_cache_from_digests(self):
-        self.bot._get_quorum = Mock(return_value=None)
-        self.bot._select_strategy = Mock(return_value=Mock())
-        cmv2_type = DepositorBot.MODULE_TYPE_CMV2
-        self.bot._get_module_type = Mock(return_value=cmv2_type)
-
-        digests = [_make_digest(1, '0xAddr1', 2), _make_digest(2, '0xAddr2', 1)]
-        self.bot._refresh_modules_state(digests)
-
-        self.assertEqual(cmv2_type, self.bot._module_type_cache[1])
-        self.assertEqual(cmv2_type, self.bot._module_type_cache[2])
-
-    def test_module_type_cache_not_refetched_if_already_present(self):
-        self.bot._get_quorum = Mock(return_value=None)
-        self.bot._select_strategy = Mock(return_value=Mock())
-        existing_type = b'some-other-type'.ljust(32, b'\x00')
-        self.bot._module_type_cache[1] = existing_type
-        self.bot._get_module_type = Mock(return_value=DepositorBot.MODULE_TYPE_CMV2)
-
-        self.bot._refresh_modules_state([_make_digest(1, '0xAddr1', 2)])
-
-        # Cache entry for module 1 must not be overwritten.
-        self.assertEqual(existing_type, self.bot._module_type_cache[1])
-        self.bot._get_module_type.assert_not_called()
-
-    def test_type_cache_only_populated_for_whitelisted(self):
-        variables.DEPOSIT_MODULES_WHITELIST = [1]
-        self.bot._module_last_heart_beat = {1: datetime.now()}
-        self.bot._get_quorum = Mock(return_value=None)
-        self.bot._select_strategy = Mock(return_value=Mock())
-        self.bot._get_module_type = Mock(return_value=DepositorBot.MODULE_TYPE_CMV2)
-
-        # module 2 is not whitelisted
-        digests = [_make_digest(1, '0xAddr1', 2), _make_digest(2, '0xAddr2', 2)]
-        self.bot._refresh_modules_state(digests)
-
-        self.assertIn(1, self.bot._module_type_cache)
-        self.assertNotIn(2, self.bot._module_type_cache)
 
 
 # ─── _is_in_cooldown ───────────────────────────────────────────────
@@ -205,7 +167,7 @@ class TestPhaseSeed(unittest.TestCase):
         self.bot._get_quorum = Mock(return_value=['msg'])
         # module 1: allocated=0 → skipped; module 2: allocated=50 → deposits
         self.bot._phase_seed([0, 50], [0, 100], digests)
-        self.bot._deposit_to_module.assert_called_once_with(2)
+        self.bot._deposit_to_module.assert_called_once_with(2, '0xA2')
 
     def test_filters_non_whitelisted(self):
         digests = [_make_digest(4, '0xA4', 2)]
@@ -225,7 +187,7 @@ class TestPhaseSeed(unittest.TestCase):
 
         self.assertEqual((True, True), (done, success))
         # Lowest-stake module (id=2) is tried first.
-        self.bot._deposit_to_module.assert_called_once_with(2)
+        self.bot._deposit_to_module.assert_called_once_with(2, '0xA2')
 
     def test_index_alignment_with_subset_whitelist(self):
         # SR returns 4 modules; WHITELIST = [1, 3]. Allocations are indexed by SR list.
@@ -240,7 +202,7 @@ class TestPhaseSeed(unittest.TestCase):
         self.bot._get_quorum = Mock(return_value=['msg'])
         # m1 stake = 70-50 = 20 (lowest); m3 stake = 80-30 = 50
         self.bot._phase_seed([50, 999, 30, 999], [70, 999, 80, 999], digests)
-        self.bot._deposit_to_module.assert_called_once_with(1)
+        self.bot._deposit_to_module.assert_called_once_with(1, '0xA1')
 
     def test_empty_digests_returns_done_false(self):
         done, success = self.bot._phase_seed([], [], [])
@@ -255,7 +217,7 @@ class TestPhaseSeed(unittest.TestCase):
         self.bot._get_quorum = Mock(return_value=['msg'])
 
         self.bot._phase_seed([10, 50], [110, 70], digests)
-        self.bot._deposit_to_module.assert_called_once_with(1)
+        self.bot._deposit_to_module.assert_called_once_with(1, '0xA1')
 
     def test_single_with_quorum_deposits(self):
         digests = [_make_digest(1, '0xA1', 2)]
@@ -264,7 +226,7 @@ class TestPhaseSeed(unittest.TestCase):
         done, success = self.bot._phase_seed([50], [100], digests)
 
         self.assertEqual((True, True), (done, success))
-        self.bot._deposit_to_module.assert_called_once_with(1)
+        self.bot._deposit_to_module.assert_called_once_with(1, '0xA1')
 
     def test_cooldown_active_no_quorum_stops_phase(self):
         # Cooldown active (fresh heartbeat) + no quorum → stop phase, don't proceed.
@@ -283,7 +245,7 @@ class TestPhaseSeed(unittest.TestCase):
         self.bot._get_quorum = Mock(side_effect=lambda mid: ['msg'] if mid == 1 else None)
 
         self.bot._phase_seed([10, 50], [110, 70], digests)
-        self.bot._deposit_to_module.assert_called_once_with(1)
+        self.bot._deposit_to_module.assert_called_once_with(1, '0xA1')
 
     def test_all_cooldowns_expired_returns_done_false(self):
         digests = [_make_digest(1, '0xA1', 2), _make_digest(2, '0xA2', 2)]
@@ -333,7 +295,7 @@ class TestPhaseFull(unittest.TestCase):
         digests = [_make_digest(1, '0xA1', 1), _make_digest(2, '0xA2', 1)]
         self.bot._get_quorum = Mock(return_value=['msg'])
         self.bot._phase_full([0, 50], [0, 100], digests)
-        self.bot._deposit_to_module.assert_called_once_with(2)
+        self.bot._deposit_to_module.assert_called_once_with(2, '0xA2')
 
     def test_filters_non_whitelisted(self):
         digests = [_make_digest(4, '0xA4', 1)]
@@ -346,14 +308,14 @@ class TestPhaseFull(unittest.TestCase):
         self.bot._get_quorum = Mock(return_value=['msg'])
         # m2 stake = 70-50 = 20 (lowest)
         self.bot._phase_full([10, 50, 30], [110, 70, 80], digests)
-        self.bot._deposit_to_module.assert_called_once_with(2)
+        self.bot._deposit_to_module.assert_called_once_with(2, '0xA2')
 
     def test_can_deposit_false_moves_to_next(self):
         digests = [_make_digest(1, '0xA1', 1), _make_digest(2, '0xA2', 1)]
         self.bot.w3.lido.deposit_security_module.can_deposit.side_effect = lambda mid: mid != 2
         self.bot._get_quorum = Mock(return_value=['msg'])
         self.bot._phase_full([10, 50], [110, 70], digests)
-        self.bot._deposit_to_module.assert_called_once_with(1)
+        self.bot._deposit_to_module.assert_called_once_with(1, '0xA1')
 
     def test_quorum_active_deposits(self):
         digests = [_make_digest(1, '0xA1', 1)]
@@ -362,7 +324,7 @@ class TestPhaseFull(unittest.TestCase):
         done, success = self.bot._phase_full([50], [100], digests)
 
         self.assertEqual((True, True), (done, success))
-        self.bot._deposit_to_module.assert_called_once_with(1)
+        self.bot._deposit_to_module.assert_called_once_with(1, '0xA1')
 
     def test_cooldown_active_stops_phase(self):
         digests = [_make_digest(1, '0xA1', 1)]
@@ -379,7 +341,7 @@ class TestPhaseFull(unittest.TestCase):
         self.bot._get_quorum = Mock(side_effect=lambda mid: ['msg'] if mid == 1 else None)
 
         self.bot._phase_full([10, 50], [110, 70], digests)
-        self.bot._deposit_to_module.assert_called_once_with(1)
+        self.bot._deposit_to_module.assert_called_once_with(1, '0xA1')
 
     def test_empty_digests_returns_done_false(self):
         done, success = self.bot._phase_full([], [], [])
@@ -463,7 +425,7 @@ class TestPhaseFullAndTopup(unittest.TestCase):
         self.bot._phase_full_and_topup(100, [999, 50], [999, 60], digests)
 
         # m2 (0x01) tried first because stake is lower
-        self.bot._deposit_to_module.assert_called_once_with(2)
+        self.bot._deposit_to_module.assert_called_once_with(2, '0xA2')
         self.bot._top_up_to_module.assert_not_called()
 
     # ─── 0x02 branch ───────────────────────────────────────────
@@ -479,7 +441,7 @@ class TestPhaseFullAndTopup(unittest.TestCase):
         self.bot._phase_full_and_topup(100, [0, 50], [0, 60], digests)
 
         self.bot._top_up_to_module.assert_not_called()
-        self.bot._deposit_to_module.assert_called_once_with(2)
+        self.bot._deposit_to_module.assert_called_once_with(2, '0xA2')
 
     def test_block_distance_not_passed_stops_phase(self):
         digests = [_make_digest(1, '0xA1', 2)]
@@ -510,7 +472,7 @@ class TestPhaseFullAndTopup(unittest.TestCase):
 
         # Both 0x01, both have seed alloc. m1 stake = 10, m2 stake = 50 → m1 tried first
         self.bot._phase_full_and_topup(100, [50, 50], [60, 100], digests)
-        self.bot._deposit_to_module.assert_called_once_with(2)
+        self.bot._deposit_to_module.assert_called_once_with(2, '0xA2')
 
     def test_0x01_with_quorum_deposits(self):
         digests = [_make_digest(1, '0xA1', 1)]
@@ -520,7 +482,7 @@ class TestPhaseFullAndTopup(unittest.TestCase):
         done, success = self.bot._phase_full_and_topup(100, [50], [100], digests)
 
         self.assertEqual((True, True), (done, success))
-        self.bot._deposit_to_module.assert_called_once_with(1)
+        self.bot._deposit_to_module.assert_called_once_with(1, '0xA1')
 
     def test_0x01_cooldown_active_stops_phase(self):
         digests = [_make_digest(1, '0xA1', 1)]
@@ -541,7 +503,7 @@ class TestPhaseFullAndTopup(unittest.TestCase):
 
         # m1 stake 10, m2 stake 50 → m1 first, cooldown expired → next; m2 has quorum
         self.bot._phase_full_and_topup(100, [50, 50], [60, 100], digests)
-        self.bot._deposit_to_module.assert_called_once_with(2)
+        self.bot._deposit_to_module.assert_called_once_with(2, '0xA2')
 
     # ─── Mixed ─────────────────────────────────────────────────
 
@@ -720,7 +682,7 @@ def test_deposit_to_module_gas_too_high_returns_false(depositor_bot):
     depositor_bot._get_quorum = Mock()
     depositor_bot.prepare_and_send_tx = Mock()
 
-    assert depositor_bot._deposit_to_module(1) is False
+    assert depositor_bot._deposit_to_module(1, '0xAddr') is False
     depositor_bot._get_quorum.assert_not_called()
     depositor_bot.prepare_and_send_tx.assert_not_called()
 
@@ -733,7 +695,7 @@ def test_deposit_to_module_quorum_disappeared_returns_false(depositor_bot):
     depositor_bot._get_quorum = Mock(return_value=None)
     depositor_bot.prepare_and_send_tx = Mock()
 
-    assert depositor_bot._deposit_to_module(1) is False
+    assert depositor_bot._deposit_to_module(1, '0xAddr') is False
     depositor_bot.prepare_and_send_tx.assert_not_called()
 
 
@@ -746,7 +708,7 @@ def test_deposit_to_module_happy_path_sends_tx(depositor_bot):
     depositor_bot._get_quorum = Mock(return_value=quorum)
     depositor_bot.prepare_and_send_tx = Mock(return_value=True)
 
-    assert depositor_bot._deposit_to_module(1) is True
+    assert depositor_bot._deposit_to_module(1, '0xAddr') is True
     depositor_bot.prepare_and_send_tx.assert_called_once_with(1, quorum)
 
 
@@ -757,7 +719,7 @@ def test_deposit_to_module_csm_strategy_for_csm_module_type(depositor_bot):
     depositor_bot._csm_strategy.is_gas_price_ok = Mock(return_value=False)
     depositor_bot._general_strategy.is_gas_price_ok = Mock(return_value=False)
 
-    depositor_bot._deposit_to_module(4)
+    depositor_bot._deposit_to_module(4, '0xCSMAddr')
 
     depositor_bot._csm_strategy.is_gas_price_ok.assert_called_once_with(4)
     depositor_bot._general_strategy.is_gas_price_ok.assert_not_called()
@@ -770,7 +732,7 @@ def test_deposit_to_module_general_strategy_for_non_csm_module_type(depositor_bo
     depositor_bot._csm_strategy.is_gas_price_ok = Mock(return_value=False)
     depositor_bot._general_strategy.is_gas_price_ok = Mock(return_value=False)
 
-    depositor_bot._deposit_to_module(1)
+    depositor_bot._deposit_to_module(1, '0xNORAddr')
 
     depositor_bot._general_strategy.is_gas_price_ok.assert_called_once_with(1)
     depositor_bot._csm_strategy.is_gas_price_ok.assert_not_called()
@@ -912,7 +874,7 @@ def test_get_module_type_calls_get_type_on_checksum_address(depositor_bot):
     mock_contract.functions.getType.return_value.call.return_value = expected_type
     depositor_bot.w3.eth.contract = Mock(return_value=mock_contract)
 
-    result = depositor_bot._get_module_type(raw_address)
+    result = depositor_bot._get_module_type(99, raw_address)
 
     assert result == expected_type
     depositor_bot.w3.to_checksum_address.assert_called_once_with(raw_address)
@@ -921,6 +883,19 @@ def test_get_module_type_calls_get_type_on_checksum_address(depositor_bot):
         abi=DepositorBot.GET_TYPE_ABI,
     )
     mock_contract.functions.getType.return_value.call.assert_called_once_with()
+
+
+@pytest.mark.unit
+def test_get_module_type_returns_cached_without_rpc():
+    """Second call for the same module_id must not make a new RPC call."""
+    bot = _make_bot()
+    cached_type = b'community-onchain-v1'.ljust(32, b'\x00')
+    bot._module_type_cache[7] = cached_type
+
+    result = bot._get_module_type(7, '0xAnyAddress')
+
+    assert result == cached_type
+    bot.w3.eth.contract.assert_not_called()
 
 
 # ─── Message actualizer / quorum (unchanged) ───────────────────────
