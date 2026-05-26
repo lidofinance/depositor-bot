@@ -140,6 +140,9 @@ class DepositorBot:
         return result
 
     def _execute_actual(self) -> bool:
+        # Populate module-type cache once at startup (no-op on subsequent iterations).
+        self._ensure_module_type_cache()
+
         # Step 0: refresh quorum + gas metrics for all whitelisted modules (also caches quorum-now per module).
         self._refresh_modules_state()
 
@@ -180,6 +183,18 @@ class DepositorBot:
         logger.info({'msg': 'Phase B finished.', 'done': _done, 'success': success})
         return success
 
+    def _ensure_module_type_cache(self) -> None:
+        """Fetch module types for all whitelisted modules that are not yet cached. Runs once at startup, no-op afterwards."""
+        uncached = [mid for mid in variables.DEPOSIT_MODULES_WHITELIST if mid not in self._module_type_cache]
+        if not uncached:
+            return
+        digests = self.w3.lido.staking_router.get_all_staking_module_digests()
+        for digest in digests:
+            module_id = digest[2][0]
+            module_address = digest[2][1]
+            if module_id in uncached:
+                self._module_type_cache[module_id] = self._get_module_type(module_address)
+
     def _refresh_modules_state(self) -> None:
         """Update last-quorum heart_beat (cooldown source) and run gas-price probe for metrics, for all whitelisted modules."""
         now = datetime.now()
@@ -211,10 +226,9 @@ class DepositorBot:
           done=True  -> caller stops (we acted or hit cooldown)
           done=False -> phase produced nothing, caller continues to the next phase
         """
-        candidates: list[tuple[int, str, Wei]] = []
+        candidates: list[tuple[int, Wei]] = []
         for i, digest in enumerate(digests):
             module_id = digest[2][0]
-            module_address = digest[2][1]
             wc_type = digest[2][13]
             if wc_type != 2:
                 continue
@@ -223,22 +237,22 @@ class DepositorBot:
             if seed_allocated[i] == 0:
                 continue
             stake = Wei(seed_new[i] - seed_allocated[i])
-            candidates.append((module_id, module_address, stake))
+            candidates.append((module_id, stake))
 
-        candidates.sort(key=lambda c: c[2])
+        candidates.sort(key=lambda c: c[1])
         logger.info(
             {
                 'msg': 'Phase A (seed 0x02) candidates sorted by stake asc.',
-                'candidates': [{'module_id': c[0], 'stake': int(c[2])} for c in candidates],
+                'candidates': [{'module_id': c[0], 'stake': int(c[1])} for c in candidates],
             }
         )
 
-        for module_id, module_address, _stake in candidates:
+        for module_id, _stake in candidates:
             if not self.w3.lido.deposit_security_module.can_deposit(module_id):
                 logger.info({'msg': 'Phase A: canDeposit=False — try next module.', 'module_id': module_id})
                 continue
             if self._get_quorum(module_id):
-                return True, self._deposit_to_module(module_id, module_address)
+                return True, self._deposit_to_module(module_id)
             # No quorum right now: if cooldown is still active, stop and wait for the next bot iteration.
             if self._is_in_cooldown(module_id):
                 logger.info({'msg': 'Phase A: no quorum, cooldown active — wait next iteration.', 'module_id': module_id})
@@ -248,10 +262,9 @@ class DepositorBot:
 
     def _phase_full(self, seed_allocated: list[int], seed_new: list[int], digests: list) -> tuple[bool, bool]:
         """Full deposits to 0x01 modules using seed (is_top_up=False) allocations."""
-        candidates: list[tuple[int, str, Wei]] = []
+        candidates: list[tuple[int, Wei]] = []
         for i, digest in enumerate(digests):
             module_id = digest[2][0]
-            module_address = digest[2][1]
             wc_type = digest[2][13]
             if wc_type != 1:
                 continue
@@ -260,22 +273,22 @@ class DepositorBot:
             if seed_allocated[i] == 0:
                 continue
             stake = Wei(seed_new[i] - seed_allocated[i])
-            candidates.append((module_id, module_address, stake))
+            candidates.append((module_id, stake))
 
-        candidates.sort(key=lambda c: c[2])
+        candidates.sort(key=lambda c: c[1])
         logger.info(
             {
                 'msg': 'Phase B (full 0x01) candidates sorted by stake asc.',
-                'candidates': [{'module_id': c[0], 'stake': int(c[2])} for c in candidates],
+                'candidates': [{'module_id': c[0], 'stake': int(c[1])} for c in candidates],
             }
         )
 
-        for module_id, module_address, _stake in candidates:
+        for module_id, _stake in candidates:
             if not self.w3.lido.deposit_security_module.can_deposit(module_id):
                 logger.info({'msg': 'Phase B: canDeposit=False — try next module.', 'module_id': module_id})
                 continue
             if self._get_quorum(module_id):
-                return True, self._deposit_to_module(module_id, module_address)
+                return True, self._deposit_to_module(module_id)
             if self._is_in_cooldown(module_id):
                 logger.info({'msg': 'Phase B: no quorum, cooldown active — wait next iteration.', 'module_id': module_id})
                 return True, False
@@ -338,16 +351,16 @@ class DepositorBot:
                 logger.info({'msg': 'Phase B: canDeposit=False — try next module.', 'module_id': module_id})
                 continue
             if self._get_quorum(module_id):
-                return True, self._deposit_to_module(module_id, module_address)
+                return True, self._deposit_to_module(module_id)
             if self._is_in_cooldown(module_id):
                 logger.info({'msg': 'Phase B: no quorum, cooldown active — wait next iteration.', 'module_id': module_id})
                 return True, False
             logger.info({'msg': 'Phase B: no quorum, cooldown expired — try next module.', 'module_id': module_id})
         return False, False
 
-    def _deposit_to_module(self, module_id: int, module_address: str) -> bool:
+    def _deposit_to_module(self, module_id: int) -> bool:
         """New simplified deposit path: gas check (no keys-count) + send."""
-        strategy = self._select_strategy(module_id, module_address)
+        strategy = self._select_strategy(module_id)
         if not strategy.is_gas_price_ok(module_id):
             logger.info({'msg': 'Gas price too high — skip deposit.', 'module_id': module_id})
             return False
@@ -364,7 +377,7 @@ class DepositorBot:
 
     def _top_up_to_module(self, module_id: int, module_address: str, module_allocation: Wei) -> bool:
         """New simplified top-up path: gas check (no keys-count) + proof + send. Allocation is passed in."""
-        module_type = self._get_module_type(module_id, module_address)
+        module_type = self._get_module_type(module_address)
         strategy = self._select_topup_strategy(module_type)
         if strategy is None:
             logger.info(
@@ -419,15 +432,13 @@ class DepositorBot:
             return self._cmv2_topup_strategy
         return None
 
-    def _get_module_type(self, module_id: int, module_address: str) -> bytes:
-        """Call IStakingModule.getType() on the module contract. Result is cached by module_id."""
-        if module_id not in self._module_type_cache:
-            module = self.w3.eth.contract(
-                address=self.w3.to_checksum_address(module_address),
-                abi=self.GET_TYPE_ABI,
-            )
-            self._module_type_cache[module_id] = module.functions.getType().call()
-        return self._module_type_cache[module_id]
+    def _get_module_type(self, module_address: str) -> bytes:
+        """Call IStakingModule.getType() on the module contract."""
+        module = self.w3.eth.contract(
+            address=self.w3.to_checksum_address(module_address),
+            abi=self.GET_TYPE_ABI,
+        )
+        return module.functions.getType().call()
 
     def _check_balance(self):
         if variables.ACCOUNT:
@@ -453,11 +464,8 @@ class DepositorBot:
         for (address, chain_id), balance in new_values.items():
             GUARDIAN_BALANCE.labels(address=address, chain_id=chain_id).set(balance)
 
-    def _select_strategy(self, module_id: int, module_address: str = '') -> DepositStrategy:
-        module_type = self._module_type_cache.get(module_id)
-        if module_type is None and module_address:
-            module_type = self._get_module_type(module_id, module_address)
-        if module_type == self.MODULE_TYPE_CSM:
+    def _select_strategy(self, module_id: int) -> DepositStrategy:
+        if self._module_type_cache.get(module_id) == self.MODULE_TYPE_CSM:
             return self._csm_strategy
         return self._general_strategy
 
