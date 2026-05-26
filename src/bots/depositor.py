@@ -6,7 +6,7 @@ from typing import Callable, Dict, List, Optional, cast
 
 import variables
 from blockchain.contracts.base_interface import ContractInterface
-from blockchain.contracts.staking_router import StakingRouterContractV4
+from blockchain.contracts.staking_router import StakingModuleInfo, StakingRouterContractV4
 from blockchain.deposit_strategy.base_deposit_strategy import (
     CSMDepositStrategy,
     DefaultDepositStrategy,
@@ -140,11 +140,10 @@ class DepositorBot:
         return result
 
     def _execute_actual(self) -> bool:
-        # Populate module-type cache once at startup (no-op on subsequent iterations).
-        self._ensure_module_type_cache()
+        digests: list[StakingModuleInfo] = self.w3.lido.staking_router.get_all_staking_module_digests()
 
         # Step 0: refresh quorum + gas metrics for all whitelisted modules (also caches quorum-now per module).
-        self._refresh_modules_state()
+        self._refresh_modules_state(digests)
 
         # Read depositable ether once; if 0 — nothing to do this iteration.
         depositable_ether = self.w3.lido.lido.get_depositable_ether()
@@ -153,10 +152,9 @@ class DepositorBot:
             logger.info({'msg': 'No depositable ether — skip iteration.'})
             return False
 
-        # Compute seed allocation + digests once; both phases use them for module ordering.
+        # Compute seed allocation once; both phases use it for module ordering.
         sr_v4 = cast(StakingRouterContractV4, self.w3.lido.staking_router)
         _total, seed_allocated, seed_new = sr_v4.get_deposit_allocations(depositable_ether, is_top_up=False)
-        digests = self.w3.lido.staking_router.get_all_staking_module_digests()
         logger.info(
             {
                 'msg': 'Seed allocations computed.',
@@ -183,20 +181,10 @@ class DepositorBot:
         logger.info({'msg': 'Phase B finished.', 'done': _done, 'success': success})
         return success
 
-    def _ensure_module_type_cache(self) -> None:
-        """Fetch module types for all whitelisted modules that are not yet cached. Runs once at startup, no-op afterwards."""
-        uncached = [mid for mid in variables.DEPOSIT_MODULES_WHITELIST if mid not in self._module_type_cache]
-        if not uncached:
-            return
-        digests = self.w3.lido.staking_router.get_all_staking_module_digests()
-        for digest in digests:
-            module_id = digest[2][0]
-            module_address = digest[2][1]
-            if module_id in uncached:
-                self._module_type_cache[module_id] = self._get_module_type(module_address)
-
-    def _refresh_modules_state(self) -> None:
+    def _refresh_modules_state(self, digests: list[StakingModuleInfo]) -> None:
         """Update last-quorum heart_beat (cooldown source) and run gas-price probe for metrics, for all whitelisted modules."""
+        addr_by_id: Dict[int, str] = {d['module_id']: d['address'] for d in digests}
+
         now = datetime.now()
         logger.info(
             {
@@ -205,6 +193,8 @@ class DepositorBot:
             }
         )
         for module_id in variables.DEPOSIT_MODULES_WHITELIST:
+            if module_id not in self._module_type_cache and module_id in addr_by_id:
+                self._module_type_cache[module_id] = self._get_module_type(addr_by_id[module_id])
             # Probe gas-price strategy purely for metrics — gas is re-checked right before the tx is sent.
             self._select_strategy(module_id).is_gas_price_ok(module_id)
             quorum = self._get_quorum(module_id)
@@ -219,7 +209,7 @@ class DepositorBot:
         last = self._module_last_heart_beat[module_id]
         return (datetime.now() - last) <= timedelta(minutes=variables.QUORUM_RETENTION_MINUTES)
 
-    def _phase_seed(self, seed_allocated: list[int], seed_new: list[int], digests: list) -> tuple[bool, bool]:
+    def _phase_seed(self, seed_allocated: list[int], seed_new: list[int], digests: list[StakingModuleInfo]) -> tuple[bool, bool]:
         """
         Seed deposits into 0x02 modules using is_top_up=False allocations.
         Returns (done, success):
@@ -228,8 +218,8 @@ class DepositorBot:
         """
         candidates: list[tuple[int, Wei]] = []
         for i, digest in enumerate(digests):
-            module_id = digest[2][0]
-            wc_type = digest[2][13]
+            module_id = digest['module_id']
+            wc_type = digest['wc_type']
             if wc_type != 2:
                 continue
             if module_id not in variables.DEPOSIT_MODULES_WHITELIST:
@@ -260,12 +250,12 @@ class DepositorBot:
             logger.info({'msg': 'Phase A: no quorum, cooldown expired — try next module.', 'module_id': module_id})
         return False, False
 
-    def _phase_full(self, seed_allocated: list[int], seed_new: list[int], digests: list) -> tuple[bool, bool]:
+    def _phase_full(self, seed_allocated: list[int], seed_new: list[int], digests: list[StakingModuleInfo]) -> tuple[bool, bool]:
         """Full deposits to 0x01 modules using seed (is_top_up=False) allocations."""
         candidates: list[tuple[int, Wei]] = []
         for i, digest in enumerate(digests):
-            module_id = digest[2][0]
-            wc_type = digest[2][13]
+            module_id = digest['module_id']
+            wc_type = digest['wc_type']
             if wc_type != 1:
                 continue
             if module_id not in variables.DEPOSIT_MODULES_WHITELIST:
@@ -300,7 +290,7 @@ class DepositorBot:
         depositable_ether: Wei,
         seed_allocated: list[int],
         seed_new: list[int],
-        digests: list,
+        digests: list[StakingModuleInfo],
     ) -> tuple[bool, bool]:
         """
         Full deposits to 0x01 + top-ups to 0x02.
@@ -312,9 +302,9 @@ class DepositorBot:
 
         candidates: list[tuple[int, str, int, Wei, Wei]] = []  # (module_id, address, wc_type, stake, topup_allocation)
         for i, digest in enumerate(digests):
-            module_id = digest[2][0]
-            module_address = digest[2][1]
-            wc_type = digest[2][13]
+            module_id = digest['module_id']
+            module_address = digest['address']
+            wc_type = digest['wc_type']
             if module_id not in variables.DEPOSIT_MODULES_WHITELIST:
                 continue
             if wc_type == 2:

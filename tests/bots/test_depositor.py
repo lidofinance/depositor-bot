@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, Mock
 
 import pytest
 import variables
+from blockchain.contracts.staking_router import StakingModuleInfo
 from bots.depositor import DepositorBot
 
 from tests.conftest import COUNCIL_ADDRESS_1, COUNCIL_ADDRESS_2, COUNCIL_PK_1, COUNCIL_PK_2
@@ -13,14 +14,9 @@ from tests.utils.protocol_utils import get_deposit_message
 # ─── Shared helpers ────────────────────────────────────────────────
 
 
-def _make_digest(module_id, address, wc_type):
-    """digest[2] = StakingModule tuple: (id, address, ..., wc_type@13, ...)."""
-    return (
-        10,
-        5,
-        (module_id, address, 500, 500, 1000, 0, f'module{module_id}', 0, 0, 0, 0, 150, 25, wc_type, 0, 0),
-        (0, 100, 10),
-    )
+def _make_digest(module_id, address, wc_type) -> StakingModuleInfo:
+    """Build a StakingModuleInfo as produced by the parsing step in _execute_actual."""
+    return StakingModuleInfo(module_id=module_id, address=address, wc_type=wc_type)
 
 
 def _make_bot():
@@ -51,7 +47,7 @@ class TestRefreshModulesState(unittest.TestCase):
         self.bot._get_quorum = Mock(return_value=None)
         self.bot._select_strategy = Mock(return_value=Mock())
 
-        self.bot._refresh_modules_state()
+        self.bot._refresh_modules_state([])
 
         called_ids = sorted(c.args[0] for c in self.bot._get_quorum.call_args_list)
         self.assertEqual([1, 2, 3], called_ids)
@@ -61,7 +57,7 @@ class TestRefreshModulesState(unittest.TestCase):
         strategy = Mock()
         self.bot._select_strategy = Mock(return_value=strategy)
 
-        self.bot._refresh_modules_state()
+        self.bot._refresh_modules_state([])
 
         # is_gas_price_ok called once per whitelisted module
         self.assertEqual(3, strategy.is_gas_price_ok.call_count)
@@ -73,7 +69,7 @@ class TestRefreshModulesState(unittest.TestCase):
         old = datetime.now() - timedelta(hours=2)
         self.bot._module_last_heart_beat = {1: old, 2: old, 3: old}
 
-        self.bot._refresh_modules_state()
+        self.bot._refresh_modules_state([])
 
         for module_id in [1, 2, 3]:
             self.assertGreater(self.bot._module_last_heart_beat[module_id], old)
@@ -85,7 +81,7 @@ class TestRefreshModulesState(unittest.TestCase):
         old = datetime.now() - timedelta(hours=2)
         self.bot._module_last_heart_beat = {1: old, 2: old, 3: old}
 
-        self.bot._refresh_modules_state()
+        self.bot._refresh_modules_state([])
 
         for module_id in [1, 2, 3]:
             self.assertEqual(old, self.bot._module_last_heart_beat[module_id])
@@ -95,7 +91,7 @@ class TestRefreshModulesState(unittest.TestCase):
         self.bot._get_quorum = Mock()
         self.bot._select_strategy = Mock()
 
-        self.bot._refresh_modules_state()
+        self.bot._refresh_modules_state([])
 
         self.bot._get_quorum.assert_not_called()
         self.bot._select_strategy.assert_not_called()
@@ -107,7 +103,7 @@ class TestRefreshModulesState(unittest.TestCase):
         self.bot._get_quorum = Mock(return_value=None)
         self.bot._select_strategy = Mock(return_value=Mock())
 
-        self.bot._refresh_modules_state()
+        self.bot._refresh_modules_state([])
 
         called_ids = sorted(c.args[0] for c in self.bot._get_quorum.call_args_list)
         self.assertEqual([1, 3], called_ids)
@@ -547,8 +543,8 @@ def depositor_bot(
 @pytest.mark.unit
 def test_execute_actual_zero_depositable_ether_short_circuits(depositor_bot):
     """If buffer is empty, skip iteration without computing allocations."""
-    depositor_bot._ensure_module_type_cache = Mock()
     depositor_bot._refresh_modules_state = Mock()
+    depositor_bot.w3.lido.staking_router.get_all_staking_module_digests = Mock(return_value=[])
     depositor_bot.w3.lido.lido.get_depositable_ether = Mock(return_value=0)
     depositor_bot.w3.lido.staking_router.get_deposit_allocations = Mock()
     depositor_bot._phase_seed = Mock()
@@ -565,7 +561,6 @@ def test_execute_actual_zero_depositable_ether_short_circuits(depositor_bot):
 @pytest.mark.unit
 def test_execute_actual_phase_a_deposit_short_circuits(depositor_bot):
     """Phase A returns (True, True) → return True, phase B not called."""
-    depositor_bot._ensure_module_type_cache = Mock()
     depositor_bot._refresh_modules_state = Mock()
     depositor_bot.w3.lido.lido.get_depositable_ether = Mock(return_value=100)
     depositor_bot.w3.lido.staking_router.get_deposit_allocations = Mock(return_value=(0, [], []))
@@ -582,7 +577,6 @@ def test_execute_actual_phase_a_deposit_short_circuits(depositor_bot):
 @pytest.mark.unit
 def test_execute_actual_phase_a_failure_does_not_call_phase_b(depositor_bot):
     """Phase A returns (True, False) — e.g. deposit attempt failed — phase B not called."""
-    depositor_bot._ensure_module_type_cache = Mock()
     depositor_bot._refresh_modules_state = Mock()
     depositor_bot.w3.lido.lido.get_depositable_ether = Mock(return_value=100)
     depositor_bot.w3.lido.staking_router.get_deposit_allocations = Mock(return_value=(0, [], []))
@@ -600,7 +594,6 @@ def test_execute_actual_phase_a_failure_does_not_call_phase_b(depositor_bot):
 def test_execute_actual_phase_a_cooldown_does_not_call_phase_b(depositor_bot):
     """Same as failure: cooldown returns (True, False) — phase B still not called.
     Documented separately because the algorithm treats cooldown explicitly."""
-    depositor_bot._ensure_module_type_cache = Mock()
     depositor_bot._refresh_modules_state = Mock()
     depositor_bot.w3.lido.lido.get_depositable_ether = Mock(return_value=100)
     depositor_bot.w3.lido.staking_router.get_deposit_allocations = Mock(return_value=(0, [], []))
@@ -618,23 +611,21 @@ def test_execute_actual_phase_a_cooldown_does_not_call_phase_b(depositor_bot):
 def test_execute_actual_phase_a_empty_falls_through_to_phase_b(depositor_bot):
     """Phase A returns (False, False) → continue to phase B."""
     variables.ENABLE_TOP_UP = False
-    depositor_bot._ensure_module_type_cache = Mock()
     depositor_bot._refresh_modules_state = Mock()
     depositor_bot.w3.lido.lido.get_depositable_ether = Mock(return_value=100)
     depositor_bot.w3.lido.staking_router.get_deposit_allocations = Mock(return_value=(0, [10, 20], [50, 50]))
-    depositor_bot.w3.lido.staking_router.get_all_staking_module_digests = Mock(return_value=['d1', 'd2'])
+    depositor_bot.w3.lido.staking_router.get_all_staking_module_digests = Mock(return_value=[])
     depositor_bot._phase_seed = Mock(return_value=(False, False))
     depositor_bot._phase_full = Mock(return_value=(True, True))
 
     assert depositor_bot._execute_actual() is True
-    # phase_full receives the seed allocations + digests
-    depositor_bot._phase_full.assert_called_once_with([10, 20], [50, 50], ['d1', 'd2'])
+    # phase_full receives the seed allocations and the parsed (empty) digests list
+    depositor_bot._phase_full.assert_called_once_with([10, 20], [50, 50], [])
 
 
 @pytest.mark.unit
 def test_execute_actual_routes_to_phase_full_when_top_up_disabled(depositor_bot):
     variables.ENABLE_TOP_UP = False
-    depositor_bot._ensure_module_type_cache = Mock()
     depositor_bot._refresh_modules_state = Mock()
     depositor_bot.w3.lido.lido.get_depositable_ether = Mock(return_value=100)
     depositor_bot.w3.lido.staking_router.get_deposit_allocations = Mock(return_value=(0, [], []))
@@ -651,7 +642,6 @@ def test_execute_actual_routes_to_phase_full_when_top_up_disabled(depositor_bot)
 @pytest.mark.unit
 def test_execute_actual_routes_to_phase_full_and_topup_when_top_up_enabled(depositor_bot):
     variables.ENABLE_TOP_UP = True
-    depositor_bot._ensure_module_type_cache = Mock()
     depositor_bot._refresh_modules_state = Mock()
     depositor_bot.w3.lido.lido.get_depositable_ether = Mock(return_value=100)
     depositor_bot.w3.lido.staking_router.get_deposit_allocations = Mock(return_value=(0, [], []))
@@ -668,7 +658,6 @@ def test_execute_actual_routes_to_phase_full_and_topup_when_top_up_enabled(depos
 @pytest.mark.unit
 def test_execute_actual_both_phases_return_false(depositor_bot):
     variables.ENABLE_TOP_UP = False
-    depositor_bot._ensure_module_type_cache = Mock()
     depositor_bot._refresh_modules_state = Mock()
     depositor_bot.w3.lido.lido.get_depositable_ether = Mock(return_value=100)
     depositor_bot.w3.lido.staking_router.get_deposit_allocations = Mock(return_value=(0, [], []))
@@ -893,57 +882,55 @@ def test_get_module_type_calls_get_type_on_checksum_address(depositor_bot):
     mock_contract.functions.getType.return_value.call.assert_called_once_with()
 
 
-# ─── _ensure_module_type_cache ─────────────────────────────────────
+# ─── _refresh_modules_state: type-cache population ─────────────────
 
 
 @pytest.mark.unit
-def test_ensure_module_type_cache_populates_for_whitelisted():
-    """Fetches digests and caches the type for every whitelisted module on first call."""
+def test_refresh_modules_state_populates_type_cache_for_whitelisted():
+    """On first call, fetches digests and caches the type for every whitelisted module."""
     bot = _make_bot()
     variables.DEPOSIT_MODULES_WHITELIST = [1, 4]
     bot._module_last_heart_beat = {1: datetime.now(), 4: datetime.now()}
     csm_type = DepositorBot.MODULE_TYPE_CSM
     nor_type = b'curated-onchain-v1'.ljust(32, b'\x00')
     bot._get_module_type = Mock(side_effect=lambda addr: csm_type if addr == '0xCSM' else nor_type)
-    bot.w3.lido.staking_router.get_all_staking_module_digests = Mock(
-        return_value=[_make_digest(1, '0xNOR', 1), _make_digest(4, '0xCSM', 1)]
-    )
+    bot._get_quorum = Mock(return_value=None)
 
-    bot._ensure_module_type_cache()
+    bot._refresh_modules_state([_make_digest(1, '0xNOR', 1), _make_digest(4, '0xCSM', 1)])
 
     assert bot._module_type_cache[1] == nor_type
     assert bot._module_type_cache[4] == csm_type
 
 
 @pytest.mark.unit
-def test_ensure_module_type_cache_skips_non_whitelisted():
+def test_refresh_modules_state_type_cache_skips_non_whitelisted():
     """Modules not in the whitelist are not cached even if returned by SR."""
     bot = _make_bot()
     variables.DEPOSIT_MODULES_WHITELIST = [1]
     bot._module_last_heart_beat = {1: datetime.now()}
     bot._get_module_type = Mock(return_value=DepositorBot.MODULE_TYPE_CMV2)
-    bot.w3.lido.staking_router.get_all_staking_module_digests = Mock(
-        return_value=[_make_digest(1, '0xA1', 1), _make_digest(2, '0xA2', 1)]
-    )
+    bot._get_quorum = Mock(return_value=None)
 
-    bot._ensure_module_type_cache()
+    bot._refresh_modules_state([_make_digest(1, '0xA1', 1), _make_digest(2, '0xA2', 1)])
 
     assert 1 in bot._module_type_cache
     assert 2 not in bot._module_type_cache
 
 
 @pytest.mark.unit
-def test_ensure_module_type_cache_noop_when_all_cached():
-    """No RPC call is made when every whitelisted module is already in the cache."""
+def test_refresh_modules_state_cache_not_overwritten_if_already_present():
+    """Existing cache entries are not overwritten when digests are passed."""
     bot = _make_bot()
     variables.DEPOSIT_MODULES_WHITELIST = [1, 4]
     bot._module_last_heart_beat = {1: datetime.now(), 4: datetime.now()}
     bot._module_type_cache[1] = DepositorBot.MODULE_TYPE_CMV2
     bot._module_type_cache[4] = DepositorBot.MODULE_TYPE_CSM
+    bot._get_module_type = Mock()
+    bot._get_quorum = Mock(return_value=None)
 
-    bot._ensure_module_type_cache()
+    bot._refresh_modules_state([_make_digest(1, '0xA1', 1), _make_digest(4, '0xA4', 1)])
 
-    bot.w3.lido.staking_router.get_all_staking_module_digests.assert_not_called()
+    bot._get_module_type.assert_not_called()
 
 
 # ─── Message actualizer / quorum (unchanged) ───────────────────────

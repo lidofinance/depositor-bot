@@ -1,10 +1,19 @@
 import logging
 from functools import lru_cache
+from typing import TypedDict
 
 from blockchain.contracts.base_interface import ContractInterface
 from web3.types import BlockIdentifier, Wei
 
 logger = logging.getLogger(__name__)
+
+
+class StakingModuleInfo(TypedDict):
+    """Parsed fields from a StakingModuleDigest tuple returned by StakingRouter."""
+
+    module_id: int
+    address: str
+    wc_type: int
 
 
 class StakingRouterContractV3(ContractInterface):
@@ -35,7 +44,7 @@ class StakingRouterContractV3(ContractInterface):
         )
         return response
 
-    def get_all_staking_module_digests(self, block_identifier: BlockIdentifier = 'latest') -> list[list]:
+    def get_all_staking_module_digests(self, block_identifier: BlockIdentifier = 'latest') -> list[StakingModuleInfo]:
         """Returns staking module digest for passed staking module ids"""
         response = self.functions.getAllStakingModuleDigests().call(block_identifier=block_identifier)
         logger.info(
@@ -45,7 +54,7 @@ class StakingRouterContractV3(ContractInterface):
                 'block_identifier': block_identifier.__repr__(),
             }
         )
-        return response
+        return [StakingModuleInfo(module_id=d[2][0], address=d[2][1], wc_type=d[2][13]) for d in response]
 
     def get_staking_module_digests(self, module_ids: list[int], block_identifier: BlockIdentifier = 'latest') -> list[list]:
         """Returns staking module digest for passed staking module ids"""
