@@ -6,6 +6,7 @@ from blockchain.contracts.deposit import DepositContract
 from blockchain.contracts.deposit_security_module import DepositSecurityModuleContract
 from blockchain.contracts.lido import LidoContract
 from blockchain.contracts.lido_locator import LidoLocatorContract
+from blockchain.contracts.staking_module import StakingModuleContract
 from blockchain.contracts.staking_router import (
     StakingRouterContractV3,
     StakingRouterContractV4,
@@ -23,6 +24,7 @@ class LidoContracts(Module):
         super().__init__(w3)
         self.staking_router_version: int | None = None
         self.topup_gateway: TopUpGatewayContract | None = None
+        self._staking_module_cache: dict[int, StakingModuleContract] = {}
         self._load_contracts()
 
     def has_contract_address_changed(self) -> bool:
@@ -60,6 +62,7 @@ class LidoContracts(Module):
         self._load_dsm()
         if self.staking_router_version == 4:
             self._load_topup_gateway()
+        self._load_staking_modules()
 
     def _load_staking_router(self):
         staking_router_address = self.lido_locator.staking_router()
@@ -102,9 +105,28 @@ class LidoContracts(Module):
             ),
         )
 
+    def _load_staking_modules(self):
+        """Pre-load StakingModuleContract instances for all whitelisted modules."""
+        self._staking_module_cache.clear()
+        digests = self.staking_router.get_all_staking_module_digests()
+        for digest in digests:
+            module_id = digest['module_id']
+            if module_id not in variables.DEPOSIT_MODULES_WHITELIST:
+                continue
+            checksum = self.w3.to_checksum_address(digest['address'])
+            self._staking_module_cache[module_id] = cast(
+                StakingModuleContract,
+                self.w3.eth.contract(address=checksum, ContractFactoryClass=StakingModuleContract),
+            )
+        logger.debug({'msg': 'Loaded staking modules for whitelist.', 'ids': list(self._staking_module_cache.keys())})
+
+    def staking_module(self, module_id: int) -> StakingModuleContract:
+        """Returns the cached StakingModuleContract for the given module id."""
+        return self._staking_module_cache[module_id]
+
     def _load_topup_gateway(self):
         topup_gateway_address = self.lido_locator.top_up_gateway()
-        self.topup_gateway: TopUpGatewayContract = cast(
+        self.topup_gateway = cast(
             TopUpGatewayContract,
             self.w3.eth.contract(
                 address=topup_gateway_address,

@@ -2,7 +2,6 @@ from typing import cast
 
 import pytest
 import variables
-from blockchain.contracts.base_interface import ContractInterface
 from blockchain.contracts.cmv2 import CMV2Contract
 from blockchain.contracts.deposit import DepositContract
 from blockchain.contracts.deposit_security_module import DepositSecurityModuleContract
@@ -92,15 +91,12 @@ def cmv2_contract(web3_lido_integration):
     if web3_lido_integration.eth.chain_id != 32382:
         pytest.skip('CMV2 contract test is supported currently only on chainId 32382.')
 
-    module_ids = web3_lido_integration.lido.staking_router.get_staking_module_ids()
-    module_digests = web3_lido_integration.lido.staking_router.get_staking_module_digests(module_ids)
-    module_type_abi = ContractInterface.load_abi('./interfaces/IStakingModule.json')
+    module_digests = web3_lido_integration.lido.staking_router.get_all_staking_module_digests()
     cmv2_type = b'curated-onchain-v2'.ljust(32, b'\x00')
 
     for digest in module_digests:
-        module_address = digest[2][1]
-        module = web3_lido_integration.eth.contract(address=module_address, abi=module_type_abi)
-        if module.functions.getType().call() == cmv2_type:
+        module_address = digest['address']
+        if web3_lido_integration.lido.staking_module(digest['module_id']).get_type() == cmv2_type:
             yield cast(
                 CMV2Contract,
                 web3_lido_integration.eth.contract(
