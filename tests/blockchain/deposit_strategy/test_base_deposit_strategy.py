@@ -1,6 +1,7 @@
 from unittest.mock import Mock
 
 import pytest
+from blockchain.contracts.staking_router import StakingModuleInfo
 
 
 @pytest.mark.unit
@@ -17,8 +18,7 @@ def test_csm_deposit_strategy(csm_strategy):
 
 
 def _digest(module_id):
-    """Minimal digest where digest[2][0] is the module_id."""
-    return (0, 0, (module_id, '', 0, 0, 0, 0, '', 0, 0, 0, 0, 0, 0, 1, 0, 0), (0, 0, 0))
+    return StakingModuleInfo(module_id=module_id, address='', wc_type=1)
 
 
 def _setup_allocation(strategy, module_id, allocated_wei, depositable=100 * 10**18):
@@ -83,7 +83,7 @@ def test_allocation_calls_get_deposit_allocations_with_top_up_true(base_deposit_
 
 @pytest.mark.unit
 def test_allocation_lookup_by_module_id_not_index(base_deposit_strategy):
-    """Allocation must be picked by digest[2][0] == module_id, not by list position."""
+    """Allocation must be picked by digest['module_id'] == module_id, not by list position."""
     base_deposit_strategy.w3.lido.lido.get_depositable_ether = Mock(return_value=300 * 10**18)
     # digests=[m1, m2, m3]; allocations=[100, 200, 64] ETH → module_id=3 must get 64 ETH (2 keys)
     base_deposit_strategy.w3.lido.staking_router.get_deposit_allocations = Mock(

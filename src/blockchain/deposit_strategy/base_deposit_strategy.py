@@ -102,7 +102,7 @@ class BaseDepositStrategy(DepositStrategy):
 
         keys = 0
         for i, digest in enumerate(digests):
-            if digest[2][0] == module_id:
+            if digest['module_id'] == module_id:
                 # 32 ETH per validator for 0x01 full deposits
                 keys = allocated[i] // (32 * 10**18)
                 break

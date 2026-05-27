@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, Mock
 
 import pytest
 import variables
-from blockchain.contracts.staking_router import StakingModuleInfo
+from blockchain.contracts.staking_router import MODULE_TYPE_CMV2, MODULE_TYPE_CSM, StakingModuleInfo
 from bots.depositor import DepositorBot
 
 from tests.conftest import COUNCIL_ADDRESS_1, COUNCIL_ADDRESS_2, COUNCIL_PK_1, COUNCIL_PK_2
@@ -47,7 +47,7 @@ class TestRefreshModulesState(unittest.TestCase):
         self.bot._get_quorum = Mock(return_value=None)
         self.bot._select_strategy = Mock(return_value=Mock())
 
-        self.bot._refresh_modules_state([])
+        self.bot._refresh_modules_state()
 
         called_ids = sorted(c.args[0] for c in self.bot._get_quorum.call_args_list)
         self.assertEqual([1, 2, 3], called_ids)
@@ -57,7 +57,7 @@ class TestRefreshModulesState(unittest.TestCase):
         strategy = Mock()
         self.bot._select_strategy = Mock(return_value=strategy)
 
-        self.bot._refresh_modules_state([])
+        self.bot._refresh_modules_state()
 
         # is_gas_price_ok called once per whitelisted module
         self.assertEqual(3, strategy.is_gas_price_ok.call_count)
@@ -69,7 +69,7 @@ class TestRefreshModulesState(unittest.TestCase):
         old = datetime.now() - timedelta(hours=2)
         self.bot._module_last_heart_beat = {1: old, 2: old, 3: old}
 
-        self.bot._refresh_modules_state([])
+        self.bot._refresh_modules_state()
 
         for module_id in [1, 2, 3]:
             self.assertGreater(self.bot._module_last_heart_beat[module_id], old)
@@ -81,7 +81,7 @@ class TestRefreshModulesState(unittest.TestCase):
         old = datetime.now() - timedelta(hours=2)
         self.bot._module_last_heart_beat = {1: old, 2: old, 3: old}
 
-        self.bot._refresh_modules_state([])
+        self.bot._refresh_modules_state()
 
         for module_id in [1, 2, 3]:
             self.assertEqual(old, self.bot._module_last_heart_beat[module_id])
@@ -91,7 +91,7 @@ class TestRefreshModulesState(unittest.TestCase):
         self.bot._get_quorum = Mock()
         self.bot._select_strategy = Mock()
 
-        self.bot._refresh_modules_state([])
+        self.bot._refresh_modules_state()
 
         self.bot._get_quorum.assert_not_called()
         self.bot._select_strategy.assert_not_called()
@@ -103,7 +103,7 @@ class TestRefreshModulesState(unittest.TestCase):
         self.bot._get_quorum = Mock(return_value=None)
         self.bot._select_strategy = Mock(return_value=Mock())
 
-        self.bot._refresh_modules_state([])
+        self.bot._refresh_modules_state()
 
         called_ids = sorted(c.args[0] for c in self.bot._get_quorum.call_args_list)
         self.assertEqual([1, 3], called_ids)
@@ -711,8 +711,10 @@ def test_deposit_to_module_happy_path_sends_tx(depositor_bot):
 
 @pytest.mark.unit
 def test_deposit_to_module_csm_strategy_for_csm_module_type(depositor_bot):
-    """_select_strategy returns CSM strategy when the module type is MODULE_TYPE_CSM."""
-    depositor_bot._module_type_cache[4] = DepositorBot.MODULE_TYPE_CSM
+    """_select_strategy returns CSM strategy when staking_module.get_type() returns MODULE_TYPE_CSM."""
+    mock_module = Mock()
+    mock_module.get_type.return_value = MODULE_TYPE_CSM
+    depositor_bot.w3.lido.staking_module = Mock(return_value=mock_module)
     depositor_bot._csm_strategy.is_gas_price_ok = Mock(return_value=False)
     depositor_bot._general_strategy.is_gas_price_ok = Mock(return_value=False)
 
@@ -724,8 +726,10 @@ def test_deposit_to_module_csm_strategy_for_csm_module_type(depositor_bot):
 
 @pytest.mark.unit
 def test_deposit_to_module_general_strategy_for_non_csm_module_type(depositor_bot):
-    """_select_strategy returns general strategy when the module type is not MODULE_TYPE_CSM."""
-    depositor_bot._module_type_cache[1] = b'curated-onchain-v1'.ljust(32, b'\x00')
+    """_select_strategy returns general strategy when staking_module.get_type() returns a non-CSM type."""
+    mock_module = Mock()
+    mock_module.get_type.return_value = b'curated-onchain-v1'.ljust(32, b'\x00')
+    depositor_bot.w3.lido.staking_module = Mock(return_value=mock_module)
     depositor_bot._csm_strategy.is_gas_price_ok = Mock(return_value=False)
     depositor_bot._general_strategy.is_gas_price_ok = Mock(return_value=False)
 
@@ -740,7 +744,9 @@ def test_deposit_to_module_general_strategy_for_non_csm_module_type(depositor_bo
 
 @pytest.mark.unit
 def test_top_up_to_module_unknown_type_returns_false(depositor_bot):
-    depositor_bot._get_module_type = Mock(return_value=b'unknown-type'.ljust(32, b'\x00'))
+    mock_module = Mock()
+    mock_module.get_type.return_value = b'unknown-type'.ljust(32, b'\x00')
+    depositor_bot.w3.lido.staking_module = Mock(return_value=mock_module)
     depositor_bot._select_topup_strategy = Mock(return_value=None)
 
     assert depositor_bot._top_up_to_module(1, '0xAddr', 50) is False
@@ -748,7 +754,9 @@ def test_top_up_to_module_unknown_type_returns_false(depositor_bot):
 
 @pytest.mark.unit
 def test_top_up_to_module_gas_too_high_returns_false(depositor_bot):
-    depositor_bot._get_module_type = Mock(return_value=DepositorBot.MODULE_TYPE_CMV2)
+    mock_module = Mock()
+    mock_module.get_type.return_value = MODULE_TYPE_CMV2
+    depositor_bot.w3.lido.staking_module = Mock(return_value=mock_module)
     strategy = Mock()
     strategy.is_gas_price_ok = Mock(return_value=False)
     strategy.get_topup_candidates = Mock()
@@ -760,7 +768,9 @@ def test_top_up_to_module_gas_too_high_returns_false(depositor_bot):
 
 @pytest.mark.unit
 def test_top_up_to_module_no_proof_data_returns_false(depositor_bot):
-    depositor_bot._get_module_type = Mock(return_value=DepositorBot.MODULE_TYPE_CMV2)
+    mock_module = Mock()
+    mock_module.get_type.return_value = MODULE_TYPE_CMV2
+    depositor_bot.w3.lido.staking_module = Mock(return_value=mock_module)
     strategy = Mock()
     strategy.is_gas_price_ok = Mock(return_value=True)
     strategy.get_topup_candidates = Mock(return_value=None)
@@ -784,7 +794,9 @@ def test_top_up_to_module_max_validators_uses_min(depositor_bot, config_limit, g
     original = variables.MAX_VALIDATORS_PER_TOP_UP
     variables.MAX_VALIDATORS_PER_TOP_UP = config_limit
     try:
-        depositor_bot._get_module_type = Mock(return_value=DepositorBot.MODULE_TYPE_CMV2)
+        mock_module = Mock()
+        mock_module.get_type.return_value = MODULE_TYPE_CMV2
+        depositor_bot.w3.lido.staking_module = Mock(return_value=mock_module)
         strategy = Mock()
         strategy.is_gas_price_ok = Mock(return_value=True)
         strategy.get_topup_candidates = Mock(return_value=['proof'])
@@ -807,7 +819,9 @@ def test_top_up_to_module_happy_path_calls_top_up_check_send(depositor_bot):
     proof_data = ['proof']
     tx = Mock(name='tx')
 
-    depositor_bot._get_module_type = Mock(return_value=DepositorBot.MODULE_TYPE_CMV2)
+    mock_module = Mock()
+    mock_module.get_type.return_value = MODULE_TYPE_CMV2
+    depositor_bot.w3.lido.staking_module = Mock(return_value=mock_module)
     strategy = Mock()
     strategy.is_gas_price_ok = Mock(return_value=True)
     strategy.get_topup_candidates = Mock(return_value=proof_data)
@@ -827,7 +841,9 @@ def test_top_up_to_module_happy_path_calls_top_up_check_send(depositor_bot):
 @pytest.mark.unit
 def test_top_up_to_module_passes_module_allocation_through_to_strategy(depositor_bot):
     """The allocation is forwarded to get_topup_candidates, not re-queried."""
-    depositor_bot._get_module_type = Mock(return_value=DepositorBot.MODULE_TYPE_CMV2)
+    mock_module = Mock()
+    mock_module.get_type.return_value = MODULE_TYPE_CMV2
+    depositor_bot.w3.lido.staking_module = Mock(return_value=mock_module)
     strategy = Mock()
     strategy.is_gas_price_ok = Mock(return_value=True)
     strategy.get_topup_candidates = Mock(return_value=['proof'])
@@ -845,12 +861,12 @@ def test_top_up_to_module_passes_module_allocation_through_to_strategy(depositor
     depositor_bot.w3.lido.staking_router.get_deposit_allocations.assert_not_called()
 
 
-# ─── _select_topup_strategy / _get_module_type (unchanged) ─────────
+# ─── _select_topup_strategy ────────────────────────────────────────
 
 
 @pytest.mark.unit
 def test_select_topup_strategy_cmv2_returns_cmv2_strategy(depositor_bot):
-    strategy = depositor_bot._select_topup_strategy(DepositorBot.MODULE_TYPE_CMV2)
+    strategy = depositor_bot._select_topup_strategy(MODULE_TYPE_CMV2)
     assert strategy is depositor_bot._cmv2_topup_strategy
 
 
@@ -858,79 +874,6 @@ def test_select_topup_strategy_cmv2_returns_cmv2_strategy(depositor_bot):
 def test_select_topup_strategy_unknown_returns_none(depositor_bot):
     unknown_type = b'something-else'.ljust(32, b'\x00')
     assert depositor_bot._select_topup_strategy(unknown_type) is None
-
-
-@pytest.mark.unit
-def test_get_module_type_calls_get_type_on_checksum_address(depositor_bot):
-    raw_address = '0xabc1234567890abcdef1234567890abcdef12345'
-    checksum_address = '0xAbC1234567890aBcdEf1234567890AbCdEF12345'
-    expected_type = b'curated-onchain-v2'.ljust(32, b'\x00')
-
-    depositor_bot.w3.to_checksum_address = Mock(return_value=checksum_address)
-    mock_contract = Mock()
-    mock_contract.functions.getType.return_value.call.return_value = expected_type
-    depositor_bot.w3.eth.contract = Mock(return_value=mock_contract)
-
-    result = depositor_bot._get_module_type(raw_address)
-
-    assert result == expected_type
-    depositor_bot.w3.to_checksum_address.assert_called_once_with(raw_address)
-    depositor_bot.w3.eth.contract.assert_called_once_with(
-        address=checksum_address,
-        abi=DepositorBot.GET_TYPE_ABI,
-    )
-    mock_contract.functions.getType.return_value.call.assert_called_once_with()
-
-
-# ─── _refresh_modules_state: type-cache population ─────────────────
-
-
-@pytest.mark.unit
-def test_refresh_modules_state_populates_type_cache_for_whitelisted():
-    """On first call, fetches digests and caches the type for every whitelisted module."""
-    bot = _make_bot()
-    variables.DEPOSIT_MODULES_WHITELIST = [1, 4]
-    bot._module_last_heart_beat = {1: datetime.now(), 4: datetime.now()}
-    csm_type = DepositorBot.MODULE_TYPE_CSM
-    nor_type = b'curated-onchain-v1'.ljust(32, b'\x00')
-    bot._get_module_type = Mock(side_effect=lambda addr: csm_type if addr == '0xCSM' else nor_type)
-    bot._get_quorum = Mock(return_value=None)
-
-    bot._refresh_modules_state([_make_digest(1, '0xNOR', 1), _make_digest(4, '0xCSM', 1)])
-
-    assert bot._module_type_cache[1] == nor_type
-    assert bot._module_type_cache[4] == csm_type
-
-
-@pytest.mark.unit
-def test_refresh_modules_state_type_cache_skips_non_whitelisted():
-    """Modules not in the whitelist are not cached even if returned by SR."""
-    bot = _make_bot()
-    variables.DEPOSIT_MODULES_WHITELIST = [1]
-    bot._module_last_heart_beat = {1: datetime.now()}
-    bot._get_module_type = Mock(return_value=DepositorBot.MODULE_TYPE_CMV2)
-    bot._get_quorum = Mock(return_value=None)
-
-    bot._refresh_modules_state([_make_digest(1, '0xA1', 1), _make_digest(2, '0xA2', 1)])
-
-    assert 1 in bot._module_type_cache
-    assert 2 not in bot._module_type_cache
-
-
-@pytest.mark.unit
-def test_refresh_modules_state_cache_not_overwritten_if_already_present():
-    """Existing cache entries are not overwritten when digests are passed."""
-    bot = _make_bot()
-    variables.DEPOSIT_MODULES_WHITELIST = [1, 4]
-    bot._module_last_heart_beat = {1: datetime.now(), 4: datetime.now()}
-    bot._module_type_cache[1] = DepositorBot.MODULE_TYPE_CMV2
-    bot._module_type_cache[4] = DepositorBot.MODULE_TYPE_CSM
-    bot._get_module_type = Mock()
-    bot._get_quorum = Mock(return_value=None)
-
-    bot._refresh_modules_state([_make_digest(1, '0xA1', 1), _make_digest(4, '0xA4', 1)])
-
-    bot._get_module_type.assert_not_called()
 
 
 # ─── Message actualizer / quorum (unchanged) ───────────────────────

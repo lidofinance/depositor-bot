@@ -1,11 +1,14 @@
 import logging
-from functools import lru_cache
+from functools import lru_cache  # used by get_contract_version, get_staking_module_ids
 from typing import TypedDict
 
 from blockchain.contracts.base_interface import ContractInterface
 from web3.types import BlockIdentifier, Wei
 
 logger = logging.getLogger(__name__)
+
+MODULE_TYPE_CMV2 = b'curated-onchain-v2'.ljust(32, b'\x00')
+MODULE_TYPE_CSM = b'community-onchain-v1'.ljust(32, b'\x00')
 
 
 class StakingModuleInfo(TypedDict):
@@ -55,18 +58,6 @@ class StakingRouterContractV3(ContractInterface):
             }
         )
         return [StakingModuleInfo(module_id=d[2][0], address=d[2][1], wc_type=d[2][13]) for d in response]
-
-    def get_staking_module_digests(self, module_ids: list[int], block_identifier: BlockIdentifier = 'latest') -> list[list]:
-        """Returns staking module digest for passed staking module ids"""
-        response = self.functions.getStakingModuleDigests(module_ids).call(block_identifier=block_identifier)
-        logger.info(
-            {
-                'msg': f'Call `getStakingModuleDigests({module_ids})`.',
-                'value': response,
-                'block_identifier': block_identifier.__repr__(),
-            }
-        )
-        return response
 
     def is_staking_module_active(
         self,

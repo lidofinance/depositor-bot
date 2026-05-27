@@ -5,8 +5,7 @@ from datetime import datetime, timedelta
 from typing import Callable, Dict, List, Optional, cast
 
 import variables
-from blockchain.contracts.base_interface import ContractInterface
-from blockchain.contracts.staking_router import StakingModuleInfo, StakingRouterContractV4
+from blockchain.contracts.staking_router import MODULE_TYPE_CMV2, MODULE_TYPE_CSM, StakingModuleInfo, StakingRouterContractV4
 from blockchain.deposit_strategy.base_deposit_strategy import (
     CSMDepositStrategy,
     DefaultDepositStrategy,
@@ -88,7 +87,6 @@ class DepositorBot:
         self._cl = cl
         now = datetime.now()
         self._module_last_heart_beat: Dict[int, datetime] = {module_id: now for module_id in variables.DEPOSIT_MODULES_WHITELIST}
-        self._module_type_cache: Dict[int, bytes] = {}
 
         transports = []
 
@@ -142,8 +140,8 @@ class DepositorBot:
     def _execute_actual(self) -> bool:
         digests: list[StakingModuleInfo] = self.w3.lido.staking_router.get_all_staking_module_digests()
 
-        # Step 0: refresh quorum + gas metrics for all whitelisted modules (also caches quorum-now per module).
-        self._refresh_modules_state(digests)
+        # Step 0: refresh quorum + gas metrics for all whitelisted modules.
+        self._refresh_modules_state()
 
         # Read depositable ether once; if 0 — nothing to do this iteration.
         depositable_ether = self.w3.lido.lido.get_depositable_ether()
@@ -181,10 +179,8 @@ class DepositorBot:
         logger.info({'msg': 'Phase B finished.', 'done': _done, 'success': success})
         return success
 
-    def _refresh_modules_state(self, digests: list[StakingModuleInfo]) -> None:
+    def _refresh_modules_state(self) -> None:
         """Update last-quorum heart_beat (cooldown source) and run gas-price probe for metrics, for all whitelisted modules."""
-        addr_by_id: Dict[int, str] = {d['module_id']: d['address'] for d in digests}
-
         now = datetime.now()
         logger.info(
             {
@@ -193,8 +189,6 @@ class DepositorBot:
             }
         )
         for module_id in variables.DEPOSIT_MODULES_WHITELIST:
-            if module_id not in self._module_type_cache and module_id in addr_by_id:
-                self._module_type_cache[module_id] = self._get_module_type(addr_by_id[module_id])
             # Probe gas-price strategy purely for metrics — gas is re-checked right before the tx is sent.
             self._select_strategy(module_id).is_gas_price_ok(module_id)
             quorum = self._get_quorum(module_id)
@@ -367,7 +361,7 @@ class DepositorBot:
 
     def _top_up_to_module(self, module_id: int, module_address: str, module_allocation: Wei) -> bool:
         """New simplified top-up path: gas check (no keys-count) + proof + send. Allocation is passed in."""
-        module_type = self._get_module_type(module_address)
+        module_type = self.w3.lido.staking_module(module_id).get_type()
         strategy = self._select_topup_strategy(module_type)
         if strategy is None:
             logger.info(
@@ -413,22 +407,10 @@ class DepositorBot:
         logger.info({'msg': f'Top-up tx result: {success}.', 'module_id': module_id})
         return success
 
-    MODULE_TYPE_CMV2 = b'curated-onchain-v2'.ljust(32, b'\x00')
-    MODULE_TYPE_CSM = b'community-onchain-v1'.ljust(32, b'\x00')
-    GET_TYPE_ABI = ContractInterface.load_abi('./interfaces/IStakingModule.json')
-
     def _select_topup_strategy(self, module_type: bytes) -> Optional[TopUpStrategy]:
-        if module_type == self.MODULE_TYPE_CMV2:
+        if module_type == MODULE_TYPE_CMV2:
             return self._cmv2_topup_strategy
         return None
-
-    def _get_module_type(self, module_address: str) -> bytes:
-        """Call IStakingModule.getType() on the module contract."""
-        module = self.w3.eth.contract(
-            address=self.w3.to_checksum_address(module_address),
-            abi=self.GET_TYPE_ABI,
-        )
-        return module.functions.getType().call()
 
     def _check_balance(self):
         if variables.ACCOUNT:
@@ -455,7 +437,7 @@ class DepositorBot:
             GUARDIAN_BALANCE.labels(address=address, chain_id=chain_id).set(balance)
 
     def _select_strategy(self, module_id: int) -> DepositStrategy:
-        if self._module_type_cache.get(module_id) == self.MODULE_TYPE_CSM:
+        if self.w3.lido.staking_module(module_id).get_type() == MODULE_TYPE_CSM:
             return self._csm_strategy
         return self._general_strategy
 

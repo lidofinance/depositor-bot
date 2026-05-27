@@ -15,7 +15,6 @@ def test_staking_router_call_v3(staking_router_v3, caplog):
                 lambda response: check_value_type(response, list) and [check_value_type(x, int) for x in response],
             ),
             ('is_staking_module_active', (1,), lambda response: check_value_type(response, bool)),
-            ('get_staking_module_digests', ([1],), lambda response: check_value_type(response, list)),
             ('get_staking_module_nonce', (1,), lambda response: check_value_type(response, int)),
             ('get_staking_module_max_deposits_count', (1, 100 * 10**18), lambda response: check_value_type(response, int)),
         ],
@@ -37,7 +36,6 @@ def test_staking_router_call_v4(staking_router_v4, caplog):
                 lambda response: check_value_type(response, list) and [check_value_type(x, int) for x in response],
             ),
             ('is_staking_module_active', (1,), lambda response: check_value_type(response, bool)),
-            ('get_staking_module_digests', ([1],), lambda response: check_value_type(response, list)),
             ('get_staking_module_nonce', (1,), lambda response: check_value_type(response, int)),
             ('get_staking_module_max_deposits_count', (1, 100 * 10**18), lambda response: check_value_type(response, int)),
             (
