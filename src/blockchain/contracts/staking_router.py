@@ -1,5 +1,5 @@
 import logging
-from functools import lru_cache  # used by get_contract_version, get_staking_module_ids
+from functools import lru_cache
 from typing import TypedDict
 
 from blockchain.contracts.base_interface import ContractInterface
@@ -48,7 +48,9 @@ class StakingRouterContractV3(ContractInterface):
         return response
 
     def get_all_staking_module_digests(self, block_identifier: BlockIdentifier = 'latest') -> list[StakingModuleInfo]:
-        """Returns staking module digest for passed staking module ids"""
+        """Returns staking module digest for passed staking module ids.
+        V3 state tuple has no wc_type field — all modules default to wc_type=1.
+        """
         response = self.functions.getAllStakingModuleDigests().call(block_identifier=block_identifier)
         logger.info(
             {
@@ -57,7 +59,7 @@ class StakingRouterContractV3(ContractInterface):
                 'block_identifier': block_identifier.__repr__(),
             }
         )
-        return [StakingModuleInfo(module_id=d[2][0], address=d[2][1], wc_type=d[2][13]) for d in response]
+        return [StakingModuleInfo(module_id=d[2][0], address=d[2][1], wc_type=1) for d in response]
 
     def is_staking_module_active(
         self,
@@ -111,6 +113,18 @@ class StakingRouterContractV3(ContractInterface):
 
 class StakingRouterContractV4(StakingRouterContractV3):
     abi_path = './interfaces/StakingRouterV4.json'
+
+    def get_all_staking_module_digests(self, block_identifier: BlockIdentifier = 'latest') -> list[StakingModuleInfo]:
+        """V4 state tuple includes wc_type at index 13."""
+        response = self.functions.getAllStakingModuleDigests().call(block_identifier=block_identifier)
+        logger.info(
+            {
+                'msg': 'Call getAllStakingModuleDigests().',
+                'value': response,
+                'block_identifier': block_identifier.__repr__(),
+            }
+        )
+        return [StakingModuleInfo(module_id=d[2][0], address=d[2][1], wc_type=d[2][13]) for d in response]
 
     def get_deposit_allocations(
         self,
