@@ -138,8 +138,6 @@ class DepositorBot:
         return result
 
     def _execute_actual(self) -> bool:
-        digests: list[StakingModuleInfo] = self.w3.lido.staking_router.get_all_staking_module_digests()
-
         # Step 0: refresh quorum + gas metrics for all whitelisted modules.
         self._refresh_modules_state()
 
@@ -161,6 +159,7 @@ class DepositorBot:
                 'new': list(seed_new),
             }
         )
+        digests: list[StakingModuleInfo] = self.w3.lido.staking_router.get_all_staking_module_digests()
 
         # Phase A: seed deposits into 0x02 modules.
         logger.info({'msg': 'Phase A start: seed deposits to 0x02 modules.'})
