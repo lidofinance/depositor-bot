@@ -112,6 +112,14 @@ class StakingRouterContractV3(ContractInterface):
 class StakingRouterContractV4(StakingRouterContractV3):
     abi_path = './interfaces/StakingRouterV4.json'
 
+    def can_deposit(self, staking_module_id: int, block_identifier: BlockIdentifier = 'latest') -> bool:
+        """
+        Check module exits and active
+        """
+        response = self.functions.canDeposit(staking_module_id).call(block_identifier=block_identifier)
+        logger.info({'msg': f'Call `canDeposit({staking_module_id})`.', 'value': response, 'block_identifier': repr(block_identifier)})
+        return response
+
     def get_deposit_allocations(
         self,
         deposit_amount: Wei,

@@ -132,8 +132,6 @@ class DepositorBot:
         logger.info({'msg': 'Depositor iteration start.', 'block_number': block.get('number')})
         self._check_balance()
 
-        sr_version = self.w3.lido.staking_router.get_contract_version()
-        logger.info({'msg': 'SR version.', 'value': sr_version})
         result = self._execute_actual()
         logger.info({'msg': 'Depositor iteration finished.', 'value': result})
         return result
@@ -322,11 +320,17 @@ class DepositorBot:
 
         for module_id, module_address, wc_type, _stake, topup_alloc in candidates:
             if wc_type == 2:
-                # Top-up path: canTopUp + is_block_distance_passed (no quorum check for top-ups).
-                if not self.w3.lido.topup_gateway.can_top_up(module_id):
-                    logger.info({'msg': 'Phase B: canTopUp=False — try next module.', 'module_id': module_id})
+                # Top-up path: inlined canTopUp checks (no quorum check for top-ups). WC type already verified above.
+                if self.w3.lido.topup_gateway.is_paused():
+                    logger.info({'msg': 'Phase B: TopUpGateway is paused — try next module.', 'module_id': module_id})
                     continue
-                if not self.w3.lido.topup_gateway.is_block_distance_passed(module_id):
+                if not sr_v4.can_deposit(module_id):
+                    logger.info({'msg': 'Phase B: StakingRouter.canDeposit=False — try next module.', 'module_id': module_id})
+                    continue
+                if not self.w3.lido.lido.can_deposit():
+                    logger.info({'msg': 'Phase B: Lido.canDeposit=False — try next module.', 'module_id': module_id})
+                    continue
+                if not self.w3.lido.topup_gateway.is_block_distance_passed():
                     logger.info({'msg': 'Phase B: top-up block distance not passed — wait next iteration.', 'module_id': module_id})
                     return True, False
                 return True, self._top_up_to_module(module_id, module_address, topup_alloc)
@@ -536,6 +540,6 @@ class DepositorBot:
         # Fetch messages and apply filters
         actualize_filter = self._get_message_actualize_filter()
         prefix = self.w3.lido.deposit_security_module.get_attest_message_prefix()
-        sign_filter = get_messages_sign_filter(prefix)
+        sign_filter = get_messages_sign_filter(prefix, self.w3.lido.dsm_version)
 
         return self.message_storage.get_messages_and_actualize(lambda x: sign_filter(x) and actualize_filter(x))

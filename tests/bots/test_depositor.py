@@ -357,7 +357,9 @@ class TestPhaseFullAndTopup(unittest.TestCase):
         variables.DEPOSIT_MODULES_WHITELIST = [1, 2, 3]
         self.bot._module_last_heart_beat = {m: datetime.now() for m in [1, 2, 3]}
         self.bot.w3.lido.deposit_security_module.can_deposit.return_value = True
-        self.bot.w3.lido.topup_gateway.can_top_up.return_value = True
+        self.bot.w3.lido.topup_gateway.is_paused.return_value = False
+        self.bot.w3.lido.staking_router.can_deposit.return_value = True
+        self.bot.w3.lido.lido.can_deposit.return_value = True
         self.bot.w3.lido.topup_gateway.is_block_distance_passed.return_value = True
         self.bot._get_quorum = Mock(return_value=None)
         self.bot._deposit_to_module = Mock(return_value=True)
@@ -429,14 +431,38 @@ class TestPhaseFullAndTopup(unittest.TestCase):
 
     # ─── 0x02 branch ───────────────────────────────────────────
 
-    def test_can_top_up_false_skips_to_next(self):
-        # m1 (0x02) can_top_up=False → skipped. m2 (0x01) succeeds.
+    def test_gateway_paused_skips_to_next(self):
+        # m1 (0x02) TopUpGateway paused → skipped. m2 (0x01) succeeds.
         digests = [_make_digest(1, '0xA1', 2), _make_digest(2, '0xA2', 1)]
         self._set_topup_allocation([50, 0], [100, 0])
-        self.bot.w3.lido.topup_gateway.can_top_up.return_value = False
+        self.bot.w3.lido.topup_gateway.is_paused.return_value = True
         self.bot._get_quorum = Mock(return_value=['msg'])
 
         # Ensure m1 has lower stake → tried first
+        self.bot._phase_full_and_topup(100, [0, 50], [0, 60], digests)
+
+        self.bot._top_up_to_module.assert_not_called()
+        self.bot._deposit_to_module.assert_called_once_with(2)
+
+    def test_staking_router_cannot_deposit_skips_to_next(self):
+        # m1 (0x02) StakingRouter.canDeposit=False → skipped. m2 (0x01) succeeds.
+        digests = [_make_digest(1, '0xA1', 2), _make_digest(2, '0xA2', 1)]
+        self._set_topup_allocation([50, 0], [100, 0])
+        self.bot.w3.lido.staking_router.can_deposit.return_value = False
+        self.bot._get_quorum = Mock(return_value=['msg'])
+
+        self.bot._phase_full_and_topup(100, [0, 50], [0, 60], digests)
+
+        self.bot._top_up_to_module.assert_not_called()
+        self.bot._deposit_to_module.assert_called_once_with(2)
+
+    def test_lido_cannot_deposit_skips_to_next(self):
+        # m1 (0x02) Lido.canDeposit=False → skipped. m2 (0x01) succeeds.
+        digests = [_make_digest(1, '0xA1', 2), _make_digest(2, '0xA2', 1)]
+        self._set_topup_allocation([50, 0], [100, 0])
+        self.bot.w3.lido.lido.can_deposit.return_value = False
+        self.bot._get_quorum = Mock(return_value=['msg'])
+
         self.bot._phase_full_and_topup(100, [0, 50], [0, 60], digests)
 
         self.bot._top_up_to_module.assert_not_called()

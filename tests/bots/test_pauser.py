@@ -31,7 +31,6 @@ def pause_message():
         'blockNumber': 10,
         'guardianAddress': COUNCIL_ADDRESS,
         'guardianIndex': 0,
-        'stakingModuleId': 1,
         'signature': {
             '_vs': '0xd4933925f5f97a9632b4b1bc621a1c2771d58eaf6eee27dcf915eac8af010537',
             'r': '0xbaa668505cd496caaf7117dd074338197200175057909ab73a04463656bdb0fa',
@@ -57,39 +56,15 @@ def add_account_to_guardian(web3_lido_integration, set_integration_account):
     yield COUNCIL_ADDRESS
 
 
-def get_pause_message(web3, module_id):
-    latest = web3.eth.get_block('latest')
-
-    prefix = web3.lido.deposit_security_module.get_pause_message_prefix()
-
-    block_number = latest.number
-
-    msg_hash = web3.solidity_keccak(['bytes32', 'uint256', 'uint256'], [prefix, block_number, module_id])
-    signed = web3.eth.account._sign_hash(msg_hash, private_key=COUNCIL_PK)
-
-    return {
-        'blockHash': latest.hash.hex(),
-        'blockNumber': latest.number,
-        'guardianAddress': COUNCIL_ADDRESS,
-        'stakingModuleId': module_id,
-        'signature': {
-            'r': '0x' + signed.r.to_bytes(32, 'big').hex(),
-            's': '0x' + signed.s.to_bytes(32, 'big').hex(),
-            'v': signed.v,
-            '_vs': compute_vs(signed.v, '0x' + signed.s.to_bytes(32, 'big').hex()),
-        },
-        'type': 'pause',
-    }
-
-
 def get_pause_message_v3(web3):
     latest = web3.eth.get_block('latest')
 
     prefix = web3.lido.deposit_security_module.get_pause_message_prefix()
+    contract_version = web3.lido.dsm_version
 
     block_number = latest.number
 
-    msg_hash = web3.solidity_keccak(['bytes32', 'uint256'], [prefix, block_number])
+    msg_hash = web3.solidity_keccak(['bytes32', 'uint256', 'uint256'], [prefix, contract_version, block_number])
     signed = web3.eth.account._sign_hash(msg_hash, private_key=COUNCIL_PK)
 
     return PauseV3Parser.build_message(
@@ -140,11 +115,11 @@ def test_pause_bot_clean_messages(pause_bot, block_data, pause_message):
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
-    'web3_provider_integration,module_id',
-    [[{'block': None}, 1], [{'block': None}, 2]],
+    'web3_provider_integration',
+    [{'block': None}],
     indirect=['web3_provider_integration'],
 )
-def test_pauser_bot(web3_lido_integration, web3_provider_integration, add_account_to_guardian, module_id, caplog):
+def test_pauser_bot(web3_lido_integration, web3_provider_integration, add_account_to_guardian, caplog):
     caplog.set_level(logging.INFO)
     latest = web3_lido_integration.eth.get_block('latest')
 

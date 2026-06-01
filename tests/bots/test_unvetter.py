@@ -19,15 +19,17 @@ def get_unvet_message(web3) -> UnvetMessage:
     block_number = latest.number
 
     prefix = web3.lido.deposit_security_module.get_unvet_message_prefix()
+    contract_version = web3.lido.dsm_version
     nonce = web3.lido.staking_router.functions.getStakingModuleNonce(1).call()
 
     operator_ids = from_hex_string_to_bytes('0x1234')
     vetted_keys_by_operator = from_hex_string_to_bytes('0001')
 
     msg_hash = web3.solidity_keccak(
-        ['bytes32', 'uint256', 'bytes32', 'uint256', 'uint256', 'bytes', 'bytes'],
+        ['bytes32', 'uint256', 'uint256', 'bytes32', 'uint256', 'uint256', 'bytes', 'bytes'],
         [
             prefix,
+            contract_version,
             block_number,
             latest.hash,
             1,
@@ -51,7 +53,7 @@ def get_unvet_message(web3) -> UnvetMessage:
         version=b'0x1',
     )
     prefix = web3.lido.deposit_security_module.get_unvet_message_prefix()
-    assert list(filter(get_messages_sign_filter(prefix), [unvet_message]))
+    assert list(filter(get_messages_sign_filter(prefix, contract_version), [unvet_message]))
 
     return unvet_message
 

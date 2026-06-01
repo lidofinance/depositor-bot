@@ -18,6 +18,15 @@ class LidoContract(ContractInterface):
         logger.info({'msg': 'Call `getDepositableEther()`.', 'value': response, 'block_identifier': repr(block_identifier)})
         return response
 
+    def can_deposit(self, block_identifier: BlockIdentifier = 'latest') -> bool:
+        """
+        Check that Lido allows depositing buffered ether to the Consensus Layer.
+        Depends on the bunker mode and protocol pause state
+        """
+        response = self.functions.canDeposit().call(block_identifier=block_identifier)
+        logger.info({'msg': 'Call `canDeposit()`.', 'value': response, 'block_identifier': repr(block_identifier)})
+        return response
+
     def get_buffered_ether(self, block_identifier: BlockIdentifier = 'latest') -> Wei:
         """
         Get the amount of Ether temporary buffered on this contract balance.

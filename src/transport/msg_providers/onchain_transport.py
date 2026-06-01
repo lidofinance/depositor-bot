@@ -236,32 +236,6 @@ class PingParser(EventParser):
         )
 
 
-# event MessagePauseV2(address indexed guardianAddress, (uint256 blockNumber, bytes32 blockHash, (bytes32 r, bytes32 vs) signature,
-# uint256 stakingModuleId, (bytes32 version) app) data)
-class PauseV2Parser(EventParser):
-    PAUSE_V2_DATA_SCHEMA = '(uint256,bytes32,(bytes32,bytes32),uint256,(bytes32))'
-    message_abi = f'MessagePauseV2(address,{PAUSE_V2_DATA_SCHEMA})'
-
-    def __init__(self, w3: Web3):
-        super().__init__(w3, self.PAUSE_V2_DATA_SCHEMA)
-
-    def _create_message(self, parsed_data: tuple, guardian: str) -> dict:
-        block_number, block_hash, (r, vs), staking_module_id, (version,) = parsed_data
-        return PauseMessage(
-            type=MessageType.PAUSE,
-            blockNumber=block_number,
-            guardianAddress=guardian,
-            stakingModuleId=staking_module_id,
-            signature={
-                'r': bytes_to_hex_string(r),
-                '_vs': bytes_to_hex_string(vs),
-            },
-            app={
-                'version': _decode_version(version),
-            },
-        )
-
-
 # event MessagePauseV3(address indexed guardianAddress, (uint256 blockNumber, bytes32 blockHash, (bytes32 r, bytes32 vs) signature,
 # (bytes32 version) app) data)
 class PauseV3Parser(EventParser):
