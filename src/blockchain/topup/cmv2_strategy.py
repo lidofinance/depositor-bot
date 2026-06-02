@@ -13,6 +13,7 @@ from blockchain.topup.types import TopUpCandidate, TopUpProofData
 from blockchain.typings import Web3
 from eth_typing import HexStr
 from providers.consensus import ConsensusClient
+from providers.consolidation_api import ConsolidationApiClient
 from providers.keys_api import KeysAPIClient, LidoKey
 from web3.types import Wei
 
@@ -26,6 +27,7 @@ class CMv2TopUpStrategy(TopUpStrategy):
         self,
         keys_api: KeysAPIClient,
         cl: ConsensusClient,
+        consolidation_api: ConsolidationApiClient,
         module_id: int,
         module_address: str,
         module_allocation: Wei,
@@ -59,14 +61,20 @@ class CMv2TopUpStrategy(TopUpStrategy):
             }
         )
 
-        # Step 2: keys from Keys API
-        keys_by_operator = keys_api.get_module_operator_used_keys(module_id, list(allocation_by_operator.keys()))
+        # Step 2: signing-key indices that are part of a pending consolidation (source or target).
+        pending_by_operator = consolidation_api.get_pending_consolidation_key_indices(module_id, list(allocation_by_operator.keys()))
 
-        # Step 3: load beacon state
+        # Step 3: keys from Keys API, with consolidating keys dropped before selection so they
+        # neither consume an operator's allocation budget nor a max_validators slot.
+        keys_by_operator = keys_api.get_module_operator_used_keys(module_id, list(allocation_by_operator.keys()))
+        if pending_by_operator:
+            keys_by_operator = _filter_out_consolidating_keys(keys_by_operator, pending_by_operator, module_id)
+
+        # Step 4: load beacon state
         all_pubkeys = _collect_pubkeys(keys_by_operator)
         beacon_data = load_beacon_state_data(self.w3, cl, all_pubkeys)
 
-        # Step 4: select candidates per operator
+        # Step 5: select candidates per operator
         candidates: list[TopUpCandidate] = []
         for op_id, op_allocation in allocation_by_operator.items():
             candidates.extend(_select_operator_candidates(keys_by_operator[op_id], op_allocation, beacon_data))
@@ -80,12 +88,42 @@ class CMv2TopUpStrategy(TopUpStrategy):
 
         logger.info({'msg': 'CMv2 candidates selected.', 'module_id': module_id, 'count': len(candidates)})
 
-        # Step 5: TopUpGateway requires strictly ascending validator_indices across operators
+        # Step 6: TopUpGateway requires strictly ascending validator_indices across operators
         candidates.sort(key=lambda c: c.validator_index)
-        # Step 6: limit to max_validators
+        # Step 7: limit to max_validators
         candidates = candidates[:max_validators]
-        # Step 7: build proofs
+        # Step 8: build proofs
         return build_topup_proofs(beacon_data, candidates)
+
+
+def _filter_out_consolidating_keys(
+    keys_by_operator: dict[int, List[LidoKey]],
+    pending_by_operator: dict[int, set[int]],
+    module_id: int,
+) -> dict[int, List[LidoKey]]:
+    """
+    Filter out keys of operator that participate as source or target of consolidation
+    """
+    filtered: dict[int, List[LidoKey]] = {}
+    excluded = 0
+    for op_id, keys in keys_by_operator.items():
+        pending = pending_by_operator.get(op_id)
+        if not pending:
+            filtered[op_id] = keys
+            continue
+        kept = [k for k in keys if k.index not in pending]
+        excluded += len(keys) - len(kept)
+        filtered[op_id] = kept
+
+    if excluded:
+        logger.info(
+            {
+                'msg': 'Excluded keys in pending consolidation.',
+                'module_id': module_id,
+                'excluded': excluded,
+            }
+        )
+    return filtered
 
 
 def _collect_pubkeys(keys_by_operator: dict[int, List[LidoKey]]) -> set[bytes]:

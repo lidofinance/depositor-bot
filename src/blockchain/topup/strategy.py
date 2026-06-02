@@ -7,6 +7,7 @@ from blockchain.deposit_strategy.gas_price_calculator import GasPriceCalculator
 from blockchain.topup.types import TopUpProofData
 from blockchain.typings import Web3
 from providers.consensus import ConsensusClient
+from providers.consolidation_api import ConsolidationApiClient
 from providers.keys_api import KeysAPIClient
 from web3.types import Wei
 
@@ -45,6 +46,7 @@ class TopUpStrategy(abc.ABC):
         self,
         keys_api: KeysAPIClient,
         cl: ConsensusClient,
+        consolidation_api: ConsolidationApiClient,
         module_id: int,
         module_address: str,
         module_allocation: Wei,

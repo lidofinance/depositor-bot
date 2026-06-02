@@ -21,10 +21,12 @@ from blockchain.topup.cmv2_strategy import (
     CMv2TopUpStrategy,
     _check_key_eligibility,
     _collect_pubkeys,
+    _filter_out_consolidating_keys,
     _select_operator_candidates,
     _take_up_to_allocation,
 )
 from blockchain.topup.types import TopUpCandidate
+from providers.consolidation_api import ConsolidationApiError
 from providers.keys_api import LidoKey
 from web3.types import Wei
 
@@ -107,6 +109,8 @@ def test_get_cmv2_topup_candidates_builds_proofs_from_fixture_data(top_up_proof_
     keys_api = Mock()
     keys_api.get_module_operator_used_keys.return_value = {11: [key_1], 12: [key_2]}
     cl = Mock()
+    consolidation_api = Mock()
+    consolidation_api.get_pending_consolidation_key_indices.return_value = {}
 
     strategy = CMv2TopUpStrategy(w3=w3, gas_price_calculator=Mock())
 
@@ -114,6 +118,7 @@ def test_get_cmv2_topup_candidates_builds_proofs_from_fixture_data(top_up_proof_
         result = strategy.get_topup_candidates(
             keys_api=keys_api,
             cl=cl,
+            consolidation_api=consolidation_api,
             module_id=1,
             module_address='0x0000000000000000000000000000000000000002',
             module_allocation=Wei(32 * 10**18),
@@ -127,7 +132,97 @@ def test_get_cmv2_topup_candidates_builds_proofs_from_fixture_data(top_up_proof_
     assert [w.pubkey for w in result.witnesses] == [bytes.fromhex(witnesses[0]['pubkey'][2:]), bytes.fromhex(witnesses[1]['pubkey'][2:])]
 
     keys_api.get_module_operator_used_keys.assert_called_once_with(1, [11, 12])
+    consolidation_api.get_pending_consolidation_key_indices.assert_called_once_with(1, [11, 12])
     load_beacon_state_data.assert_called_once()
+
+
+@pytest.mark.unit
+def test_get_cmv2_topup_candidates_drops_consolidating_keys(top_up_proof_fixtures):
+    beacon_data = _build_beacon_state_data(top_up_proof_fixtures)
+    witnesses = top_up_proof_fixtures['validator_witnesses']
+    key_1 = _make_key(witnesses[0]['pubkey'], 7, 11)
+    key_2 = _make_key(witnesses[1]['pubkey'], 8, 12)
+
+    w3 = MagicMock()
+    w3.to_checksum_address.side_effect = lambda address: address
+    cmv2_contract = Mock()
+    cmv2_contract.get_deposits_allocation.return_value = (
+        32 * 10**18,
+        [11, 12],
+        [16 * 10**18, 16 * 10**18],
+    )
+    w3.eth.contract.return_value = cmv2_contract
+
+    keys_api = Mock()
+    keys_api.get_module_operator_used_keys.return_value = {11: [key_1], 12: [key_2]}
+    cl = Mock()
+    consolidation_api = Mock()
+    # operator 11, key index 7 is consolidating → only operator 12's key remains
+    consolidation_api.get_pending_consolidation_key_indices.return_value = {11: {7}}
+
+    strategy = CMv2TopUpStrategy(w3=w3, gas_price_calculator=Mock())
+
+    with patch('blockchain.topup.cmv2_strategy.load_beacon_state_data', return_value=beacon_data):
+        result = strategy.get_topup_candidates(
+            keys_api=keys_api,
+            cl=cl,
+            consolidation_api=consolidation_api,
+            module_id=1,
+            module_address='0x0000000000000000000000000000000000000002',
+            module_allocation=Wei(32 * 10**18),
+            max_validators=50,
+        )
+
+    assert result is not None
+    assert result.key_indices == [8]
+    assert result.operator_ids == [12]
+
+
+@pytest.mark.unit
+def test_get_cmv2_topup_candidates_propagates_consolidation_api_error():
+    """The strategy does not swallow API errors: they propagate to the executor,
+    which logs and retries on the next block (so the keys are never treated as free)."""
+    w3 = MagicMock()
+    w3.to_checksum_address.side_effect = lambda address: address
+    cmv2_contract = Mock()
+    cmv2_contract.get_deposits_allocation.return_value = (
+        32 * 10**18,
+        [11, 12],
+        [16 * 10**18, 16 * 10**18],
+    )
+    w3.eth.contract.return_value = cmv2_contract
+
+    keys_api = Mock()
+    consolidation_api = Mock()
+    consolidation_api.get_pending_consolidation_key_indices.side_effect = ConsolidationApiError('not ready')
+
+    strategy = CMv2TopUpStrategy(w3=w3, gas_price_calculator=Mock())
+
+    with pytest.raises(ConsolidationApiError):
+        strategy.get_topup_candidates(
+            keys_api=keys_api,
+            cl=Mock(),
+            consolidation_api=consolidation_api,
+            module_id=1,
+            module_address='0x0000000000000000000000000000000000000002',
+            module_allocation=Wei(32 * 10**18),
+            max_validators=50,
+        )
+
+    # Consolidation check happens before the beacon-state-heavy work, so keys are never fetched.
+    keys_api.get_module_operator_used_keys.assert_not_called()
+
+
+@pytest.mark.unit
+def test_filter_out_consolidating_keys():
+    key_1 = _make_key('0x' + '11' * 48, 7, 11)
+    key_2 = _make_key('0x' + '22' * 48, 8, 11)
+    key_3 = _make_key('0x' + '33' * 48, 3, 12)
+    keys_by_operator = {11: [key_1, key_2], 12: [key_3]}
+
+    result = _filter_out_consolidating_keys(keys_by_operator, {11: {7}}, module_id=1)
+
+    assert result == {11: [key_2], 12: [key_3]}
 
 
 @pytest.mark.unit

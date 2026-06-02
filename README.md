@@ -66,6 +66,7 @@ Next cases requires bot restart:
 | DEPOSIT_CONTRACT          | 0x00000000219ab540356cBB839Cbe05303d7705Fa | Ethereum deposit contract address                                                                                        |
 | DEPOSIT_MODULES_WHITELIST | 1                                          | List of staking module's ids in which the depositor bot will make deposits                                               |
 | KEYS_API_URL              | -                                          | URL of the Keys API                                                                                                      |
+| CONSOLIDATION_API_URL     | -                                          | URL of the consolidation-bot API (used as a guard for top-ups)                                                           |
 | CL_API_URLS               | -                                          | Comma-separated list of Consensus Layer client URIs                                                                      |
 | ENABLE_TOP_UP             | false                                      | Enable top-up functionality. Must be disabled until Node Operators submit consolidation requests                         |
 | ---                       | ---	                                       | ---                                                                                                                      |

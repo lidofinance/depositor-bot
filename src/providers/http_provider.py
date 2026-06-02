@@ -205,6 +205,62 @@ class HTTPProvider(ProviderConsistencyModule, ABC):
         retval_validator(data, meta, endpoint=endpoint)
         return data, meta
 
+    def _post_without_fallbacks(
+        self,
+        host: str,
+        endpoint: str,
+        json: Any = None,
+        retval_validator: ReturnValueValidator = data_is_any,
+    ) -> tuple[Any, Any]:
+        """
+        Simple post request without fallbacks.
+        Returns (data, meta) or raises an exception.
+        """
+        with self.PROMETHEUS_HISTOGRAM.time() as t:
+            try:
+                response = self.session.post(
+                    self._urljoin(host, endpoint),
+                    json=json,
+                    timeout=self.request_timeout,
+                )
+            except Exception as error:
+                logger.error({'msg': str(error)})
+                t.labels(
+                    endpoint=endpoint,
+                    code=0,
+                    domain=urlparse(host).netloc,
+                )
+                raise self.PROVIDER_EXCEPTION(status=0, text='Response error.') from error
+
+            t.labels(
+                endpoint=endpoint,
+                code=response.status_code,
+                domain=urlparse(host).netloc,
+            )
+
+            if response.status_code != HTTPStatus.OK:
+                response_fail_msg = f'Response from {endpoint} [{response.status_code}]' f' with text: "{str(response.text)}" returned.'
+                logger.debug({'msg': response_fail_msg})
+                raise self.PROVIDER_EXCEPTION(response_fail_msg, status=response.status_code, text=response.text)
+
+            try:
+                json_response = response.json()
+            except JSONDecodeError as error:
+                response_fail_msg = f'Failed to decode JSON response from {endpoint} with text: "{str(response.text)}"'
+                logger.debug({'msg': response_fail_msg})
+                raise self.PROVIDER_EXCEPTION(status=0, text='JSON decode error.') from error
+
+        try:
+            data = json_response['data']
+            del json_response['data']
+            meta = json_response
+        except (KeyError, TypeError):
+            data = json_response
+            meta = {}
+
+        retval_validator(data, meta, endpoint=endpoint)
+        return data, meta
+
     def get_all_providers(self) -> list[str]:
         return self.hosts
 

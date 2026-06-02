@@ -14,6 +14,7 @@ from metrics.healthcheck_pulse import start_pulse_server
 from metrics.logging import logging
 from prometheus_client import start_http_server
 from providers.consensus import ConsensusClient
+from providers.consolidation_api import ConsolidationApiClient
 from providers.fallback_provider import FallbackProviderModule
 from providers.keys_api import KeysAPIClient
 
@@ -78,6 +79,7 @@ def main(bot_name: str):
 
     if bot_name == BotModule.DEPOSITOR:
         keys_api = KeysAPIClient(host=variables.KEYS_API_URL)
+        consolidation_api = ConsolidationApiClient(host=variables.CONSOLIDATION_API_URL)
         cl = ConsensusClient(
             hosts=variables.CL_API_URLS,
             request_timeout=variables.HTTP_REQUEST_TIMEOUT_CONSENSUS,
@@ -86,7 +88,7 @@ def main(bot_name: str):
         )
 
         check_providers_chain_ids(w3, cl, keys_api)
-        run_depositor(w3, keys_api, cl)
+        run_depositor(w3, keys_api, cl, consolidation_api)
     elif bot_name == BotModule.PAUSER:
         run_pauser(w3)
     elif bot_name == BotModule.UNVETTER:

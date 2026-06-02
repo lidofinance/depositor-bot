@@ -27,6 +27,7 @@ from metrics.metrics import (
 )
 from metrics.transport_message_metrics import message_metrics_filter
 from providers.consensus import ConsensusClient
+from providers.consolidation_api import ConsolidationApiClient
 from providers.keys_api import KeysAPIClient
 from schema import Or, Schema
 from transport.msg_providers.onchain_transport import (
@@ -45,14 +46,14 @@ from web3.types import BlockData, Wei
 logger = logging.getLogger(__name__)
 
 
-def run_depositor(w3, keys_api: KeysAPIClient, cl: ConsensusClient):
+def run_depositor(w3, keys_api: KeysAPIClient, cl: ConsensusClient, consolidation_api: ConsolidationApiClient):
     logger.info({'msg': 'Initialize Depositor bot.'})
     sender = Sender(w3)
     gas_price_calculator = GasPriceCalculator(w3)
     base_deposit_strategy = DefaultDepositStrategy(w3, gas_price_calculator)
     csm_strategy = CSMDepositStrategy(w3, gas_price_calculator)
 
-    depositor_bot = DepositorBot(w3, sender, base_deposit_strategy, csm_strategy, gas_price_calculator, keys_api, cl)
+    depositor_bot = DepositorBot(w3, sender, base_deposit_strategy, csm_strategy, gas_price_calculator, keys_api, cl, consolidation_api)
 
     e = Executor(
         w3,
@@ -76,6 +77,7 @@ class DepositorBot:
         gas_price_calculator: GasPriceCalculator,
         keys_api: KeysAPIClient,
         cl: ConsensusClient,
+        consolidation_api: ConsolidationApiClient,
     ):
         self.w3 = w3
         self._sender = sender
@@ -85,6 +87,7 @@ class DepositorBot:
         self._cmv2_topup_strategy = CMv2TopUpStrategy(w3, gas_price_calculator)
         self._keys_api = keys_api
         self._cl = cl
+        self._consolidation_api = consolidation_api
         now = datetime.now()
         self._module_last_heart_beat: Dict[int, datetime] = {module_id: now for module_id in variables.DEPOSIT_MODULES_WHITELIST}
 
@@ -392,6 +395,7 @@ class DepositorBot:
         proof_data = strategy.get_topup_candidates(
             self._keys_api,
             self._cl,
+            self._consolidation_api,
             module_id,
             module_address,
             module_allocation,

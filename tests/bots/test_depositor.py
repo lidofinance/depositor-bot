@@ -30,6 +30,7 @@ def _make_bot():
         gas_price_calculator=MagicMock(),
         keys_api=MagicMock(),
         cl=MagicMock(),
+        consolidation_api=MagicMock(),
     )
 
 
@@ -107,7 +108,6 @@ class TestRefreshModulesState(unittest.TestCase):
 
         called_ids = sorted(c.args[0] for c in self.bot._get_quorum.call_args_list)
         self.assertEqual([1, 3], called_ids)
-
 
 
 # ─── _is_in_cooldown ───────────────────────────────────────────────
@@ -536,7 +536,7 @@ def depositor_bot(
         variables.DEPOSIT_MODULES_WHITELIST = [1, 2]
         web3_lido_unit.eth.get_block = Mock(return_value=block_data)
         yield DepositorBot(
-            web3_lido_unit, deposit_transaction_sender, base_deposit_strategy, csm_strategy, gas_price_calculator, Mock(), Mock()
+            web3_lido_unit, deposit_transaction_sender, base_deposit_strategy, csm_strategy, gas_price_calculator, Mock(), Mock(), Mock()
         )
 
 
@@ -808,8 +808,8 @@ def test_top_up_to_module_max_validators_uses_min(depositor_bot, config_limit, g
 
         depositor_bot._top_up_to_module(1, '0xAddr', 50)
 
-        # max_validators is positional arg index 5
-        assert strategy.get_topup_candidates.call_args.args[5] == expected
+        # max_validators is positional arg index 6
+        assert strategy.get_topup_candidates.call_args.args[6] == expected
     finally:
         variables.MAX_VALIDATORS_PER_TOP_UP = original
 
@@ -857,7 +857,7 @@ def test_top_up_to_module_passes_module_allocation_through_to_strategy(depositor
     depositor_bot._top_up_to_module(7, '0xModule7', 1234)
 
     # allocation 1234 forwarded; getDepositAllocations NOT re-queried
-    assert strategy.get_topup_candidates.call_args.args[4] == 1234
+    assert strategy.get_topup_candidates.call_args.args[5] == 1234
     depositor_bot.w3.lido.staking_router.get_deposit_allocations.assert_not_called()
 
 
@@ -1053,6 +1053,7 @@ def test_depositor_bot(
         base_deposit_strategy_integration,
         csm_strategy_integration,
         gas_price_calculator_integration,
+        Mock(),
         Mock(),
         Mock(),
     )
