@@ -58,10 +58,6 @@ class InMemoryPendingStore:
     def pending_pubkey_count(self) -> int:
         return sum(self._pending.values())
 
-    def approx_memory_bytes(self) -> int:
-        """Rough gauge for growth alerts: ~130 B per pk record + ~400 B per batch."""
-        return self.pending_pubkey_count() * 130 + self.pending_batch_count() * 400
-
     # ---- cursor ----
     def get_cursor(self, default: int) -> int:
         return self._cursor if self._cursor is not None else default

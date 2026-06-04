@@ -142,17 +142,7 @@ def test_wipe_clears_everything(store):
     assert store.get_cursor(default=7) == 7
 
 
-# ---- 9. approx memory ----
-@pytest.mark.unit
-def test_approx_memory_bytes_grows_with_data(store):
-    """approx_memory_bytes is 0 when empty and > 0 once data is written."""
-    assert store.approx_memory_bytes() == 0
-
-    store.add_batch(_hash('a'), [_pk(1)])
-    assert store.approx_memory_bytes() > 0
-
-
-# ---- 10. edge: empty batch ----
+# ---- 9. edge: empty batch ----
 @pytest.mark.unit
 def test_add_empty_batch_creates_only_batch_record(store):
     """add_batch with no pubkeys: 1 batch record, 0 pk records."""
