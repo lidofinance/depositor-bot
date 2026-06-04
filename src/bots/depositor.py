@@ -1,10 +1,14 @@
 # pyright: reportTypedDictNotRequiredAccess=false
 import logging
 from collections import defaultdict
+from collections.abc import Callable
 from datetime import datetime, timedelta
-from typing import Callable, Dict, List, Optional, cast
+from typing import cast
 
 import variables
+from blockchain.consolidation.indexer import ConsolidationIndexer
+from blockchain.consolidation.store import InMemoryPendingStore
+from blockchain.contracts.consolidation_bus import ConsolidationBusContract
 from blockchain.contracts.staking_router import MODULE_TYPE_CMV2, MODULE_TYPE_CSM, StakingModuleInfo, StakingRouterContractV4
 from blockchain.deposit_strategy.base_deposit_strategy import (
     CSMDepositStrategy,
@@ -85,8 +89,9 @@ class DepositorBot:
         self._cmv2_topup_strategy = CMv2TopUpStrategy(w3, gas_price_calculator)
         self._keys_api = keys_api
         self._cl = cl
+        self._consolidation_indexer = self._build_consolidation_indexer()
         now = datetime.now()
-        self._module_last_heart_beat: Dict[int, datetime] = {module_id: now for module_id in variables.DEPOSIT_MODULES_WHITELIST}
+        self._module_last_heart_beat: dict[int, datetime] = {module_id: now for module_id in variables.DEPOSIT_MODULES_WHITELIST}
 
         transports = []
 
@@ -322,6 +327,11 @@ class DepositorBot:
         for module_id, module_address, wc_type, _stake, topup_alloc in candidates:
             if wc_type == 2:
                 # Top-up path: canTopUp + is_block_distance_passed (no quorum check for top-ups).
+                # Top-up requires a ready consolidation indexer; if not, skip this module so 0x01
+                # full deposits can still proceed.
+                if self._consolidation_indexer is None or not self._consolidation_indexer.is_ready:
+                    logger.info({'msg': 'Phase B: consolidation indexer not ready — skip top-up module.', 'module_id': module_id})
+                    continue
                 if not self.w3.lido.topup_gateway.can_top_up(module_id):
                     logger.info({'msg': 'Phase B: canTopUp=False — try next module.', 'module_id': module_id})
                     continue
@@ -360,6 +370,12 @@ class DepositorBot:
 
     def _top_up_to_module(self, module_id: int, module_address: str, module_allocation: Wei) -> bool:
         """New simplified top-up path: gas check (no keys-count) + proof + send. Allocation is passed in."""
+        # Top-up is not allowed without a ready consolidation indexer — we must be able to filter
+        # out keys participating in pending ConsolidationBus requests.
+        if self._consolidation_indexer is None or not self._consolidation_indexer.is_ready:
+            logger.info({'msg': 'Consolidation indexer not ready — skip top-up.', 'module_id': module_id})
+            return False
+
         module_type = self.w3.lido.staking_module(module_id).get_type()
         strategy = self._select_topup_strategy(module_type)
         if strategy is None:
@@ -396,6 +412,7 @@ class DepositorBot:
             module_address,
             module_allocation,
             max_validators,
+            self._consolidation_indexer,
         )
         if not proof_data:
             logger.info({'msg': 'No top-up candidates.', 'module_id': module_id})
@@ -406,10 +423,36 @@ class DepositorBot:
         logger.info({'msg': f'Top-up tx result: {success}.', 'module_id': module_id})
         return success
 
-    def _select_topup_strategy(self, module_type: bytes) -> Optional[TopUpStrategy]:
+    def _select_topup_strategy(self, module_type: bytes) -> TopUpStrategy | None:
         if module_type == MODULE_TYPE_CMV2:
             return self._cmv2_topup_strategy
         return None
+
+    def _build_consolidation_indexer(self) -> ConsolidationIndexer | None:
+        """Build the ConsolidationBus indexer and run the cold-start backfill.
+
+        Returns None when the Bus is not configured for this chain — top-up is then skipped.
+        """
+        address, deploy_block = variables.get_consolidation_bus_config(self.w3.eth.chain_id)
+        if address is None or deploy_block is None:
+            logger.warning({'msg': 'ConsolidationBus not configured for this chain — top-up will be skipped.'})
+            return None
+
+        contract = cast(
+            ConsolidationBusContract,
+            self.w3.eth.contract(address=address, ContractFactoryClass=ConsolidationBusContract),
+        )
+        store = InMemoryPendingStore()
+        indexer = ConsolidationIndexer(
+            self.w3,
+            contract,
+            store,
+            deploy_block,
+            variables.CONSOLIDATION_GETLOGS_CHUNK,
+        )
+        logger.info({'msg': 'ConsolidationBus indexer cold start.', 'address': address, 'deploy_block': deploy_block})
+        indexer.cold_start()
+        return indexer
 
     def _check_balance(self):
         if variables.ACCOUNT:
@@ -440,7 +483,7 @@ class DepositorBot:
             return self._csm_strategy
         return self._general_strategy
 
-    def _get_quorum(self, module_id: int) -> Optional[List[DepositMessage]]:
+    def _get_quorum(self, module_id: int) -> list[DepositMessage] | None:
         """
         Returns quorum messages or None if the quorum is not ready.
         """

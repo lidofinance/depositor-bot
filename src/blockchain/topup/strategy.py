@@ -3,6 +3,7 @@ import logging
 from typing import Optional
 
 import variables
+from blockchain.consolidation.indexer import ConsolidationIndexer
 from blockchain.deposit_strategy.gas_price_calculator import GasPriceCalculator
 from blockchain.topup.types import TopUpProofData
 from blockchain.typings import Web3
@@ -49,5 +50,6 @@ class TopUpStrategy(abc.ABC):
         module_address: str,
         module_allocation: Wei,
         max_validators: int,
+        consolidation_indexer: ConsolidationIndexer,
     ) -> Optional[TopUpProofData]:
         pass

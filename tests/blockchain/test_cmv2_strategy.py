@@ -110,6 +110,10 @@ def test_get_cmv2_topup_candidates_builds_proofs_from_fixture_data(top_up_proof_
 
     strategy = CMv2TopUpStrategy(w3=w3, gas_price_calculator=Mock())
 
+    consolidation_indexer = Mock()
+    consolidation_indexer.sync_base_to_finalized.return_value = 100
+    consolidation_indexer.get_filter_set.return_value = set()
+
     with patch('blockchain.topup.cmv2_strategy.load_beacon_state_data', return_value=beacon_data) as load_beacon_state_data:
         result = strategy.get_topup_candidates(
             keys_api=keys_api,
@@ -118,6 +122,7 @@ def test_get_cmv2_topup_candidates_builds_proofs_from_fixture_data(top_up_proof_
             module_address='0x0000000000000000000000000000000000000002',
             module_allocation=Wei(32 * 10**18),
             max_validators=50,
+            consolidation_indexer=consolidation_indexer,
         )
 
     assert result is not None
@@ -128,6 +133,118 @@ def test_get_cmv2_topup_candidates_builds_proofs_from_fixture_data(top_up_proof_
 
     keys_api.get_module_operator_used_keys.assert_called_once_with(1, [11, 12])
     load_beacon_state_data.assert_called_once()
+
+
+def _make_topup_setup(top_up_proof_fixtures):
+    """Common setup for get_topup_candidates tests: strategy + keys_api + beacon_data.
+
+    Two operators (11, 12) each with one key (witness 0 / witness 1), 16 ETH allocation each.
+    """
+    beacon_data = _build_beacon_state_data(top_up_proof_fixtures)
+    witnesses = top_up_proof_fixtures['validator_witnesses']
+    key_1 = _make_key(witnesses[0]['pubkey'], 7, 11)
+    key_2 = _make_key(witnesses[1]['pubkey'], 8, 12)
+
+    w3 = MagicMock()
+    w3.to_checksum_address.side_effect = lambda address: address
+    cmv2_contract = Mock()
+    cmv2_contract.get_deposits_allocation.return_value = (32 * 10**18, [11, 12], [16 * 10**18, 16 * 10**18])
+    w3.eth.contract.return_value = cmv2_contract
+
+    keys_api = Mock()
+    keys_api.get_module_operator_used_keys.return_value = {11: [key_1], 12: [key_2]}
+
+    strategy = CMv2TopUpStrategy(w3=w3, gas_price_calculator=Mock())
+    return strategy, keys_api, beacon_data
+
+
+def _call_topup(strategy, keys_api, beacon_data, consolidation_indexer):
+    with patch('blockchain.topup.cmv2_strategy.load_beacon_state_data', return_value=beacon_data):
+        return strategy.get_topup_candidates(
+            keys_api=keys_api,
+            cl=Mock(),
+            module_id=1,
+            module_address='0x0000000000000000000000000000000000000002',
+            module_allocation=Wei(32 * 10**18),
+            max_validators=50,
+            consolidation_indexer=consolidation_indexer,
+        )
+
+
+@pytest.mark.unit
+def test_get_topup_candidates_excludes_pending_consolidation_key(top_up_proof_fixtures):
+    """A key returned by the indexer's filter set is dropped from the proof data."""
+    strategy, keys_api, beacon_data = _make_topup_setup(top_up_proof_fixtures)
+    witnesses = top_up_proof_fixtures['validator_witnesses']
+    excluded_pubkey = bytes.fromhex(witnesses[0]['pubkey'][2:])
+
+    indexer = Mock()
+    indexer.sync_base_to_finalized.return_value = 100
+    indexer.get_filter_set.return_value = {excluded_pubkey}  # witness 0 is consolidating
+
+    result = _call_topup(strategy, keys_api, beacon_data, indexer)
+
+    assert result is not None
+    # only witness 1 (operator 12, key 8) survives
+    assert result.key_indices == [8]
+    assert result.operator_ids == [12]
+    assert result.validator_indices == [int(witnesses[1]['validatorIndex'])]
+
+
+@pytest.mark.unit
+def test_get_topup_candidates_skips_when_base_sync_fails(top_up_proof_fixtures):
+    """If the base sync raises, top-up is skipped (returns None) rather than risking a bad top-up."""
+    strategy, keys_api, beacon_data = _make_topup_setup(top_up_proof_fixtures)
+
+    indexer = Mock()
+    indexer.sync_base_to_finalized.side_effect = Exception('rpc down')
+
+    result = _call_topup(strategy, keys_api, beacon_data, indexer)
+
+    assert result is None
+    indexer.get_filter_set.assert_not_called()
+
+
+@pytest.mark.unit
+def test_get_topup_candidates_skips_when_tail_read_fails(top_up_proof_fixtures):
+    """If the ephemeral tail read raises, top-up is skipped (returns None)."""
+    strategy, keys_api, beacon_data = _make_topup_setup(top_up_proof_fixtures)
+
+    indexer = Mock()
+    indexer.sync_base_to_finalized.return_value = 100
+    indexer.get_filter_set.side_effect = Exception('rpc down')
+
+    result = _call_topup(strategy, keys_api, beacon_data, indexer)
+
+    assert result is None
+
+
+@pytest.mark.unit
+def test_get_topup_candidates_syncs_base_before_ssz_then_tail(top_up_proof_fixtures):
+    """Base sync runs before the SSZ load (outside the proof window); the tail read after it."""
+    strategy, keys_api, beacon_data = _make_topup_setup(top_up_proof_fixtures)
+
+    indexer = Mock()
+    indexer.sync_base_to_finalized.return_value = 100
+    indexer.get_filter_set.return_value = set()
+
+    manager = Mock()
+    manager.attach_mock(indexer.sync_base_to_finalized, 'sync')
+    manager.attach_mock(indexer.get_filter_set, 'tail')
+    with patch('blockchain.topup.cmv2_strategy.load_beacon_state_data', return_value=beacon_data) as load:
+        manager.attach_mock(load, 'ssz')
+        strategy.get_topup_candidates(
+            keys_api=keys_api,
+            cl=Mock(),
+            module_id=1,
+            module_address='0x0000000000000000000000000000000000000002',
+            module_allocation=Wei(32 * 10**18),
+            max_validators=50,
+            consolidation_indexer=indexer,
+        )
+
+    order = [name for name, _args, _kwargs in manager.mock_calls if name in ('sync', 'ssz', 'tail')]
+    assert order == ['sync', 'ssz', 'tail']
 
 
 @pytest.mark.unit
@@ -147,7 +264,7 @@ def test_check_key_eligibility_returns_candidate(top_up_proof_fixtures):
     witness = top_up_proof_fixtures['validator_witnesses'][0]
     key = _make_key(witness['pubkey'], 7, 11)
 
-    candidate = _check_key_eligibility(key, beacon_data)
+    candidate = _check_key_eligibility(key, beacon_data, set())
 
     assert candidate == TopUpCandidate(
         validator_index=int(witness['validatorIndex']),
@@ -166,31 +283,34 @@ def test_check_key_eligibility_rejects_invalid_cases(top_up_proof_fixtures):
     validator_index = int(witness['validatorIndex'])
     key = _make_key(witness['pubkey'], 7, 11)
 
-    assert _check_key_eligibility(_make_key('0x' + '33' * 48, 7, 11), beacon_data) is None
+    assert _check_key_eligibility(_make_key('0x' + '33' * 48, 7, 11), beacon_data, set()) is None
+
+    # key participating in a pending ConsolidationBus request is excluded
+    assert _check_key_eligibility(key, beacon_data, {pubkey}) is None
 
     beacon_data.consolidation_targets = {validator_index}
-    assert _check_key_eligibility(key, beacon_data) is None
+    assert _check_key_eligibility(key, beacon_data, set()) is None
     beacon_data.consolidation_targets = set()
 
     fields = beacon_data.validators_fields[validator_index]
 
     beacon_data.validators_fields[validator_index] = fields._replace(slashed=True)
-    assert _check_key_eligibility(key, beacon_data) is None
+    assert _check_key_eligibility(key, beacon_data, set()) is None
 
     beacon_data.validators_fields[validator_index] = fields._replace(exit_epoch=1)
-    assert _check_key_eligibility(key, beacon_data) is None
+    assert _check_key_eligibility(key, beacon_data, set()) is None
 
     beacon_data.validators_fields[validator_index] = fields._replace(
         exit_epoch=FAR_FUTURE_EPOCH,
         activation_epoch=beacon_data.slot + 1,
     )
-    assert _check_key_eligibility(key, beacon_data) is None
+    assert _check_key_eligibility(key, beacon_data, set()) is None
 
     beacon_data.validators_fields[validator_index] = fields._replace(
         effective_balance=MAX_TOP_UP_BALANCE_GWEI,
     )
     beacon_data.pending_deposits = {pubkey: 1}
-    assert _check_key_eligibility(key, beacon_data) is None
+    assert _check_key_eligibility(key, beacon_data, set()) is None
 
 
 @pytest.mark.unit
@@ -211,7 +331,7 @@ def test_select_operator_candidates_sorts_by_key_index():
         ),
         patch('blockchain.topup.cmv2_strategy._take_up_to_allocation', side_effect=lambda candidates, allocation, _: candidates) as take,
     ):
-        result = _select_operator_candidates(keys, 16 * 10**18, beacon_data)
+        result = _select_operator_candidates(keys, 16 * 10**18, beacon_data, set())
 
     assert [candidate.key_index for candidate in result] == [7, 8]
     assert take.call_args.args[0] == result

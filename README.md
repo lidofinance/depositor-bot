@@ -97,6 +97,9 @@ Next cases requires bot restart:
 | ONCHAIN_TRANSPORT_RPC_ENDPOINTS   | -             | RPC endpoint for the databus RPC, Gnosis at the moment                                                                   |
 | QUORUM_RETENTION_MINUTES          | 5             | TTL of quorum collection for marking module as healthy                                                                   |
 | MAX_VALIDATORS_PER_TOP_UP         | 50            | Maximum number of validators per top-up transaction                                                                      |
+| CONSOLIDATION_BUS_ADDRESS         | -             | ConsolidationBus address override. Defaults to the hardcoded per-chain value; top-up is skipped if the chain is unknown  |
+| CONSOLIDATION_BUS_DEPLOY_BLOCK    | -             | ConsolidationBus deploy block override (must be exact-or-earlier). Used together with CONSOLIDATION_BUS_ADDRESS          |
+| CONSOLIDATION_GETLOGS_CHUNK       | 10000         | Block-range size per getLogs call when indexing ConsolidationBus events                                                  |
 | HTTP_REQUEST_TIMEOUT_CONSENSUS    | 300           | Timeout in seconds for CL HTTP requests                                                                                  |
 | HTTP_REQUEST_RETRY_COUNT_CONSENSUS | 5            | Number of retries for CL HTTP requests                                                                                   |
 | HTTP_REQUEST_SLEEP_BEFORE_RETRY_IN_SECONDS_CONSENSUS | 5 | Backoff factor in seconds between CL request retries                                                              |

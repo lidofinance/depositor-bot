@@ -22,7 +22,7 @@ def _make_digest(module_id, address, wc_type) -> StakingModuleInfo:
 def _make_bot():
     """Build a DepositorBot with all-MagicMock deps. No transports → MessageStorage stays empty."""
     variables.MESSAGE_TRANSPORTS = ''
-    return DepositorBot(
+    bot = DepositorBot(
         w3=MagicMock(),
         sender=MagicMock(),
         base_deposit_strategy=MagicMock(),
@@ -31,6 +31,9 @@ def _make_bot():
         keys_api=MagicMock(),
         cl=MagicMock(),
     )
+    # A ready consolidation indexer is an orthogonal precondition for the top-up path.
+    bot._consolidation_indexer = MagicMock(is_ready=True)
+    return bot
 
 
 # ─── _refresh_modules_state ────────────────────────────────────────
@@ -107,7 +110,6 @@ class TestRefreshModulesState(unittest.TestCase):
 
         called_ids = sorted(c.args[0] for c in self.bot._get_quorum.call_args_list)
         self.assertEqual([1, 3], called_ids)
-
 
 
 # ─── _is_in_cooldown ───────────────────────────────────────────────
@@ -424,6 +426,20 @@ class TestPhaseFullAndTopup(unittest.TestCase):
         self.bot._deposit_to_module.assert_called_once_with(2)
         self.bot._top_up_to_module.assert_not_called()
 
+    def test_indexer_not_ready_skips_0x02_and_lets_0x01_proceed(self):
+        # m1 (0x02) has the lowest stake → tried first, but the indexer is not ready,
+        # so it is skipped and the 0x01 module deposits instead.
+        self.bot._consolidation_indexer.is_ready = False
+        digests = [_make_digest(1, '0xA1', 2), _make_digest(2, '0xA2', 1)]
+        self._set_topup_allocation([50, 999], [70, 999])  # m1 0x02 stake = 20 (lowest)
+        self.bot._get_quorum = Mock(return_value=['msg'])  # m2 0x01 has quorum
+
+        done, success = self.bot._phase_full_and_topup(100, [999, 50], [999, 100], digests)
+
+        self.assertEqual((True, True), (done, success))
+        self.bot._top_up_to_module.assert_not_called()
+        self.bot._deposit_to_module.assert_called_once_with(2)
+
     # ─── 0x02 branch ───────────────────────────────────────────
 
     def test_can_top_up_false_skips_to_next(self):
@@ -535,9 +551,12 @@ def depositor_bot(
         variables.MESSAGE_TRANSPORTS = ''
         variables.DEPOSIT_MODULES_WHITELIST = [1, 2]
         web3_lido_unit.eth.get_block = Mock(return_value=block_data)
-        yield DepositorBot(
+        bot = DepositorBot(
             web3_lido_unit, deposit_transaction_sender, base_deposit_strategy, csm_strategy, gas_price_calculator, Mock(), Mock()
         )
+        # A ready consolidation indexer is an orthogonal precondition for the top-up path.
+        bot._consolidation_indexer = MagicMock(is_ready=True)
+        yield bot
 
 
 @pytest.mark.unit
@@ -740,6 +759,26 @@ def test_deposit_to_module_general_strategy_for_non_csm_module_type(depositor_bo
 
 
 # ─── _top_up_to_module ─────────────────────────────────────────────
+
+
+@pytest.mark.unit
+def test_top_up_to_module_skipped_when_indexer_not_ready(depositor_bot):
+    """Indexer present but not ready → skip top-up before selecting a strategy."""
+    depositor_bot._consolidation_indexer.is_ready = False
+    depositor_bot._select_topup_strategy = Mock()
+
+    assert depositor_bot._top_up_to_module(1, '0xAddr', 50) is False
+    depositor_bot._select_topup_strategy.assert_not_called()
+
+
+@pytest.mark.unit
+def test_top_up_to_module_skipped_when_indexer_none(depositor_bot):
+    """No indexer configured for this chain → skip top-up."""
+    depositor_bot._consolidation_indexer = None
+    depositor_bot._select_topup_strategy = Mock()
+
+    assert depositor_bot._top_up_to_module(1, '0xAddr', 50) is False
+    depositor_bot._select_topup_strategy.assert_not_called()
 
 
 @pytest.mark.unit
