@@ -6,6 +6,7 @@ from blockchain.beacon_state.ssz_types import (
     SLOTS_PER_EPOCH,
 )
 from blockchain.beacon_state.state import BeaconStateData, ValidatorFields, load_beacon_state_data
+from blockchain.consolidation.indexer import ConsolidationIndexer
 from blockchain.contracts.cmv2 import CMV2Contract
 from blockchain.topup.proofs import build_topup_proofs
 from blockchain.topup.strategy import TopUpStrategy
@@ -30,6 +31,7 @@ class CMv2TopUpStrategy(TopUpStrategy):
         module_address: str,
         module_allocation: Wei,
         max_validators: int,
+        consolidation_indexer: ConsolidationIndexer,
     ) -> Optional[TopUpProofData]:
         """Select validators for top-up in a CMv2 module."""
         # Step 1: operator allocation
@@ -62,14 +64,37 @@ class CMv2TopUpStrategy(TopUpStrategy):
         # Step 2: keys from Keys API
         keys_by_operator = keys_api.get_module_operator_used_keys(module_id, list(allocation_by_operator.keys()))
 
-        # Step 3: load beacon state
+        # Step 3: advance the consolidation base to finalized BEFORE the heavy SSZ load (outside the proof window).
+        # Any failure here -> skip the top-up rather than risk topping up a consolidating key.
+        try:
+            finalized = consolidation_indexer.sync_base_to_finalized()
+        except Exception as e:
+            logger.error({'msg': 'Consolidation base sync failed — skip top-up.', 'module_id': module_id, 'err': repr(e)})
+            return None
+
+        # Step 4: load beacon state (anchors the proof slot; ~2 min)
         all_pubkeys = _collect_pubkeys(keys_by_operator)
         beacon_data = load_beacon_state_data(self.w3, cl, all_pubkeys)
 
-        # Step 4: select candidates per operator
+        # Step 5: read the fresh ADD-only tail (finalized -> latest) and build the pending filter set.
+        try:
+            latest = self.w3.eth.block_number
+            pending_consolidation = consolidation_indexer.get_filter_set(finalized + 1, latest)
+        except Exception as e:
+            logger.error({'msg': 'Consolidation tail read failed — skip top-up.', 'module_id': module_id, 'err': repr(e)})
+            return None
+        logger.info(
+            {
+                'msg': 'Consolidation pending filter ready.',
+                'module_id': module_id,
+                'pending_pubkeys': len(pending_consolidation),
+            }
+        )
+
+        # Step 6: select candidates per operator (excluding keys in pending ConsolidationBus requests)
         candidates: list[TopUpCandidate] = []
         for op_id, op_allocation in allocation_by_operator.items():
-            candidates.extend(_select_operator_candidates(keys_by_operator[op_id], op_allocation, beacon_data))
+            candidates.extend(_select_operator_candidates(keys_by_operator[op_id], op_allocation, beacon_data, pending_consolidation))
 
         # LidoKey instances are no longer needed; free before the memory-heavy proof build.
         del keys_by_operator
@@ -80,11 +105,11 @@ class CMv2TopUpStrategy(TopUpStrategy):
 
         logger.info({'msg': 'CMv2 candidates selected.', 'module_id': module_id, 'count': len(candidates)})
 
-        # Step 5: TopUpGateway requires strictly ascending validator_indices across operators
+        # Step 7: TopUpGateway requires strictly ascending validator_indices across operators
         candidates.sort(key=lambda c: c.validator_index)
-        # Step 6: limit to max_validators
+        # Step 8: limit to max_validators
         candidates = candidates[:max_validators]
-        # Step 7: build proofs
+        # Step 9: build proofs
         return build_topup_proofs(beacon_data, candidates)
 
 
@@ -100,10 +125,11 @@ def _select_operator_candidates(
     keys: List[LidoKey],
     allocation: int,
     beacon_data: BeaconStateData,
+    pending_consolidation: set[bytes],
 ) -> List[TopUpCandidate]:
     eligible = []
     for key in keys:
-        candidate = _check_key_eligibility(key, beacon_data)
+        candidate = _check_key_eligibility(key, beacon_data, pending_consolidation)
         if candidate is not None:
             eligible.append(candidate)
 
@@ -111,8 +137,12 @@ def _select_operator_candidates(
     return _take_up_to_allocation(eligible, allocation, beacon_data)
 
 
-def _check_key_eligibility(key: LidoKey, beacon_data: BeaconStateData) -> Optional[TopUpCandidate]:
+def _check_key_eligibility(key: LidoKey, beacon_data: BeaconStateData, pending_consolidation: set[bytes]) -> Optional[TopUpCandidate]:
     pubkey = Web3.to_bytes(hexstr=HexStr(key.key))
+
+    # Exclude keys participating in a pending ConsolidationBus request (source or target).
+    if pubkey in pending_consolidation:
+        return None
 
     validator_index = beacon_data.pubkey_to_index.get(pubkey)
     if validator_index is None:
