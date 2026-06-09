@@ -174,8 +174,6 @@ class DepositorBot:
         logger.info({'msg': 'Depositor iteration start.', 'block_number': block.get('number')})
         self._check_balance()
 
-        sr_version = self.w3.lido.staking_router.get_contract_version()
-        logger.info({'msg': 'SR version.', 'value': sr_version})
         result = self._execute_actual()
         logger.info({'msg': 'Depositor iteration finished.', 'value': result})
         return result
@@ -298,10 +296,7 @@ class DepositorBot:
     def _try_top_up(self, candidate: ModuleCandidate, phase: str) -> PhaseOutcome:
         """One top-up attempt on a 0x02 module (no quorum needed). SKIPPED → caller tries the next candidate."""
         module_id = candidate.module_id
-        if not self.w3.lido.topup_gateway.can_top_up(module_id):
-            logger.info({'msg': f'{phase}: canTopUp=False — try next module.', 'module_id': module_id})
-            return PhaseOutcome.SKIPPED
-        if not self.w3.lido.topup_gateway.is_block_distance_passed(module_id):
+        if not self.w3.lido.topup_gateway.is_block_distance_passed():
             logger.info({'msg': f'{phase}: top-up block distance not passed — wait next iteration.', 'module_id': module_id})
             return PhaseOutcome.WAIT_DISTANCE
         sent = self._top_up_to_module(module_id, candidate.address, candidate.allocation)
@@ -628,6 +623,6 @@ class DepositorBot:
         # Fetch messages and apply filters
         actualize_filter = self._get_message_actualize_filter()
         prefix = self.w3.lido.deposit_security_module.get_attest_message_prefix()
-        sign_filter = get_messages_sign_filter(prefix)
+        sign_filter = get_messages_sign_filter(prefix, self.w3.lido.dsm_version)
 
         return self.message_storage.get_messages_and_actualize(lambda x: sign_filter(x) and actualize_filter(x))
