@@ -243,37 +243,27 @@ def test_get_filter_set_empty_tail_returns_base_only():
     assert result == {_pk(1), _pk(2)}
 
 
-# ---- 11b. is_ready is False before cold_start ----
+# ---- 12. cold_start success indexes the backfilled batch ----
 @pytest.mark.unit
-def test_is_ready_false_before_cold_start():
-    """A freshly built indexer is not ready until cold_start succeeds (bot guard relies on this)."""
-    indexer, _bus, _store = _make_indexer(finalized=10)
-
-    assert indexer.is_ready is False
-
-
-# ---- 12. cold_start success ----
-@pytest.mark.unit
-def test_cold_start_sets_ready():
+def test_cold_start_indexes_pending_batch():
     data, _bh, _ = _batch([([_pk(1)], _pk(2))])
     indexer, bus, store = _make_indexer(finalized=10)
     bus.add_added(block=5, log_index=0, batch_data=data)
 
     indexer.cold_start()
 
-    assert indexer.is_ready is True
     assert store.is_pending(_pk(1))
 
 
-# ---- 13. cold_start failure -> not ready ----
+# ---- 13. cold_start failure is fatal (propagates) ----
 @pytest.mark.unit
-def test_cold_start_failure_marks_not_ready():
+def test_cold_start_failure_raises():
+    # The bot guards on this: a failed backfill must fail fast at startup, not run half-initialized.
     indexer, bus, _store = _make_indexer(finalized=10)
     indexer.w3.eth.get_block.side_effect = Exception('rpc down')
 
-    indexer.cold_start()
-
-    assert indexer.is_ready is False
+    with pytest.raises(Exception, match='rpc down'):
+        indexer.cold_start()
 
 
 # ---- 14. BatchesRemoved with multiple hashes closes all ----

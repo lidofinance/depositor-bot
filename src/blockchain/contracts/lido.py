@@ -25,3 +25,9 @@ class LidoContract(ContractInterface):
         response = self.functions.getBufferedEther().call(block_identifier=block_identifier)
         logger.info({'msg': 'Call `getBufferedEther()`.', 'value': response, 'block_identifier': repr(block_identifier)})
         return response
+
+    def can_deposit(self, block_identifier: BlockIdentifier = 'latest') -> bool:
+        """Whether Lido currently allows deposits (not stopped / not bunker, etc.)."""
+        response = self.functions.canDeposit().call(block_identifier=block_identifier)
+        logger.info({'msg': 'Call `canDeposit()`.', 'value': response, 'block_identifier': repr(block_identifier)})
+        return response

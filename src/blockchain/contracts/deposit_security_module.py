@@ -44,6 +44,24 @@ class DepositSecurityModuleContract(ContractInterface):
         CAN_DEPOSIT.labels(staking_module_id).set(int(response))
         return response
 
+    def is_min_deposit_distance_passed(self, staking_module_id: int, block_identifier: BlockIdentifier = 'latest') -> bool:
+        """Whether the global min deposit block distance has passed since the last deposit.
+
+        Standalone view of just the distance condition inside `canDeposit` (point 5 of
+        `depositBufferedEther`): `block.number - getLastDepositBlock() >= minDepositBlockDistance`.
+        The last deposit block is global (a deposit to any module advances it), so this gates every
+        module. Used to tell a transient distance block apart from a permanent one.
+        """
+        response = self.functions.isMinDepositDistancePassed(staking_module_id).call(block_identifier=block_identifier)
+        logger.info(
+            {
+                'msg': f'Call `isMinDepositDistancePassed({staking_module_id})`.',
+                'value': response,
+                'block_identifier': repr(block_identifier),
+            }
+        )
+        return response
+
     def deposit_buffered_ether(
         self,
         block_number: int,
