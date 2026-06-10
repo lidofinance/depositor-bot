@@ -55,7 +55,7 @@ def test_cold_start_against_live_consolidation_bus(consolidation_indexer_live):
     print(
         f'\ncold_start: {cold_dt:.1f}s | pending_batches={store.pending_batch_count()} ' f'pending_pubkeys={store.pending_pubkey_count()}'
     )
-    assert indexer.is_ready
+    # cold_start raises on failure (fatal), so reaching here means it succeeded.
 
     # 2. Correctness cross-check: every batch we hold as pending is actually open on-chain.
     #    getBatchInfo(batchHash).publisher == 0x0 would mean it is NOT pending.

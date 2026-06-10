@@ -17,6 +17,7 @@ class StakingModuleInfo(TypedDict):
     module_id: int
     address: str
     wc_type: int
+    status: int  # StakingModuleStatus: 0=Active, 1=DepositsPaused, 2=Stopped
 
 
 class StakingRouterContractV3(ContractInterface):
@@ -59,7 +60,7 @@ class StakingRouterContractV3(ContractInterface):
                 'block_identifier': block_identifier.__repr__(),
             }
         )
-        return [StakingModuleInfo(module_id=d[2][0], address=d[2][1], wc_type=1) for d in response]
+        return [StakingModuleInfo(module_id=d[2][0], address=d[2][1], wc_type=1, status=d[2][5]) for d in response]
 
     def is_staking_module_active(
         self,
@@ -124,7 +125,7 @@ class StakingRouterContractV4(StakingRouterContractV3):
                 'block_identifier': block_identifier.__repr__(),
             }
         )
-        return [StakingModuleInfo(module_id=d[2][0], address=d[2][1], wc_type=d[2][13]) for d in response]
+        return [StakingModuleInfo(module_id=d[2][0], address=d[2][1], wc_type=d[2][13], status=d[2][5]) for d in response]
 
     def get_deposit_allocations(
         self,

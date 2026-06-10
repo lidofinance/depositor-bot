@@ -41,6 +41,12 @@ class TopUpGatewayContract(ContractInterface):
         )
         return True
 
+    def is_paused(self, block_identifier: BlockIdentifier = 'latest') -> bool:
+        # TODO: isPaused is not yet in the deployed TopUpGateway ABI. Returning False (not paused)
+        # with a warning until the contract exposes it; then switch to the real on-chain call.
+        logger.warning({'msg': '`isPaused()` not yet deployed — stubbing to False.', 'block_identifier': repr(block_identifier)})
+        return False
+
     def top_up(self, module_id: int, proof_data: 'TopUpProofData') -> ContractFunction:
         top_up_data = (
             module_id,

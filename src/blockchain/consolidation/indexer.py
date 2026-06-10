@@ -46,25 +46,23 @@ class ConsolidationIndexer:
         self.store = store
         self.deploy_block = deploy_block
         self.chunk = chunk
-        self.is_ready = False
 
     # ---- lifecycle ----
     def cold_start(self) -> None:
-        """Full backfill (deploy -> finalized) at bot init."""
-        try:
-            finalized = self.sync_base_to_finalized()
-            self.is_ready = True
-            logger.info(
-                {
-                    'msg': 'Consolidation indexer ready.',
-                    'finalized': finalized,
-                    'pending_batches': self.store.pending_batch_count(),
-                    'pending_pubkeys': self.store.pending_pubkey_count(),
-                }
-            )
-        except Exception as e:
-            self.is_ready = False
-            logger.error({'msg': 'Consolidation indexer cold start failed — top-up will be skipped.', 'err': repr(e)})
+        """Full backfill (deploy -> finalized) at bot init.
+
+        Raises on failure — the caller must NOT run a half-initialized indexer (it would skip every
+        top-up until restart). The bot fails fast at startup instead.
+        """
+        finalized = self.sync_base_to_finalized()
+        logger.info(
+            {
+                'msg': 'Consolidation indexer ready.',
+                'finalized': finalized,
+                'pending_batches': self.store.pending_batch_count(),
+                'pending_pubkeys': self.store.pending_pubkey_count(),
+            }
+        )
 
     # ---- base (up to finalized) ----
     def sync_base_to_finalized(self) -> int:

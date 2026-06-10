@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, Mock
 import pytest
 import variables
 from blockchain.contracts.staking_router import MODULE_TYPE_CMV2, MODULE_TYPE_CSM, StakingModuleInfo
-from bots.depositor import DepositorBot
+from bots.depositor import DepositorBot, PhaseOutcome, QuorumState
 
 from tests.conftest import COUNCIL_ADDRESS_1, COUNCIL_ADDRESS_2, COUNCIL_PK_1, COUNCIL_PK_2
 from tests.utils.protocol_utils import get_deposit_message
@@ -14,25 +14,26 @@ from tests.utils.protocol_utils import get_deposit_message
 # ─── Shared helpers ────────────────────────────────────────────────
 
 
-def _make_digest(module_id, address, wc_type) -> StakingModuleInfo:
+def _make_digest(module_id, address, wc_type, status=0) -> StakingModuleInfo:
     """Build a StakingModuleInfo as produced by the parsing step in _execute_actual."""
-    return StakingModuleInfo(module_id=module_id, address=address, wc_type=wc_type)
+    return StakingModuleInfo(module_id=module_id, address=address, wc_type=wc_type, status=status)
 
 
 def _make_bot():
     """Build a DepositorBot with all-MagicMock deps. No transports → MessageStorage stays empty."""
     variables.MESSAGE_TRANSPORTS = ''
-    bot = DepositorBot(
-        w3=MagicMock(),
-        sender=MagicMock(),
-        base_deposit_strategy=MagicMock(),
-        csm_strategy=MagicMock(),
-        gas_price_calculator=MagicMock(),
-        keys_api=MagicMock(),
-        cl=MagicMock(),
-    )
-    # A ready consolidation indexer is an orthogonal precondition for the top-up path.
-    bot._consolidation_indexer = MagicMock(is_ready=True)
+    # Skip the real ConsolidationBus backfill (needs RPC) — inject a mock indexer so top-up paths
+    # are still exercised. ENABLE_TOP_UP is left untouched; tests set it as needed.
+    with mock.patch.object(DepositorBot, '_build_consolidation_indexer', return_value=MagicMock()):
+        bot = DepositorBot(
+            w3=MagicMock(),
+            sender=MagicMock(),
+            base_deposit_strategy=MagicMock(),
+            csm_strategy=MagicMock(),
+            gas_price_calculator=MagicMock(),
+            keys_api=MagicMock(),
+            cl=MagicMock(),
+        )
     return bot
 
 
@@ -112,27 +113,103 @@ class TestRefreshModulesState(unittest.TestCase):
         self.assertEqual([1, 3], called_ids)
 
 
-# ─── _is_in_cooldown ───────────────────────────────────────────────
+# ─── _resolve_quorum ───────────────────────────────────────────────
 
 
 @pytest.mark.unit
-class TestIsInCooldown(unittest.TestCase):
+class TestResolveQuorum(unittest.TestCase):
     def setUp(self):
         self.bot = _make_bot()
         variables.DEPOSIT_MODULES_WHITELIST = [1]
 
-    def test_fresh_returns_true(self):
+    def test_ready_when_quorum_present(self):
+        self.bot._get_quorum = Mock(return_value=['msg'])
+        self.assertIs(QuorumState.READY, self.bot._resolve_quorum(1))
+
+    def test_retained_when_no_quorum_but_recent(self):
+        self.bot._get_quorum = Mock(return_value=None)
         self.bot._module_last_heart_beat[1] = datetime.now() - timedelta(minutes=1)
-        self.assertTrue(self.bot._is_in_cooldown(1))
+        self.assertIs(QuorumState.RETAINED, self.bot._resolve_quorum(1))
 
-    def test_stale_returns_false(self):
+    def test_stale_when_no_quorum_and_window_expired(self):
+        self.bot._get_quorum = Mock(return_value=None)
         self.bot._module_last_heart_beat[1] = datetime.now() - timedelta(minutes=variables.QUORUM_RETENTION_MINUTES + 1)
-        self.assertFalse(self.bot._is_in_cooldown(1))
+        self.assertIs(QuorumState.STALE, self.bot._resolve_quorum(1))
 
-    def test_at_boundary_returns_true(self):
-        # The contract is `<=` — exactly at the boundary still counts as cooldown.
+    def test_retained_at_boundary(self):
+        # The window is `<=` — exactly at the boundary still counts as retained.
+        self.bot._get_quorum = Mock(return_value=None)
         self.bot._module_last_heart_beat[1] = datetime.now() - timedelta(minutes=variables.QUORUM_RETENTION_MINUTES, seconds=-1)
-        self.assertTrue(self.bot._is_in_cooldown(1))
+        self.assertIs(QuorumState.RETAINED, self.bot._resolve_quorum(1))
+
+
+# ─── _common_preconditions ─────────────────────────────────────────
+
+
+@pytest.mark.unit
+class TestCommonPreconditions(unittest.TestCase):
+    def setUp(self):
+        self.bot = _make_bot()
+        self.bot.w3.lido.lido.can_deposit.return_value = True
+        self.bot.w3.lido.deposit_security_module.get_guardian_quorum.return_value = 1
+
+    def test_passes_when_all_ok(self):
+        self.assertTrue(self.bot._common_preconditions())
+
+    def test_fails_when_lido_cannot_deposit(self):
+        self.bot.w3.lido.lido.can_deposit.return_value = False
+        self.assertFalse(self.bot._common_preconditions())
+
+    def test_fails_when_quorum_zero(self):
+        self.bot.w3.lido.deposit_security_module.get_guardian_quorum.return_value = 0
+        self.assertFalse(self.bot._common_preconditions())
+
+
+# ─── _collect_candidates ───────────────────────────────────────────
+
+
+@pytest.mark.unit
+class TestCollectCandidates(unittest.TestCase):
+    def setUp(self):
+        self.bot = _make_bot()
+        variables.DEPOSIT_MODULES_WHITELIST = [1, 2, 3]
+
+    def test_filters_by_wc_type(self):
+        digests = [_make_digest(1, '0xA1', 1), _make_digest(2, '0xA2', 2)]
+        cands = self.bot._collect_candidates(digests, 2, [50, 50], [100, 100])
+        self.assertEqual([2], [c.module_id for c in cands])
+
+    def test_filters_non_whitelisted(self):
+        variables.DEPOSIT_MODULES_WHITELIST = [1]
+        digests = [_make_digest(1, '0xA1', 1), _make_digest(2, '0xA2', 1)]
+        cands = self.bot._collect_candidates(digests, 1, [50, 50], [100, 100])
+        self.assertEqual([1], [c.module_id for c in cands])
+
+    def test_filters_zero_allocation(self):
+        digests = [_make_digest(1, '0xA1', 1), _make_digest(2, '0xA2', 1)]
+        cands = self.bot._collect_candidates(digests, 1, [0, 50], [0, 100])
+        self.assertEqual([2], [c.module_id for c in cands])
+
+    def test_filters_inactive_status(self):
+        # status: 0=Active (kept), 1=DepositsPaused, 2=Stopped (both skipped)
+        digests = [_make_digest(1, '0xA1', 1, status=1), _make_digest(2, '0xA2', 1, status=0), _make_digest(3, '0xA3', 1, status=2)]
+        cands = self.bot._collect_candidates(digests, 1, [50, 50, 50], [100, 100, 100])
+        self.assertEqual([2], [c.module_id for c in cands])
+
+    def test_builds_fields_and_stake(self):
+        digests = [_make_digest(1, '0xA1', 2)]
+        cands = self.bot._collect_candidates(digests, 2, [30], [100])
+        c = cands[0]
+        self.assertEqual((c.digest_index, c.module_id, c.wc_type, c.address), (0, 1, 2, '0xA1'))
+        self.assertEqual(c.stake, 70)  # new - allocated = 100 - 30
+        self.assertEqual(c.allocation, 30)  # allocated[i]
+
+    def test_preserves_digest_order_without_sorting(self):
+        # the method does not sort; index mirrors digest position
+        digests = [_make_digest(1, '0xA1', 1), _make_digest(2, '0xA2', 1), _make_digest(3, '0xA3', 1)]
+        cands = self.bot._collect_candidates(digests, 1, [10, 20, 30], [110, 70, 80])
+        self.assertEqual([0, 1, 2], [c.digest_index for c in cands])
+        self.assertEqual([1, 2, 3], [c.module_id for c in cands])
 
 
 # ─── _phase_seed ───────────────────────────────────────────────────
@@ -145,7 +222,6 @@ class TestPhaseSeed(unittest.TestCase):
         variables.DEPOSIT_MODULES_WHITELIST = [1, 2, 3]
         # Fresh heartbeats → all modules are in cooldown by default.
         self.bot._module_last_heart_beat = {m: datetime.now() for m in [1, 2, 3]}
-        self.bot.w3.lido.deposit_security_module.can_deposit.return_value = True
         self.bot._get_quorum = Mock(return_value=None)
         self.bot._deposit_to_module = Mock(return_value=True)
 
@@ -156,8 +232,8 @@ class TestPhaseSeed(unittest.TestCase):
 
     def test_filters_non_0x02(self):
         digests = [_make_digest(1, '0xA1', 1)]
-        done, success = self.bot._phase_seed([50], [100], digests)
-        self.assertEqual((False, False), (done, success))
+        outcome = self.bot._phase_seed([50], [100], digests)
+        self.assertEqual(PhaseOutcome.SKIPPED, outcome)
         self.bot._deposit_to_module.assert_not_called()
 
     def test_filters_zero_allocation(self):
@@ -169,8 +245,8 @@ class TestPhaseSeed(unittest.TestCase):
 
     def test_filters_non_whitelisted(self):
         digests = [_make_digest(4, '0xA4', 2)]
-        done, success = self.bot._phase_seed([50], [100], digests)
-        self.assertEqual((False, False), (done, success))
+        outcome = self.bot._phase_seed([50], [100], digests)
+        self.assertEqual(PhaseOutcome.SKIPPED, outcome)
         self.bot._deposit_to_module.assert_not_called()
 
     # ─── Sort & selection ──────────────────────────────────────
@@ -181,9 +257,9 @@ class TestPhaseSeed(unittest.TestCase):
         digests = [_make_digest(1, '0xA1', 2), _make_digest(2, '0xA2', 2), _make_digest(3, '0xA3', 2)]
         self.bot._get_quorum = Mock(return_value=['msg'])
 
-        done, success = self.bot._phase_seed([10, 50, 30], [110, 70, 80], digests)
+        outcome = self.bot._phase_seed([10, 50, 30], [110, 70, 80], digests)
 
-        self.assertEqual((True, True), (done, success))
+        self.assertEqual(PhaseOutcome.SENT, outcome)
         # Lowest-stake module (id=2) is tried first.
         self.bot._deposit_to_module.assert_called_once_with(2)
 
@@ -203,37 +279,28 @@ class TestPhaseSeed(unittest.TestCase):
         self.bot._deposit_to_module.assert_called_once_with(1)
 
     def test_empty_digests_returns_done_false(self):
-        done, success = self.bot._phase_seed([], [], [])
-        self.assertEqual((False, False), (done, success))
+        outcome = self.bot._phase_seed([], [], [])
+        self.assertEqual(PhaseOutcome.SKIPPED, outcome)
 
     # ─── Iteration ─────────────────────────────────────────────
-
-    def test_can_deposit_false_moves_to_next(self):
-        digests = [_make_digest(1, '0xA1', 2), _make_digest(2, '0xA2', 2)]
-        # m2 has lower stake → tried first; can_deposit=False on m2 → fall to m1
-        self.bot.w3.lido.deposit_security_module.can_deposit.side_effect = lambda mid: mid != 2
-        self.bot._get_quorum = Mock(return_value=['msg'])
-
-        self.bot._phase_seed([10, 50], [110, 70], digests)
-        self.bot._deposit_to_module.assert_called_once_with(1)
 
     def test_single_with_quorum_deposits(self):
         digests = [_make_digest(1, '0xA1', 2)]
         self.bot._get_quorum = Mock(return_value=['msg'])
 
-        done, success = self.bot._phase_seed([50], [100], digests)
+        outcome = self.bot._phase_seed([50], [100], digests)
 
-        self.assertEqual((True, True), (done, success))
+        self.assertEqual(PhaseOutcome.SENT, outcome)
         self.bot._deposit_to_module.assert_called_once_with(1)
 
     def test_cooldown_active_no_quorum_stops_phase(self):
-        # Cooldown active (fresh heartbeat) + no quorum → stop phase, don't proceed.
+        # Retention active (fresh heartbeat) + no quorum → stop phase, don't proceed.
         digests = [_make_digest(1, '0xA1', 2)]
         self.bot._get_quorum = Mock(return_value=None)
 
-        done, success = self.bot._phase_seed([50], [100], digests)
+        outcome = self.bot._phase_seed([50], [100], digests)
 
-        self.assertEqual((True, False), (done, success))
+        self.assertEqual(PhaseOutcome.WAIT_QUORUM, outcome)
         self.bot._deposit_to_module.assert_not_called()
 
     def test_cooldown_expired_no_quorum_moves_to_next(self):
@@ -251,9 +318,9 @@ class TestPhaseSeed(unittest.TestCase):
         self._set_cooldown_expired(2)
         self.bot._get_quorum = Mock(return_value=None)
 
-        done, success = self.bot._phase_seed([30, 50], [50, 100], digests)
+        outcome = self.bot._phase_seed([30, 50], [50, 100], digests)
 
-        self.assertEqual((False, False), (done, success))
+        self.assertEqual(PhaseOutcome.SKIPPED, outcome)
         self.bot._deposit_to_module.assert_not_called()
 
     def test_deposit_failure_still_returns_done_true(self):
@@ -261,10 +328,34 @@ class TestPhaseSeed(unittest.TestCase):
         self.bot._get_quorum = Mock(return_value=['msg'])
         self.bot._deposit_to_module = Mock(return_value=False)
 
-        done, success = self.bot._phase_seed([50], [100], digests)
+        outcome = self.bot._phase_seed([50], [100], digests)
 
-        # done=True → caller stops; success=False → no deposit
-        self.assertEqual((True, False), (done, success))
+        self.assertEqual(PhaseOutcome.TX_FAILED, outcome)  # deposit attempted, tx failed
+
+    # ─── distance cooldown ─────────────────────────────────────
+
+    def test_distance_not_passed_waits(self):
+        # min deposit distance not passed → wait, don't divert.
+        digests = [_make_digest(1, '0xA1', 2)]
+        self.bot.w3.lido.deposit_security_module.is_min_deposit_distance_passed.return_value = False
+        self.bot._get_quorum = Mock(return_value=['msg'])  # quorum exists — to prove we return before checking it
+
+        outcome = self.bot._phase_seed([50], [100], digests)
+
+        self.assertEqual(PhaseOutcome.WAIT_DISTANCE, outcome)  # no fall-through to Phase B
+        self.bot._deposit_to_module.assert_not_called()
+        self.bot._get_quorum.assert_not_called()
+
+    def test_distance_block_on_priority_does_not_divert(self):
+        # Priority (lowest-stake) m2 is distance-blocked → wait for it; do NOT deposit lower-priority m1.
+        digests = [_make_digest(1, '0xA1', 2), _make_digest(2, '0xA2', 2)]
+        self.bot.w3.lido.deposit_security_module.is_min_deposit_distance_passed.side_effect = lambda mid: mid != 2
+        self.bot._get_quorum = Mock(return_value=['msg'])
+        # m1 stake = 110-10 = 100; m2 stake = 70-50 = 20 (lowest → tried first)
+        outcome = self.bot._phase_seed([10, 50], [110, 70], digests)
+
+        self.assertEqual(PhaseOutcome.WAIT_DISTANCE, outcome)
+        self.bot._deposit_to_module.assert_not_called()
 
 
 # ─── _phase_full ───────────────────────────────────────────────────
@@ -276,7 +367,6 @@ class TestPhaseFull(unittest.TestCase):
         self.bot = _make_bot()
         variables.DEPOSIT_MODULES_WHITELIST = [1, 2, 3]
         self.bot._module_last_heart_beat = {m: datetime.now() for m in [1, 2, 3]}
-        self.bot.w3.lido.deposit_security_module.can_deposit.return_value = True
         self.bot._get_quorum = Mock(return_value=None)
         self.bot._deposit_to_module = Mock(return_value=True)
 
@@ -285,8 +375,8 @@ class TestPhaseFull(unittest.TestCase):
 
     def test_filters_non_0x01(self):
         digests = [_make_digest(1, '0xA1', 2)]
-        done, success = self.bot._phase_full([50], [100], digests)
-        self.assertEqual((False, False), (done, success))
+        outcome = self.bot._phase_full([50], [100], digests)
+        self.assertEqual(PhaseOutcome.SKIPPED, outcome)
         self.bot._deposit_to_module.assert_not_called()
 
     def test_filters_zero_seed_allocation(self):
@@ -297,8 +387,8 @@ class TestPhaseFull(unittest.TestCase):
 
     def test_filters_non_whitelisted(self):
         digests = [_make_digest(4, '0xA4', 1)]
-        done, success = self.bot._phase_full([50], [100], digests)
-        self.assertEqual((False, False), (done, success))
+        outcome = self.bot._phase_full([50], [100], digests)
+        self.assertEqual(PhaseOutcome.SKIPPED, outcome)
         self.bot._deposit_to_module.assert_not_called()
 
     def test_sorts_by_stake_asc(self):
@@ -308,29 +398,22 @@ class TestPhaseFull(unittest.TestCase):
         self.bot._phase_full([10, 50, 30], [110, 70, 80], digests)
         self.bot._deposit_to_module.assert_called_once_with(2)
 
-    def test_can_deposit_false_moves_to_next(self):
-        digests = [_make_digest(1, '0xA1', 1), _make_digest(2, '0xA2', 1)]
-        self.bot.w3.lido.deposit_security_module.can_deposit.side_effect = lambda mid: mid != 2
-        self.bot._get_quorum = Mock(return_value=['msg'])
-        self.bot._phase_full([10, 50], [110, 70], digests)
-        self.bot._deposit_to_module.assert_called_once_with(1)
-
     def test_quorum_active_deposits(self):
         digests = [_make_digest(1, '0xA1', 1)]
         self.bot._get_quorum = Mock(return_value=['msg'])
 
-        done, success = self.bot._phase_full([50], [100], digests)
+        outcome = self.bot._phase_full([50], [100], digests)
 
-        self.assertEqual((True, True), (done, success))
+        self.assertEqual(PhaseOutcome.SENT, outcome)
         self.bot._deposit_to_module.assert_called_once_with(1)
 
     def test_cooldown_active_stops_phase(self):
         digests = [_make_digest(1, '0xA1', 1)]
         self.bot._get_quorum = Mock(return_value=None)
 
-        done, success = self.bot._phase_full([50], [100], digests)
+        outcome = self.bot._phase_full([50], [100], digests)
 
-        self.assertEqual((True, False), (done, success))
+        self.assertEqual(PhaseOutcome.WAIT_QUORUM, outcome)
         self.bot._deposit_to_module.assert_not_called()
 
     def test_cooldown_expired_moves_to_next(self):
@@ -342,8 +425,21 @@ class TestPhaseFull(unittest.TestCase):
         self.bot._deposit_to_module.assert_called_once_with(1)
 
     def test_empty_digests_returns_done_false(self):
-        done, success = self.bot._phase_full([], [], [])
-        self.assertEqual((False, False), (done, success))
+        outcome = self.bot._phase_full([], [], [])
+        self.assertEqual(PhaseOutcome.SKIPPED, outcome)
+
+    # ─── distance cooldown ─────────────────────────────────────
+
+    def test_distance_not_passed_waits(self):
+        digests = [_make_digest(1, '0xA1', 1)]
+        self.bot.w3.lido.deposit_security_module.is_min_deposit_distance_passed.return_value = False
+        self.bot._get_quorum = Mock(return_value=['msg'])
+
+        outcome = self.bot._phase_full([50], [100], digests)
+
+        self.assertEqual(PhaseOutcome.WAIT_DISTANCE, outcome)
+        self.bot._deposit_to_module.assert_not_called()
+        self.bot._get_quorum.assert_not_called()
 
 
 # ─── _phase_full_and_topup ─────────────────────────────────────────
@@ -355,7 +451,6 @@ class TestPhaseFullAndTopup(unittest.TestCase):
         self.bot = _make_bot()
         variables.DEPOSIT_MODULES_WHITELIST = [1, 2, 3]
         self.bot._module_last_heart_beat = {m: datetime.now() for m in [1, 2, 3]}
-        self.bot.w3.lido.deposit_security_module.can_deposit.return_value = True
         self.bot.w3.lido.topup_gateway.can_top_up.return_value = True
         self.bot.w3.lido.topup_gateway.is_block_distance_passed.return_value = True
         self.bot._get_quorum = Mock(return_value=None)
@@ -375,8 +470,8 @@ class TestPhaseFullAndTopup(unittest.TestCase):
         variables.DEPOSIT_MODULES_WHITELIST = [1]
         digests = [_make_digest(2, '0xA2', 2), _make_digest(3, '0xA3', 1)]
         self._set_topup_allocation([50, 50], [100, 100])
-        done, success = self.bot._phase_full_and_topup(100, [0, 50], [0, 100], digests)
-        self.assertEqual((False, False), (done, success))
+        outcome = self.bot._phase_full_and_topup(100, [0, 50], [0, 100], digests)
+        self.assertEqual(PhaseOutcome.SKIPPED, outcome)
         self.bot._top_up_to_module.assert_not_called()
         self.bot._deposit_to_module.assert_not_called()
 
@@ -387,9 +482,9 @@ class TestPhaseFullAndTopup(unittest.TestCase):
         self._set_topup_allocation([0, 50], [0, 100])
         self.bot._get_quorum = Mock(return_value=['msg'])
 
-        done, success = self.bot._phase_full_and_topup(100, [50, 0], [100, 0], digests)
+        outcome = self.bot._phase_full_and_topup(100, [50, 0], [100, 0], digests)
 
-        self.assertEqual((False, False), (done, success))
+        self.assertEqual(PhaseOutcome.SKIPPED, outcome)
         self.bot._top_up_to_module.assert_not_called()
         self.bot._deposit_to_module.assert_not_called()
 
@@ -426,20 +521,6 @@ class TestPhaseFullAndTopup(unittest.TestCase):
         self.bot._deposit_to_module.assert_called_once_with(2)
         self.bot._top_up_to_module.assert_not_called()
 
-    def test_indexer_not_ready_skips_0x02_and_lets_0x01_proceed(self):
-        # m1 (0x02) has the lowest stake → tried first, but the indexer is not ready,
-        # so it is skipped and the 0x01 module deposits instead.
-        self.bot._consolidation_indexer.is_ready = False
-        digests = [_make_digest(1, '0xA1', 2), _make_digest(2, '0xA2', 1)]
-        self._set_topup_allocation([50, 999], [70, 999])  # m1 0x02 stake = 20 (lowest)
-        self.bot._get_quorum = Mock(return_value=['msg'])  # m2 0x01 has quorum
-
-        done, success = self.bot._phase_full_and_topup(100, [999, 50], [999, 100], digests)
-
-        self.assertEqual((True, True), (done, success))
-        self.bot._top_up_to_module.assert_not_called()
-        self.bot._deposit_to_module.assert_called_once_with(2)
-
     # ─── 0x02 branch ───────────────────────────────────────────
 
     def test_can_top_up_false_skips_to_next(self):
@@ -460,40 +541,30 @@ class TestPhaseFullAndTopup(unittest.TestCase):
         self._set_topup_allocation([50], [100])
         self.bot.w3.lido.topup_gateway.is_block_distance_passed.return_value = False
 
-        done, success = self.bot._phase_full_and_topup(100, [0], [0], digests)
+        outcome = self.bot._phase_full_and_topup(100, [0], [0], digests)
 
-        self.assertEqual((True, False), (done, success))
+        self.assertEqual(PhaseOutcome.WAIT_DISTANCE, outcome)
         self.bot._top_up_to_module.assert_not_called()
 
     def test_routes_0x02_to_top_up_with_topup_allocation(self):
         digests = [_make_digest(1, '0xA1', 2)]
         self._set_topup_allocation([42], [100])  # 42 is the value that must be passed through
 
-        done, success = self.bot._phase_full_and_topup(100, [0], [0], digests)
+        outcome = self.bot._phase_full_and_topup(100, [0], [0], digests)
 
-        self.assertEqual((True, True), (done, success))
+        self.assertEqual(PhaseOutcome.SENT, outcome)
         self.bot._top_up_to_module.assert_called_once_with(1, '0xA1', 42)
 
     # ─── 0x01 branch ───────────────────────────────────────────
-
-    def test_0x01_can_deposit_false_moves_to_next(self):
-        digests = [_make_digest(1, '0xA1', 1), _make_digest(2, '0xA2', 1)]
-        self._set_topup_allocation([0, 0], [0, 0])
-        self.bot.w3.lido.deposit_security_module.can_deposit.side_effect = lambda mid: mid != 1
-        self.bot._get_quorum = Mock(return_value=['msg'])
-
-        # Both 0x01, both have seed alloc. m1 stake = 10, m2 stake = 50 → m1 tried first
-        self.bot._phase_full_and_topup(100, [50, 50], [60, 100], digests)
-        self.bot._deposit_to_module.assert_called_once_with(2)
 
     def test_0x01_with_quorum_deposits(self):
         digests = [_make_digest(1, '0xA1', 1)]
         self._set_topup_allocation([0], [0])
         self.bot._get_quorum = Mock(return_value=['msg'])
 
-        done, success = self.bot._phase_full_and_topup(100, [50], [100], digests)
+        outcome = self.bot._phase_full_and_topup(100, [50], [100], digests)
 
-        self.assertEqual((True, True), (done, success))
+        self.assertEqual(PhaseOutcome.SENT, outcome)
         self.bot._deposit_to_module.assert_called_once_with(1)
 
     def test_0x01_cooldown_active_stops_phase(self):
@@ -502,9 +573,9 @@ class TestPhaseFullAndTopup(unittest.TestCase):
         # Fresh heartbeat → cooldown active. No quorum.
         self.bot._get_quorum = Mock(return_value=None)
 
-        done, success = self.bot._phase_full_and_topup(100, [50], [100], digests)
+        outcome = self.bot._phase_full_and_topup(100, [50], [100], digests)
 
-        self.assertEqual((True, False), (done, success))
+        self.assertEqual(PhaseOutcome.WAIT_QUORUM, outcome)
         self.bot._deposit_to_module.assert_not_called()
 
     def test_0x01_cooldown_expired_moves_to_next(self):
@@ -528,11 +599,37 @@ class TestPhaseFullAndTopup(unittest.TestCase):
         self.bot._get_quorum = Mock(return_value=None)  # m1 has no quorum
 
         # m1 seed stake = 60-50 = 10, m2 topup stake = 150 → m1 first
-        done, success = self.bot._phase_full_and_topup(100, [50, 999], [60, 999], digests)
+        outcome = self.bot._phase_full_and_topup(100, [50, 999], [60, 999], digests)
 
-        self.assertEqual((True, True), (done, success))
+        self.assertEqual(PhaseOutcome.SENT, outcome)
         self.bot._top_up_to_module.assert_called_once_with(2, '0xA2', 50)
         self.bot._deposit_to_module.assert_not_called()
+
+    # ─── distance cooldown ─────────────────────────────────────
+
+    def test_deposits_paused_skips_0x01_keeps_topup(self):
+        # deposits_paused=True → 0x01 full deposits are not collected; 0x02 top-up still happens.
+        digests = [_make_digest(1, '0xA1', 1), _make_digest(2, '0xA2', 2)]
+        self._set_topup_allocation([999, 50], [999, 200])  # m2 0x02 is a top-up candidate
+        self.bot._get_quorum = Mock(return_value=['msg'])  # m1 0x01 would deposit if collected
+
+        outcome = self.bot._phase_full_and_topup(100, [50, 999], [60, 999], digests, deposits_paused=True)
+
+        self.assertEqual(PhaseOutcome.SENT, outcome)
+        self.bot._top_up_to_module.assert_called_once_with(2, '0xA2', 50)
+        self.bot._deposit_to_module.assert_not_called()
+
+    def test_0x01_distance_block_does_not_divert_to_topup(self):
+        # Priority 0x01 module is distance-blocked → wait for it; do NOT divert to the ready 0x02 top-up.
+        digests = [_make_digest(1, '0xA1', 1), _make_digest(2, '0xA2', 2)]
+        self._set_topup_allocation([999, 50], [999, 200])  # m2 0x02 topup stake = 150
+        self.bot.w3.lido.deposit_security_module.is_min_deposit_distance_passed.return_value = False
+        # m1 0x01 seed stake = 60-50 = 10 (lowest → tried first), m2 topup stake = 150
+        outcome = self.bot._phase_full_and_topup(100, [50, 999], [60, 999], digests)
+
+        self.assertEqual(PhaseOutcome.WAIT_DISTANCE, outcome)
+        self.bot._deposit_to_module.assert_not_called()
+        self.bot._top_up_to_module.assert_not_called()
 
 
 # ─── _execute_actual ───────────────────────────────────────────────
@@ -551,11 +648,13 @@ def depositor_bot(
         variables.MESSAGE_TRANSPORTS = ''
         variables.DEPOSIT_MODULES_WHITELIST = [1, 2]
         web3_lido_unit.eth.get_block = Mock(return_value=block_data)
-        bot = DepositorBot(
-            web3_lido_unit, deposit_transaction_sender, base_deposit_strategy, csm_strategy, gas_price_calculator, Mock(), Mock()
-        )
-        # A ready consolidation indexer is an orthogonal precondition for the top-up path.
-        bot._consolidation_indexer = MagicMock(is_ready=True)
+        # Skip the real ConsolidationBus backfill (needs RPC) — inject a mock indexer.
+        with mock.patch.object(DepositorBot, '_build_consolidation_indexer', return_value=MagicMock()):
+            bot = DepositorBot(
+                web3_lido_unit, deposit_transaction_sender, base_deposit_strategy, csm_strategy, gas_price_calculator, Mock(), Mock()
+            )
+        bot.w3.lido.deposit_security_module.is_deposits_paused = Mock(return_value=False)
+        bot.w3.lido.topup_gateway.is_paused = Mock(return_value=False)
         yield bot
 
 
@@ -579,12 +678,12 @@ def test_execute_actual_zero_depositable_ether_short_circuits(depositor_bot):
 
 @pytest.mark.unit
 def test_execute_actual_phase_a_deposit_short_circuits(depositor_bot):
-    """Phase A returns (True, True) → return True, phase B not called."""
+    """Phase A SENT → _execute_actual returns backoff=True, phase B not called."""
     depositor_bot._refresh_modules_state = Mock()
     depositor_bot.w3.lido.lido.get_depositable_ether = Mock(return_value=100)
     depositor_bot.w3.lido.staking_router.get_deposit_allocations = Mock(return_value=(0, [], []))
     depositor_bot.w3.lido.staking_router.get_all_staking_module_digests = Mock(return_value=[])
-    depositor_bot._phase_seed = Mock(return_value=(True, True))
+    depositor_bot._phase_seed = Mock(return_value=PhaseOutcome.SENT)
     depositor_bot._phase_full = Mock()
     depositor_bot._phase_full_and_topup = Mock()
 
@@ -595,12 +694,12 @@ def test_execute_actual_phase_a_deposit_short_circuits(depositor_bot):
 
 @pytest.mark.unit
 def test_execute_actual_phase_a_failure_does_not_call_phase_b(depositor_bot):
-    """Phase A returns (True, False) — e.g. deposit attempt failed — phase B not called."""
+    """Phase A returns a non-SKIPPED wait/fail outcome → phase B not called."""
     depositor_bot._refresh_modules_state = Mock()
     depositor_bot.w3.lido.lido.get_depositable_ether = Mock(return_value=100)
     depositor_bot.w3.lido.staking_router.get_deposit_allocations = Mock(return_value=(0, [], []))
     depositor_bot.w3.lido.staking_router.get_all_staking_module_digests = Mock(return_value=[])
-    depositor_bot._phase_seed = Mock(return_value=(True, False))
+    depositor_bot._phase_seed = Mock(return_value=PhaseOutcome.WAIT_QUORUM)
     depositor_bot._phase_full = Mock()
     depositor_bot._phase_full_and_topup = Mock()
 
@@ -611,13 +710,12 @@ def test_execute_actual_phase_a_failure_does_not_call_phase_b(depositor_bot):
 
 @pytest.mark.unit
 def test_execute_actual_phase_a_cooldown_does_not_call_phase_b(depositor_bot):
-    """Same as failure: cooldown returns (True, False) — phase B still not called.
-    Documented separately because the algorithm treats cooldown explicitly."""
+    """Quorum-retention wait (WAIT_QUORUM) is non-SKIPPED → phase B still not called."""
     depositor_bot._refresh_modules_state = Mock()
     depositor_bot.w3.lido.lido.get_depositable_ether = Mock(return_value=100)
     depositor_bot.w3.lido.staking_router.get_deposit_allocations = Mock(return_value=(0, [], []))
     depositor_bot.w3.lido.staking_router.get_all_staking_module_digests = Mock(return_value=[])
-    depositor_bot._phase_seed = Mock(return_value=(True, False))
+    depositor_bot._phase_seed = Mock(return_value=PhaseOutcome.WAIT_QUORUM)
     depositor_bot._phase_full = Mock()
     depositor_bot._phase_full_and_topup = Mock()
 
@@ -628,14 +726,14 @@ def test_execute_actual_phase_a_cooldown_does_not_call_phase_b(depositor_bot):
 
 @pytest.mark.unit
 def test_execute_actual_phase_a_empty_falls_through_to_phase_b(depositor_bot):
-    """Phase A returns (False, False) → continue to phase B."""
+    """Phase A SKIPPED → continue to phase B."""
     variables.ENABLE_TOP_UP = False
     depositor_bot._refresh_modules_state = Mock()
     depositor_bot.w3.lido.lido.get_depositable_ether = Mock(return_value=100)
     depositor_bot.w3.lido.staking_router.get_deposit_allocations = Mock(return_value=(0, [10, 20], [50, 50]))
     depositor_bot.w3.lido.staking_router.get_all_staking_module_digests = Mock(return_value=[])
-    depositor_bot._phase_seed = Mock(return_value=(False, False))
-    depositor_bot._phase_full = Mock(return_value=(True, True))
+    depositor_bot._phase_seed = Mock(return_value=PhaseOutcome.SKIPPED)
+    depositor_bot._phase_full = Mock(return_value=PhaseOutcome.SENT)
 
     assert depositor_bot._execute_actual() is True
     # phase_full receives the seed allocations and the parsed (empty) digests list
@@ -649,8 +747,8 @@ def test_execute_actual_routes_to_phase_full_when_top_up_disabled(depositor_bot)
     depositor_bot.w3.lido.lido.get_depositable_ether = Mock(return_value=100)
     depositor_bot.w3.lido.staking_router.get_deposit_allocations = Mock(return_value=(0, [], []))
     depositor_bot.w3.lido.staking_router.get_all_staking_module_digests = Mock(return_value=[])
-    depositor_bot._phase_seed = Mock(return_value=(False, False))
-    depositor_bot._phase_full = Mock(return_value=(False, False))
+    depositor_bot._phase_seed = Mock(return_value=PhaseOutcome.SKIPPED)
+    depositor_bot._phase_full = Mock(return_value=PhaseOutcome.SKIPPED)
     depositor_bot._phase_full_and_topup = Mock()
 
     depositor_bot._execute_actual()
@@ -665,13 +763,51 @@ def test_execute_actual_routes_to_phase_full_and_topup_when_top_up_enabled(depos
     depositor_bot.w3.lido.lido.get_depositable_ether = Mock(return_value=100)
     depositor_bot.w3.lido.staking_router.get_deposit_allocations = Mock(return_value=(0, [], []))
     depositor_bot.w3.lido.staking_router.get_all_staking_module_digests = Mock(return_value=[])
-    depositor_bot._phase_seed = Mock(return_value=(False, False))
+    depositor_bot._phase_seed = Mock(return_value=PhaseOutcome.SKIPPED)
     depositor_bot._phase_full = Mock()
-    depositor_bot._phase_full_and_topup = Mock(return_value=(False, False))
+    depositor_bot._phase_full_and_topup = Mock(return_value=PhaseOutcome.SKIPPED)
 
     depositor_bot._execute_actual()
     depositor_bot._phase_full.assert_not_called()
     depositor_bot._phase_full_and_topup.assert_called_once()
+
+
+@pytest.mark.unit
+def test_execute_actual_top_up_gateway_paused_routes_to_phase_full(depositor_bot):
+    """ENABLE_TOP_UP on but TopUpGateway paused → top-ups disabled this iteration; route to _phase_full."""
+    variables.ENABLE_TOP_UP = True
+    depositor_bot.w3.lido.topup_gateway.is_paused = Mock(return_value=True)
+    depositor_bot._refresh_modules_state = Mock()
+    depositor_bot.w3.lido.lido.get_depositable_ether = Mock(return_value=100)
+    depositor_bot.w3.lido.staking_router.get_deposit_allocations = Mock(return_value=(0, [], []))
+    depositor_bot.w3.lido.staking_router.get_all_staking_module_digests = Mock(return_value=[])
+    depositor_bot._phase_seed = Mock(return_value=PhaseOutcome.SKIPPED)
+    depositor_bot._phase_full = Mock(return_value=PhaseOutcome.SKIPPED)
+    depositor_bot._phase_full_and_topup = Mock()
+
+    depositor_bot._execute_actual()
+    depositor_bot._phase_full.assert_called_once()
+    depositor_bot._phase_full_and_topup.assert_not_called()
+
+
+@pytest.mark.unit
+def test_execute_actual_deposits_paused_skips_phase_a_and_passes_flag(depositor_bot):
+    """Deposits paused → Phase A (seed deposits) skipped; Phase B runs with deposits_paused=True (top-ups only)."""
+    variables.ENABLE_TOP_UP = True
+    depositor_bot._refresh_modules_state = Mock()
+    depositor_bot.w3.lido.lido.get_depositable_ether = Mock(return_value=100)
+    depositor_bot.w3.lido.deposit_security_module.is_deposits_paused = Mock(return_value=True)
+    depositor_bot.w3.lido.staking_router.get_deposit_allocations = Mock(return_value=(0, [], []))
+    depositor_bot.w3.lido.staking_router.get_all_staking_module_digests = Mock(return_value=[])
+    depositor_bot._phase_seed = Mock()
+    depositor_bot._phase_full = Mock()
+    depositor_bot._phase_full_and_topup = Mock(return_value=PhaseOutcome.SKIPPED)
+
+    depositor_bot._execute_actual()
+
+    depositor_bot._phase_seed.assert_not_called()  # Phase A is deposits-only → skipped while paused
+    depositor_bot._phase_full_and_topup.assert_called_once()
+    assert depositor_bot._phase_full_and_topup.call_args.args[-1] is True  # deposits_paused flag
 
 
 @pytest.mark.unit
@@ -681,10 +817,144 @@ def test_execute_actual_both_phases_return_false(depositor_bot):
     depositor_bot.w3.lido.lido.get_depositable_ether = Mock(return_value=100)
     depositor_bot.w3.lido.staking_router.get_deposit_allocations = Mock(return_value=(0, [], []))
     depositor_bot.w3.lido.staking_router.get_all_staking_module_digests = Mock(return_value=[])
-    depositor_bot._phase_seed = Mock(return_value=(False, False))
-    depositor_bot._phase_full = Mock(return_value=(False, False))
+    depositor_bot._phase_seed = Mock(return_value=PhaseOutcome.SKIPPED)
+    depositor_bot._phase_full = Mock(return_value=PhaseOutcome.SKIPPED)
 
     assert depositor_bot._execute_actual() is False
+
+
+# ─── Regression matrix: _execute_actual() Executor-facing signal ────
+#
+# Snapshot of the Executor scheduling signal (the bool _execute_actual returns: True → +BBE backoff,
+# False → +1 poll next block) per scenario, against the CURRENT behavior. Driven through the real
+# phases via stable low-level seams (_collect_candidates inputs, distance/quorum gates), so it stays
+# comparable across the PhaseOutcome refactor: the enum step must keep EVERY row unchanged; only the
+# later distance-backoff step is allowed to flip the distance rows (A1, B3) from False to True.
+
+
+@pytest.mark.unit
+class TestExecuteActualScheduling(unittest.TestCase):
+    def setUp(self):
+        variables.ENABLE_TOP_UP = True
+        variables.DEPOSIT_MODULES_WHITELIST = [5, 1]
+        self.bot = _make_bot()
+        self.bot._refresh_modules_state = Mock()
+        self.bot._common_preconditions = Mock(return_value=True)
+        self.bot.w3.lido.deposit_security_module.is_deposits_paused = Mock(return_value=False)
+        self.bot.w3.lido.lido.get_depositable_ether = Mock(return_value=100)
+        self.bot._deposit_to_module = Mock(return_value=True)
+        self.bot._top_up_to_module = Mock(return_value=True)
+        self.bot.w3.lido.deposit_security_module.is_min_deposit_distance_passed = Mock(return_value=True)
+        self.bot.w3.lido.topup_gateway.can_top_up = Mock(return_value=True)
+        self.bot.w3.lido.topup_gateway.is_block_distance_passed = Mock(return_value=True)
+        self.bot.w3.lido.topup_gateway.is_paused = Mock(return_value=False)
+        self.bot._get_quorum = Mock(return_value=['msg'])
+        # heartbeats fresh → quorum-retention cooldown active by default
+        self.bot._module_last_heart_beat = {5: datetime.now(), 1: datetime.now()}
+        # digests: index 0 = m5 (0x02, active), index 1 = m1 (0x01, active)
+        self.bot.w3.lido.staking_router.get_all_staking_module_digests = Mock(
+            return_value=[_make_digest(5, '0x5', 2), _make_digest(1, '0x1', 1)]
+        )
+
+    def _set_alloc(self, seed, topup):
+        """Per-digest-index allocations; `new` = allocated + 1000 so stake is non-zero."""
+
+        def alloc(_amount, is_top_up):
+            src = topup if is_top_up else seed
+            return (0, list(src), [v + 1000 for v in src])
+
+        self.bot.w3.lido.staking_router.get_deposit_allocations = Mock(side_effect=alloc)
+
+    def _stale_quorum(self, module_id):
+        self.bot._module_last_heart_beat[module_id] = datetime.now() - timedelta(minutes=variables.QUORUM_RETENTION_MINUTES + 1)
+
+    # ─── A. deposit candidate (Phase A seed 0x02) ──────────────
+
+    def test_A1_deposit_distance_not_passed(self):
+        self._set_alloc(seed=[100, 0], topup=[0, 0])
+        self.bot.w3.lido.deposit_security_module.is_min_deposit_distance_passed = Mock(return_value=False)
+        self.assertTrue(self.bot._execute_actual())  # distance-backoff: +BBE instead of polling every block
+        self.bot._deposit_to_module.assert_not_called()
+
+    def test_A2_deposit_sent(self):
+        self._set_alloc(seed=[100, 0], topup=[0, 0])
+        self.assertTrue(self.bot._execute_actual())  # +BBE
+        self.bot._deposit_to_module.assert_called_once_with(5)
+
+    def test_A3_deposit_failed(self):
+        self._set_alloc(seed=[100, 0], topup=[0, 0])
+        self.bot._deposit_to_module = Mock(return_value=False)
+        self.assertFalse(self.bot._execute_actual())  # +1
+        self.bot._deposit_to_module.assert_called_once_with(5)
+
+    def test_A4_quorum_retained_wait(self):
+        self._set_alloc(seed=[100, 0], topup=[0, 0])
+        self.bot._get_quorum = Mock(return_value=None)  # no quorum now, heartbeat fresh → retained
+        self.assertFalse(self.bot._execute_actual())  # +1
+        self.bot._deposit_to_module.assert_not_called()
+
+    def test_A5_quorum_stale_phase_a_skips(self):
+        self._set_alloc(seed=[100, 0], topup=[0, 0])  # no top-up, no 0x01 → Phase B empty
+        self.bot._get_quorum = Mock(return_value=None)
+        self._stale_quorum(5)
+        self.assertFalse(self.bot._execute_actual())  # +1
+        self.bot._deposit_to_module.assert_not_called()
+        self.bot._top_up_to_module.assert_not_called()
+
+    def test_A6_quorum_retained_holds_priority_over_ready_module(self):
+        # Two 0x02 seed candidates. Priority m5 (lower stake) has no quorum but is in retention → we
+        # WAIT and do NOT divert to m2, even though m2 has a quorum and could deposit right now.
+        variables.DEPOSIT_MODULES_WHITELIST = [5, 2]
+        self.bot._module_last_heart_beat = {5: datetime.now(), 2: datetime.now()}  # both retained (fresh)
+        self.bot.w3.lido.staking_router.get_all_staking_module_digests = Mock(
+            return_value=[_make_digest(5, '0x5', 2), _make_digest(2, '0x2', 2)]
+        )
+
+        def alloc(_amount, is_top_up):
+            if is_top_up:
+                return (0, [0, 0], [0, 0])
+            return (0, [100, 100], [200, 2000])  # m5 stake=100 (priority), m2 stake=1900
+
+        self.bot.w3.lido.staking_router.get_deposit_allocations = Mock(side_effect=alloc)
+        self.bot._get_quorum = Mock(side_effect=lambda mid: ['msg'] if mid == 2 else None)  # only m2 has quorum
+
+        self.assertFalse(self.bot._execute_actual())  # WAIT on priority m5 (+1)
+        self.bot._deposit_to_module.assert_not_called()  # did NOT divert to the ready m2
+
+    # ─── B. top-up candidate (Phase B 0x02) ────────────────────
+
+    def test_B2_can_top_up_false_skips(self):
+        self._set_alloc(seed=[0, 0], topup=[100, 0])  # m5 top-up candidate; Phase A empty
+        self.bot.w3.lido.topup_gateway.can_top_up = Mock(return_value=False)
+        self.assertFalse(self.bot._execute_actual())  # +1
+        self.bot._top_up_to_module.assert_not_called()
+
+    def test_B3_top_up_distance_not_passed(self):
+        self._set_alloc(seed=[0, 0], topup=[100, 0])
+        self.bot.w3.lido.topup_gateway.is_block_distance_passed = Mock(return_value=False)
+        self.assertTrue(self.bot._execute_actual())  # distance-backoff: +BBE instead of polling every block
+        self.bot._top_up_to_module.assert_not_called()
+
+    def test_B4_top_up_sent(self):
+        self._set_alloc(seed=[0, 0], topup=[100, 0])
+        self.assertTrue(self.bot._execute_actual())  # +BBE
+        self.bot._top_up_to_module.assert_called_once()
+
+    def test_B5_top_up_failed(self):
+        self._set_alloc(seed=[0, 0], topup=[100, 0])
+        self.bot._top_up_to_module = Mock(return_value=False)
+        self.assertFalse(self.bot._execute_actual())  # +1
+        self.bot._top_up_to_module.assert_called_once()
+
+    # ─── C. cascade (skip a candidate, act on the next) ────────
+
+    def test_C3_skip_topup_then_full_deposit(self):
+        # Phase B: m5 (0x02) can_top_up=False → skip; m1 (0x01) deposits.
+        self._set_alloc(seed=[0, 50], topup=[100, 0])
+        self.bot.w3.lido.topup_gateway.can_top_up = Mock(return_value=False)
+        self.assertTrue(self.bot._execute_actual())  # +BBE (deposit sent)
+        self.bot._top_up_to_module.assert_not_called()
+        self.bot._deposit_to_module.assert_called_once_with(1)
 
 
 # ─── _deposit_to_module ────────────────────────────────────────────
@@ -762,25 +1032,6 @@ def test_deposit_to_module_general_strategy_for_non_csm_module_type(depositor_bo
 
 
 @pytest.mark.unit
-def test_top_up_to_module_skipped_when_indexer_not_ready(depositor_bot):
-    """Indexer present but not ready → skip top-up before selecting a strategy."""
-    depositor_bot._consolidation_indexer.is_ready = False
-    depositor_bot._select_topup_strategy = Mock()
-
-    assert depositor_bot._top_up_to_module(1, '0xAddr', 50) is False
-    depositor_bot._select_topup_strategy.assert_not_called()
-
-
-@pytest.mark.unit
-def test_top_up_to_module_skipped_when_indexer_none(depositor_bot):
-    """No indexer configured for this chain → skip top-up."""
-    depositor_bot._consolidation_indexer = None
-    depositor_bot._select_topup_strategy = Mock()
-
-    assert depositor_bot._top_up_to_module(1, '0xAddr', 50) is False
-    depositor_bot._select_topup_strategy.assert_not_called()
-
-
 @pytest.mark.unit
 def test_top_up_to_module_unknown_type_returns_false(depositor_bot):
     mock_module = Mock()
@@ -898,6 +1149,25 @@ def test_top_up_to_module_passes_module_allocation_through_to_strategy(depositor
     # allocation 1234 forwarded; getDepositAllocations NOT re-queried
     assert strategy.get_topup_candidates.call_args.args[4] == 1234
     depositor_bot.w3.lido.staking_router.get_deposit_allocations.assert_not_called()
+
+
+# ─── _build_consolidation_indexer ──────────────────────────────────
+
+
+@pytest.mark.unit
+def test_build_consolidation_indexer_none_when_top_up_disabled():
+    variables.ENABLE_TOP_UP = False
+    bot = _make_bot()
+    assert bot._build_consolidation_indexer() is None
+
+
+@pytest.mark.unit
+def test_build_consolidation_indexer_raises_when_top_up_enabled_but_bus_unconfigured():
+    # ENABLE_TOP_UP on + no Bus config → fail fast at startup (don't run with top-ups silently off).
+    variables.ENABLE_TOP_UP = True
+    bot = _make_bot()
+    with mock.patch.object(variables, 'get_consolidation_bus_config', return_value=(None, None)), pytest.raises(ValueError):
+        bot._build_consolidation_indexer()
 
 
 # ─── _select_topup_strategy ────────────────────────────────────────
