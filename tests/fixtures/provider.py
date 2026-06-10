@@ -60,9 +60,16 @@ def web3_transaction_integration(web3_provider_integration: Web3) -> Web3:
 
 @pytest.fixture
 def web3_lido_integration(web3_transaction_integration: Web3) -> Web3:
-    web3_transaction_integration.attach_modules(
-        {
-            'lido': LidoContracts,
-        }
-    )
+    try:
+        web3_transaction_integration.attach_modules(
+            {
+                'lido': LidoContracts,
+            }
+        )
+    except ValueError as e:
+        # Integration RPC points at mainnet, which is still on DSM v3. The bot now requires
+        # DSM v4 (LidoContracts raises on mismatch). Skip until the v4 upgrade lands on mainnet.
+        if 'Unsupported DSM version' in str(e):
+            pytest.skip(f'{e}; re-enable once the DSM v4 upgrade lands.')
+        raise
     yield web3_transaction_integration
