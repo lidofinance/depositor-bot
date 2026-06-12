@@ -8,7 +8,7 @@ from blockchain.contracts.deposit_security_module import DepositSecurityModuleCo
 from blockchain.contracts.erc20 import ERC20Contract
 from blockchain.contracts.lido import LidoContract
 from blockchain.contracts.lido_locator import LidoLocatorContract
-from blockchain.contracts.staking_router import StakingRouterContractV3, StakingRouterContractV4
+from blockchain.contracts.staking_router import StakingRouterContractV4
 from blockchain.contracts.topup_gateway import TopUpGatewayContract
 
 
@@ -52,17 +52,6 @@ def deposit_security_module(web3_provider_integration, lido_locator):
         web3_provider_integration.eth.contract(
             address=lido_locator.deposit_security_module(),
             ContractFactoryClass=DepositSecurityModuleContract,
-        ),
-    )
-
-
-@pytest.fixture
-def staking_router_v3(web3_provider_integration, lido_locator):
-    yield cast(
-        StakingRouterContractV3,
-        web3_provider_integration.eth.contract(
-            address=lido_locator.staking_router(),
-            ContractFactoryClass=StakingRouterContractV3,
         ),
     )
 
