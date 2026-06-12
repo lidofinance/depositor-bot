@@ -20,8 +20,8 @@ class StakingModuleInfo(TypedDict):
     status: int  # StakingModuleStatus: 0=Active, 1=DepositsPaused, 2=Stopped
 
 
-class StakingRouterContractV3(ContractInterface):
-    abi_path = './interfaces/StakingRouterV3.json'
+class StakingRouterContractV4(ContractInterface):
+    abi_path = './interfaces/StakingRouterV4.json'
 
     @lru_cache(maxsize=1)
     def get_contract_version(self, block_identifier: BlockIdentifier = 'latest') -> int:
@@ -47,20 +47,6 @@ class StakingRouterContractV3(ContractInterface):
             }
         )
         return response
-
-    def get_all_staking_module_digests(self, block_identifier: BlockIdentifier = 'latest') -> list[StakingModuleInfo]:
-        """Returns staking module digest for passed staking module ids.
-        V3 state tuple has no wc_type field — all modules default to wc_type=1.
-        """
-        response = self.functions.getAllStakingModuleDigests().call(block_identifier=block_identifier)
-        logger.info(
-            {
-                'msg': 'Call getAllStakingModuleDigests().',
-                'value': response,
-                'block_identifier': block_identifier.__repr__(),
-            }
-        )
-        return [StakingModuleInfo(module_id=d[2][0], address=d[2][1], wc_type=1, status=d[2][5]) for d in response]
 
     def is_staking_module_active(
         self,
@@ -110,10 +96,6 @@ class StakingRouterContractV3(ContractInterface):
             }
         )
         return response
-
-
-class StakingRouterContractV4(StakingRouterContractV3):
-    abi_path = './interfaces/StakingRouterV4.json'
 
     def get_all_staking_module_digests(self, block_identifier: BlockIdentifier = 'latest') -> list[StakingModuleInfo]:
         """V4 state tuple includes wc_type at index 13."""

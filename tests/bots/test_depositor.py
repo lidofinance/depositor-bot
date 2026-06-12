@@ -451,7 +451,6 @@ class TestPhaseFullAndTopup(unittest.TestCase):
         self.bot = _make_bot()
         variables.DEPOSIT_MODULES_WHITELIST = [1, 2, 3]
         self.bot._module_last_heart_beat = {m: datetime.now() for m in [1, 2, 3]}
-        self.bot.w3.lido.topup_gateway.can_top_up.return_value = True
         self.bot.w3.lido.topup_gateway.is_block_distance_passed.return_value = True
         self.bot._get_quorum = Mock(return_value=None)
         self.bot._deposit_to_module = Mock(return_value=True)
@@ -522,19 +521,6 @@ class TestPhaseFullAndTopup(unittest.TestCase):
         self.bot._top_up_to_module.assert_not_called()
 
     # ─── 0x02 branch ───────────────────────────────────────────
-
-    def test_can_top_up_false_skips_to_next(self):
-        # m1 (0x02) can_top_up=False → skipped. m2 (0x01) succeeds.
-        digests = [_make_digest(1, '0xA1', 2), _make_digest(2, '0xA2', 1)]
-        self._set_topup_allocation([50, 0], [100, 0])
-        self.bot.w3.lido.topup_gateway.can_top_up.return_value = False
-        self.bot._get_quorum = Mock(return_value=['msg'])
-
-        # Ensure m1 has lower stake → tried first
-        self.bot._phase_full_and_topup(100, [0, 50], [0, 60], digests)
-
-        self.bot._top_up_to_module.assert_not_called()
-        self.bot._deposit_to_module.assert_called_once_with(2)
 
     def test_block_distance_not_passed_stops_phase(self):
         digests = [_make_digest(1, '0xA1', 2)]
@@ -845,7 +831,6 @@ class TestExecuteActualScheduling(unittest.TestCase):
         self.bot._deposit_to_module = Mock(return_value=True)
         self.bot._top_up_to_module = Mock(return_value=True)
         self.bot.w3.lido.deposit_security_module.is_min_deposit_distance_passed = Mock(return_value=True)
-        self.bot.w3.lido.topup_gateway.can_top_up = Mock(return_value=True)
         self.bot.w3.lido.topup_gateway.is_block_distance_passed = Mock(return_value=True)
         self.bot.w3.lido.topup_gateway.is_paused = Mock(return_value=False)
         self.bot._get_quorum = Mock(return_value=['msg'])
@@ -923,12 +908,6 @@ class TestExecuteActualScheduling(unittest.TestCase):
 
     # ─── B. top-up candidate (Phase B 0x02) ────────────────────
 
-    def test_B2_can_top_up_false_skips(self):
-        self._set_alloc(seed=[0, 0], topup=[100, 0])  # m5 top-up candidate; Phase A empty
-        self.bot.w3.lido.topup_gateway.can_top_up = Mock(return_value=False)
-        self.assertFalse(self.bot._execute_actual())  # +1
-        self.bot._top_up_to_module.assert_not_called()
-
     def test_B3_top_up_distance_not_passed(self):
         self._set_alloc(seed=[0, 0], topup=[100, 0])
         self.bot.w3.lido.topup_gateway.is_block_distance_passed = Mock(return_value=False)
@@ -945,16 +924,6 @@ class TestExecuteActualScheduling(unittest.TestCase):
         self.bot._top_up_to_module = Mock(return_value=False)
         self.assertFalse(self.bot._execute_actual())  # +1
         self.bot._top_up_to_module.assert_called_once()
-
-    # ─── C. cascade (skip a candidate, act on the next) ────────
-
-    def test_C3_skip_topup_then_full_deposit(self):
-        # Phase B: m5 (0x02) can_top_up=False → skip; m1 (0x01) deposits.
-        self._set_alloc(seed=[0, 50], topup=[100, 0])
-        self.bot.w3.lido.topup_gateway.can_top_up = Mock(return_value=False)
-        self.assertTrue(self.bot._execute_actual())  # +BBE (deposit sent)
-        self.bot._top_up_to_module.assert_not_called()
-        self.bot._deposit_to_module.assert_called_once_with(1)
 
 
 # ─── _deposit_to_module ────────────────────────────────────────────

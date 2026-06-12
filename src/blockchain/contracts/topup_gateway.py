@@ -18,34 +18,15 @@ class TopUpGatewayContract(ContractInterface):
         logger.info({'msg': 'Call `getMaxValidatorsPerTopUp()`.', 'value': response, 'block_identifier': repr(block_identifier)})
         return response
 
-    def can_top_up(self, staking_module_id: int, block_identifier: BlockIdentifier = 'latest') -> bool:
-        response = self.functions.canTopUp(staking_module_id).call(block_identifier=block_identifier)
-        logger.info(
-            {
-                'msg': f'Call `canTopUp({staking_module_id})`.',
-                'value': response,
-                'block_identifier': repr(block_identifier),
-            }
-        )
+    def is_paused(self, block_identifier: BlockIdentifier = 'latest') -> bool:
+        response = self.functions.isPaused().call(block_identifier=block_identifier)
+        logger.info({'msg': 'Call `isPaused()`.', 'value': response, 'block_identifier': repr(block_identifier)})
         return response
 
-    def is_block_distance_passed(self, staking_module_id: int, block_identifier: BlockIdentifier = 'latest') -> bool:
-        # TODO: isBlockDistancePassed is not yet deployed on Hoodi. Returning True with a warning
-        # until the contract is updated; then switch to the real on-chain call.
-        logger.warning(
-            {
-                'msg': f'`isBlockDistancePassed({staking_module_id})` not yet deployed — stubbing to True.',
-                'module_id': staking_module_id,
-                'block_identifier': repr(block_identifier),
-            }
-        )
-        return True
-
-    def is_paused(self, block_identifier: BlockIdentifier = 'latest') -> bool:
-        # TODO: isPaused is not yet in the deployed TopUpGateway ABI. Returning False (not paused)
-        # with a warning until the contract exposes it; then switch to the real on-chain call.
-        logger.warning({'msg': '`isPaused()` not yet deployed — stubbing to False.', 'block_identifier': repr(block_identifier)})
-        return False
+    def is_block_distance_passed(self, block_identifier: BlockIdentifier = 'latest') -> bool:
+        response = self.functions.isBlockDistancePassed().call(block_identifier=block_identifier)
+        logger.info({'msg': 'Call `isBlockDistancePassed()`.', 'value': response, 'block_identifier': repr(block_identifier)})
+        return response
 
     def top_up(self, module_id: int, proof_data: 'TopUpProofData') -> ContractFunction:
         top_up_data = (

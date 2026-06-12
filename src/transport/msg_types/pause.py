@@ -28,7 +28,6 @@ PauseMessageSchema = Schema(
         'blockNumber': int,
         'guardianAddress': And(str, ADDRESS_REGREX.validate),
         'signature': SignatureSchema,
-        # 'stakingModuleId': int
     },
     ignore_extra_keys=True,
 )
@@ -38,4 +37,3 @@ class PauseMessage(Metadata):
     blockNumber: int
     guardianAddress: str
     signature: Signature
-    stakingModuleId: int

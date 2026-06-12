@@ -16,12 +16,12 @@ logger = logging.getLogger(__name__)
 BotMessage = DepositMessage | PauseMessage | UnvetMessage | PingMessage
 
 
-def get_messages_sign_filter(prefix) -> Callable:
+def get_messages_sign_filter(prefix: bytes, contract_version: int) -> Callable:
     """Returns filter that checks message validity"""
 
     def check_messages(msg: DepositMessage | PauseMessage | UnvetMessage) -> bool:
         v, r, s = _vrs(msg)
-        data, abi = _verification_data(prefix, msg)
+        data, abi = _verification_data(prefix, contract_version, msg)
 
         is_valid = verify_message_with_signature(
             data=data,
@@ -59,37 +59,34 @@ def _select_label(msg: DepositMessage | PauseMessage | UnvetMessage) -> str:
         raise ValueError('Unsupported message type')
 
 
-def _verification_data(prefix: bytes, msg: BotMessage) -> tuple[List[Any], List[str]]:
+def _verification_data(prefix: bytes, contract_version: int, msg: BotMessage) -> tuple[List[Any], List[str]]:
     t = msg['type']
     if t == MessageType.PAUSE:
-        return _verification_data_pause(prefix, cast(PauseMessage, msg))
+        return _verification_data_pause(prefix, contract_version, cast(PauseMessage, msg))
     elif t == MessageType.UNVET:
-        return _verification_data_unvet(prefix, cast(UnvetMessage, msg))
+        return _verification_data_unvet(prefix, contract_version, cast(UnvetMessage, msg))
     elif t == MessageType.DEPOSIT:
-        return _verification_data_deposit(prefix, cast(DepositMessage, msg))
+        return _verification_data_deposit(prefix, contract_version, cast(DepositMessage, msg))
     else:
         raise ValueError('Unsupported message type')
 
 
-def _verification_data_deposit(prefix: bytes, msg: DepositMessage) -> tuple[List[Any], List[str]]:
-    data = [prefix, msg['blockNumber'], msg['blockHash'], msg['depositRoot'], msg['stakingModuleId'], msg['nonce']]
-    abi = ['bytes32', 'uint256', 'bytes32', 'bytes32', 'uint256', 'uint256']
+def _verification_data_deposit(prefix: bytes, contract_version: int, msg: DepositMessage) -> tuple[List[Any], List[str]]:
+    data = [prefix, contract_version, msg['blockNumber'], msg['blockHash'], msg['depositRoot'], msg['stakingModuleId'], msg['nonce']]
+    abi = ['bytes32', 'uint256', 'uint256', 'bytes32', 'bytes32', 'uint256', 'uint256']
     return data, abi
 
 
-def _verification_data_pause(prefix: bytes, msg: PauseMessage) -> tuple[List[Any], List[str]]:
-    if 'stakingModuleId' in msg:
-        data = [prefix, msg['blockNumber'], msg['stakingModuleId']]
-        abi = ['bytes32', 'uint256', 'uint256']
-    else:
-        data = [prefix, msg['blockNumber']]
-        abi = ['bytes32', 'uint256']
+def _verification_data_pause(prefix: bytes, contract_version: int, msg: PauseMessage) -> tuple[List[Any], List[str]]:
+    data = [prefix, contract_version, msg['blockNumber']]
+    abi = ['bytes32', 'uint256', 'uint256']
     return data, abi
 
 
-def _verification_data_unvet(prefix: bytes, msg: UnvetMessage) -> tuple[List[Any], List[str]]:
+def _verification_data_unvet(prefix: bytes, contract_version: int, msg: UnvetMessage) -> tuple[List[Any], List[str]]:
     data = [
         prefix,
+        contract_version,
         msg['blockNumber'],
         msg['blockHash'],
         msg['stakingModuleId'],
@@ -97,5 +94,5 @@ def _verification_data_unvet(prefix: bytes, msg: UnvetMessage) -> tuple[List[Any
         from_hex_string_to_bytes(msg['operatorIds']),
         from_hex_string_to_bytes(msg['vettedKeysByOperator']),
     ]
-    abi = ['bytes32', 'uint256', 'bytes32', 'uint256', 'uint256', 'bytes', 'bytes']
+    abi = ['bytes32', 'uint256', 'uint256', 'bytes32', 'uint256', 'uint256', 'bytes', 'bytes']
     return data, abi

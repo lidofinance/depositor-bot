@@ -53,11 +53,6 @@
   },
   {
     "inputs": [],
-    "name": "DuplicateValidatorIndex",
-    "type": "error"
-  },
-  {
-    "inputs": [],
     "name": "IndexOutOfRange",
     "type": "error"
   },
@@ -73,12 +68,12 @@
   },
   {
     "inputs": [],
-    "name": "InvalidSignLength",
+    "name": "InvalidSlot",
     "type": "error"
   },
   {
     "inputs": [],
-    "name": "InvalidSlot",
+    "name": "InvalidValidatorIndicesSortOrder",
     "type": "error"
   },
   {
@@ -99,6 +94,21 @@
   {
     "inputs": [],
     "name": "NotInitializing",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "PauseUntilMustBeInFuture",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "PausedExpected",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ResumedExpected",
     "type": "error"
   },
   {
@@ -139,6 +149,22 @@
   {
     "inputs": [],
     "name": "WrongWithdrawalCredentials",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "string",
+        "name": "argument",
+        "type": "string"
+      }
+    ],
+    "name": "ZeroArgument",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ZeroPauseDuration",
     "type": "error"
   },
   {
@@ -209,6 +235,25 @@
       }
     ],
     "name": "MinBlockDistanceChanged",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "duration",
+        "type": "uint256"
+      }
+    ],
+    "name": "Paused",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [],
+    "name": "Resumed",
     "type": "event"
   },
   {
@@ -385,12 +430,51 @@
   },
   {
     "inputs": [],
+    "name": "PAUSE_INFINITELY",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "PAUSE_ROLE",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
     "name": "PIVOT_SLOT",
     "outputs": [
       {
         "internalType": "uint64",
         "name": "",
         "type": "uint64"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "RESUME_ROLE",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
       }
     ],
     "stateMutability": "view",
@@ -417,25 +501,6 @@
         "internalType": "bytes32",
         "name": "",
         "type": "bytes32"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "_stakingModuleId",
-        "type": "uint256"
-      }
-    ],
-    "name": "canTopUp",
-    "outputs": [
-      {
-        "internalType": "bool",
-        "name": "",
-        "type": "bool"
       }
     ],
     "stateMutability": "view",
@@ -496,6 +561,19 @@
   {
     "inputs": [],
     "name": "getMinTopUpGwei",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getResumeSinceTimestamp",
     "outputs": [
       {
         "internalType": "uint256",
@@ -656,7 +734,7 @@
       },
       {
         "internalType": "uint256",
-        "name": "_minBlockDistance",
+        "name": "_minTopUpBlockDistance",
         "type": "uint256"
       },
       {
@@ -681,6 +759,58 @@
     "type": "function"
   },
   {
+    "inputs": [],
+    "name": "isBlockDistancePassed",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "isPaused",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_duration",
+        "type": "uint256"
+      }
+    ],
+    "name": "pauseFor",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_pauseUntilInclusive",
+        "type": "uint256"
+      }
+    ],
+    "name": "pauseUntil",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
     "inputs": [
       {
         "internalType": "bytes32",
@@ -694,6 +824,13 @@
       }
     ],
     "name": "renounceRole",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "resume",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
