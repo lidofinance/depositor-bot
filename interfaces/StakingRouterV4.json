@@ -58,6 +58,11 @@
   },
   {
     "inputs": [],
+    "name": "AlreadyMigrated",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "AmountNotAlignedToGwei",
     "type": "error"
   },
@@ -108,6 +113,11 @@
   },
   {
     "inputs": [],
+    "name": "InvalidMaxTopUpPerBlockGwei",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "InvalidMinDepositBlockDistance",
     "type": "error"
   },
@@ -130,6 +140,11 @@
   {
     "inputs": [],
     "name": "InvalidStakeShareLimit",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "LidoDepositsPaused",
     "type": "error"
   },
   {
@@ -196,6 +211,22 @@
   {
     "inputs": [],
     "name": "StakingModulesLimitExceeded",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "expected",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "actual",
+        "type": "uint256"
+      }
+    ],
+    "name": "UnexpectedContractVersion",
     "type": "error"
   },
   {
@@ -319,6 +350,25 @@
       }
     ],
     "name": "Initialized",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "maxTopUpPerBlockGwei",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "setBy",
+        "type": "address"
+      }
+    ],
+    "name": "MaxTopUpPerBlockGweiSet",
     "type": "event"
   },
   {
@@ -644,6 +694,25 @@
       }
     ],
     "name": "StakingRouterETHDeposited",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "stakingModuleId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      }
+    ],
+    "name": "StakingRouterETHTopUp",
     "type": "event"
   },
   {
@@ -1010,25 +1079,6 @@
         "internalType": "uint256",
         "name": "_stakingModuleId",
         "type": "uint256"
-      }
-    ],
-    "name": "canDeposit",
-    "outputs": [
-      {
-        "internalType": "bool",
-        "name": "",
-        "type": "bool"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "_stakingModuleId",
-        "type": "uint256"
       },
       {
         "internalType": "bytes",
@@ -1065,7 +1115,13 @@
     "type": "function"
   },
   {
-    "inputs": [],
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_maxTopUpPerBlockGwei",
+        "type": "uint256"
+      }
+    ],
     "name": "finalizeUpgrade_v4",
     "outputs": [],
     "stateMutability": "nonpayable",
@@ -1320,6 +1376,19 @@
         "internalType": "uint256[]",
         "name": "newAllocations",
         "type": "uint256[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getMaxTopUpPerBlockGwei",
+    "outputs": [
+      {
+        "internalType": "uint64",
+        "name": "",
+        "type": "uint64"
       }
     ],
     "stateMutability": "view",
@@ -2750,6 +2819,19 @@
       }
     ],
     "name": "revokeRole",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_newValue",
+        "type": "uint256"
+      }
+    ],
+    "name": "setMaxTopUpPerBlockGwei",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
