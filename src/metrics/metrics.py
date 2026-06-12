@@ -80,13 +80,6 @@ QUORUM = Gauge(
     namespace=PROMETHEUS_PREFIX,
 )
 
-CAN_DEPOSIT = Gauge(
-    'can_deposit',
-    'Represents can_deposit check.',
-    ['module_id'],
-    namespace=PROMETHEUS_PREFIX,
-)
-
 GAS_OK = Gauge(
     'is_gas_ok',
     'Represents is_gas_ok check.',

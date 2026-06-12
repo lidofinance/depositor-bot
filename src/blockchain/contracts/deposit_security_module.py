@@ -3,7 +3,6 @@ from functools import lru_cache
 
 from blockchain.contracts.base_interface import ContractInterface
 from eth_typing import ChecksumAddress, Hash32
-from metrics.metrics import CAN_DEPOSIT
 from web3.contract.contract import ContractFunction
 from web3.types import BlockIdentifier
 
@@ -31,17 +30,6 @@ class DepositSecurityModuleContract(ContractInterface):
     def get_attest_message_prefix(self, block_identifier: BlockIdentifier = 'latest') -> bytes:
         response = self.functions.ATTEST_MESSAGE_PREFIX().call(block_identifier=block_identifier)
         logger.info({'msg': 'Call `ATTEST_MESSAGE_PREFIX()`.', 'value': response.hex(), 'block_identifier': repr(block_identifier)})
-        return response
-
-    def can_deposit(self, staking_module_id: int, block_identifier: BlockIdentifier = 'latest') -> bool:
-        """
-        Returns whether LIDO.deposit() can be called, given that the caller will provide
-        guardian attestations of non-stale deposit root and `nonce`, and the number of
-        such attestations will be enough to reach quorum.
-        """
-        response = self.functions.canDeposit(staking_module_id).call(block_identifier=block_identifier)
-        logger.info({'msg': f'Call `canDeposit({staking_module_id})`.', 'value': response, 'block_identifier': repr(block_identifier)})
-        CAN_DEPOSIT.labels(staking_module_id).set(int(response))
         return response
 
     def is_min_deposit_distance_passed(self, staking_module_id: int, block_identifier: BlockIdentifier = 'latest') -> bool:
