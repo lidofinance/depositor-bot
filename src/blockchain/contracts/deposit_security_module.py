@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 class DepositSecurityModuleContract(ContractInterface):
-    abi_path = './interfaces/DepositSecurityModuleV2.json'
+    abi_path = './interfaces/DepositSecurityModuleV4.json'
 
     @lru_cache(maxsize=1)
     def get_guardian_quorum(self, block_identifier: BlockIdentifier = 'latest') -> int:
