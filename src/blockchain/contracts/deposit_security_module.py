@@ -57,24 +57,25 @@ class DepositSecurityModuleContract(ContractInterface):
         deposit_root: Hash32,
         staking_module_id: int,
         nonce: int,
-        deposit_call_data: bytes,
         guardian_signatures: tuple[tuple[str, str], ...],
     ) -> ContractFunction:
         """
-        Calls LIDO.deposit(maxDepositsPerBlock, stakingModuleId, depositCalldata).
+        Calls STAKING_ROUTER.deposit(stakingModuleId, "") (deposit calldata is always empty in DSMv4).
 
         Reverts if any of the following is true:
         1. IDepositContract.get_deposit_root() != depositRoot.
-        2. StakingModule.getNonce() != nonce.
-        3. The number of guardian signatures is less than getGuardianQuorum().
-        4. An invalid or non-guardian signature received.
+        2. StakingRouter.getStakingModuleNonce() != nonce.
+        3. quorum == 0 or the number of guardian signatures is less than the quorum.
+        4. The module is not active.
         5. block.number - StakingModule.getLastDepositBlock() < minDepositBlockDistance.
-        6. blockhash(blockNumber) != blockHash.
+        6. blockHash is zero or blockhash(blockNumber) != blockHash.
+        7. Deposits are paused.
+        8. An invalid or non-guardian signature received.
 
         Signatures must be sorted in ascending order by address of the guardian. Each signature must
         be produced for the keccak256 hash of the following message (each component taking 32 bytes):
 
-        | ATTEST_MESSAGE_PREFIX | blockNumber | blockHash | depositRoot | stakingModuleId | nonce |
+        | ATTEST_MESSAGE_PREFIX | contractVersion | blockNumber | blockHash | depositRoot | stakingModuleId | nonce |
         """
         tx = self.functions.depositBufferedEther(
             block_number,
@@ -82,13 +83,12 @@ class DepositSecurityModuleContract(ContractInterface):
             deposit_root,
             staking_module_id,
             nonce,
-            deposit_call_data,
             guardian_signatures,
         )
         logger.info(
             {
                 'msg': f'Build `depositBufferedEther({block_number}, {block_hash}, {deposit_root}, {staking_module_id}, '
-                f'{nonce}, {deposit_call_data}, {guardian_signatures})` tx.'  # noqa
+                f'{nonce}, {guardian_signatures})` tx.'  # noqa
             }
         )
         return tx
