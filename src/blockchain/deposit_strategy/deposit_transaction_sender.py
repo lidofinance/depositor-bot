@@ -42,7 +42,6 @@ class Sender:
         deposit_root = Hash32(from_hex_string_to_bytes(quorum[0]['depositRoot']))
         staking_module_id = quorum[0]['stakingModuleId']
         staking_module_nonce = quorum[0]['nonce']
-        payload = b''
         guardian_signs = self._prepare_signs_for_deposit(quorum)
 
         return self._w3.lido.deposit_security_module.deposit_buffered_ether(
@@ -51,7 +50,6 @@ class Sender:
             deposit_root,
             staking_module_id,
             staking_module_nonce,
-            payload,
             guardian_signs,
         )
 
