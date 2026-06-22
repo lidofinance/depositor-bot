@@ -17,7 +17,6 @@ from blockchain.beacon_state.ssz_types import (
 )
 from blockchain.beacon_state.state import BeaconStateData, ValidatorFields
 from blockchain.topup.cmv2_strategy import (
-    MAX_TOP_UP_BALANCE_GWEI,
     CMv2TopUpStrategy,
     _check_key_eligibility,
     _collect_pubkeys,
@@ -27,6 +26,11 @@ from blockchain.topup.cmv2_strategy import (
 from blockchain.topup.types import TopUpCandidate
 from providers.keys_api import LidoKey
 from web3.types import Wei
+
+# Mirror TopUpGateway limits (getTargetBalanceGwei / getMinTopUpGwei).
+TARGET_BALANCE_GWEI = 2_046_750_000_000  # 2046.75 ETH
+MIN_TOP_UP_GWEI = 2_000_000_000  # 2 ETH
+MAX_ELIGIBLE_BALANCE_GWEI = TARGET_BALANCE_GWEI - MIN_TOP_UP_GWEI  # 2044.75 ETH
 
 
 def _build_beacon_state_data(top_up_proof_fixtures) -> BeaconStateData:
@@ -96,6 +100,8 @@ def test_get_cmv2_topup_candidates_builds_proofs_from_fixture_data(top_up_proof_
 
     w3 = MagicMock()
     w3.to_checksum_address.side_effect = lambda address: address
+    w3.lido.topup_gateway.get_target_balance_gwei.return_value = TARGET_BALANCE_GWEI
+    w3.lido.topup_gateway.get_min_top_up_gwei.return_value = MIN_TOP_UP_GWEI
     cmv2_contract = Mock()
     cmv2_contract.get_deposits_allocation.return_value = (
         32 * 10**18,
@@ -147,6 +153,8 @@ def _make_topup_setup(top_up_proof_fixtures):
 
     w3 = MagicMock()
     w3.to_checksum_address.side_effect = lambda address: address
+    w3.lido.topup_gateway.get_target_balance_gwei.return_value = TARGET_BALANCE_GWEI
+    w3.lido.topup_gateway.get_min_top_up_gwei.return_value = MIN_TOP_UP_GWEI
     cmv2_contract = Mock()
     cmv2_contract.get_deposits_allocation.return_value = (32 * 10**18, [11, 12], [16 * 10**18, 16 * 10**18])
     w3.eth.contract.return_value = cmv2_contract
@@ -264,7 +272,7 @@ def test_check_key_eligibility_returns_candidate(top_up_proof_fixtures):
     witness = top_up_proof_fixtures['validator_witnesses'][0]
     key = _make_key(witness['pubkey'], 7, 11)
 
-    candidate = _check_key_eligibility(key, beacon_data, set())
+    candidate = _check_key_eligibility(key, beacon_data, set(), TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI)
 
     assert candidate == TopUpCandidate(
         validator_index=int(witness['validatorIndex']),
@@ -283,34 +291,35 @@ def test_check_key_eligibility_rejects_invalid_cases(top_up_proof_fixtures):
     validator_index = int(witness['validatorIndex'])
     key = _make_key(witness['pubkey'], 7, 11)
 
-    assert _check_key_eligibility(_make_key('0x' + '33' * 48, 7, 11), beacon_data, set()) is None
+    assert _check_key_eligibility(_make_key('0x' + '33' * 48, 7, 11), beacon_data, set(), TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI) is None
 
     # key participating in a pending ConsolidationBus request is excluded
-    assert _check_key_eligibility(key, beacon_data, {pubkey}) is None
+    assert _check_key_eligibility(key, beacon_data, {pubkey}, TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI) is None
 
     beacon_data.consolidation_targets = {validator_index}
-    assert _check_key_eligibility(key, beacon_data, set()) is None
+    assert _check_key_eligibility(key, beacon_data, set(), TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI) is None
     beacon_data.consolidation_targets = set()
 
     fields = beacon_data.validators_fields[validator_index]
 
     beacon_data.validators_fields[validator_index] = fields._replace(slashed=True)
-    assert _check_key_eligibility(key, beacon_data, set()) is None
+    assert _check_key_eligibility(key, beacon_data, set(), TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI) is None
 
     beacon_data.validators_fields[validator_index] = fields._replace(exit_epoch=1)
-    assert _check_key_eligibility(key, beacon_data, set()) is None
+    assert _check_key_eligibility(key, beacon_data, set(), TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI) is None
 
     beacon_data.validators_fields[validator_index] = fields._replace(
         exit_epoch=FAR_FUTURE_EPOCH,
         activation_epoch=beacon_data.slot + 1,
     )
-    assert _check_key_eligibility(key, beacon_data, set()) is None
+    assert _check_key_eligibility(key, beacon_data, set(), TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI) is None
 
+    # balance exactly at the max eligible threshold + any pending pushes it over -> excluded
     beacon_data.validators_fields[validator_index] = fields._replace(
-        effective_balance=MAX_TOP_UP_BALANCE_GWEI,
+        effective_balance=MAX_ELIGIBLE_BALANCE_GWEI,
     )
     beacon_data.pending_deposits = {pubkey: 1}
-    assert _check_key_eligibility(key, beacon_data, set()) is None
+    assert _check_key_eligibility(key, beacon_data, set(), TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI) is None
 
 
 @pytest.mark.unit
@@ -329,39 +338,63 @@ def test_select_operator_candidates_sorts_by_key_index():
                 TopUpCandidate(0, 7, 11, bytes.fromhex('11' * 48), 0),
             ],
         ),
-        patch('blockchain.topup.cmv2_strategy._take_up_to_allocation', side_effect=lambda candidates, allocation, _: candidates) as take,
+        patch(
+            'blockchain.topup.cmv2_strategy._take_up_to_allocation',
+            side_effect=lambda candidates, allocation, beacon, target, min_top_up: candidates,
+        ) as take,
     ):
-        result = _select_operator_candidates(keys, 16 * 10**18, beacon_data, set())
+        result = _select_operator_candidates(keys, 16 * 10**18, beacon_data, set(), TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI)
 
     assert [candidate.key_index for candidate in result] == [7, 8]
     assert take.call_args.args[0] == result
 
 
 @pytest.mark.unit
-def test_take_up_to_allocation_respects_remaining_and_skips_zero_topup():
+def test_take_up_to_allocation_respects_remaining_and_skips_below_min_topup():
     beacon_data = Mock(
         validators_fields={
-            0: _make_fields(MAX_TOP_UP_BALANCE_GWEI - 10),  # needs 10 Gwei
-            1: _make_fields(MAX_TOP_UP_BALANCE_GWEI - 20),  # needs 20 Gwei
-            2: _make_fields(MAX_TOP_UP_BALANCE_GWEI),  # needs 0 Gwei — skip
+            0: _make_fields(TARGET_BALANCE_GWEI - 3 * 10**9),  # needs 3 ETH
+            1: _make_fields(TARGET_BALANCE_GWEI - 4 * 10**9),  # needs 4 ETH
+            2: _make_fields(TARGET_BALANCE_GWEI - 10**9),  # needs 1 ETH < 2 ETH min — skip
+            3: _make_fields(TARGET_BALANCE_GWEI),  # needs 0 — skip
         }
     )
     candidates = [
         TopUpCandidate(0, 1, 11, b'a', 0),
+        TopUpCandidate(2, 3, 11, b'c', 0),  # below min — skipped
+        TopUpCandidate(3, 4, 11, b'd', 0),  # zero — skipped
         TopUpCandidate(1, 2, 11, b'b', 0),
-        TopUpCandidate(2, 3, 11, b'c', 0),
     ]
 
-    # 15 Gwei in Wei — enough for candidate 0 (10 Gwei), then 10+20=30 > 15 so stops after candidate 1
-    result = _take_up_to_allocation(candidates, 15 * 10**9, beacon_data)
+    # 6 ETH allocation: candidate 0 (3 ETH) -> remaining 3 ETH, skip below-min/zero,
+    # candidate 1 (4 ETH) exhausts remaining and stops.
+    result = _take_up_to_allocation(candidates, 6 * 10**18, beacon_data, TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI)
 
-    assert result == candidates[:2]
+    assert result == [candidates[0], candidates[3]]
+
+
+@pytest.mark.unit
+def test_take_up_to_allocation_skips_sub_min_tail():
+    """A validator that would receive a sub-min partial top-up from the leftover budget is not selected.
+
+    Budget 4.5 ETH, validators each with 2.75 ETH room: the first is funded fully (2.75 ETH),
+    leaving 1.75 ETH < 2 ETH min — the contract would revert on the second, so it must be dropped.
+    """
+    room_gwei = 2_750_000_000  # 2.75 ETH
+    fields = _make_fields(TARGET_BALANCE_GWEI - room_gwei)
+    beacon_data = Mock(validators_fields={0: fields, 1: fields, 2: fields})
+    candidates = [TopUpCandidate(i, i, 0, bytes([i]), 0) for i in range(3)]
+
+    # 4.5 ETH allocation
+    result = _take_up_to_allocation(candidates, 9 * 10**18 // 2, beacon_data, TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI)
+
+    assert result == [candidates[0]]
 
 
 @pytest.mark.unit
 def test_take_up_to_allocation_log_scenario_1216_eth():
     """Reproduces devnet log: allocation=1216 ETH, 25 validators each with 32 ETH balance.
-    topup per validator = 2045.75 - 32 = 2013.75 ETH > 1216 ETH allocation,
+    topup per validator = 2046.75 - 32 = 2014.75 ETH > 1216 ETH allocation,
     so only 1 candidate should be selected.
     """
     balance_gwei = 32 * 10**9  # 32 ETH in Gwei
@@ -371,8 +404,8 @@ def test_take_up_to_allocation_log_scenario_1216_eth():
 
     # 1216 ETH in Wei — from the log
     allocation_wei = 1216 * 10**18
-    result = _take_up_to_allocation(candidates, allocation_wei, beacon_data)
+    result = _take_up_to_allocation(candidates, allocation_wei, beacon_data, TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI)
 
-    # topup per validator = 2_013_750_000_000 Gwei (2013.75 ETH) > 1216 ETH allocation
+    # topup per validator = 2_014_750_000_000 Gwei (2014.75 ETH) > 1216 ETH allocation
     # first candidate exhausts allocation → only 1 selected
     assert len(result) == 1

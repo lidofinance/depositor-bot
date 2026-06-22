@@ -18,8 +18,6 @@ from providers.keys_api import KeysAPIClient, LidoKey
 from web3.types import Wei
 
 logger = logging.getLogger(__name__)
-# todo: maybe read from the contract
-MAX_TOP_UP_BALANCE_GWEI = 2_045_750_000_000  # 2045.75 ETH
 
 
 class CMv2TopUpStrategy(TopUpStrategy):
@@ -91,10 +89,35 @@ class CMv2TopUpStrategy(TopUpStrategy):
             }
         )
 
+        # Balance limits mirror TopUpGateway._evaluateTopUpLimit (cached on the contract; may change
+        # via setTopUpBalanceLimits). A validator whose balance leaves less than min_top_up_gwei of
+        # headroom yields an on-chain limit of 0, so we treat target - min as the max eligible balance.
+        gateway = self.w3.lido.topup_gateway
+        target_balance_gwei = gateway.get_target_balance_gwei()
+        min_top_up_gwei = gateway.get_min_top_up_gwei()
+        max_eligible_balance_gwei = target_balance_gwei - min_top_up_gwei
+        logger.info(
+            {
+                'msg': 'TopUp balance limits.',
+                'target_balance_gwei': target_balance_gwei,
+                'min_top_up_gwei': min_top_up_gwei,
+                'max_eligible_balance_gwei': max_eligible_balance_gwei,
+            }
+        )
+
         # Step 6: select candidates per operator (excluding keys in pending ConsolidationBus requests)
         candidates: list[TopUpCandidate] = []
         for op_id, op_allocation in allocation_by_operator.items():
-            candidates.extend(_select_operator_candidates(keys_by_operator[op_id], op_allocation, beacon_data, pending_consolidation))
+            candidates.extend(
+                _select_operator_candidates(
+                    keys_by_operator[op_id],
+                    op_allocation,
+                    beacon_data,
+                    pending_consolidation,
+                    target_balance_gwei,
+                    min_top_up_gwei,
+                )
+            )
 
         # LidoKey instances are no longer needed; free before the memory-heavy proof build.
         del keys_by_operator
@@ -126,18 +149,26 @@ def _select_operator_candidates(
     allocation: int,
     beacon_data: BeaconStateData,
     pending_consolidation: set[bytes],
+    target_balance_gwei: int,
+    min_top_up_gwei: int,
 ) -> List[TopUpCandidate]:
     eligible = []
     for key in keys:
-        candidate = _check_key_eligibility(key, beacon_data, pending_consolidation)
+        candidate = _check_key_eligibility(key, beacon_data, pending_consolidation, target_balance_gwei, min_top_up_gwei)
         if candidate is not None:
             eligible.append(candidate)
 
     eligible.sort(key=lambda c: c.validator_index)
-    return _take_up_to_allocation(eligible, allocation, beacon_data)
+    return _take_up_to_allocation(eligible, allocation, beacon_data, target_balance_gwei, min_top_up_gwei)
 
 
-def _check_key_eligibility(key: LidoKey, beacon_data: BeaconStateData, pending_consolidation: set[bytes]) -> Optional[TopUpCandidate]:
+def _check_key_eligibility(
+    key: LidoKey,
+    beacon_data: BeaconStateData,
+    pending_consolidation: set[bytes],
+    target_balance_gwei: int,
+    min_top_up_gwei: int,
+) -> Optional[TopUpCandidate]:
     pubkey = Web3.to_bytes(hexstr=HexStr(key.key))
 
     # Exclude keys participating in a pending ConsolidationBus request (source or target).
@@ -160,8 +191,10 @@ def _check_key_eligibility(key: LidoKey, beacon_data: BeaconStateData, pending_c
         return None
     if validator_index in beacon_data.consolidation_targets:
         return None
-    # TopUpGateway also checks effective balance on-chain
-    if fields.effective_balance + pending > MAX_TOP_UP_BALANCE_GWEI:
+    # Mirror TopUpGateway._evaluateTopUpLimit: a balance above (target - min) leaves less than the
+    # minimum meaningful top-up, so the contract would return limit 0 — exclude such keys here too.
+    max_eligible_balance_gwei = target_balance_gwei - min_top_up_gwei
+    if fields.effective_balance + pending > max_eligible_balance_gwei:
         return None
 
     return TopUpCandidate(
@@ -189,16 +222,23 @@ def _take_up_to_allocation(
     candidates: List[TopUpCandidate],
     allocation_wei: int,
     beacon_data: BeaconStateData,
+    target_balance_gwei: int,
+    min_top_up_gwei: int,
 ) -> List[TopUpCandidate]:
     result = []
     remaining = allocation_wei // 10**9
     for c in candidates:
+        # Stop before adding a validator the leftover budget can't fund to at least the minimum:
+        # the contract spends the allocation in order and tops the last validator up only by what
+        # remains — if that is < min it reverts. Checked before append so a sub-min tail is never selected.
+        if remaining < min_top_up_gwei:
+            break
         balance = beacon_data.validators_fields[c.validator_index].effective_balance
-        topup_amount = MAX_TOP_UP_BALANCE_GWEI - (balance + c.pending_balance)
-        if topup_amount <= 0:
+        topup_amount = target_balance_gwei - (balance + c.pending_balance)
+        # Already at/near the cap — the contract tops up nothing (mirrors TopUpGateway._evaluateTopUpLimit).
+        if topup_amount < min_top_up_gwei:
             continue
         result.append(c)
+        # May go negative: the last selected validator absorbs the remaining budget as a partial top-up.
         remaining -= topup_amount
-        if remaining <= 0:
-            break
     return result
