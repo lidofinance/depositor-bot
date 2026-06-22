@@ -18,6 +18,18 @@ class TopUpGatewayContract(ContractInterface):
         logger.info({'msg': 'Call `getMaxValidatorsPerTopUp()`.', 'value': response, 'block_identifier': repr(block_identifier)})
         return response
 
+    @lru_cache(maxsize=1)
+    def get_target_balance_gwei(self, block_identifier: BlockIdentifier = 'latest') -> int:
+        response = self.functions.getTargetBalanceGwei().call(block_identifier=block_identifier)
+        logger.info({'msg': 'Call `getTargetBalanceGwei()`.', 'value': response, 'block_identifier': repr(block_identifier)})
+        return response
+
+    @lru_cache(maxsize=1)
+    def get_min_top_up_gwei(self, block_identifier: BlockIdentifier = 'latest') -> int:
+        response = self.functions.getMinTopUpGwei().call(block_identifier=block_identifier)
+        logger.info({'msg': 'Call `getMinTopUpGwei()`.', 'value': response, 'block_identifier': repr(block_identifier)})
+        return response
+
     def is_paused(self, block_identifier: BlockIdentifier = 'latest') -> bool:
         response = self.functions.isPaused().call(block_identifier=block_identifier)
         logger.info({'msg': 'Call `isPaused()`.', 'value': response, 'block_identifier': repr(block_identifier)})
