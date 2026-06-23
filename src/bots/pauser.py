@@ -119,4 +119,4 @@ class PauserBot:
 
     def _sign_filter(self) -> Callable:
         prefix = self.w3.lido.deposit_security_module.get_pause_message_prefix()
-        return get_messages_sign_filter(prefix, self.w3.lido.dsm_version)
+        return get_messages_sign_filter(prefix)
