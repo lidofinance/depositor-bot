@@ -1,157 +1,150 @@
 # Depositor bot algorithm
 
 This document describes the per-iteration logic of `DepositorBot.execute()`.
-The implementation lives in `src/bots/depositor.py`; this is the authoritative
-spec the implementation follows.
+The implementation lives in `src/bots/depositor.py`.
 
-## Glossary
+## How `execute()` is driven
 
-- **wc_type** — the withdrawal-credentials type of a staking module:
-  `0x01` = full-deposit (32 ETH) modules; `0x02` = top-up modules.
-- **seed allocation** — `getDepositAllocations(eth, is_top_up=False)`. The
-  baseline allocation of buffered ETH across modules, used by both phases for
-  candidate selection and ordering.
-- **top-up allocation** — `getDepositAllocations(eth, is_top_up=True)`. Takes
-  per-module top-up capacity into account; only computed when phase B with
-  `ENABLE_TOP_UP=True` actually runs.
-- **stake** — sort key for candidates: `new_allocations[i] - allocated[i]`.
-  Lower stake → higher priority (we feed underfunded modules first).
-- **quorum-retention cooldown** — `now - last_heart_beat <= QUORUM_RETENTION_MINUTES`.
-  Records when a module last had a guardian quorum; protects against premature
-  fall-through when council messages are simply late.
+The bot runs in a loop for as long as the process is alive (`Executor`,
+`src/blockchain/executor.py`): it waits for the next scheduled block, calls
+`bot.execute(block)` (which checks balances and then runs the deposit algorithm),
+and the bool that `execute` returns sets when it runs next:
+- `True` → schedule `BLOCKS_BETWEEN_EXECUTION` blocks ahead (we acted, or hit a
+  wait that won't clear soon — back off);
+- `False` → run again on the very next block (keep polling).
 
----
 
-## Step 0 — Preparation (before module selection)
+## Step 1 — Check balances
 
-1. `_check_balance()` — refresh account / guardian balance metrics.
-2. For each module in `DEPOSIT_MODULES_WHITELIST`:
-   - call `_get_quorum(module_id)` (also refreshes `_module_last_heart_beat`);
-   - call `_select_strategy(module_id).is_gas_price_ok(module_id)` — **for
-     metrics only**, never as a gate.
+**What it does.** Every run starts by refreshing balance metrics: how much ETH
+the bot's own account holds and how much each guardian holds. This is
+monitoring only — it never blocks a deposit or top-up.
 
-Neither call gates execution at this stage; gas and quorum are re-checked at
-the points where they actually matter (`_deposit_to_module`, phase iteration).
+**How.** `_check_balance()`:
+- If an account is configured, read its balance and write it to the
+  `ACCOUNT_BALANCE` metric.
+- Read the guardian list from the DSM (`get_guardians()`), then read each
+  guardian's balance on every connected provider (the main RPC, plus the
+  on-chain-transport RPC when that transport is enabled) and write them to the
+  `GUARDIAN_BALANCE` metric.
 
-## Step 1 — `execute()`
+**Why.** These numbers feed monitoring/alerting so operators notice a drained
+bot account or an under-funded guardian early. They take no part in any
+deposit/top-up decision.
 
-- Call `_execute_actual()`.
+## Step 2 — Main algorithm (`_execute_actual`)
 
-(There is no legacy `_execute_legacy` branch in the current code; all
-StakingRouter versions in scope are v4+.)
+**What it does.** The core of the bot: figure out which module needs ETH and try
+to deposit or top it up. It runs right after `_check_balance()` and returns the
+bool value that `execute()` hands back to the Executor.
 
-## Step 2 — `_execute_actual()` dispatcher
+**How.** First it refreshes what the bot knows about each module, then it runs a
+few must-pass checks (and exits early if any fails), reads the allocation it will
+reuse later, and finally hands off to the two phases.
 
-- Run **phase A**.
-  - Phase A returned `(True, success)` → return `success`. We deposited (or
-    tried and hit gas/quorum guards) — done for this iteration.
-  - Phase A returned `(True, False)` with reason = **cooldown** → end the
-    bot iteration. Do **not** fall through to phase B; we wait for the next
-    bot tick to give the council more time.
-  - Phase A returned `(False, False)` (no candidates) → continue to phase B.
-- Run **phase B** with the same `(done, success)` semantics:
-  - success → end; cooldown → end; empty → end.
+1. **Refresh module state.** For every whitelisted module we look up whether it
+   has a guardian quorum right now; if it does, we stamp "now" as that module's
+   last heartbeat — this is what the retention window later measures against. We
+   also run a gas-price probe, but only to publish a metric. Nothing here blocks
+   anything: gas and quorum are checked again later, where they actually matter.
+   Method: `_refresh_modules_state()`.
 
-Both phases share the same return contract:
+2. **Must-pass checks — exit early if any fails.** A deposit or top-up can only
+   happen if all of these hold, so we check them up front and stop the whole
+   iteration the moment one is missing:
+   - non-zero depositable ether — `lido.get_depositable_ether() != 0`;
+   - the protocol allows deposits and a guardian quorum is configured: `lido.can_deposit()` and
+     `dsm.get_guardian_quorum() != 0`.
+   On any miss we return `False`, and the Executor just retries on the next block
+   (no back-off), so the bot resumes the moment the state recovers.
 
-```
-done = True   →  caller stops this iteration (we acted or hit cooldown)
-done = False  →  phase produced nothing; caller continues to the next phase
-```
+3. **Note whether deposits are paused.** We read the DSM pause flag once —
+   `dsm.is_deposits_paused()`. Pausing stops deposits but not top-ups, so we
+   don't exit here: we just remember the flag and use it to skip deposit
+   candidates this iteration while top-ups keep flowing.
 
-## Step 3 — Phase A — seed deposits into 0x02 modules
+4. **Read the allocation once.** We ask the StakingRouter how the buffered ETH
+   would spread across modules — the seed allocation, via
+   `getDepositAllocations(eth, is_top_up=False)`. We compute it a single time
+   here and reuse it in both phases to pick and order candidates: phase A for
+   seed deposits to `0x02` modules, phase B for full deposits to `0x01` modules.
+   (Phase B additionally computes a top-up variant when top-up is enabled.)
 
-1. `depositable_ether = lido.get_depositable_ether()`.
-   - If `0` → nothing to do this iteration, return `False` immediately. (The
-     buffer is empty; even top-ups have nothing to draw against.)
-2. `seed_allocated, seed_new = getDepositAllocations(eth, is_top_up=False)`.
-   Result is computed once in `_execute_actual` and **forwarded to phase B**
-   so it doesn't recompute.
-3. Stream candidates while iterating the module digests (no separate list +
-   second pass):
-   - `wc_type == 2`
-   - module in `DEPOSIT_MODULES_WHITELIST`
-   - `seed_allocated[i] > 0`
-4. Sort candidates by `stake = seed_new[i] - seed_allocated[i]` ascending.
-5. Iterate:
-   - `canDeposit(module_id) == False` → `next`.
-   - Quorum available right now (`_get_quorum(module_id) is not None`)?
-     - **Yes** → `_deposit_to_module(module_id)` (gas check + send happen
-       inside). Return its result; **stop iterating modules**.
-     - **No** → cooldown active (`now - last_heart_beat <= QUORUM_RETENTION_MINUTES`)?
-       - **Yes** → exit phase A with reason "cooldown". Phase B is **not**
-         entered; we wait for the next bot tick.
-       - **No** → `next`.
-6. If candidates exhaust without acting → phase A is empty, fall through to
-   phase B.
+5. **Phase A — seed deposits to `0x02` modules** (`_phase_seed`)
+     Only `0x02` candidates, only while the DSM is not paused.
+     - collect candidates: whitelisted, active, non-zero seed allocation;
+     - sort ascending by stake;
+     - go through candidates; the first one that isn't "stale" decides the outcome
+       and stops the phase:
+       - distance not passed → wait, stop;
+       - quorum ready → deposit (gas + quorum re-checked before send), stop;
+       - quorum on cooldown → wait next block, stop;
+       - no quorum for a while (stale) → try the next candidate;
+     - no candidate acted → fall through to phase B.
 
-## Step 4 — Phase B
+6. **Phase B — full `0x01` deposits, plus top-ups to `0x02`** (`_phase_full` / `_phase_full_and_topup`)
+     Full `0x01` deposits, plus `0x02` top-ups when top-ups are on
+     (`ENABLE_TOP_UP` and the TopUpGateway not paused). Top-ups off → `0x01` only;
+     top-ups off and deposits paused → nothing to do.
+     - collect candidates: `0x01` from seed allocation (skipped while deposits
+       paused), `0x02` from top-up allocation; each whitelisted, active, non-zero
+       allocation;
+     - merge both types, sort ascending by stake;
+     - go through candidates; the first one that isn't "stale" decides the outcome
+       and stops the phase:
+       - `0x01` → same as phase A (distance → quorum: deposit / cooldown wait / stale → next);
+       - `0x02` top-up → no quorum needed; top-up distance not passed → wait, stop;
+         else top-up, stop (a top-up never goes "stale", so it never tries the next candidate);
+     - no candidate acted → iteration ends, retry on the next block.
 
-### B.0 — `ENABLE_TOP_UP == False`
 
-1. Reuse `seed_allocated`, `seed_new` from step 3.2 (computed in
-   `_execute_actual`).
-2. Candidates: `wc_type == 1`, module in whitelist, `seed_allocated[i] > 0`.
-3. Sort by `stake = seed_new[i] - seed_allocated[i]` and iterate exactly as
-   in step 3.5 (`canDeposit → quorum-now → cooldown → next/stop/deposit`).
-4. End.
+## Deposit into a module (`_deposit_to_module`)
 
-### B.1 — `ENABLE_TOP_UP == True`
+Runs the final gas and quorum checks for one module, then builds and sends the
+deposit transaction.
+- pick the strategy: CSM module → CSM strategy, otherwise the default one
+  (`_select_strategy`) — they differ only in the gas rule;
+- gas check — `strategy.is_gas_price_ok(module_id)`; too high → stop, no deposit
+  (there is no keys-count check anymore);
+- quorum re-check — read the quorum again (`_get_quorum`); if it is no longer
+  there → stop;
+- build & send — `prepare_and_send_tx`: sort the guardian signatures by address,
+  build the `depositBufferedEther` tx, dry-run it locally (`transaction.check`),
+  then send it (via the private/flashbots relay if configured, otherwise a normal
+  broadcast);
+- return whether the tx made it on-chain.
 
-1. `topup_allocated, topup_new = getDepositAllocations(eth, is_top_up=True)`
-   (this variant factors in per-module top-up capacity).
-2. Candidates: module in whitelist, with per-type allocation filter:
-   - `wc_type == 2` → requires `topup_allocated[i] > 0`.
-   - `wc_type == 1` → requires `seed_allocated[i] > 0` (full deposits draw
-     from the seed allocation, not the top-up one).
-3. Sort key: `stake` per type:
-   - 0x02: `topup_new[i] - topup_allocated[i]`.
-   - 0x01: `seed_new[i] - seed_allocated[i]`.
-4. Iterate:
-   - **0x02 candidate (top-up):**
-     - `topup_gateway.can_top_up(module_id)` False → `next`.
-     - `topup_gateway.is_block_distance_passed(module_id)` (new method; while
-       the contract is not yet deployed it returns `True` and logs a warning):
-       - **False** → exit phase B, wait for the next bot tick.
-       - **True** → `_top_up_to_module(module_id, module_address,
-         module_allocation = topup_allocated[i])`. Return its result; **stop
-         iterating**.
-   - **0x01 candidate (full deposit):**
-     - `canDeposit(module_id)` False → `next`.
-     - Quorum available right now?
-       - **Yes** → `_deposit_to_module(module_id)` (gas check + send inside).
-         The deposit itself doesn't take an allocation parameter — the DSM
-         contract decides the deposit count from current chain state. Return
-         its result; **stop iterating**.
-       - **No** → cooldown active?
-         - **Yes** → exit phase B, wait for the next bot tick.
-         - **No** → `next`.
-5. End of iteration — if nothing acted, return `(False, False)` to the
-   dispatcher.
+ ## Top up a module (`_top_up_to_module`)
 
-## Step 5 — `_deposit_to_module(module_id)`
+  Runs the checks for one `0x02` module and sends the top-up. No guardian quorum is
+  involved — only the bot can call top-up.
+  - pick the strategy by module type — `CMv2TopUpStrategy` for `curated-onchain-v2`;
+    unknown type → stop;
+  - gas check — `strategy.is_gas_price_ok()`; too high → stop;
+  - cap the batch — `max_validators = min(MAX_VALIDATORS_PER_TOP_UP,
+    topup_gateway.get_max_validators_per_top_up())`;
+  - pick which validators to top up — `get_topup_candidates(...)` (below); none → stop;
+  - build & send — `topup_gateway.top_up(module_id, proof_data)`, dry-run locally
+    (`transaction.check`), then send without the private relay
+    (`transaction.send(..., use_relay=False)`);
+  - return whether the tx made it on-chain.
 
-1. `gas_ok = strategy.is_gas_price_ok(module_id)`. No keys-count check —
-   `can_deposit_keys_based_on_*` is gone and there is no separate
-   keys-amount branch.
-2. If `gas_ok` is `False` → return `False`.
-3. Collect the quorum, call `prepare_and_send_tx(module_id, quorum)`.
-4. Return the result.
+  ### Selecting validators (`get_topup_candidates`, CMv2)
 
-(A defensive quorum re-check between steps 2 and 3 guards against the rare
-case where the quorum disappears mid-iteration.)
-
-## Step 6 — `_top_up_to_module(module_id, module_address, module_allocation)`
-
-1. Select a strategy by module type (`CMv2TopUpStrategy` for
-   `curated-onchain-v2`); unknown type → return `False`.
-2. `gas_ok = strategy.is_gas_price_ok()` — no keys-count check. If `False`
-   → return `False`.
-3. `max_validators = min(MAX_VALIDATORS_PER_TOP_UP,
-   topup_gateway.get_max_validators_per_top_up())`.
-4. `proof_data = strategy.get_topup_candidates(..., module_allocation,
-   max_validators)`. The allocation is **forwarded**, not recomputed via
-   `getDepositAllocations`.
-5. If `proof_data` is empty → return `False`.
-6. `topup_gateway.top_up(module_id, proof_data)` → `transaction.check` →
-   `transaction.send`. Return the result.
+  Turns the module's top-up allocation into a concrete list of validators and their proofs:
+  - split the allocation across operators — `cmv2.get_deposits_allocation`; nothing
+    allocated → stop;
+  - fetch those operators' used keys from the Keys API;
+  - sync the consolidation index up to the finalized block (before the heavy load);
+    if it fails → skip the top-up, so we never risk topping up a consolidating key;
+  - load the beacon state for these keys (anchors the proof slot — the heavy step):
+    gives each validator's index, balance and pending deposits;
+  - read the set of keys in pending ConsolidationBus requests (to exclude them);
+  - read the top-up balance limits from the gateway (target balance, min top-up);
+    a validator is eligible only up to `target − min`;
+  - per operator, keep validators that are: not in a pending consolidation (as source
+    or target), present in the state, active, not slashed, not exiting, not a
+    consolidation target, and below the eligible balance cap; take them in order until
+    the operator's allocation runs out (never leaving a below-minimum top-up);
+  - sort all candidates by validator index (the gateway requires strictly ascending),
+    cap to `max_validators`, and build the SSZ proofs (`build_topup_proofs`).
