@@ -53,26 +53,6 @@ CURRENT_QUORUM_SIZE = Gauge(
     namespace=PROMETHEUS_PREFIX,
 )
 
-DEPOSITABLE_ETHER = Gauge(
-    'depositable_ether',
-    'Depositable Ether',
-    namespace=PROMETHEUS_PREFIX,
-)
-
-POSSIBLE_DEPOSITS_AMOUNT = Gauge(
-    'possible_deposits_amount',
-    'Possible deposits amount.',
-    ['module_id'],
-    namespace=PROMETHEUS_PREFIX,
-)
-
-IS_DEPOSITABLE = Gauge(
-    'is_depositable',
-    'Represents is_depositable check.',
-    ['module_id'],
-    namespace=PROMETHEUS_PREFIX,
-)
-
 QUORUM = Gauge(
     'quorum',
     'Represents if quorum could be collected.',
@@ -83,13 +63,6 @@ QUORUM = Gauge(
 GAS_OK = Gauge(
     'is_gas_ok',
     'Represents is_gas_ok check.',
-    ['module_id'],
-    namespace=PROMETHEUS_PREFIX,
-)
-
-DEPOSIT_AMOUNT_OK = Gauge(
-    'is_deposit_amount_ok',
-    'Represents is_deposit_amount_ok check.',
     ['module_id'],
     namespace=PROMETHEUS_PREFIX,
 )
@@ -131,7 +104,7 @@ DEPOSITS_PAUSED = Gauge(
 
 TOPUP_GATEWAY_PAUSED = Gauge(
     'topup_gateway_paused',
-    '1 when TopUpGateway.isPaused() is true. Only set when ENABLE_TOP_UP=true.',
+    '1 when TopUpGateway.isPaused() is true. 0 when ENABLE_TOP_UP=false.',
     namespace=PROMETHEUS_PREFIX,
 )
 
@@ -148,6 +121,13 @@ MODULE_STATUS = Gauge(
 PHASE_OUTCOME = Gauge(
     'phase_outcome',
     'Last outcome for a module in a given phase. 0=skipped 1=sent 2=tx_failed 3=wait_distance 4=wait_quorum',
+    ['phase', 'module_id'],
+    namespace=PROMETHEUS_PREFIX,
+)
+
+PHASE_LAST_RUN_TIMESTAMP = Gauge(
+    'phase_last_run_timestamp_seconds',
+    'Unix timestamp of the last time a module was processed in a given phase.',
     ['phase', 'module_id'],
     namespace=PROMETHEUS_PREFIX,
 )
@@ -178,9 +158,23 @@ TOPUP_GAS_OK = Gauge(
     namespace=PROMETHEUS_PREFIX,
 )
 
+TOPUP_GAS_OK_LAST_RUN_TIMESTAMP = Gauge(
+    'topup_gas_ok_last_run_timestamp_seconds',
+    'Unix timestamp of the last time the top-up gas check ran for a module.',
+    ['module_id'],
+    namespace=PROMETHEUS_PREFIX,
+)
+
 TOPUP_CANDIDATES_SELECTED = Gauge(
     'topup_candidates_selected',
     'Validators selected for top-up after eligibility filtering.',
+    ['module_id'],
+    namespace=PROMETHEUS_PREFIX,
+)
+
+TOPUP_CANDIDATES_LAST_RUN_TIMESTAMP = Gauge(
+    'topup_candidates_last_run_timestamp_seconds',
+    'Unix timestamp of the last time candidate selection ran for a module.',
     ['module_id'],
     namespace=PROMETHEUS_PREFIX,
 )
@@ -211,6 +205,28 @@ CONSOLIDATION_CURSOR_LAG = Gauge(
     'Blocks between the consolidation indexer cursor and the current finalized block.',
     namespace=PROMETHEUS_PREFIX,
 )
+
+# --- Bot liveness ---
+
+BOT_LAST_CYCLE_TIMESTAMP = Gauge(
+    'bot_last_cycle_timestamp_seconds',
+    'Unix timestamp of the last time the depositor bot completed a full iteration.',
+    namespace=PROMETHEUS_PREFIX,
+)
+
+# --- Pre-initialize series that must exist even before the first bot cycle ---
+
+# Absent counter series cause rate() to return "no data" instead of 0, masking alerts.
+for _module_id in DEPOSIT_MODULES_WHITELIST:
+    TOPUP_TX_SEND.labels('success', _module_id).inc(0)
+    TOPUP_TX_SEND.labels('failure', _module_id).inc(0)
+
+# Absent Gauges are indistinguishable from "feature disabled"; 0 is more honest.
+DEPOSITS_PAUSED.set(0)
+TOPUP_GATEWAY_PAUSED.set(0)
+CONSOLIDATION_PENDING_BATCHES.set(0)
+CONSOLIDATION_PENDING_PUBKEYS.set(0)
+CONSOLIDATION_CURSOR_LAG.set(0)
 
 INFO = Info(name='build', documentation='Info metric', namespace=PROMETHEUS_PREFIX)
 CONVERTED_PUBLIC_ENV = {k: str(v) for k, v in PUBLIC_ENV_VARS.items()}

@@ -454,7 +454,7 @@ class TestPhaseFullAndTopup(unittest.TestCase):
         self.bot.w3.lido.topup_gateway.is_block_distance_passed.return_value = True
         self.bot._get_quorum = Mock(return_value=None)
         self.bot._deposit_to_module = Mock(return_value=True)
-        self.bot._top_up_to_module = Mock(return_value=True)
+        self.bot._top_up_to_module = Mock(return_value=PhaseOutcome.SENT)
 
     def _set_cooldown_expired(self, module_id):
         self.bot._module_last_heart_beat[module_id] = datetime.now() - timedelta(minutes=variables.QUORUM_RETENTION_MINUTES + 1)
@@ -829,7 +829,7 @@ class TestExecuteActualScheduling(unittest.TestCase):
         self.bot.w3.lido.deposit_security_module.is_deposits_paused = Mock(return_value=False)
         self.bot.w3.lido.lido.get_depositable_ether = Mock(return_value=100)
         self.bot._deposit_to_module = Mock(return_value=True)
-        self.bot._top_up_to_module = Mock(return_value=True)
+        self.bot._top_up_to_module = Mock(return_value=PhaseOutcome.SENT)
         self.bot.w3.lido.deposit_security_module.is_min_deposit_distance_passed = Mock(return_value=True)
         self.bot.w3.lido.topup_gateway.is_block_distance_passed = Mock(return_value=True)
         self.bot.w3.lido.topup_gateway.is_paused = Mock(return_value=False)
@@ -921,7 +921,7 @@ class TestExecuteActualScheduling(unittest.TestCase):
 
     def test_B5_top_up_failed(self):
         self._set_alloc(seed=[0, 0], topup=[100, 0])
-        self.bot._top_up_to_module = Mock(return_value=False)
+        self.bot._top_up_to_module = Mock(return_value=PhaseOutcome.TX_FAILED)
         self.assertFalse(self.bot._execute_actual())  # +1
         self.bot._top_up_to_module.assert_called_once()
 
@@ -1008,7 +1008,7 @@ def test_top_up_to_module_unknown_type_returns_false(depositor_bot):
     depositor_bot.w3.lido.staking_module = Mock(return_value=mock_module)
     depositor_bot._select_topup_strategy = Mock(return_value=None)
 
-    assert depositor_bot._top_up_to_module(1, '0xAddr', 50) is False
+    assert depositor_bot._top_up_to_module(1, '0xAddr', 50) is PhaseOutcome.SKIPPED
 
 
 @pytest.mark.unit
@@ -1021,7 +1021,7 @@ def test_top_up_to_module_gas_too_high_returns_false(depositor_bot):
     strategy.get_topup_candidates = Mock()
     depositor_bot._select_topup_strategy = Mock(return_value=strategy)
 
-    assert depositor_bot._top_up_to_module(1, '0xAddr', 50) is False
+    assert depositor_bot._top_up_to_module(1, '0xAddr', 50) is PhaseOutcome.SKIPPED
     strategy.get_topup_candidates.assert_not_called()
 
 
@@ -1037,7 +1037,7 @@ def test_top_up_to_module_no_proof_data_returns_false(depositor_bot):
     depositor_bot.w3.lido.topup_gateway.get_max_validators_per_top_up = Mock(return_value=10)
     depositor_bot.w3.lido.topup_gateway.top_up = Mock()
 
-    assert depositor_bot._top_up_to_module(1, '0xAddr', 50) is False
+    assert depositor_bot._top_up_to_module(1, '0xAddr', 50) is PhaseOutcome.SKIPPED
     depositor_bot.w3.lido.topup_gateway.top_up.assert_not_called()
 
 
@@ -1090,7 +1090,7 @@ def test_top_up_to_module_happy_path_calls_top_up_check_send(depositor_bot):
     depositor_bot.w3.transaction.check = Mock(return_value=True)
     depositor_bot.w3.transaction.send = Mock(return_value=True)
 
-    assert depositor_bot._top_up_to_module(1, '0xAddr', 50) is True
+    assert depositor_bot._top_up_to_module(1, '0xAddr', 50) is PhaseOutcome.SENT
 
     depositor_bot.w3.lido.topup_gateway.top_up.assert_called_once_with(1, proof_data)
     depositor_bot.w3.transaction.check.assert_called_once_with(tx)

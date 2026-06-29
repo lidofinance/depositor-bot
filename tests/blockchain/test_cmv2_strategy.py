@@ -272,7 +272,7 @@ def test_check_key_eligibility_returns_candidate(top_up_proof_fixtures):
     witness = top_up_proof_fixtures['validator_witnesses'][0]
     key = _make_key(witness['pubkey'], 7, 11)
 
-    candidate = _check_key_eligibility(key, beacon_data, set(), TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI)
+    candidate = _check_key_eligibility(key, beacon_data, TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI)
 
     assert candidate == TopUpCandidate(
         validator_index=int(witness['validatorIndex']),
@@ -291,35 +291,32 @@ def test_check_key_eligibility_rejects_invalid_cases(top_up_proof_fixtures):
     validator_index = int(witness['validatorIndex'])
     key = _make_key(witness['pubkey'], 7, 11)
 
-    assert _check_key_eligibility(_make_key('0x' + '33' * 48, 7, 11), beacon_data, set(), TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI) is None
-
-    # key participating in a pending ConsolidationBus request is excluded
-    assert _check_key_eligibility(key, beacon_data, {pubkey}, TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI) is None
+    assert _check_key_eligibility(_make_key('0x' + '33' * 48, 7, 11), beacon_data, TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI) is None
 
     beacon_data.consolidation_targets = {validator_index}
-    assert _check_key_eligibility(key, beacon_data, set(), TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI) is None
+    assert _check_key_eligibility(key, beacon_data, TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI) is None
     beacon_data.consolidation_targets = set()
 
     fields = beacon_data.validators_fields[validator_index]
 
     beacon_data.validators_fields[validator_index] = fields._replace(slashed=True)
-    assert _check_key_eligibility(key, beacon_data, set(), TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI) is None
+    assert _check_key_eligibility(key, beacon_data, TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI) is None
 
     beacon_data.validators_fields[validator_index] = fields._replace(exit_epoch=1)
-    assert _check_key_eligibility(key, beacon_data, set(), TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI) is None
+    assert _check_key_eligibility(key, beacon_data, TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI) is None
 
     beacon_data.validators_fields[validator_index] = fields._replace(
         exit_epoch=FAR_FUTURE_EPOCH,
         activation_epoch=beacon_data.slot + 1,
     )
-    assert _check_key_eligibility(key, beacon_data, set(), TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI) is None
+    assert _check_key_eligibility(key, beacon_data, TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI) is None
 
     # balance exactly at the max eligible threshold + any pending pushes it over -> excluded
     beacon_data.validators_fields[validator_index] = fields._replace(
         effective_balance=MAX_ELIGIBLE_BALANCE_GWEI,
     )
     beacon_data.pending_deposits = {pubkey: 1}
-    assert _check_key_eligibility(key, beacon_data, set(), TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI) is None
+    assert _check_key_eligibility(key, beacon_data, TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI) is None
 
 
 @pytest.mark.unit
@@ -343,10 +340,27 @@ def test_select_operator_candidates_sorts_by_key_index():
             side_effect=lambda candidates, allocation, beacon, target, min_top_up: candidates,
         ) as take,
     ):
-        result = _select_operator_candidates(keys, 16 * 10**18, beacon_data, set(), TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI)
+        result, consolidation_filtered = _select_operator_candidates(keys, 16 * 10**18, beacon_data, set(), TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI)
 
     assert [candidate.key_index for candidate in result] == [7, 8]
     assert take.call_args.args[0] == result
+    assert consolidation_filtered == 0
+
+
+@pytest.mark.unit
+def test_select_operator_candidates_counts_consolidation_filtered(top_up_proof_fixtures):
+    """Keys that pass all eligibility checks but are in the pending consolidation set are counted."""
+    beacon_data = _build_beacon_state_data(top_up_proof_fixtures)
+    witness = top_up_proof_fixtures['validator_witnesses'][0]
+    pubkey = bytes.fromhex(witness['pubkey'][2:])
+    key = _make_key(witness['pubkey'], 7, 11)
+
+    result, consolidation_filtered = _select_operator_candidates(
+        [key], 32 * 10**18, beacon_data, {pubkey}, TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI
+    )
+
+    assert result == []
+    assert consolidation_filtered == 1
 
 
 @pytest.mark.unit
