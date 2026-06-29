@@ -13,6 +13,7 @@ from blockchain.topup.strategy import TopUpStrategy
 from blockchain.topup.types import TopUpCandidate, TopUpProofData
 from blockchain.typings import Web3
 from eth_typing import HexStr
+from metrics.metrics import TOPUP_CANDIDATES_SELECTED, TOPUP_CONSOLIDATION_FILTERED
 from providers.consensus import ConsensusClient
 from providers.keys_api import KeysAPIClient, LidoKey
 from web3.types import Wei
@@ -81,11 +82,14 @@ class CMv2TopUpStrategy(TopUpStrategy):
         except Exception as e:
             logger.error({'msg': 'Consolidation tail read failed — skip top-up.', 'module_id': module_id, 'err': repr(e)})
             return None
+        consolidation_filtered = len(all_pubkeys & pending_consolidation)
+        TOPUP_CONSOLIDATION_FILTERED.labels(module_id).set(consolidation_filtered)
         logger.info(
             {
                 'msg': 'Consolidation pending filter ready.',
                 'module_id': module_id,
                 'pending_pubkeys': len(pending_consolidation),
+                'consolidation_filtered': consolidation_filtered,
             }
         )
 
@@ -132,6 +136,7 @@ class CMv2TopUpStrategy(TopUpStrategy):
         candidates.sort(key=lambda c: c.validator_index)
         # Step 8: limit to max_validators
         candidates = candidates[:max_validators]
+        TOPUP_CANDIDATES_SELECTED.labels(module_id).set(len(candidates))
         # Step 9: build proofs
         return build_topup_proofs(beacon_data, candidates)
 
