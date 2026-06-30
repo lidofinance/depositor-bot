@@ -152,7 +152,7 @@ TOPUP_TX_SEND = Counter(
 )
 
 TOPUP_GAS_OK = Gauge(
-    'is_topup_gas_ok',
+    'topup_gas_ok',
     '1 when gas price is acceptable for a top-up transaction.',
     ['module_id'],
     namespace=PROMETHEUS_PREFIX,

@@ -80,6 +80,11 @@ class QuorumState(Enum):
     STALE = 'stale'  # no quorum and none recently → try the next module
 
 
+_QUORUM_STALE = 0
+_QUORUM_RETAINED = 1
+_QUORUM_READY = 2
+
+
 class PhaseOutcome(Enum):
     SENT = 'sent'  # deposit/top-up tx sent ok
     TX_FAILED = 'tx_failed'  # deposit/top-up tx failed
@@ -272,6 +277,7 @@ class DepositorBot:
             TOPUP_GATEWAY_PAUSED.set(int(_gw_paused))
             top_up_enabled = not _gw_paused
         else:
+            TOPUP_GATEWAY_PAUSED.set(0)
             top_up_enabled = False
         if not top_up_enabled:
             if deposits_paused:
@@ -307,13 +313,13 @@ class DepositorBot:
     def _resolve_quorum(self, module_id: int) -> QuorumState:
         """Read the guardian quorum and apply the retention window (replaces _is_in_cooldown)."""
         if self._get_quorum(module_id):
-            QUORUM_STATE.labels(module_id).set(2)
+            QUORUM_STATE.labels(module_id).set(_QUORUM_READY)
             return QuorumState.READY
         last = self._module_last_heart_beat[module_id]
         if datetime.now() - last <= timedelta(minutes=variables.QUORUM_RETENTION_MINUTES):
-            QUORUM_STATE.labels(module_id).set(1)
+            QUORUM_STATE.labels(module_id).set(_QUORUM_RETAINED)
             return QuorumState.RETAINED
-        QUORUM_STATE.labels(module_id).set(0)
+        QUORUM_STATE.labels(module_id).set(_QUORUM_STALE)
         return QuorumState.STALE
 
     def _try_deposit(self, module_id: int, phase: Literal['A', 'B']) -> PhaseOutcome:

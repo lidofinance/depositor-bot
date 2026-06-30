@@ -48,6 +48,7 @@ class CMv2TopUpStrategy(TopUpStrategy):
             now = time.time()
             TOPUP_CANDIDATES_SELECTED.labels(module_id).set(0)
             TOPUP_CANDIDATES_LAST_RUN_TIMESTAMP.labels(module_id).set(now)
+            TOPUP_CONSOLIDATION_FILTERED.labels(module_id).set(0)
             logger.info({'msg': 'No allocation from CMv2.', 'module_id': module_id})
             return None
 
@@ -56,6 +57,7 @@ class CMv2TopUpStrategy(TopUpStrategy):
             now = time.time()
             TOPUP_CANDIDATES_SELECTED.labels(module_id).set(0)
             TOPUP_CANDIDATES_LAST_RUN_TIMESTAMP.labels(module_id).set(now)
+            TOPUP_CONSOLIDATION_FILTERED.labels(module_id).set(0)
             logger.info({'msg': 'No operators with allocation.', 'module_id': module_id})
             return None
 
