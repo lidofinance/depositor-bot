@@ -2,12 +2,13 @@
 
 import logging
 import traceback
-from time import sleep
+from time import sleep, time
 from typing import Any, Callable, Optional
 
 from blockchain.constants import SLOT_TIME
 from blockchain.typings import Web3
 from metrics import healthcheck_pulse
+from metrics.metrics import EL_HEAD_BLOCK_AGE_SECONDS, EL_HEAD_BLOCK_NUMBER, UNEXPECTED_EXCEPTIONS
 from utils.timeout import TimeoutManager, TimeoutManagerError
 from web3.types import BlockData
 from web3_multi_provider import NoActiveProviderError
@@ -74,6 +75,8 @@ class Executor:
             while True:
                 latest_block: BlockData = self.w3.eth.get_block('latest')
                 logger.debug({'msg': 'Fetch latest block.', 'value': latest_block})
+                EL_HEAD_BLOCK_NUMBER.set(latest_block['number'])
+                EL_HEAD_BLOCK_AGE_SECONDS.set(max(0, time() - latest_block['timestamp']))
 
                 if latest_block['number'] >= self._next_expected_block:
                     self._next_expected_block = latest_block['number']
@@ -97,11 +100,18 @@ class Executor:
         try:
             return function(*args, **kwargs)
         except TimeoutManagerError as exception:
+            UNEXPECTED_EXCEPTIONS.labels('timeout').inc()
             logger.error({'msg': 'Timeout error.', 'error': str(exception), 'function': function.__name__})
             raise TimeoutManagerError('Bot stuck. Shut down.') from exception
         except NoActiveProviderError as exception:
+            UNEXPECTED_EXCEPTIONS.labels('no_active_provider').inc()
             logger.error({'msg': 'No active node available. Shut down.', 'error': str(exception)})
-            raise NoActiveProviderError from exception
+            # NoActiveProviderError is a BaseExceptionGroup subclass and needs (msg, exceptions) to
+            # construct — re-raising the caught instance is simpler and preserves its sub-exceptions.
+            raise
         except Exception as error:
+            # Swallowed on purpose (no re-raise) so a single bad cycle doesn't kill the daemon —
+            # which is exactly why this needs a counter: nothing else surfaces it happening.
+            UNEXPECTED_EXCEPTIONS.labels(type(error).__name__).inc()
             stack_trace = traceback.format_exc()
             logger.error({'msg': 'Unexpected error.', 'error': str(error), 'args': str(error.args), 'stack': stack_trace})

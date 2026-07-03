@@ -27,8 +27,12 @@ from metrics.metrics import (
     ACCOUNT_BALANCE,
     BOT_LAST_CYCLE_TIMESTAMP,
     CURRENT_QUORUM_SIZE,
+    DEPOSITABLE_ETHER,
     DEPOSITS_PAUSED,
     GUARDIAN_BALANCE,
+    MODULE_ALLOCATION,
+    MODULE_QUORUM_LAST_SEEN_TIMESTAMP,
+    MODULE_STAKE,
     MODULE_STATUS,
     MODULE_TX_SEND,
     PHASE_LAST_RUN_TIMESTAMP,
@@ -158,6 +162,8 @@ class DepositorBot:
         self._consolidation_indexer = self._build_consolidation_indexer()
         now = datetime.now()
         self._module_last_heart_beat: dict[int, datetime] = {module_id: now for module_id in variables.DEPOSIT_MODULES_WHITELIST}
+        for module_id in variables.DEPOSIT_MODULES_WHITELIST:
+            MODULE_QUORUM_LAST_SEEN_TIMESTAMP.labels(module_id).set(now.timestamp())
 
         transports = []
 
@@ -233,6 +239,7 @@ class DepositorBot:
 
         # Read depositable ether once; if 0 — nothing to do this iteration.
         depositable_ether = self.w3.lido.lido.get_depositable_ether()
+        DEPOSITABLE_ETHER.set(depositable_ether)
         logger.info({'msg': 'Depositable ether.', 'value': depositable_ether})
         if depositable_ether == 0:
             logger.info({'msg': 'No depositable ether — skip iteration.'})
@@ -261,6 +268,7 @@ class DepositorBot:
         for digest in digests:
             if digest['module_id'] in variables.DEPOSIT_MODULES_WHITELIST:
                 MODULE_STATUS.labels(digest['module_id']).set(digest['status'])
+        self._publish_allocation_metrics(digests, seed_allocated, seed_new, 'seed')
 
         # Phase A: seed deposits into 0x02 modules (deposits only — skipped while deposits are paused).
         if not deposits_paused:
@@ -306,6 +314,7 @@ class DepositorBot:
             quorum = self._get_quorum(module_id)
             if quorum:
                 self._module_last_heart_beat[module_id] = now
+                MODULE_QUORUM_LAST_SEEN_TIMESTAMP.labels(module_id).set(now.timestamp())
                 logger.info({'msg': 'Module has quorum — heartbeat refreshed.', 'module_id': module_id})
             else:
                 logger.info({'msg': 'Module has no quorum right now.', 'module_id': module_id})
@@ -354,6 +363,19 @@ class DepositorBot:
         PHASE_OUTCOME.labels(phase, module_id).set(_PHASE_OUTCOME_INT[outcome])
         PHASE_LAST_RUN_TIMESTAMP.labels(phase, module_id).set(now)
         return outcome
+
+    def _publish_allocation_metrics(
+        self, digests: list[StakingModuleInfo], allocated: list[int], new: list[int], kind: Literal['seed', 'topup']
+    ) -> None:
+        """Expose allocation/stake for every whitelisted module, not just ones that make it into
+        candidates — a module excluded by zero allocation would otherwise keep showing whatever
+        outcome it last had, which misrepresents why it isn't being deposited to."""
+        for i, digest in enumerate(digests):
+            module_id = digest['module_id']
+            if module_id not in variables.DEPOSIT_MODULES_WHITELIST:
+                continue
+            MODULE_ALLOCATION.labels(module_id, kind).set(allocated[i])
+            MODULE_STAKE.labels(module_id, kind).set(new[i] - allocated[i])
 
     def _collect_candidates(
         self, digests: list[StakingModuleInfo], wc_type: int, allocated: list[int], new: list[int]
@@ -438,6 +460,7 @@ class DepositorBot:
         """
         sr_v4 = cast(StakingRouterContractV4, self.w3.lido.staking_router)
         _total, topup_allocated, topup_new = sr_v4.get_deposit_allocations(depositable_ether, is_top_up=True)
+        self._publish_allocation_metrics(digests, topup_allocated, topup_new, 'topup')
 
         # Top-ups (0x02) from is_top_up=True allocations always; full deposits (0x01) from seed
         # (is_top_up=False) allocations only while deposits are not paused.

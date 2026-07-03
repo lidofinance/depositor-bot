@@ -186,6 +186,17 @@ TOPUP_CONSOLIDATION_FILTERED = Gauge(
     namespace=PROMETHEUS_PREFIX,
 )
 
+# Per-key exclusion reasons. Low cardinality (module_id x ~9 reasons) — use this for trends
+# ("why is exclusion rate up"); use the matching per-key log line ('Top-up candidate excluded.')
+# to answer "why wasn't key X topped up", since pubkey-labeled Prometheus series would explode
+# cardinality. See CMv2TopUpStrategy for the reason values.
+TOPUP_KEY_EXCLUDED = Counter(
+    'topup_key_excluded',
+    'Top-up candidate keys excluded from a top-up tx, by reason.',
+    ['module_id', 'reason'],
+    namespace=PROMETHEUS_PREFIX,
+)
+
 # --- Consolidation indexer ---
 
 CONSOLIDATION_PENDING_BATCHES = Gauge(
@@ -214,12 +225,90 @@ BOT_LAST_CYCLE_TIMESTAMP = Gauge(
     namespace=PROMETHEUS_PREFIX,
 )
 
+# --- Depositable ether ---
+
+DEPOSITABLE_ETHER = Gauge(
+    'depositable_ether',
+    'Depositable Ether, read once per bot iteration.',
+    namespace=PROMETHEUS_PREFIX,
+)
+
+# --- Module priority / allocation ---
+# kind: 'seed' (is_top_up=False allocation, used by Phase A 0x02 and Phase B 0x01) or
+# 'topup' (is_top_up=True allocation, used by Phase B 0x02). Published for every whitelisted
+# module each cycle, including ones excluded from candidates (allocation == 0) — otherwise a
+# module with no allocation this cycle keeps showing its last successful outcome forever.
+
+MODULE_ALLOCATION = Gauge(
+    'module_allocation_wei',
+    'Ether allocation computed by the StakingRouter allocation algorithm for a module this cycle. 0 means the module got no allocation.',
+    ['module_id', 'kind'],
+    namespace=PROMETHEUS_PREFIX,
+)
+
+MODULE_STAKE = Gauge(
+    'module_stake_wei',
+    'Priority ordering key (new - allocated) for a module; lower value is tried first.',
+    ['module_id', 'kind'],
+    namespace=PROMETHEUS_PREFIX,
+)
+
+# --- Quorum retention ---
+
+MODULE_QUORUM_LAST_SEEN_TIMESTAMP = Gauge(
+    'module_quorum_last_seen_timestamp_seconds',
+    'Unix timestamp of the last time a guardian quorum was observed for a module. '
+    'quorum_state turns stale QUORUM_RETENTION_MINUTES after this.',
+    ['module_id'],
+    namespace=PROMETHEUS_PREFIX,
+)
+
+# --- Top-up gas ---
+
+TOPUP_GAS_FEE = Gauge(
+    'topup_gas_fee_wei',
+    'Gas fee observed during the top-up gas price check (network-wide, not per-module).',
+    ['type'],
+    namespace=PROMETHEUS_PREFIX,
+)
+
+# --- Keys API freshness ---
+
+KEYS_API_BLOCK_NUMBER = Gauge(
+    'keys_api_block_number',
+    'elBlockSnapshot.blockNumber from the last successful Keys API response.',
+    namespace=PROMETHEUS_PREFIX,
+)
+
+KEYS_API_BLOCK_AGE_SECONDS = Gauge(
+    'keys_api_block_age_seconds',
+    'Seconds between elBlockSnapshot.timestamp of the last Keys API response and now.',
+    namespace=PROMETHEUS_PREFIX,
+)
+
+# --- Execution layer freshness ---
+
+EL_HEAD_BLOCK_NUMBER = Gauge(
+    'el_head_block_number',
+    'Latest EL block number seen by the Executor.',
+    namespace=PROMETHEUS_PREFIX,
+)
+
+EL_HEAD_BLOCK_AGE_SECONDS = Gauge(
+    'el_head_block_age_seconds',
+    'Seconds between the latest EL block timestamp and now — detects a stalled/lagging RPC.',
+    namespace=PROMETHEUS_PREFIX,
+)
+
 # --- Pre-initialize series that must exist even before the first bot cycle ---
 
 # Absent counter series cause rate() to return "no data" instead of 0, masking alerts.
 for _module_id in DEPOSIT_MODULES_WHITELIST:
     TOPUP_TX_SEND.labels('success', _module_id).inc(0)
     TOPUP_TX_SEND.labels('failure', _module_id).inc(0)
+    for _kind in ('seed', 'topup'):
+        MODULE_ALLOCATION.labels(_module_id, _kind).set(0)
+        MODULE_STAKE.labels(_module_id, _kind).set(0)
 
 # Absent Gauges are indistinguishable from "feature disabled"; 0 is more honest.
 DEPOSITS_PAUSED.set(0)
@@ -227,6 +316,12 @@ TOPUP_GATEWAY_PAUSED.set(0)
 CONSOLIDATION_PENDING_BATCHES.set(0)
 CONSOLIDATION_PENDING_PUBKEYS.set(0)
 CONSOLIDATION_CURSOR_LAG.set(0)
+TOPUP_GAS_FEE.labels('current_fee').set(0)
+TOPUP_GAS_FEE.labels('recommended_fee').set(0)
+KEYS_API_BLOCK_NUMBER.set(0)
+KEYS_API_BLOCK_AGE_SECONDS.set(0)
+EL_HEAD_BLOCK_NUMBER.set(0)
+EL_HEAD_BLOCK_AGE_SECONDS.set(0)
 
 INFO = Info(name='build', documentation='Info metric', namespace=PROMETHEUS_PREFIX)
 CONVERTED_PUBLIC_ENV = {k: str(v) for k, v in PUBLIC_ENV_VARS.items()}

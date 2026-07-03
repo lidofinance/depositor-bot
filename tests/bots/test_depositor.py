@@ -90,6 +90,26 @@ class TestRefreshModulesState(unittest.TestCase):
         for module_id in [1, 2, 3]:
             self.assertEqual(old, self.bot._module_last_heart_beat[module_id])
 
+    def test_quorum_last_seen_metric_updated_on_truthy_quorum(self):
+        self.bot._get_quorum = Mock(return_value=['msg'])
+        self.bot._select_strategy = Mock(return_value=Mock())
+
+        with mock.patch('bots.depositor.MODULE_QUORUM_LAST_SEEN_TIMESTAMP') as gauge:
+            self.bot._refresh_modules_state()
+
+        called_ids = sorted(c.args[0] for c in gauge.labels.call_args_list)
+        self.assertEqual([1, 2, 3], called_ids)
+        gauge.labels.return_value.set.assert_called()
+
+    def test_quorum_last_seen_metric_not_updated_on_none_quorum(self):
+        self.bot._get_quorum = Mock(return_value=None)
+        self.bot._select_strategy = Mock(return_value=Mock())
+
+        with mock.patch('bots.depositor.MODULE_QUORUM_LAST_SEEN_TIMESTAMP') as gauge:
+            self.bot._refresh_modules_state()
+
+        gauge.labels.assert_not_called()
+
     def test_empty_whitelist_noop(self):
         variables.DEPOSIT_MODULES_WHITELIST = []
         self.bot._get_quorum = Mock()
@@ -163,6 +183,50 @@ class TestCommonPreconditions(unittest.TestCase):
     def test_fails_when_quorum_zero(self):
         self.bot.w3.lido.deposit_security_module.get_guardian_quorum.return_value = 0
         self.assertFalse(self.bot._common_preconditions())
+
+
+# ─── _publish_allocation_metrics ─────────────────────────────────────
+
+
+@pytest.mark.unit
+class TestPublishAllocationMetrics(unittest.TestCase):
+    def setUp(self):
+        self.bot = _make_bot()
+        variables.DEPOSIT_MODULES_WHITELIST = [1, 2]
+
+    def test_publishes_allocation_and_stake_for_whitelisted_modules(self):
+        digests = [_make_digest(1, '0xA1', 2), _make_digest(2, '0xA2', 1)]
+
+        with mock.patch('bots.depositor.MODULE_ALLOCATION') as allocation, mock.patch('bots.depositor.MODULE_STAKE') as stake:
+            self.bot._publish_allocation_metrics(digests, [30, 0], [100, 0], 'seed')
+
+        allocation.labels.assert_any_call(1, 'seed')
+        allocation.labels.assert_any_call(2, 'seed')
+        allocation.labels.return_value.set.assert_any_call(30)
+        allocation.labels.return_value.set.assert_any_call(0)
+        stake.labels.return_value.set.assert_any_call(70)  # 100 - 30
+
+    def test_skips_non_whitelisted_modules(self):
+        # Regression: a module excluded here would otherwise show a stale outcome from its last
+        # successful cycle, misrepresenting why it currently isn't a deposit candidate.
+        variables.DEPOSIT_MODULES_WHITELIST = [1]
+        digests = [_make_digest(1, '0xA1', 2), _make_digest(2, '0xA2', 1)]
+
+        with mock.patch('bots.depositor.MODULE_ALLOCATION') as allocation:
+            self.bot._publish_allocation_metrics(digests, [30, 999], [100, 999], 'seed')
+
+        called_ids = {c.args[0] for c in allocation.labels.call_args_list}
+        self.assertEqual({1}, called_ids)
+
+    def test_publishes_zero_allocation_for_excluded_module(self):
+        """A module with zero allocation must still get a fresh 0 this cycle, not be left alone."""
+        digests = [_make_digest(1, '0xA1', 2)]
+
+        with mock.patch('bots.depositor.MODULE_ALLOCATION') as allocation:
+            self.bot._publish_allocation_metrics(digests, [0], [0], 'seed')
+
+        allocation.labels.assert_called_once_with(1, 'seed')
+        allocation.labels.return_value.set.assert_called_once_with(0)
 
 
 # ─── _collect_candidates ───────────────────────────────────────────
@@ -660,6 +724,20 @@ def test_execute_actual_zero_depositable_ether_short_circuits(depositor_bot):
     depositor_bot._phase_seed.assert_not_called()
     depositor_bot._phase_full.assert_not_called()
     depositor_bot._phase_full_and_topup.assert_not_called()
+
+
+@pytest.mark.unit
+def test_execute_actual_reports_depositable_ether_even_when_zero(depositor_bot):
+    """DEPOSITABLE_ETHER must stay current even on the empty-buffer short-circuit — it's the
+    first thing worth checking when asking why nothing is being deposited."""
+    depositor_bot._refresh_modules_state = Mock()
+    depositor_bot.w3.lido.staking_router.get_all_staking_module_digests = Mock(return_value=[])
+    depositor_bot.w3.lido.lido.get_depositable_ether = Mock(return_value=0)
+
+    with mock.patch('bots.depositor.DEPOSITABLE_ETHER') as gauge:
+        depositor_bot._execute_actual()
+
+    gauge.set.assert_called_once_with(0)
 
 
 @pytest.mark.unit
