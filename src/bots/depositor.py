@@ -4,7 +4,7 @@ import time
 from collections import defaultdict
 from collections.abc import Callable
 from datetime import datetime, timedelta
-from enum import Enum
+from enum import StrEnum
 from typing import Literal, NamedTuple, cast
 
 import variables
@@ -78,18 +78,17 @@ class ModuleCandidate(NamedTuple):
     allocation: Wei
 
 
-class QuorumState(Enum):
+class QuorumState(StrEnum):
+    """A StrEnum member is a plain str at runtime, so it can be passed straight into
+    QUORUM_STATE.state(...) (a prometheus_client.Enum, which stores state as its string value)
+    without a separate int-mapping table."""
+
     READY = 'ready'  # a guardian quorum exists now → deposit
     RETAINED = 'retained'  # no quorum now, but one existed within QUORUM_RETENTION_MINUTES → wait
     STALE = 'stale'  # no quorum and none recently → try the next module
 
 
-_QUORUM_STALE = 0
-_QUORUM_RETAINED = 1
-_QUORUM_READY = 2
-
-
-class PhaseOutcome(Enum):
+class PhaseOutcome(StrEnum):
     SENT = 'sent'  # deposit/top-up tx sent ok
     TX_FAILED = 'tx_failed'  # deposit/top-up tx failed
     WAIT_DISTANCE = 'wait_distance'  # blocked by min deposit / top-up block distance
@@ -107,16 +106,9 @@ class PhaseOutcome(Enum):
         return self in (PhaseOutcome.SENT, PhaseOutcome.WAIT_DISTANCE)
 
 
-_PHASE_OUTCOME_INT: dict[PhaseOutcome, int] = {
-    PhaseOutcome.SKIPPED: 0,
-    PhaseOutcome.SENT: 1,
-    PhaseOutcome.TX_FAILED: 2,
-    PhaseOutcome.WAIT_DISTANCE: 3,
-    PhaseOutcome.WAIT_QUORUM: 4,
-}
-
-_PHASE_A = 'A'
-_PHASE_B = 'B'
+class Phase(StrEnum):
+    A = 'A'  # seed deposits to 0x02 modules
+    B = 'B'  # top-ups (0x02) and full deposits (0x01)
 
 
 def run_depositor(w3, keys_api: KeysAPIClient, cl: ConsensusClient):
@@ -311,8 +303,12 @@ class DepositorBot:
         for module_id in variables.DEPOSIT_MODULES_WHITELIST:
             # Probe gas-price strategy purely for metrics — gas is re-checked right before the tx is sent.
             self._select_strategy(module_id).is_gas_price_ok(module_id)
-            quorum = self._get_quorum(module_id)
-            if quorum:
+            # Route through _resolve_quorum (not a bare _get_quorum call) so QUORUM_STATE is refreshed
+            # for every whitelisted module every cycle — otherwise a module that's never actually
+            # attempted this cycle (top-up-only cycle, lost the priority race, zero allocation) leaves
+            # QUORUM_STATE stale at whatever it last was.
+            state = self._resolve_quorum(module_id)
+            if state is QuorumState.READY:
                 self._module_last_heart_beat[module_id] = now
                 MODULE_QUORUM_LAST_SEEN_TIMESTAMP.labels(module_id).set(now.timestamp())
                 logger.info({'msg': 'Module has quorum — heartbeat refreshed.', 'module_id': module_id})
@@ -322,16 +318,16 @@ class DepositorBot:
     def _resolve_quorum(self, module_id: int) -> QuorumState:
         """Read the guardian quorum and apply the retention window (replaces _is_in_cooldown)."""
         if self._get_quorum(module_id):
-            QUORUM_STATE.labels(module_id).set(_QUORUM_READY)
+            QUORUM_STATE.labels(module_id).state(QuorumState.READY)
             return QuorumState.READY
         last = self._module_last_heart_beat[module_id]
         if datetime.now() - last <= timedelta(minutes=variables.QUORUM_RETENTION_MINUTES):
-            QUORUM_STATE.labels(module_id).set(_QUORUM_RETAINED)
+            QUORUM_STATE.labels(module_id).state(QuorumState.RETAINED)
             return QuorumState.RETAINED
-        QUORUM_STATE.labels(module_id).set(_QUORUM_STALE)
+        QUORUM_STATE.labels(module_id).state(QuorumState.STALE)
         return QuorumState.STALE
 
-    def _try_deposit(self, module_id: int, phase: Literal['A', 'B']) -> PhaseOutcome:
+    def _try_deposit(self, module_id: int, phase: Phase) -> PhaseOutcome:
         """One seed/full deposit attempt on a module. SKIPPED → caller tries the next candidate."""
         if not self.w3.lido.deposit_security_module.is_min_deposit_distance_passed(module_id):
             logger.info({'msg': f'Phase {phase}: min deposit distance not passed — wait next iteration.', 'module_id': module_id})
@@ -347,11 +343,11 @@ class DepositorBot:
                 logger.info({'msg': f'Phase {phase}: no quorum, retention expired — try next module.', 'module_id': module_id})
                 outcome = PhaseOutcome.SKIPPED
         now = time.time()
-        PHASE_OUTCOME.labels(phase, module_id).set(_PHASE_OUTCOME_INT[outcome])
+        PHASE_OUTCOME.labels(phase, module_id).state(outcome)
         PHASE_LAST_RUN_TIMESTAMP.labels(phase, module_id).set(now)
         return outcome
 
-    def _try_top_up(self, candidate: ModuleCandidate, phase: Literal['A', 'B']) -> PhaseOutcome:
+    def _try_top_up(self, candidate: ModuleCandidate, phase: Phase) -> PhaseOutcome:
         """One top-up attempt on a 0x02 module (no quorum needed). SKIPPED → caller tries the next candidate."""
         module_id = candidate.module_id
         if not self.w3.lido.topup_gateway.is_block_distance_passed():
@@ -360,7 +356,7 @@ class DepositorBot:
         else:
             outcome = self._top_up_to_module(module_id, candidate.address, candidate.allocation)
         now = time.time()
-        PHASE_OUTCOME.labels(phase, module_id).set(_PHASE_OUTCOME_INT[outcome])
+        PHASE_OUTCOME.labels(phase, module_id).state(outcome)
         PHASE_LAST_RUN_TIMESTAMP.labels(phase, module_id).set(now)
         return outcome
 
@@ -423,7 +419,7 @@ class DepositorBot:
         )
 
         for candidate in candidates:
-            outcome = self._try_deposit(candidate.module_id, _PHASE_A)
+            outcome = self._try_deposit(candidate.module_id, Phase.A)
             if outcome is not PhaseOutcome.SKIPPED:
                 return outcome
         return PhaseOutcome.SKIPPED
@@ -440,7 +436,7 @@ class DepositorBot:
         )
 
         for candidate in candidates:
-            outcome = self._try_deposit(candidate.module_id, _PHASE_B)
+            outcome = self._try_deposit(candidate.module_id, Phase.B)
             if outcome is not PhaseOutcome.SKIPPED:
                 return outcome
         return PhaseOutcome.SKIPPED
@@ -478,7 +474,7 @@ class DepositorBot:
         for candidate in candidates:
             # The consolidation indexer is guaranteed present and ready in the top-up path — validated
             # at startup when ENABLE_TOP_UP is on (otherwise the bot would not have started).
-            outcome = self._try_top_up(candidate, _PHASE_B) if candidate.wc_type == 2 else self._try_deposit(candidate.module_id, _PHASE_B)
+            outcome = self._try_top_up(candidate, Phase.B) if candidate.wc_type == 2 else self._try_deposit(candidate.module_id, Phase.B)
             if outcome is not PhaseOutcome.SKIPPED:
                 return outcome
         return PhaseOutcome.SKIPPED

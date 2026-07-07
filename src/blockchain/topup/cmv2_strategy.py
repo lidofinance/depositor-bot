@@ -1,5 +1,6 @@
 import logging
 import time
+from enum import StrEnum
 from typing import List, Optional, cast
 
 from blockchain.beacon_state.ssz_types import (
@@ -26,25 +27,32 @@ from web3.types import Wei
 
 logger = logging.getLogger(__name__)
 
-# Stable per-key exclusion reasons — used for both the per-cycle log line and TOPUP_KEY_EXCLUDED.
-# This is the full answer set for "why wasn't key X topped up this cycle" (see _check_key_eligibility,
-# _take_up_to_allocation and the max_validators truncation in get_topup_candidates).
-_REASON_NOT_IN_BEACON_STATE = 'not_in_beacon_state'
-_REASON_NOT_ACTIVE = 'not_active'
-_REASON_SLASHED = 'slashed'
-_REASON_EXITING = 'exiting'
-_REASON_BEACON_CONSOLIDATION_TARGET = 'beacon_consolidation_target'
-_REASON_ALREADY_AT_TARGET_BALANCE = 'already_at_target_balance'
-_REASON_PENDING_CONSOLIDATION_BUS = 'pending_consolidation_bus'
-_REASON_OPERATOR_BUDGET_EXHAUSTED = 'operator_budget_exhausted'
-_REASON_TRUNCATED_BY_MAX_VALIDATORS = 'truncated_by_max_validators'
+
+class TopUpExclusionReason(StrEnum):
+    """Stable per-key exclusion reasons — used for both the per-cycle log line and TOPUP_KEY_EXCLUDED.
+
+    This is the full answer set for "why wasn't key X topped up this cycle" (see
+    _check_key_eligibility, _take_up_to_allocation and the max_validators truncation in
+    get_topup_candidates). A StrEnum member is a plain str at runtime, so it works directly as a
+    Prometheus label value and a JSON log field without a separate mapping.
+    """
+
+    NOT_IN_BEACON_STATE = 'not_in_beacon_state'
+    NOT_ACTIVE = 'not_active'
+    SLASHED = 'slashed'
+    EXITING = 'exiting'
+    BEACON_CONSOLIDATION_TARGET = 'beacon_consolidation_target'
+    ALREADY_AT_TARGET_BALANCE = 'already_at_target_balance'
+    PENDING_CONSOLIDATION_BUS = 'pending_consolidation_bus'
+    OPERATOR_BUDGET_EXHAUSTED = 'operator_budget_exhausted'
+    TRUNCATED_BY_MAX_VALIDATORS = 'truncated_by_max_validators'
 
 
 def _pubkey_hex(pubkey: bytes) -> str:
     return '0x' + pubkey.hex()
 
 
-def _log_excluded_key(module_id: int, operator_id: int, pubkey: str, reason: str) -> None:
+def _log_excluded_key(module_id: int, operator_id: int, pubkey: str, reason: TopUpExclusionReason) -> None:
     """One INFO line per excluded top-up candidate — the way to answer "why wasn't key X topped
     up this cycle" for a specific pubkey (grep logs by pubkey). `reason` is also counted in
     TOPUP_KEY_EXCLUDED for trend visibility without per-key cardinality.
@@ -179,7 +187,9 @@ class CMv2TopUpStrategy(TopUpStrategy):
         # Step 8: limit to max_validators — everything past the cap loses purely to cross-operator
         # competition for tx space, not to any eligibility problem of its own.
         for excluded in candidates[max_validators:]:
-            _log_excluded_key(module_id, excluded.operator_id, _pubkey_hex(excluded.pubkey), _REASON_TRUNCATED_BY_MAX_VALIDATORS)
+            _log_excluded_key(
+                module_id, excluded.operator_id, _pubkey_hex(excluded.pubkey), TopUpExclusionReason.TRUNCATED_BY_MAX_VALIDATORS
+            )
         candidates = candidates[:max_validators]
         # Set before the early return so metrics are always fresh after a selection run,
         # including the 0 case — avoids stale values from a previous cycle.
@@ -229,7 +239,7 @@ def _select_operator_candidates(
             continue
         if candidate.pubkey in pending_consolidation:
             consolidation_filtered += 1
-            _log_excluded_key(module_id, candidate.operator_id, key.key, _REASON_PENDING_CONSOLIDATION_BUS)
+            _log_excluded_key(module_id, candidate.operator_id, key.key, TopUpExclusionReason.PENDING_CONSOLIDATION_BUS)
             continue
         eligible.append(candidate)
 
@@ -243,31 +253,31 @@ def _check_key_eligibility(
     beacon_data: BeaconStateData,
     target_balance_gwei: int,
     min_top_up_gwei: int,
-) -> tuple[Optional[TopUpCandidate], Optional[str]]:
+) -> tuple[Optional[TopUpCandidate], Optional[TopUpExclusionReason]]:
     """Returns (candidate, exclusion_reason) — reason is set only when candidate is None."""
     pubkey = Web3.to_bytes(hexstr=HexStr(key.key))
 
     validator_index = beacon_data.pubkey_to_index.get(pubkey)
     if validator_index is None:
-        return None, _REASON_NOT_IN_BEACON_STATE
+        return None, TopUpExclusionReason.NOT_IN_BEACON_STATE
 
     fields = beacon_data.validators_fields[validator_index]
     pending = beacon_data.pending_deposits.get(pubkey, 0)
     current_epoch = beacon_data.slot // SLOTS_PER_EPOCH
 
     if not _is_active(fields, current_epoch):
-        return None, _REASON_NOT_ACTIVE
+        return None, TopUpExclusionReason.NOT_ACTIVE
     if _is_slashed(fields):
-        return None, _REASON_SLASHED
+        return None, TopUpExclusionReason.SLASHED
     if _is_exiting(fields):
-        return None, _REASON_EXITING
+        return None, TopUpExclusionReason.EXITING
     if validator_index in beacon_data.consolidation_targets:
-        return None, _REASON_BEACON_CONSOLIDATION_TARGET
+        return None, TopUpExclusionReason.BEACON_CONSOLIDATION_TARGET
     # Mirror TopUpGateway._evaluateTopUpLimit: a balance above (target - min) leaves less than the
     # minimum meaningful top-up, so the contract would return limit 0 — exclude such keys here too.
     max_eligible_balance_gwei = target_balance_gwei - min_top_up_gwei
     if fields.effective_balance + pending > max_eligible_balance_gwei:
-        return None, _REASON_ALREADY_AT_TARGET_BALANCE
+        return None, TopUpExclusionReason.ALREADY_AT_TARGET_BALANCE
 
     return (
         TopUpCandidate(
@@ -309,13 +319,15 @@ def _take_up_to_allocation(
         # remains — if that is < min it reverts. Checked before append so a sub-min tail is never selected.
         if remaining < min_top_up_gwei:
             for excluded in candidates[i:]:
-                _log_excluded_key(module_id, excluded.operator_id, _pubkey_hex(excluded.pubkey), _REASON_OPERATOR_BUDGET_EXHAUSTED)
+                _log_excluded_key(
+                    module_id, excluded.operator_id, _pubkey_hex(excluded.pubkey), TopUpExclusionReason.OPERATOR_BUDGET_EXHAUSTED
+                )
             break
         balance = beacon_data.validators_fields[c.validator_index].effective_balance
         topup_amount = target_balance_gwei - (balance + c.pending_balance)
         # Already at/near the cap — the contract tops up nothing (mirrors TopUpGateway._evaluateTopUpLimit).
         if topup_amount < min_top_up_gwei:
-            _log_excluded_key(module_id, c.operator_id, _pubkey_hex(c.pubkey), _REASON_ALREADY_AT_TARGET_BALANCE)
+            _log_excluded_key(module_id, c.operator_id, _pubkey_hex(c.pubkey), TopUpExclusionReason.ALREADY_AT_TARGET_BALANCE)
             continue
         result.append(c)
         # May go negative: the last selected validator absorbs the remaining budget as a partial top-up.

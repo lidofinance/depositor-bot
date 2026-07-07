@@ -110,6 +110,21 @@ class TestRefreshModulesState(unittest.TestCase):
 
         gauge.labels.assert_not_called()
 
+    def test_quorum_state_metric_updated_for_every_whitelisted_module(self):
+        """Regression: QUORUM_STATE used to be set only inside _try_deposit's call path
+        (_resolve_quorum), so a module never reached in a given cycle (top-up-only cycle, lost the
+        priority race, zero allocation) left it stale. _refresh_modules_state must touch it for
+        every whitelisted module every cycle, regardless of whether it has quorum."""
+        self.bot._get_quorum = Mock(return_value=None)
+        self.bot._select_strategy = Mock(return_value=Mock())
+
+        with mock.patch('bots.depositor.QUORUM_STATE') as quorum_state:
+            self.bot._refresh_modules_state()
+
+        called_ids = sorted(c.args[0] for c in quorum_state.labels.call_args_list)
+        self.assertEqual([1, 2, 3], called_ids)
+        quorum_state.labels.return_value.state.assert_called()
+
     def test_empty_whitelist_noop(self):
         variables.DEPOSIT_MODULES_WHITELIST = []
         self.bot._get_quorum = Mock()
@@ -161,6 +176,18 @@ class TestResolveQuorum(unittest.TestCase):
         self.bot._get_quorum = Mock(return_value=None)
         self.bot._module_last_heart_beat[1] = datetime.now() - timedelta(minutes=variables.QUORUM_RETENTION_MINUTES, seconds=-1)
         self.assertIs(QuorumState.RETAINED, self.bot._resolve_quorum(1))
+
+    def test_reports_state_via_enum_metric_not_a_numeric_gauge(self):
+        """QUORUM_STATE is a prometheus_client.Enum — driven with .state(<QuorumState member>),
+        never .set(<int>). A regression here would silently produce a numeric-again series."""
+        self.bot._get_quorum = Mock(return_value=['msg'])
+
+        with mock.patch('bots.depositor.QUORUM_STATE') as quorum_state:
+            self.bot._resolve_quorum(1)
+
+        quorum_state.labels.assert_called_once_with(1)
+        quorum_state.labels.return_value.state.assert_called_once_with(QuorumState.READY)
+        quorum_state.labels.return_value.set.assert_not_called()
 
 
 # ─── _common_preconditions ─────────────────────────────────────────

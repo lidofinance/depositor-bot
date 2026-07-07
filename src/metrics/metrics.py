@@ -1,4 +1,4 @@
-from prometheus_client.metrics import Counter, Gauge, Info
+from prometheus_client.metrics import Counter, Enum, Gauge, Info
 from variables import DEPOSIT_MODULES_WHITELIST, PROMETHEUS_PREFIX, PUBLIC_ENV_VARS
 
 GAS_FEE = Gauge(
@@ -116,12 +116,14 @@ MODULE_STATUS = Gauge(
 )
 
 # --- Phase outcomes ---
-# Values: 0=skipped 1=sent 2=tx_failed 3=wait_distance 4=wait_quorum
+# States must stay in sync with bots.depositor.PhaseOutcome's values — kept as plain strings here
+# rather than imported, since metrics.py has no dependency on bots/ (importing it back would cycle).
 
-PHASE_OUTCOME = Gauge(
+PHASE_OUTCOME = Enum(
     'phase_outcome',
-    'Last outcome for a module in a given phase. 0=skipped 1=sent 2=tx_failed 3=wait_distance 4=wait_quorum',
+    'Last outcome for a module in a given phase.',
     ['phase', 'module_id'],
+    states=['skipped', 'sent', 'tx_failed', 'wait_distance', 'wait_quorum'],
     namespace=PROMETHEUS_PREFIX,
 )
 
@@ -133,12 +135,13 @@ PHASE_LAST_RUN_TIMESTAMP = Gauge(
 )
 
 # --- Quorum state per module ---
-# Values: 0=stale 1=retained 2=ready
+# States must stay in sync with bots.depositor.QuorumState's values (see note on PHASE_OUTCOME).
 
-QUORUM_STATE = Gauge(
+QUORUM_STATE = Enum(
     'quorum_state',
-    'Guardian quorum state per module. 0=stale 1=retained 2=ready',
+    'Guardian quorum state per module.',
     ['module_id'],
+    states=['stale', 'retained', 'ready'],
     namespace=PROMETHEUS_PREFIX,
 )
 
