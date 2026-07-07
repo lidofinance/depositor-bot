@@ -97,7 +97,7 @@ def eligible_candidates(module_keys, beacon_data_and_timing) -> list[TopUpCandid
     beacon_data = beacon_data_and_timing[0]
     candidates = []
     for key in module_keys:
-        candidate = _check_key_eligibility(key, beacon_data, set(), 2_046_750_000_000, 2_000_000_000)
+        candidate, _ = _check_key_eligibility(key, beacon_data, 2_046_750_000_000, 2_000_000_000)
         if candidate is not None:
             candidates.append(candidate)
     candidates.sort(key=lambda c: c.key_index)

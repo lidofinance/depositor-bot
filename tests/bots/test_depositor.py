@@ -90,6 +90,41 @@ class TestRefreshModulesState(unittest.TestCase):
         for module_id in [1, 2, 3]:
             self.assertEqual(old, self.bot._module_last_heart_beat[module_id])
 
+    def test_quorum_last_seen_metric_updated_on_truthy_quorum(self):
+        self.bot._get_quorum = Mock(return_value=['msg'])
+        self.bot._select_strategy = Mock(return_value=Mock())
+
+        with mock.patch('bots.depositor.MODULE_QUORUM_LAST_SEEN_TIMESTAMP') as gauge:
+            self.bot._refresh_modules_state()
+
+        called_ids = sorted(c.args[0] for c in gauge.labels.call_args_list)
+        self.assertEqual([1, 2, 3], called_ids)
+        gauge.labels.return_value.set.assert_called()
+
+    def test_quorum_last_seen_metric_not_updated_on_none_quorum(self):
+        self.bot._get_quorum = Mock(return_value=None)
+        self.bot._select_strategy = Mock(return_value=Mock())
+
+        with mock.patch('bots.depositor.MODULE_QUORUM_LAST_SEEN_TIMESTAMP') as gauge:
+            self.bot._refresh_modules_state()
+
+        gauge.labels.assert_not_called()
+
+    def test_quorum_state_metric_updated_for_every_whitelisted_module(self):
+        """Regression: QUORUM_STATE used to be set only inside _try_deposit's call path
+        (_resolve_quorum), so a module never reached in a given cycle (top-up-only cycle, lost the
+        priority race, zero allocation) left it stale. _refresh_modules_state must touch it for
+        every whitelisted module every cycle, regardless of whether it has quorum."""
+        self.bot._get_quorum = Mock(return_value=None)
+        self.bot._select_strategy = Mock(return_value=Mock())
+
+        with mock.patch('bots.depositor.QUORUM_STATE') as quorum_state:
+            self.bot._refresh_modules_state()
+
+        called_ids = sorted(c.args[0] for c in quorum_state.labels.call_args_list)
+        self.assertEqual([1, 2, 3], called_ids)
+        quorum_state.labels.return_value.state.assert_called()
+
     def test_empty_whitelist_noop(self):
         variables.DEPOSIT_MODULES_WHITELIST = []
         self.bot._get_quorum = Mock()
@@ -142,6 +177,18 @@ class TestResolveQuorum(unittest.TestCase):
         self.bot._module_last_heart_beat[1] = datetime.now() - timedelta(minutes=variables.QUORUM_RETENTION_MINUTES, seconds=-1)
         self.assertIs(QuorumState.RETAINED, self.bot._resolve_quorum(1))
 
+    def test_reports_state_via_enum_metric_not_a_numeric_gauge(self):
+        """QUORUM_STATE is a prometheus_client.Enum — driven with .state(<QuorumState member>),
+        never .set(<int>). A regression here would silently produce a numeric-again series."""
+        self.bot._get_quorum = Mock(return_value=['msg'])
+
+        with mock.patch('bots.depositor.QUORUM_STATE') as quorum_state:
+            self.bot._resolve_quorum(1)
+
+        quorum_state.labels.assert_called_once_with(1)
+        quorum_state.labels.return_value.state.assert_called_once_with(QuorumState.READY)
+        quorum_state.labels.return_value.set.assert_not_called()
+
 
 # ─── _common_preconditions ─────────────────────────────────────────
 
@@ -163,6 +210,50 @@ class TestCommonPreconditions(unittest.TestCase):
     def test_fails_when_quorum_zero(self):
         self.bot.w3.lido.deposit_security_module.get_guardian_quorum.return_value = 0
         self.assertFalse(self.bot._common_preconditions())
+
+
+# ─── _publish_allocation_metrics ─────────────────────────────────────
+
+
+@pytest.mark.unit
+class TestPublishAllocationMetrics(unittest.TestCase):
+    def setUp(self):
+        self.bot = _make_bot()
+        variables.DEPOSIT_MODULES_WHITELIST = [1, 2]
+
+    def test_publishes_allocation_and_stake_for_whitelisted_modules(self):
+        digests = [_make_digest(1, '0xA1', 2), _make_digest(2, '0xA2', 1)]
+
+        with mock.patch('bots.depositor.MODULE_ALLOCATION') as allocation, mock.patch('bots.depositor.MODULE_STAKE') as stake:
+            self.bot._publish_allocation_metrics(digests, [30, 0], [100, 0], 'seed')
+
+        allocation.labels.assert_any_call(1, 'seed')
+        allocation.labels.assert_any_call(2, 'seed')
+        allocation.labels.return_value.set.assert_any_call(30)
+        allocation.labels.return_value.set.assert_any_call(0)
+        stake.labels.return_value.set.assert_any_call(70)  # 100 - 30
+
+    def test_skips_non_whitelisted_modules(self):
+        # Regression: a module excluded here would otherwise show a stale outcome from its last
+        # successful cycle, misrepresenting why it currently isn't a deposit candidate.
+        variables.DEPOSIT_MODULES_WHITELIST = [1]
+        digests = [_make_digest(1, '0xA1', 2), _make_digest(2, '0xA2', 1)]
+
+        with mock.patch('bots.depositor.MODULE_ALLOCATION') as allocation:
+            self.bot._publish_allocation_metrics(digests, [30, 999], [100, 999], 'seed')
+
+        called_ids = {c.args[0] for c in allocation.labels.call_args_list}
+        self.assertEqual({1}, called_ids)
+
+    def test_publishes_zero_allocation_for_excluded_module(self):
+        """A module with zero allocation must still get a fresh 0 this cycle, not be left alone."""
+        digests = [_make_digest(1, '0xA1', 2)]
+
+        with mock.patch('bots.depositor.MODULE_ALLOCATION') as allocation:
+            self.bot._publish_allocation_metrics(digests, [0], [0], 'seed')
+
+        allocation.labels.assert_called_once_with(1, 'seed')
+        allocation.labels.return_value.set.assert_called_once_with(0)
 
 
 # ─── _collect_candidates ───────────────────────────────────────────
@@ -454,7 +545,7 @@ class TestPhaseFullAndTopup(unittest.TestCase):
         self.bot.w3.lido.topup_gateway.is_block_distance_passed.return_value = True
         self.bot._get_quorum = Mock(return_value=None)
         self.bot._deposit_to_module = Mock(return_value=True)
-        self.bot._top_up_to_module = Mock(return_value=True)
+        self.bot._top_up_to_module = Mock(return_value=PhaseOutcome.SENT)
 
     def _set_cooldown_expired(self, module_id):
         self.bot._module_last_heart_beat[module_id] = datetime.now() - timedelta(minutes=variables.QUORUM_RETENTION_MINUTES + 1)
@@ -663,6 +754,20 @@ def test_execute_actual_zero_depositable_ether_short_circuits(depositor_bot):
 
 
 @pytest.mark.unit
+def test_execute_actual_reports_depositable_ether_even_when_zero(depositor_bot):
+    """DEPOSITABLE_ETHER must stay current even on the empty-buffer short-circuit — it's the
+    first thing worth checking when asking why nothing is being deposited."""
+    depositor_bot._refresh_modules_state = Mock()
+    depositor_bot.w3.lido.staking_router.get_all_staking_module_digests = Mock(return_value=[])
+    depositor_bot.w3.lido.lido.get_depositable_ether = Mock(return_value=0)
+
+    with mock.patch('bots.depositor.DEPOSITABLE_ETHER') as gauge:
+        depositor_bot._execute_actual()
+
+    gauge.set.assert_called_once_with(0)
+
+
+@pytest.mark.unit
 def test_execute_actual_phase_a_deposit_short_circuits(depositor_bot):
     """Phase A SENT → _execute_actual returns backoff=True, phase B not called."""
     depositor_bot._refresh_modules_state = Mock()
@@ -829,7 +934,7 @@ class TestExecuteActualScheduling(unittest.TestCase):
         self.bot.w3.lido.deposit_security_module.is_deposits_paused = Mock(return_value=False)
         self.bot.w3.lido.lido.get_depositable_ether = Mock(return_value=100)
         self.bot._deposit_to_module = Mock(return_value=True)
-        self.bot._top_up_to_module = Mock(return_value=True)
+        self.bot._top_up_to_module = Mock(return_value=PhaseOutcome.SENT)
         self.bot.w3.lido.deposit_security_module.is_min_deposit_distance_passed = Mock(return_value=True)
         self.bot.w3.lido.topup_gateway.is_block_distance_passed = Mock(return_value=True)
         self.bot.w3.lido.topup_gateway.is_paused = Mock(return_value=False)
@@ -921,7 +1026,7 @@ class TestExecuteActualScheduling(unittest.TestCase):
 
     def test_B5_top_up_failed(self):
         self._set_alloc(seed=[0, 0], topup=[100, 0])
-        self.bot._top_up_to_module = Mock(return_value=False)
+        self.bot._top_up_to_module = Mock(return_value=PhaseOutcome.TX_FAILED)
         self.assertFalse(self.bot._execute_actual())  # +1
         self.bot._top_up_to_module.assert_called_once()
 
@@ -1008,7 +1113,7 @@ def test_top_up_to_module_unknown_type_returns_false(depositor_bot):
     depositor_bot.w3.lido.staking_module = Mock(return_value=mock_module)
     depositor_bot._select_topup_strategy = Mock(return_value=None)
 
-    assert depositor_bot._top_up_to_module(1, '0xAddr', 50) is False
+    assert depositor_bot._top_up_to_module(1, '0xAddr', 50) is PhaseOutcome.SKIPPED
 
 
 @pytest.mark.unit
@@ -1021,7 +1126,7 @@ def test_top_up_to_module_gas_too_high_returns_false(depositor_bot):
     strategy.get_topup_candidates = Mock()
     depositor_bot._select_topup_strategy = Mock(return_value=strategy)
 
-    assert depositor_bot._top_up_to_module(1, '0xAddr', 50) is False
+    assert depositor_bot._top_up_to_module(1, '0xAddr', 50) is PhaseOutcome.SKIPPED
     strategy.get_topup_candidates.assert_not_called()
 
 
@@ -1037,7 +1142,7 @@ def test_top_up_to_module_no_proof_data_returns_false(depositor_bot):
     depositor_bot.w3.lido.topup_gateway.get_max_validators_per_top_up = Mock(return_value=10)
     depositor_bot.w3.lido.topup_gateway.top_up = Mock()
 
-    assert depositor_bot._top_up_to_module(1, '0xAddr', 50) is False
+    assert depositor_bot._top_up_to_module(1, '0xAddr', 50) is PhaseOutcome.SKIPPED
     depositor_bot.w3.lido.topup_gateway.top_up.assert_not_called()
 
 
@@ -1090,7 +1195,7 @@ def test_top_up_to_module_happy_path_calls_top_up_check_send(depositor_bot):
     depositor_bot.w3.transaction.check = Mock(return_value=True)
     depositor_bot.w3.transaction.send = Mock(return_value=True)
 
-    assert depositor_bot._top_up_to_module(1, '0xAddr', 50) is True
+    assert depositor_bot._top_up_to_module(1, '0xAddr', 50) is PhaseOutcome.SENT
 
     depositor_bot.w3.lido.topup_gateway.top_up.assert_called_once_with(1, proof_data)
     depositor_bot.w3.transaction.check.assert_called_once_with(tx)

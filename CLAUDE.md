@@ -124,6 +124,72 @@ All environment variables are read in `src/variables.py`. When adding a new one:
 
 `pyproject.toml` sets `pythonpath = ["src", "tests"]`. All imports are relative to `src/` — use `from blockchain.contracts...`, not `from src.blockchain...`.
 
+## Debugging: "why wasn't key X deposited / topped up?"
+
+This question splits into two different investigations depending on what X is. Conflating them
+wastes time — figure out which one applies before looking at anything.
+
+### X is an already-active validator (top-up path)
+
+CMv2 evaluates individual pubkeys for top-up, so there's always a definitive, instrumented answer.
+Walk the gates in order; the first one that isn't "pass" is almost always the whole answer.
+
+Module-level gates (Prometheus, defined in `src/metrics/metrics.py`, set in `src/bots/depositor.py`):
+
+1. `topup_gateway_paused == 0` (and `variables.ENABLE_TOP_UP` is true — checked at startup, not a metric).
+2. `module_allocation_wei{module_id, kind="topup"} > 0`. Zero here is the single most common reason
+   nothing happens — the StakingRouter allocation algorithm didn't route ETH to this module at all
+   this cycle.
+3. `module_stake_wei{module_id, kind="topup"}` — lowest value across candidate modules goes first.
+   Only **one** module is acted on per bot iteration (`_phase_full_and_topup` returns on the first
+   non-`SKIPPED` outcome), so a module that lost the priority race this cycle never gets its
+   `phase_outcome`/`quorum_state` touched — those stay at whatever they were last time this module
+   *was* reached. Tell "evaluated and skipped" from "not reached this cycle" by comparing
+   `phase_last_run_timestamp_seconds{phase="B", module_id}` against `module_allocation_wei`'s own
+   freshness (both are set every cycle regardless of whether the module becomes a candidate).
+4. `topup_gas_ok{module_id}` / `topup_gas_fee_wei{type}`.
+5. `phase_outcome{phase="B", module_id} != wait_distance` (TopUpGateway block distance).
+
+Key-level gates — module_id is now known, question narrows to pubkey X. Instrumented in
+`CMv2TopUpStrategy` (`src/blockchain/topup/cmv2_strategy.py`), evaluated in this order:
+
+- `not_in_beacon_state` / `not_active` / `slashed` / `exiting` / `beacon_consolidation_target` /
+  `already_at_target_balance` — `_check_key_eligibility`.
+- `pending_consolidation_bus` — excluded by a pending ConsolidationBus request.
+- `operator_budget_exhausted` — eligible and funded in isolation, but the operator's allocation ran
+  out before reaching X in validator-index order (`_take_up_to_allocation`). This is a queue-position
+  problem, not an eligibility problem — X is a strong candidate for the next cycle.
+- `truncated_by_max_validators` — eligible, funded, and within its operator's budget, but cut by the
+  cross-operator `max_validators` cap on the final sorted list.
+
+**`topup_key_excluded_total{module_id, reason}` (Counter) only tells you a reason is trending up —
+it is deliberately not labeled by pubkey** (would explode cardinality across thousands of keys).
+For "why was key X specifically excluded," grep logs for the structured line every excluded
+candidate gets, once per cycle, from `_log_excluded_key`:
+
+```
+{"msg": "Top-up candidate excluded.", "module_id": ..., "operator_id": ..., "pubkey": "0x...", "reason": "..."}
+```
+
+### X has never been deposited (first-deposit / 0x01 path)
+
+The bot does **not** pick a specific key here — it only decides how much ETH to route to X's
+*module* via `depositBufferedEther`. Which key gets consumed next is decided on-chain by that
+module's registry contract (NodeOperatorsRegistry / CSM), based on operator stake share and key
+submission order. That logic lives outside this repo and this repo has no metric for it — don't go
+looking for one.
+
+Check, in order: `deposits_paused`, `depositable_ether`, `module_status{module_id}` +
+`module_allocation_wei{module_id, kind="seed"}`, `quorum_state{module_id}` (deposits require a
+signed guardian quorum; top-ups don't — this gate has no equivalent on the top-up path),
+`phase_outcome{phase, module_id}`.
+
+If all of those pass and a deposit was sent, the module is healthy and the bot did its job — whether
+X specifically was the key consumed requires a separate lookup outside this bot: compare X's key
+index for its operator (Keys API) against the operator's currently-used-key count and stake share
+(StakingRouter). That's a one-off chain-state query, not something worth turning into a bot metric —
+it doesn't change cycle to cycle the way allocation or gas does.
+
 ## Testing
 
 Unit tests (`-m unit`) are fully offline and run on every commit via pre-commit hook. Integration tests (`-m integration`) fork Hoodi via anvil and require `TESTNET_WEB3_RPC_ENDPOINTS`.

@@ -1,7 +1,9 @@
 import logging
+import time
 from dataclasses import dataclass
 from typing import NamedTuple
 
+from metrics.metrics import KEYS_API_BLOCK_AGE_SECONDS, KEYS_API_BLOCK_NUMBER
 from prometheus_client import Histogram
 from providers.http_provider import HTTPProvider, data_is_dict
 
@@ -71,12 +73,13 @@ class KeysAPIClient(HTTPProvider):
         Get all used (deposited) keys for a staking module.
         GET /v1/modules/{module_id}/keys?used=true
         """
-        data, _ = self._get(
+        data, meta = self._get(
             endpoint='v1/modules/{}/keys',
             path_params=[module_id],
             query_params={'used': 'true'},
             retval_validator=data_is_dict,
         )
+        self._report_freshness(meta)
         keys = [LidoKey.from_response(**k) for k in data['keys']]
         logger.info(
             {
@@ -86,6 +89,20 @@ class KeysAPIClient(HTTPProvider):
             }
         )
         return keys
+
+    @staticmethod
+    def _report_freshness(meta: dict) -> None:
+        """meta wraps the response's top-level `meta.elBlockSnapshot` (see SRModuleKeyListResponse
+        in lidofinance/lido-keys-api). Defensive .get() chain: an API schema change should degrade
+        to a stale gauge, not break the deposit path.
+        """
+        snapshot = meta.get('meta', {}).get('elBlockSnapshot', {})
+        block_number = snapshot.get('blockNumber')
+        block_timestamp = snapshot.get('timestamp')
+        if block_number is not None:
+            KEYS_API_BLOCK_NUMBER.set(block_number)
+        if block_timestamp is not None:
+            KEYS_API_BLOCK_AGE_SECONDS.set(max(0, time.time() - block_timestamp))
 
     def get_module_operator_used_keys(self, module_id: int, operator_ids: list[int]) -> dict[int, list[LidoKey]]:
         """
