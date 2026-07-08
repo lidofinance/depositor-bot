@@ -22,18 +22,12 @@ _ZERO_ADDRESS = '0x0000000000000000000000000000000000000000'
 
 @pytest.fixture
 def consolidation_indexer_live():
-    rpcs = variables.WEB3_RPC_ENDPOINTS or variables.TESTNET_WEB3_RPC_ENDPOINTS
-    if not rpcs:
-        pytest.skip('No EL RPC configured (WEB3_RPC_ENDPOINTS / TESTNET_WEB3_RPC_ENDPOINTS).')
-
-    w3 = Web3(HTTPProvider(rpcs[0], request_kwargs={'timeout': 600}))
-    if not w3.is_connected():
-        pytest.skip('EL RPC not reachable.')
+    w3 = Web3(HTTPProvider(variables.WEB3_RPC_ENDPOINTS[0], request_kwargs={'timeout': 600}))
+    assert w3.is_connected(), 'Failed to connect to the Web3 provider.'
 
     chain_id = w3.eth.chain_id
     address, deploy_block = variables.get_consolidation_bus_config(chain_id)
-    if address is None or deploy_block is None:
-        pytest.skip(f'ConsolidationBus not configured for chain {chain_id}.')
+    assert address is not None and deploy_block is not None, f'ConsolidationBus not configured for chain {chain_id}.'
 
     contract = cast(
         ConsolidationBusContract,
@@ -52,9 +46,7 @@ def test_cold_start_against_live_consolidation_bus(consolidation_indexer_live):
     t0 = time.monotonic()
     indexer.cold_start()
     cold_dt = time.monotonic() - t0
-    print(
-        f'\ncold_start: {cold_dt:.1f}s | pending_batches={store.pending_batch_count()} ' f'pending_pubkeys={store.pending_pubkey_count()}'
-    )
+    print(f'\ncold_start: {cold_dt:.1f}s | pending_batches={store.pending_batch_count()} pending_pubkeys={store.pending_pubkey_count()}')
     # cold_start raises on failure (fatal), so reaching here means it succeeded.
 
     # 2. Correctness cross-check: every batch we hold as pending is actually open on-chain.
