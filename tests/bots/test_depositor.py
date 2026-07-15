@@ -645,10 +645,12 @@ class TestPhaseFullAndTopup(unittest.TestCase):
         self.bot._deposit_to_module.assert_not_called()
 
     def test_0x01_distance_block_does_not_divert_to_topup(self):
+        self.bot._deposit_to_module = Mock(return_value=True)
+        self.bot._top_up_to_module = Mock(return_value=True)
         # Priority 0x01 module is distance-blocked → wait for it; do NOT divert to the ready 0x02 top-up.
         digests = [_make_digest(1, '0xA1', 1), _make_digest(2, '0xA2', 2)]
         self._set_topup_allocation([999, 50], [999, 200])  # m2 0x02 topup stake = 150
-        self.bot.w3.lido.deposit_security_module.is_min_deposit_distance_passed.return_value = False
+        self.bot.w3.lido.deposit_security_module.is_min_deposit_distance_passed = Mock(return_value=False)
         # m1 0x01 seed stake = 60-50 = 10 (lowest → tried first), m2 topup stake = 150
         outcome = self.bot._phase_full_and_topup(Wei(100), [50, 999], [60, 999], digests)
 
