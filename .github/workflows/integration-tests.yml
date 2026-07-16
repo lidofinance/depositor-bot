@@ -38,6 +38,6 @@ jobs:
           TESTNET_WEB3_RPC_ENDPOINTS: 'https://ethereum-holesky-rpc.publicnode.com'
           DEPOSIT_CONTRACT: "0x00000000219ab540356cBB839Cbe05303d7705Fa"
           LIDO_LOCATOR: "0xC1d0b3DE6792Bf6b4b37EccdcC24e45978Cfd2Eb"
-          ONCHAIN_TRANSPORT_RPC_ENDPOINTS: "https://gnosis-chiado-rpc.publicnode.com"
-          ONCHAIN_TRANSPORT_ADDRESS: "0x42E1DEfC18388E3AA1fCADa851499A11405cf37f"
+          ONCHAIN_TRANSPORT_RPC_ENDPOINTS: "https://rpc.gnosis.gateway.fm"
+          ONCHAIN_TRANSPORT_ADDRESS: "0x37De961D6bb5865867aDd416be07189D2Dd960e6"
           ANVIL_PATH: ""

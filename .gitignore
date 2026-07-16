@@ -139,3 +139,6 @@ debug.log
 deposit_contract_cache/
 
 node_modules/
+
+# Claude
+.claude

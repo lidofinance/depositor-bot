@@ -2,9 +2,7 @@ import logging
 from functools import lru_cache
 
 from blockchain.contracts.base_interface import ContractInterface
-from eth_account.account import VRS
 from eth_typing import ChecksumAddress, Hash32
-from metrics.metrics import CAN_DEPOSIT
 from web3.contract.contract import ContractFunction
 from web3.types import BlockIdentifier
 
@@ -12,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 class DepositSecurityModuleContract(ContractInterface):
-    abi_path = './interfaces/DepositSecurityModule.json'
+    abi_path = './interfaces/DepositSecurityModuleV4.json'
 
     @lru_cache(maxsize=1)
     def get_guardian_quorum(self, block_identifier: BlockIdentifier = 'latest') -> int:
@@ -34,15 +32,22 @@ class DepositSecurityModuleContract(ContractInterface):
         logger.info({'msg': 'Call `ATTEST_MESSAGE_PREFIX()`.', 'value': response.hex(), 'block_identifier': repr(block_identifier)})
         return response
 
-    def can_deposit(self, staking_module_id: int, block_identifier: BlockIdentifier = 'latest') -> bool:
+    def is_min_deposit_distance_passed(self, staking_module_id: int, block_identifier: BlockIdentifier = 'latest') -> bool:
+        """Whether the global min deposit block distance has passed since the last deposit.
+
+        Standalone view of just the distance condition inside `canDeposit` (point 5 of
+        `depositBufferedEther`): `block.number - getLastDepositBlock() >= minDepositBlockDistance`.
+        The last deposit block is global (a deposit to any module advances it), so this gates every
+        module. Used to tell a transient distance block apart from a permanent one.
         """
-        Returns whether LIDO.deposit() can be called, given that the caller will provide
-        guardian attestations of non-stale deposit root and `nonce`, and the number of
-        such attestations will be enough to reach quorum.
-        """
-        response = self.functions.canDeposit(staking_module_id).call(block_identifier=block_identifier)
-        logger.info({'msg': f'Call `canDeposit({staking_module_id})`.', 'value': response, 'block_identifier': repr(block_identifier)})
-        CAN_DEPOSIT.labels(staking_module_id).set(int(response))
+        response = self.functions.isMinDepositDistancePassed(staking_module_id).call(block_identifier=block_identifier)
+        logger.info(
+            {
+                'msg': f'Call `isMinDepositDistancePassed({staking_module_id})`.',
+                'value': response,
+                'block_identifier': repr(block_identifier),
+            }
+        )
         return response
 
     def deposit_buffered_ether(
@@ -52,24 +57,25 @@ class DepositSecurityModuleContract(ContractInterface):
         deposit_root: Hash32,
         staking_module_id: int,
         nonce: int,
-        deposit_call_data: bytes,
         guardian_signatures: tuple[tuple[str, str], ...],
     ) -> ContractFunction:
         """
-        Calls LIDO.deposit(maxDepositsPerBlock, stakingModuleId, depositCalldata).
+        Calls STAKING_ROUTER.deposit(stakingModuleId, "") (deposit calldata is always empty in DSMv4).
 
         Reverts if any of the following is true:
         1. IDepositContract.get_deposit_root() != depositRoot.
-        2. StakingModule.getNonce() != nonce.
-        3. The number of guardian signatures is less than getGuardianQuorum().
-        4. An invalid or non-guardian signature received.
+        2. StakingRouter.getStakingModuleNonce() != nonce.
+        3. quorum == 0 or the number of guardian signatures is less than the quorum.
+        4. The module is not active.
         5. block.number - StakingModule.getLastDepositBlock() < minDepositBlockDistance.
-        6. blockhash(blockNumber) != blockHash.
+        6. blockHash is zero or blockhash(blockNumber) != blockHash.
+        7. Deposits are paused.
+        8. An invalid or non-guardian signature received.
 
         Signatures must be sorted in ascending order by address of the guardian. Each signature must
         be produced for the keccak256 hash of the following message (each component taking 32 bytes):
 
-        | ATTEST_MESSAGE_PREFIX | blockNumber | blockHash | depositRoot | stakingModuleId | nonce |
+        | ATTEST_MESSAGE_PREFIX | contractVersion | blockNumber | blockHash | depositRoot | stakingModuleId | nonce |
         """
         tx = self.functions.depositBufferedEther(
             block_number,
@@ -77,13 +83,12 @@ class DepositSecurityModuleContract(ContractInterface):
             deposit_root,
             staking_module_id,
             nonce,
-            deposit_call_data,
             guardian_signatures,
         )
         logger.info(
             {
                 'msg': f'Build `depositBufferedEther({block_number}, {block_hash}, {deposit_root}, {staking_module_id}, '
-                f'{nonce}, {deposit_call_data}, {guardian_signatures})` tx.'  # noqa
+                f'{nonce}, {guardian_signatures})` tx.'  # noqa
             }
         )
         return tx
@@ -104,76 +109,10 @@ class DepositSecurityModuleContract(ContractInterface):
     def pause_deposits(
         self,
         block_number: int,
-        staking_module_id: int,
-        guardian_signature: tuple[VRS, str],
-    ) -> ContractFunction:
-        """
-        Pauses deposits for staking module given that both conditions are satisfied (reverts otherwise):
-
-                1. The function is called by the guardian with index guardianIndex OR sig
-                        is a valid signature by the guardian with index guardianIndex of the data
-                        defined below.
-
-                2. block.number - blockNumber <= pauseIntentValidityPeriodBlocks
-
-        The signature, if present, must be produced for keccak256 hash of the following
-        message (each component taking 32 bytes):
-
-        | PAUSE_MESSAGE_PREFIX | blockNumber | stakingModuleId |
-        """
-        tx = self.functions.pauseDeposits(block_number, staking_module_id, guardian_signature)
-        logger.info({'msg': f'Build `pauseDeposits({block_number}, {staking_module_id}, {guardian_signature})` tx.'})
-        return tx
-
-    @lru_cache(maxsize=1)
-    def version(self, block_identifier: BlockIdentifier = 'latest') -> int:
-        response = self.functions.VERSION().call(block_identifier=block_identifier)
-
-        logger.info(
-            {
-                'msg': 'Call `VERSION()`.',
-                'value': response,
-                'block_identifier': repr(block_identifier),
-            }
-        )
-        return response
-
-    def get_unvet_message_prefix(self, block_identifier: BlockIdentifier = 'latest'):
-        raise NotImplementedError('V1 does not implement this method.')
-
-    def unvet_signing_keys(
-        self,
-        block_number: int,
-        block_hash: Hash32,
-        staking_module_id: int,
-        nonce: int,
-        operator_ids: bytes,
-        vetted_keys_by_operator: bytes,
-        guardian_signature: tuple[str, str],
-    ):
-        raise NotImplementedError('V1 does not implement this method.')
-
-    def is_deposits_paused(self, block_identifier: BlockIdentifier = 'latest'):
-        raise NotImplementedError('V1 does not implement this method.')
-
-    def pause_deposits_v2(
-        self,
-        block_number: int,
-        guardian_signature: tuple[str, str],
-    ) -> ContractFunction:
-        raise NotImplementedError('V1 does not implement this method.')
-
-
-class DepositSecurityModuleContractV2(DepositSecurityModuleContract):
-    abi_path = './interfaces/DepositSecurityModuleV2.json'
-
-    def pause_deposits_v2(
-        self,
-        block_number: int,
         guardian_signature: tuple[str, str],
     ) -> ContractFunction:
         """
-        Pauses deposits for staking module given that both conditions are satisfied (reverts otherwise):
+        Pauses deposits given that both conditions are satisfied (reverts otherwise):
 
                 1. The function is called by the guardian with index guardianIndex OR sig
                         is a valid signature by the guardian with index guardianIndex of the data
@@ -186,7 +125,6 @@ class DepositSecurityModuleContractV2(DepositSecurityModuleContract):
 
         | PAUSE_MESSAGE_PREFIX | blockNumber |
         """
-
         tx = self.functions.pauseDeposits(block_number, guardian_signature)
         logger.info({'msg': f'Build `pauseDeposits({block_number}, {guardian_signature})` tx.'})
         return tx
@@ -244,6 +182,19 @@ class DepositSecurityModuleContractV2(DepositSecurityModuleContract):
         logger.info(
             {
                 'msg': 'Call `getMaxOperatorsPerUnvetting()`.',
+                'value': response,
+                'block_identifier': repr(block_identifier),
+            }
+        )
+        return response
+
+    @lru_cache(maxsize=1)
+    def version(self, block_identifier: BlockIdentifier = 'latest') -> int:
+        response = self.functions.VERSION().call(block_identifier=block_identifier)
+
+        logger.info(
+            {
+                'msg': 'Call `VERSION()`.',
                 'value': response,
                 'block_identifier': repr(block_identifier),
             }

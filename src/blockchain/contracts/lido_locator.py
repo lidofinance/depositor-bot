@@ -32,6 +32,11 @@ class LidoLocatorContract(ContractInterface):
         logger.info({'msg': 'Call `withdrawalQueue()`.', 'value': response, 'block_identifier': repr(block_identifier)})
         return response
 
+    def top_up_gateway(self, block_identifier: BlockIdentifier = 'latest') -> ChecksumAddress:
+        response = self.functions.topUpGateway().call(block_identifier=block_identifier)
+        logger.info({'msg': 'Call `topUpGateway()`.', 'value': response, 'block_identifier': repr(block_identifier)})
+        return response
+
     @property
     def withdrawal_queue_contract(self) -> WithdrawalQueueContract:
         return cast(

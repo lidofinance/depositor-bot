@@ -1,7 +1,6 @@
 from blockchain.contracts.data_bus import DataBusContract
 from transport.msg_providers.onchain_transport import (
     DepositParser,
-    PauseV2Parser,
     PauseV3Parser,
     PingParser,
     UnvetParser,
@@ -38,20 +37,6 @@ class OnchainTransportSender:
         mes = self._w3.codec.encode(
             types=[DepositParser.DEPOSIT_V1_DATA_SCHEMA],
             args=[(block_number, block_hash, deposit_root, staking_module_id, nonce, self._DEFAULT_SIGNATURE, app)],
-        )
-        tx = self._data_bus.functions.sendMessage(event_id, mes)
-        return tx.transact()
-
-    def send_pause_v2(self, pause_mes: PauseMessage):
-        event_id = self._w3.keccak(text=PauseV2Parser.message_abi)
-        block_number, staking_module_id, app = (
-            pause_mes['blockNumber'],
-            pause_mes['stakingModuleId'],
-            ((1).to_bytes(32),),
-        )
-        mes = self._w3.codec.encode(
-            types=[PauseV2Parser.PAUSE_V2_DATA_SCHEMA],
-            args=[(block_number, self._DEFAULT_BLOCK_HASH, self._DEFAULT_SIGNATURE, staking_module_id, app)],
         )
         tx = self._data_bus.functions.sendMessage(event_id, mes)
         return tx.transact()

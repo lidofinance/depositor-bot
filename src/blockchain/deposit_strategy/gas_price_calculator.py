@@ -47,4 +47,8 @@ class GasPriceCalculator:
             last_block = BlockNumber(stat_item)
 
             gas_fees = stats['baseFeePerGas'] + gas_fees
+
+            if last_block < 1:
+                break
+
         return gas_fees[: days * self._BLOCKS_IN_ONE_DAY]
