@@ -9,22 +9,30 @@ MODULE_ID = 1
 
 @pytest.mark.unit
 def test_is_gas_price_ok(base_deposit_strategy):
-    base_deposit_strategy._gas_price_calculator.get_pending_base_fee = Mock(return_value=10)
-    base_deposit_strategy._gas_price_calculator.get_recommended_gas_fee = Mock(return_value=20)
-    variables.MAX_GAS_FEE = 300
+    # Save and restore the globals this test mutates, otherwise the leaked values break later tests
+    # (e.g. the integration deposit test reads MAX_GAS_FEE and would reject deposits).
+    saved_max_gas_fee = variables.MAX_GAS_FEE
+    saved_max_buffered = variables.MAX_BUFFERED_ETHERS
+    try:
+        base_deposit_strategy._gas_price_calculator.get_pending_base_fee = Mock(return_value=10)
+        base_deposit_strategy._gas_price_calculator.get_recommended_gas_fee = Mock(return_value=20)
+        variables.MAX_GAS_FEE = 300
 
-    base_deposit_strategy._gas_price_calculator.w3.lido.lido.get_depositable_ether = Mock(return_value=100)
-    variables.MAX_BUFFERED_ETHERS = 200
-    assert base_deposit_strategy.is_gas_price_ok(MODULE_ID)
+        base_deposit_strategy._gas_price_calculator.w3.lido.lido.get_depositable_ether = Mock(return_value=100)
+        variables.MAX_BUFFERED_ETHERS = 200
+        assert base_deposit_strategy.is_gas_price_ok(MODULE_ID)
 
-    base_deposit_strategy._gas_price_calculator.get_recommended_gas_fee = Mock(return_value=5)
-    assert not base_deposit_strategy.is_gas_price_ok(MODULE_ID)
+        base_deposit_strategy._gas_price_calculator.get_recommended_gas_fee = Mock(return_value=5)
+        assert not base_deposit_strategy.is_gas_price_ok(MODULE_ID)
 
-    base_deposit_strategy._gas_price_calculator.w3.lido.lido.get_depositable_ether = Mock(return_value=300)
-    assert base_deposit_strategy.is_gas_price_ok(MODULE_ID)
+        base_deposit_strategy._gas_price_calculator.w3.lido.lido.get_depositable_ether = Mock(return_value=300)
+        assert base_deposit_strategy.is_gas_price_ok(MODULE_ID)
 
-    base_deposit_strategy._gas_price_calculator.get_pending_base_fee = Mock(return_value=400)
-    assert not base_deposit_strategy.is_gas_price_ok(MODULE_ID)
+        base_deposit_strategy._gas_price_calculator.get_pending_base_fee = Mock(return_value=400)
+        assert not base_deposit_strategy.is_gas_price_ok(MODULE_ID)
+    finally:
+        variables.MAX_GAS_FEE = saved_max_gas_fee
+        variables.MAX_BUFFERED_ETHERS = saved_max_buffered
 
 
 @pytest.mark.unit

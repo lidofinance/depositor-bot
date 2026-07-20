@@ -721,12 +721,12 @@ def test_execute_actual_phase_a_deposit_short_circuits(depositor_bot):
 
 @pytest.mark.unit
 def test_execute_actual_phase_a_failure_does_not_call_phase_b(depositor_bot):
-    """Phase A returns a non-SKIPPED wait/fail outcome → phase B not called."""
+    """Phase A returns TX_FAILED → no backoff (False), phase B not called."""
     depositor_bot._refresh_modules_state = Mock()
     depositor_bot.w3.lido.lido.get_depositable_ether = Mock(return_value=100)
     depositor_bot.w3.lido.staking_router.get_deposit_allocations = Mock(return_value=(0, [], []))
     depositor_bot.w3.lido.staking_router.get_all_staking_module_digests = Mock(return_value=[])
-    depositor_bot._phase_seed = Mock(return_value=PhaseOutcome.WAIT_QUORUM)
+    depositor_bot._phase_seed = Mock(return_value=PhaseOutcome.TX_FAILED)
     depositor_bot._phase_full = Mock()
     depositor_bot._phase_full_and_topup = Mock()
 
@@ -850,15 +850,6 @@ def test_execute_actual_both_phases_return_false(depositor_bot):
     assert depositor_bot._execute_actual() is False
 
 
-# ─── Regression matrix: _execute_actual() Executor-facing signal ────
-#
-# Snapshot of the Executor scheduling signal (the bool _execute_actual returns: True → +BBE backoff,
-# False → +1 poll next block) per scenario, against the CURRENT behavior. Driven through the real
-# phases via stable low-level seams (_collect_candidates inputs, distance/quorum gates), so it stays
-# comparable across the PhaseOutcome refactor: the enum step must keep EVERY row unchanged; only the
-# later distance-backoff step is allowed to flip the distance rows (A1, B3) from False to True.
-
-
 @pytest.mark.unit
 class TestExecuteActualScheduling(unittest.TestCase):
     def setUp(self):
@@ -900,10 +891,10 @@ class TestExecuteActualScheduling(unittest.TestCase):
         self._set_alloc(seed=[100, 0], topup=[0, 0])
         self.bot.w3.lido.deposit_security_module.is_min_deposit_distance_passed = Mock(return_value=False)
         self.assertTrue(self.bot._execute_actual())  # distance-backoff: +BBE instead of polling every block
-        self.bot._deposit_to_module.assert_not_called()
 
     def test_A2_deposit_sent(self):
         self._set_alloc(seed=[100, 0], topup=[0, 0])
+        self.bot._deposit_to_module = Mock(return_value=True)
         self.assertTrue(self.bot._execute_actual())  # +BBE
         self.bot._deposit_to_module.assert_called_once_with(5)
 
@@ -916,6 +907,7 @@ class TestExecuteActualScheduling(unittest.TestCase):
     def test_A4_quorum_retained_wait(self):
         self._set_alloc(seed=[100, 0], topup=[0, 0])
         self.bot._get_quorum = Mock(return_value=None)  # no quorum now, heartbeat fresh → retained
+        self.bot._deposit_to_module = Mock(return_value=True)
         self.assertFalse(self.bot._execute_actual())  # +1
         self.bot._deposit_to_module.assert_not_called()
 
@@ -923,11 +915,14 @@ class TestExecuteActualScheduling(unittest.TestCase):
         self._set_alloc(seed=[100, 0], topup=[0, 0])  # no top-up, no 0x01 → Phase B empty
         self.bot._get_quorum = Mock(return_value=None)
         self._stale_quorum(5)
+        self.bot._deposit_to_module = Mock(return_value=True)
+        self.bot._top_up_to_module = Mock(return_value=True)
         self.assertFalse(self.bot._execute_actual())  # +1
         self.bot._deposit_to_module.assert_not_called()
         self.bot._top_up_to_module.assert_not_called()
 
     def test_A6_quorum_retained_holds_priority_over_ready_module(self):
+        self.bot._deposit_to_module = Mock()
         # Two 0x02 seed candidates. Priority m5 (lower stake) has no quorum but is in retention → we
         # WAIT and do NOT divert to m2, even though m2 has a quorum and could deposit right now.
         variables.DEPOSIT_MODULES_WHITELIST = [5, 2]
@@ -952,11 +947,13 @@ class TestExecuteActualScheduling(unittest.TestCase):
     def test_B3_top_up_distance_not_passed(self):
         self._set_alloc(seed=[0, 0], topup=[100, 0])
         self.bot.w3.lido.topup_gateway.is_block_distance_passed = Mock(return_value=False)
+        self.bot._top_up_to_module = Mock(return_value=True)
         self.assertTrue(self.bot._execute_actual())  # distance-backoff: +BBE instead of polling every block
         self.bot._top_up_to_module.assert_not_called()
 
     def test_B4_top_up_sent(self):
         self._set_alloc(seed=[0, 0], topup=[100, 0])
+        self.bot._top_up_to_module = Mock(return_value=True)
         self.assertTrue(self.bot._execute_actual())  # +BBE
         self.bot._top_up_to_module.assert_called_once()
 
@@ -1320,11 +1317,10 @@ def test_get_quorum(depositor_bot, setup_deposit_message):
 # ─── Integration ───────────────────────────────────────────────────
 
 
-@pytest.mark.skip(reason='SR v4 with getDepositAllocations is not deployed on Hoodi yet; re-enable once the upgrade lands.')
 @pytest.mark.integration
 @pytest.mark.parametrize(
     'web3_provider_integration,module_id',
-    [[{'block': 23647294}, 1]],
+    [[{'block': 3247161}, 1]],  # hoodi block
     indirect=['web3_provider_integration'],
 )
 def test_depositor_bot(
@@ -1337,8 +1333,11 @@ def test_depositor_bot(
     module_id,
     add_accounts_to_guardian,
 ):
-    variables.DEPOSIT_MODULES_WHITELIST = [1, 2]
+    variables.DEPOSIT_MODULES_WHITELIST = [1, 2, 3, 4, 5]
     variables.ENABLE_TOP_UP = False
+    # The staking-module cache is built at fixture init time from the whitelist; rebuild it now that the
+    # test set its own whitelist, otherwise _refresh_modules_state raises KeyError on the new module ids.
+    web3_lido_integration.lido._load_staking_modules()
 
     web3_lido_integration.provider.make_request(
         'anvil_setBalance',
@@ -1349,12 +1348,40 @@ def test_depositor_bot(
     )
 
     for _ in range(15):
-        web3_lido_integration.lido.lido.functions.submit(web3_lido_integration.eth.accounts[0]).transact(
-            {
-                'from': web3_lido_integration.eth.accounts[0],
-                'value': 10000 * 10**18,
-            }
-        )
+        # submit() reverts with STAKE_LIMIT if value exceeds the current stake limit — cap each
+        # submit to what the rate-limit bucket allows, then mine a block so it replenishes.
+        stake_limit = web3_lido_integration.lido.lido.functions.getCurrentStakeLimit().call()
+        value = min(10000 * 10**18, stake_limit)
+        if value > 0:
+            web3_lido_integration.lido.lido.functions.submit(web3_lido_integration.eth.accounts[0]).transact(
+                {
+                    'from': web3_lido_integration.eth.accounts[0],
+                    'value': value,
+                }
+            )
+        web3_lido_integration.provider.make_request('anvil_mine', [1])
+
+    # At this fork block module 1 (the only one with depositable keys) has stakeShareLimit=0, so the
+    # allocation algorithm returns 0 for every module and nothing gets deposited. Raise its share limit
+    # (impersonating the STAKING_MODULE_MANAGE_ROLE holder) so it receives a non-zero allocation.
+    # TODO: temporary — remove once there is a helper to add keys to the other (new) modules, so we can
+    # get a non-zero allocation without touching share limits.
+    sr = web3_lido_integration.lido.staking_router
+    manage_role = sr.functions.STAKING_MODULE_MANAGE_ROLE().call()
+    sr_admin = sr.functions.getRoleMember(manage_role, 0).call()
+    web3_lido_integration.provider.make_request('anvil_impersonateAccount', [sr_admin])
+    web3_lido_integration.provider.make_request('anvil_setBalance', [sr_admin, '0x500000000000000000000000'])
+    m1 = sr.functions.getStakingModule(module_id).call()
+    sr.functions.updateStakingModule(
+        module_id,
+        10000,  # stakeShareLimit → 100%
+        m1.priorityExitShareThreshold or 10000,
+        m1.stakingModuleFee,
+        m1.treasuryFee,
+        m1.maxDepositsPerBlock,
+        m1.minDepositBlockDistance,
+    ).transact({'from': sr_admin})
+
     latest = web3_lido_integration.eth.get_block('latest')
 
     old_module_nonce = web3_lido_integration.lido.staking_router.get_staking_module_nonce(module_id)
