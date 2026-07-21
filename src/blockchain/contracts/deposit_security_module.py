@@ -1,10 +1,11 @@
 import logging
 from functools import lru_cache
 
-from blockchain.contracts.base_interface import ContractInterface
 from eth_typing import ChecksumAddress, Hash32
 from web3.contract.contract import ContractFunction
 from web3.types import BlockIdentifier
+
+from blockchain.contracts.base_interface import ContractInterface
 
 logger = logging.getLogger(__name__)
 
