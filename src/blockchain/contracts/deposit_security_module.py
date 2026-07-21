@@ -75,7 +75,7 @@ class DepositSecurityModuleContract(ContractInterface):
         Signatures must be sorted in ascending order by address of the guardian. Each signature must
         be produced for the keccak256 hash of the following message (each component taking 32 bytes):
 
-        | ATTEST_MESSAGE_PREFIX | contractVersion | blockNumber | blockHash | depositRoot | stakingModuleId | nonce |
+        | ATTEST_MESSAGE_PREFIX | blockNumber | blockHash | depositRoot | stakingModuleId | nonce |
         """
         tx = self.functions.depositBufferedEther(
             block_number,
