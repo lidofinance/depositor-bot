@@ -1,5 +1,5 @@
 import logging
-from typing import List, Optional, cast
+from typing import cast
 
 from blockchain.beacon_state.ssz_types import (
     FAR_FUTURE_EPOCH,
@@ -30,7 +30,7 @@ class CMv2TopUpStrategy(TopUpStrategy):
         module_allocation: Wei,
         max_validators: int,
         consolidation_indexer: ConsolidationIndexer,
-    ) -> Optional[TopUpProofData]:
+    ) -> TopUpProofData | None:
         """Select validators for top-up in a CMv2 module."""
         # Step 1: operator allocation
         cmv2 = cast(
@@ -47,10 +47,6 @@ class CMv2TopUpStrategy(TopUpStrategy):
             return None
 
         allocation_by_operator: dict[int, int] = {op_id: alloc for op_id, alloc in zip(operator_ids, allocations) if alloc > 0}
-        if not allocation_by_operator:
-            logger.info({'msg': 'No operators with allocation.', 'module_id': module_id})
-            return None
-
         logger.info(
             {
                 'msg': 'CMv2 operator allocations.',
@@ -136,7 +132,7 @@ class CMv2TopUpStrategy(TopUpStrategy):
         return build_topup_proofs(beacon_data, candidates)
 
 
-def _collect_pubkeys(keys_by_operator: dict[int, List[LidoKey]]) -> set[bytes]:
+def _collect_pubkeys(keys_by_operator: dict[int, list[LidoKey]]) -> set[bytes]:
     result = set()
     for keys in keys_by_operator.values():
         for k in keys:
@@ -145,16 +141,16 @@ def _collect_pubkeys(keys_by_operator: dict[int, List[LidoKey]]) -> set[bytes]:
 
 
 def _select_operator_candidates(
-    keys: List[LidoKey],
+    keys: list[LidoKey],
     allocation: int,
     beacon_data: BeaconStateData,
     pending_consolidation: set[bytes],
     target_balance_gwei: int,
     min_top_up_gwei: int,
-) -> List[TopUpCandidate]:
+) -> list[TopUpCandidate]:
     eligible = []
     for key in keys:
-        candidate = _check_key_eligibility(key, beacon_data, pending_consolidation, target_balance_gwei, min_top_up_gwei)
+        candidate = _build_candidate_if_eligible(key, beacon_data, pending_consolidation, target_balance_gwei, min_top_up_gwei)
         if candidate is not None:
             eligible.append(candidate)
 
@@ -162,13 +158,13 @@ def _select_operator_candidates(
     return _take_up_to_allocation(eligible, allocation, beacon_data, target_balance_gwei, min_top_up_gwei)
 
 
-def _check_key_eligibility(
+def _build_candidate_if_eligible(
     key: LidoKey,
     beacon_data: BeaconStateData,
     pending_consolidation: set[bytes],
     target_balance_gwei: int,
     min_top_up_gwei: int,
-) -> Optional[TopUpCandidate]:
+) -> TopUpCandidate | None:
     pubkey = Web3.to_bytes(hexstr=HexStr(key.key))
 
     # Exclude keys participating in a pending ConsolidationBus request (source or target).
@@ -219,12 +215,12 @@ def _is_exiting(fields: ValidatorFields) -> bool:
 
 
 def _take_up_to_allocation(
-    candidates: List[TopUpCandidate],
+    candidates: list[TopUpCandidate],
     allocation_wei: int,
     beacon_data: BeaconStateData,
     target_balance_gwei: int,
     min_top_up_gwei: int,
-) -> List[TopUpCandidate]:
+) -> list[TopUpCandidate]:
     result = []
     remaining = allocation_wei // 10**9
     for c in candidates:

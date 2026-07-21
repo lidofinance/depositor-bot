@@ -10,6 +10,10 @@ logger = logging.getLogger(__name__)
 MODULE_TYPE_CMV2 = b'curated-onchain-v2'.ljust(32, b'\x00')
 MODULE_TYPE_CSM = b'community-onchain-v1'.ljust(32, b'\x00')
 
+# withdrawalCredentialsType of a staking module (StakingModuleDigest field 13)
+WC_TYPE_0X01 = 1
+WC_TYPE_0X02 = 2
+
 
 class StakingModuleInfo(TypedDict):
     """Parsed fields from a StakingModuleDigest tuple returned by StakingRouter."""

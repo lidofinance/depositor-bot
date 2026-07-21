@@ -10,7 +10,14 @@ import variables
 from blockchain.consolidation.indexer import ConsolidationIndexer
 from blockchain.consolidation.store import InMemoryPendingStore
 from blockchain.contracts.consolidation_bus import ConsolidationBusContract
-from blockchain.contracts.staking_router import MODULE_TYPE_CMV2, MODULE_TYPE_CSM, StakingModuleInfo, StakingRouterContractV4
+from blockchain.contracts.staking_router import (
+    MODULE_TYPE_CMV2,
+    MODULE_TYPE_CSM,
+    WC_TYPE_0X01,
+    WC_TYPE_0X02,
+    StakingModuleInfo,
+    StakingRouterContractV4,
+)
 from blockchain.deposit_strategy.base_deposit_strategy import (
     CSMDepositStrategy,
     DefaultDepositStrategy,
@@ -331,7 +338,7 @@ class DepositorBot:
 
         SKIPPED -> nothing actionable here, caller continues to the next phase.
         """
-        candidates = self._collect_candidates(digests, 2, seed_allocated, seed_new)
+        candidates = self._collect_candidates(digests, wc_type=WC_TYPE_0X02, allocated=seed_allocated, new=seed_new)
         candidates.sort(key=lambda c: (c.stake, c.digest_index))
         logger.info(
             {
@@ -363,12 +370,12 @@ class DepositorBot:
         candidates: list[ModuleCandidate] = []
 
         if not deposits_paused:
-            candidates += self._collect_candidates(digests, 1, seed_allocated, seed_new)
+            candidates += self._collect_candidates(digests, wc_type=WC_TYPE_0X01, allocated=seed_allocated, new=seed_new)
 
         if top_up_enabled:
             sr_v4 = cast(StakingRouterContractV4, self.w3.lido.staking_router)
             _total, topup_allocated, topup_new = sr_v4.get_deposit_allocations(depositable_ether, is_top_up=True)
-            candidates += self._collect_candidates(digests, 2, topup_allocated, topup_new)
+            candidates += self._collect_candidates(digests, wc_type=WC_TYPE_0X02, allocated=topup_allocated, new=topup_new)
 
         candidates.sort(key=lambda c: (c.stake, c.digest_index))
         logger.info(
@@ -381,7 +388,7 @@ class DepositorBot:
         for candidate in candidates:
             # The consolidation indexer is guaranteed present and ready in the top-up path — validated
             # at startup when ENABLE_TOP_UP is on (otherwise the bot would not have started).
-            if candidate.wc_type == 2:
+            if candidate.wc_type == WC_TYPE_0X02:
                 outcome = self._try_top_up(candidate, 'Phase B')
             else:
                 outcome = self._try_deposit(candidate.module_id, 'Phase B')
@@ -577,10 +584,7 @@ class DepositorBot:
                 # can't be verified, so skip
                 return True
 
-            if message['depositRoot'] != deposit_root:
-                return False
-
-            return True
+            return message['depositRoot'] == deposit_root
 
         return message_filter
 
