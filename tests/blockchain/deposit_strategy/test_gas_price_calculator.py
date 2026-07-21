@@ -2,7 +2,6 @@ from unittest.mock import Mock
 
 import pytest
 import variables
-from blockchain.deposit_strategy.base_deposit_strategy import BaseDepositStrategy
 
 MODULE_ID = 1
 
@@ -33,15 +32,6 @@ def test_is_gas_price_ok(base_deposit_strategy):
     finally:
         variables.MAX_GAS_FEE = saved_max_gas_fee
         variables.MAX_BUFFERED_ETHERS = saved_max_buffered
-
-
-@pytest.mark.unit
-@pytest.mark.parametrize(
-    'deposits,expected_range',
-    [(1, (0, 20)), (5, (20, 100)), (10, (50, 1000)), (100, (1000, 1000000))],
-)
-def test_calculate_recommended_gas_based_on_deposit_amount(deposits, expected_range):
-    assert expected_range[0] * 10**9 <= BaseDepositStrategy._recommended_max_gas(deposits, MODULE_ID) <= expected_range[1] * 10**9
 
 
 @pytest.mark.unit

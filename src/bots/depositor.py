@@ -32,8 +32,11 @@ from blockchain.typings import Web3
 from metrics.metrics import (
     ACCOUNT_BALANCE,
     CURRENT_QUORUM_SIZE,
+    DEPOSIT_AMOUNT_OK,
+    DEPOSITABLE_ETHER,
     GUARDIAN_BALANCE,
     MODULE_TX_SEND,
+    POSSIBLE_DEPOSITS_AMOUNT,
     QUORUM,
     UNEXPECTED_EXCEPTIONS,
 )
@@ -206,6 +209,7 @@ class DepositorBot:
 
         # Read depositable ether once; if 0 — nothing to do this iteration.
         depositable_ether = self.w3.lido.lido.get_depositable_ether()
+        DEPOSITABLE_ETHER.set(depositable_ether)
         logger.info({'msg': 'Depositable ether.', 'value': depositable_ether})
         if depositable_ether == 0:
             logger.info({'msg': 'No depositable ether — skip iteration.'})
@@ -234,6 +238,14 @@ class DepositorBot:
             }
         )
         digests: list[StakingModuleInfo] = self.w3.lido.staking_router.get_all_staking_module_digests()
+
+        # Per-module deposit metrics from the seed (is_top_up=False) allocation — 32 ETH per validator.
+        # Top-up allocations are intentionally excluded here (top-ups aren't 32-ETH deposits).
+        for i, digest in enumerate(digests):
+            if digest['module_id'] in variables.DEPOSIT_MODULES_WHITELIST:
+                possible_deposits = seed_allocated[i] // (32 * 10**18)
+                POSSIBLE_DEPOSITS_AMOUNT.labels(digest['module_id']).set(possible_deposits)
+                DEPOSIT_AMOUNT_OK.labels(digest['module_id']).set(int(possible_deposits >= 1))
 
         # Phase A: seed deposits into 0x02 modules (deposits only — skipped while deposits are paused).
         if not deposits_paused:
