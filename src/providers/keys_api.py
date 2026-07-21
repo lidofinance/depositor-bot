@@ -2,16 +2,10 @@ import logging
 from dataclasses import dataclass
 from typing import NamedTuple
 
-from prometheus_client import Histogram
+from metrics.metrics import KEYS_API_REQUESTS_DURATION
 from providers.http_provider import HTTPProvider, data_is_dict
 
 logger = logging.getLogger(__name__)
-
-KEYS_API_REQUESTS_DURATION = Histogram(
-    'keys_api_requests_duration_seconds',
-    'Keys API request duration',
-    ['endpoint', 'code', 'domain'],
-)
 
 
 class LidoKey(NamedTuple):
