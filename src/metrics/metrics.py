@@ -1,4 +1,4 @@
-from prometheus_client.metrics import Counter, Gauge, Info
+from prometheus_client.metrics import Counter, Gauge, Histogram, Info
 from variables import DEPOSIT_MODULES_WHITELIST, PROMETHEUS_PREFIX, PUBLIC_ENV_VARS
 
 GAS_FEE = Gauge(
@@ -120,6 +120,12 @@ MODULES = Gauge('modules', 'Modules gauge', ['module_id'], namespace=PROMETHEUS_
 
 for module_id in DEPOSIT_MODULES_WHITELIST:
     MODULES.labels(module_id).set(1)
+
+KEYS_API_REQUESTS_DURATION = Histogram(
+    'keys_api_requests_duration_seconds',
+    'Keys API request duration',
+    ['endpoint', 'code', 'domain'],
+)
 
 INFO = Info(name='build', documentation='Info metric', namespace=PROMETHEUS_PREFIX)
 CONVERTED_PUBLIC_ENV = {k: str(v) for k, v in PUBLIC_ENV_VARS.items()}

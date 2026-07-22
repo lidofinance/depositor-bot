@@ -10,7 +10,14 @@ import variables
 from blockchain.consolidation.indexer import ConsolidationIndexer
 from blockchain.consolidation.store import InMemoryPendingStore
 from blockchain.contracts.consolidation_bus import ConsolidationBusContract
-from blockchain.contracts.staking_router import MODULE_TYPE_CMV2, MODULE_TYPE_CSM, StakingModuleInfo, StakingRouterContractV4
+from blockchain.contracts.staking_router import (
+    MODULE_TYPE_CMV2,
+    MODULE_TYPE_CSM,
+    WC_TYPE_0X01,
+    WC_TYPE_0X02,
+    StakingModuleInfo,
+    StakingRouterContractV4,
+)
 from blockchain.deposit_strategy.base_deposit_strategy import (
     CSMDepositStrategy,
     DefaultDepositStrategy,
@@ -25,8 +32,11 @@ from blockchain.typings import Web3
 from metrics.metrics import (
     ACCOUNT_BALANCE,
     CURRENT_QUORUM_SIZE,
+    DEPOSIT_AMOUNT_OK,
+    DEPOSITABLE_ETHER,
     GUARDIAN_BALANCE,
     MODULE_TX_SEND,
+    POSSIBLE_DEPOSITS_AMOUNT,
     QUORUM,
     UNEXPECTED_EXCEPTIONS,
 )
@@ -199,6 +209,7 @@ class DepositorBot:
 
         # Read depositable ether once; if 0 — nothing to do this iteration.
         depositable_ether = self.w3.lido.lido.get_depositable_ether()
+        DEPOSITABLE_ETHER.set(depositable_ether)
         logger.info({'msg': 'Depositable ether.', 'value': depositable_ether})
         if depositable_ether == 0:
             logger.info({'msg': 'No depositable ether — skip iteration.'})
@@ -228,6 +239,14 @@ class DepositorBot:
         )
         digests: list[StakingModuleInfo] = self.w3.lido.staking_router.get_all_staking_module_digests()
 
+        # Per-module deposit metrics from the seed (is_top_up=False) allocation — 32 ETH per validator.
+        # Top-up allocations are intentionally excluded here (top-ups aren't 32-ETH deposits).
+        for i, digest in enumerate(digests):
+            if digest['module_id'] in variables.DEPOSIT_MODULES_WHITELIST:
+                possible_deposits = seed_allocated[i] // (32 * 10**18)
+                POSSIBLE_DEPOSITS_AMOUNT.labels(digest['module_id']).set(possible_deposits)
+                DEPOSIT_AMOUNT_OK.labels(digest['module_id']).set(int(possible_deposits >= 1))
+
         # Phase A: seed deposits into 0x02 modules (deposits only — skipped while deposits are paused).
         if not deposits_paused:
             logger.info({'msg': 'Phase A start: seed deposits to 0x02 modules.'})
@@ -236,18 +255,11 @@ class DepositorBot:
             if outcome is not PhaseOutcome.SKIPPED:
                 return outcome.is_backoff
 
-        # Phase B: top-ups (0x02) and full deposits (0x01). A paused TopUpGateway disables top-ups for
-        # this iteration — same effect as ENABLE_TOP_UP=False (deposits still flow via _phase_full).
+        # Phase B: full deposits (0x01) + top-ups (0x02), gated independently inside the phase —
+        # 0x01 while deposits are not paused, 0x02 while top-up is enabled and the gateway is not paused.
         top_up_enabled = variables.ENABLE_TOP_UP and not self.w3.lido.topup_gateway.is_paused()
-        if not top_up_enabled:
-            if deposits_paused:
-                logger.info({'msg': 'Deposits paused and top-up disabled/paused — nothing to do.'})
-                return False
-            logger.info({'msg': 'Phase B start: full deposits to 0x01 (top-up disabled/paused).'})
-            outcome = self._phase_full(seed_allocated, seed_new, digests)
-        else:
-            logger.info({'msg': 'Phase B start: full deposits to 0x01 + top-up to 0x02.'})
-            outcome = self._phase_full_and_topup(depositable_ether, seed_allocated, seed_new, digests, deposits_paused)
+        logger.info({'msg': 'Phase B start: full deposits to 0x01 + top-up to 0x02.'})
+        outcome = self._phase_full_and_topup(depositable_ether, seed_allocated, seed_new, digests, deposits_paused, top_up_enabled)
         logger.info({'msg': 'Phase B finished.', 'outcome': outcome.value})
         return outcome.is_backoff
 
@@ -338,7 +350,7 @@ class DepositorBot:
 
         SKIPPED -> nothing actionable here, caller continues to the next phase.
         """
-        candidates = self._collect_candidates(digests, 2, seed_allocated, seed_new)
+        candidates = self._collect_candidates(digests, wc_type=WC_TYPE_0X02, allocated=seed_allocated, new=seed_new)
         candidates.sort(key=lambda c: (c.stake, c.digest_index))
         logger.info(
             {
@@ -353,23 +365,6 @@ class DepositorBot:
                 return outcome
         return PhaseOutcome.SKIPPED
 
-    def _phase_full(self, seed_allocated: list[int], seed_new: list[int], digests: list[StakingModuleInfo]) -> PhaseOutcome:
-        """Full deposits to 0x01 modules using seed (is_top_up=False) allocations."""
-        candidates = self._collect_candidates(digests, 1, seed_allocated, seed_new)
-        candidates.sort(key=lambda c: (c.stake, c.digest_index))
-        logger.info(
-            {
-                'msg': 'Phase B (full 0x01) candidates sorted by stake asc.',
-                'candidates': [{'module_id': c.module_id, 'stake': int(c.stake)} for c in candidates],
-            }
-        )
-
-        for candidate in candidates:
-            outcome = self._try_deposit(candidate.module_id, 'Phase B')
-            if outcome is not PhaseOutcome.SKIPPED:
-                return outcome
-        return PhaseOutcome.SKIPPED
-
     def _phase_full_and_topup(
         self,
         depositable_ether: Wei,
@@ -377,20 +372,23 @@ class DepositorBot:
         seed_new: list[int],
         digests: list[StakingModuleInfo],
         deposits_paused: bool = False,
+        top_up_enabled: bool = False,
     ) -> PhaseOutcome:
         """
-        Full deposits to 0x01 + top-ups to 0x02.
-        - 0x02 (top-up) candidates: from is_top_up=True allocations (top-up uses its own capacity).
-        - 0x01 (full)   candidates: from is_top_up=False (seed) allocations.
+        Full deposits to 0x01 + top-ups to 0x02, each gated independently:
+        - 0x01 (full)   candidates: from is_top_up=False (seed) allocations, only while deposits are not paused.
+        - 0x02 (top-up) candidates: from is_top_up=True allocations, only while top-up is enabled/unpaused.
         """
-        sr_v4 = cast(StakingRouterContractV4, self.w3.lido.staking_router)
-        _total, topup_allocated, topup_new = sr_v4.get_deposit_allocations(depositable_ether, is_top_up=True)
+        candidates: list[ModuleCandidate] = []
 
-        # Top-ups (0x02) from is_top_up=True allocations always; full deposits (0x01) from seed
-        # (is_top_up=False) allocations only while deposits are not paused.
-        candidates = self._collect_candidates(digests, 2, topup_allocated, topup_new)
         if not deposits_paused:
-            candidates += self._collect_candidates(digests, 1, seed_allocated, seed_new)
+            candidates += self._collect_candidates(digests, wc_type=WC_TYPE_0X01, allocated=seed_allocated, new=seed_new)
+
+        if top_up_enabled:
+            sr_v4 = cast(StakingRouterContractV4, self.w3.lido.staking_router)
+            _total, topup_allocated, topup_new = sr_v4.get_deposit_allocations(depositable_ether, is_top_up=True)
+            candidates += self._collect_candidates(digests, wc_type=WC_TYPE_0X02, allocated=topup_allocated, new=topup_new)
+
         candidates.sort(key=lambda c: (c.stake, c.digest_index))
         logger.info(
             {
@@ -402,7 +400,7 @@ class DepositorBot:
         for candidate in candidates:
             # The consolidation indexer is guaranteed present and ready in the top-up path — validated
             # at startup when ENABLE_TOP_UP is on (otherwise the bot would not have started).
-            if candidate.wc_type == 2:
+            if candidate.wc_type == WC_TYPE_0X02:
                 outcome = self._try_top_up(candidate, 'Phase B')
             else:
                 outcome = self._try_deposit(candidate.module_id, 'Phase B')
@@ -598,10 +596,7 @@ class DepositorBot:
                 # can't be verified, so skip
                 return True
 
-            if message['depositRoot'] != deposit_root:
-                return False
-
-            return True
+            return message['depositRoot'] == deposit_root
 
         return message_filter
 

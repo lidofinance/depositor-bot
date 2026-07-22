@@ -1,5 +1,4 @@
 import hashlib
-from typing import List, Optional
 
 
 def sha256(data: bytes) -> bytes:
@@ -17,7 +16,7 @@ def next_power_of_two(n: int) -> int:
     return 1 << (n - 1).bit_length()
 
 
-ZERO_HASHES: List[bytes] = [b'\x00' * 32]
+ZERO_HASHES: list[bytes] = [b'\x00' * 32]
 for _i in range(1, 64):
     ZERO_HASHES.append(sha256(ZERO_HASHES[-1] + ZERO_HASHES[-1]))
 
@@ -27,7 +26,7 @@ class MerkleTree:
     A Merkle tree built from leaf chunks, supporting proof extraction.
     """
 
-    def __init__(self, chunks: List[bytes], limit: Optional[int] = None):
+    def __init__(self, chunks: list[bytes], limit: int | None = None):
         self.limit = limit
         self.original_length = len(chunks)
 
@@ -39,7 +38,7 @@ class MerkleTree:
         self.leaves = list(chunks) + [ZERO_HASHES[0]] * (target_len - len(chunks))
 
         # Build all layers (layer 0 = leaves, last layer = root)
-        self.layers: List[List[bytes]] = [self.leaves]
+        self.layers: list[list[bytes]] = [self.leaves]
         current = self.leaves
         while len(current) > 1:
             next_layer = []
@@ -52,7 +51,7 @@ class MerkleTree:
 
         self.root = current[0] if current else ZERO_HASHES[0]
 
-    def get_proof(self, index: int) -> List[bytes]:
+    def get_proof(self, index: int) -> list[bytes]:
         """Get Merkle proof for leaf at index. Returns proof bottom-up."""
         proof = []
         idx = index
@@ -66,7 +65,7 @@ class MerkleTree:
         return proof
 
 
-def build_sparse_list_proof(chunks: List[bytes], index: int, depth: int, nodes_cache: dict) -> List[bytes]:
+def build_sparse_list_proof(chunks: list[bytes], index: int, depth: int, nodes_cache: dict) -> list[bytes]:
     """
     Build Merkle proof for item at index.
     Efficient: computes only sibling subtree roots needed for the path.
@@ -106,7 +105,7 @@ def build_sparse_list_proof(chunks: List[bytes], index: int, depth: int, nodes_c
     return proof
 
 
-def compute_merkle_root_sparse(chunks: List[bytes], depth: int) -> bytes:
+def compute_merkle_root_sparse(chunks: list[bytes], depth: int) -> bytes:
     """Compute a sparse Merkle root using zero hashes for missing leaves."""
     if not chunks:
         return ZERO_HASHES[depth]
@@ -123,7 +122,7 @@ def compute_merkle_root_sparse(chunks: List[bytes], depth: int) -> bytes:
     return layer[0]
 
 
-def verify_merkle_proof_by_index(leaf: bytes, proof: List[bytes], index: int, root: bytes) -> bool:
+def verify_merkle_proof_by_index(leaf: bytes, proof: list[bytes], index: int, root: bytes) -> bool:
     """Verify a bottom-up proof against a simple leaf index."""
     computed = leaf
     current_index = index
