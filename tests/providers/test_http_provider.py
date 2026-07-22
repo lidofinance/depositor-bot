@@ -1,9 +1,10 @@
 from unittest.mock import MagicMock, Mock
 
 import pytest
-from providers.consensus import CL_REQUESTS_DURATION
-from providers.http_provider import HTTPProvider, NoHostsProvided, NotOkResponse, data_is_any
 from requests import Response
+
+from providers.consensus import CL_REQUESTS_DURATION
+from providers.http_provider import HTTPProvider, NoHostsProvided, NotOkResponse, data_is_any, data_is_dict
 
 
 @pytest.mark.unit
@@ -96,6 +97,17 @@ def test_retval_validator():
 
     with pytest.raises(ValueError, match='Validation failed'):
         provider._get('test', retval_validator=failed_validation)
+
+
+@pytest.mark.unit
+def test_data_is_dict():
+    # dict passes silently; anything else raises with the endpoint in the message
+    data_is_dict({}, {}, endpoint='v1/test')
+    data_is_dict({'a': 1}, {}, endpoint='v1/test')
+
+    for bad in ([], [1, 2], 1, 'str', None):
+        with pytest.raises(ValueError, match='Expected mapping response from v1/test'):
+            data_is_dict(bad, {}, endpoint='v1/test')
 
 
 @pytest.mark.unit
