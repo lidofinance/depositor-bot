@@ -4,11 +4,11 @@ from unittest import mock
 from unittest.mock import MagicMock, Mock
 
 import pytest
+from web3.types import Wei
+
 import variables
 from blockchain.contracts.staking_router import MODULE_TYPE_CMV2, MODULE_TYPE_CSM, StakingModuleInfo
 from bots.depositor import DepositorBot, PhaseOutcome, QuorumState
-from web3.types import Wei
-
 from tests.conftest import COUNCIL_ADDRESS_1, COUNCIL_ADDRESS_2, COUNCIL_PK_1, COUNCIL_PK_2
 from tests.utils.protocol_utils import get_deposit_message
 
@@ -233,9 +233,9 @@ class TestPhaseSeed(unittest.TestCase):
 
     def test_filters_non_0x02(self):
         digests = [_make_digest(1, '0xA1', 1)]
+        self.bot._deposit_to_module = Mock(return_value=True)
         outcome = self.bot._phase_seed([50], [100], digests)
         self.assertEqual(PhaseOutcome.SKIPPED, outcome)
-        self.bot._deposit_to_module = Mock(return_value=True)
         self.bot._deposit_to_module.assert_not_called()
 
     def test_filters_zero_allocation(self):
@@ -248,9 +248,9 @@ class TestPhaseSeed(unittest.TestCase):
 
     def test_filters_non_whitelisted(self):
         digests = [_make_digest(4, '0xA4', 2)]
+        self.bot._deposit_to_module = Mock(return_value=True)
         outcome = self.bot._phase_seed([50], [100], digests)
         self.assertEqual(PhaseOutcome.SKIPPED, outcome)
-        self.bot._deposit_to_module = Mock(return_value=True)
         self.bot._deposit_to_module.assert_not_called()
 
     # ─── Sort & selection ──────────────────────────────────────
@@ -368,9 +368,6 @@ class TestPhaseSeed(unittest.TestCase):
 
         self.assertEqual(PhaseOutcome.WAIT_DISTANCE, outcome)
         self.bot._deposit_to_module.assert_not_called()
-
-
-# ─── _phase_full ───────────────────────────────────────────────────
 
 
 @pytest.mark.unit
@@ -644,6 +641,19 @@ class TestPhaseFullAndTopup(unittest.TestCase):
         self.bot._top_up_to_module.assert_called_once_with(2, '0xA2', 50)
         self.bot._deposit_to_module.assert_not_called()
 
+    def test_deposits_paused_and_topup_disabled_skips_all(self):
+        # deposits_paused=True AND top_up_enabled=False → neither 0x01 nor 0x02 collected → SKIPPED, no-op.
+        digests = [_make_digest(1, '0xA1', 1), _make_digest(2, '0xA2', 2)]
+        self.bot._deposit_to_module = Mock(return_value=True)
+        self.bot._top_up_to_module = Mock(return_value=True)
+        self.bot._get_quorum = Mock(return_value=['msg'])  # would deposit if 0x01 were collected
+
+        outcome = self.bot._phase_full_and_topup(Wei(100), [50, 50], [60, 60], digests, deposits_paused=True, top_up_enabled=False)
+
+        self.assertEqual(PhaseOutcome.SKIPPED, outcome)
+        self.bot._deposit_to_module.assert_not_called()
+        self.bot._top_up_to_module.assert_not_called()
+
     def test_0x01_distance_block_does_not_divert_to_topup(self):
         self.bot._deposit_to_module = Mock(return_value=True)
         self.bot._top_up_to_module = Mock(return_value=True)
@@ -693,13 +703,11 @@ def test_execute_actual_zero_depositable_ether_short_circuits(depositor_bot):
     depositor_bot.w3.lido.lido.get_depositable_ether = Mock(return_value=0)
     depositor_bot.w3.lido.staking_router.get_deposit_allocations = Mock()
     depositor_bot._phase_seed = Mock()
-    depositor_bot._phase_full = Mock()
     depositor_bot._phase_full_and_topup = Mock()
 
     assert depositor_bot._execute_actual() is False
     depositor_bot.w3.lido.staking_router.get_deposit_allocations.assert_not_called()
     depositor_bot._phase_seed.assert_not_called()
-    depositor_bot._phase_full.assert_not_called()
     depositor_bot._phase_full_and_topup.assert_not_called()
 
 
@@ -711,11 +719,9 @@ def test_execute_actual_phase_a_deposit_short_circuits(depositor_bot):
     depositor_bot.w3.lido.staking_router.get_deposit_allocations = Mock(return_value=(0, [], []))
     depositor_bot.w3.lido.staking_router.get_all_staking_module_digests = Mock(return_value=[])
     depositor_bot._phase_seed = Mock(return_value=PhaseOutcome.SENT)
-    depositor_bot._phase_full = Mock()
     depositor_bot._phase_full_and_topup = Mock()
 
     assert depositor_bot._execute_actual() is True
-    depositor_bot._phase_full.assert_not_called()
     depositor_bot._phase_full_and_topup.assert_not_called()
 
 
@@ -727,11 +733,9 @@ def test_execute_actual_phase_a_failure_does_not_call_phase_b(depositor_bot):
     depositor_bot.w3.lido.staking_router.get_deposit_allocations = Mock(return_value=(0, [], []))
     depositor_bot.w3.lido.staking_router.get_all_staking_module_digests = Mock(return_value=[])
     depositor_bot._phase_seed = Mock(return_value=PhaseOutcome.TX_FAILED)
-    depositor_bot._phase_full = Mock()
     depositor_bot._phase_full_and_topup = Mock()
 
     assert depositor_bot._execute_actual() is False
-    depositor_bot._phase_full.assert_not_called()
     depositor_bot._phase_full_and_topup.assert_not_called()
 
 
@@ -743,11 +747,9 @@ def test_execute_actual_phase_a_cooldown_does_not_call_phase_b(depositor_bot):
     depositor_bot.w3.lido.staking_router.get_deposit_allocations = Mock(return_value=(0, [], []))
     depositor_bot.w3.lido.staking_router.get_all_staking_module_digests = Mock(return_value=[])
     depositor_bot._phase_seed = Mock(return_value=PhaseOutcome.WAIT_QUORUM)
-    depositor_bot._phase_full = Mock()
     depositor_bot._phase_full_and_topup = Mock()
 
     depositor_bot._execute_actual()
-    depositor_bot._phase_full.assert_not_called()
     depositor_bot._phase_full_and_topup.assert_not_called()
 
 
@@ -790,11 +792,9 @@ def test_execute_actual_routes_to_phase_full_and_topup_when_top_up_enabled(depos
     depositor_bot.w3.lido.staking_router.get_deposit_allocations = Mock(return_value=(0, [], []))
     depositor_bot.w3.lido.staking_router.get_all_staking_module_digests = Mock(return_value=[])
     depositor_bot._phase_seed = Mock(return_value=PhaseOutcome.SKIPPED)
-    depositor_bot._phase_full = Mock()
     depositor_bot._phase_full_and_topup = Mock(return_value=PhaseOutcome.SKIPPED)
 
     depositor_bot._execute_actual()
-    depositor_bot._phase_full.assert_not_called()
     depositor_bot._phase_full_and_topup.assert_called_once()
 
 
@@ -825,7 +825,6 @@ def test_execute_actual_deposits_paused_skips_phase_a_and_passes_flag(depositor_
     depositor_bot.w3.lido.staking_router.get_deposit_allocations = Mock(return_value=(0, [], []))
     depositor_bot.w3.lido.staking_router.get_all_staking_module_digests = Mock(return_value=[])
     depositor_bot._phase_seed = Mock()
-    depositor_bot._phase_full = Mock()
     depositor_bot._phase_full_and_topup = Mock(return_value=PhaseOutcome.SKIPPED)
 
     depositor_bot._execute_actual()
@@ -843,7 +842,6 @@ def test_execute_actual_both_phases_return_false(depositor_bot):
     depositor_bot.w3.lido.staking_router.get_deposit_allocations = Mock(return_value=(0, [], []))
     depositor_bot.w3.lido.staking_router.get_all_staking_module_digests = Mock(return_value=[])
     depositor_bot._phase_seed = Mock(return_value=PhaseOutcome.SKIPPED)
-    depositor_bot._phase_full = Mock(return_value=PhaseOutcome.SKIPPED)
 
     assert depositor_bot._execute_actual() is False
 
