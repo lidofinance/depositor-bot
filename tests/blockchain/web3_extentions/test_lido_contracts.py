@@ -1,8 +1,10 @@
+from unittest import mock
 from unittest.mock import Mock
 
 import pytest
 from web3 import Web3
 
+import variables
 from blockchain.contracts.deposit_security_module import DepositSecurityModuleContract, DepositSecurityModuleContractV5
 from blockchain.web3_extentions.lido_contracts import (
     DSM_CONTRACT_BY_VERSION,
@@ -29,6 +31,8 @@ def _make_lido_contracts(
     obj = LidoContracts.__new__(LidoContracts)
     obj.w3 = Web3()
     obj.dsm_version = dsm_version
+    obj._delegates_cache = None
+    obj._delegates_cached_at = 0.0
     obj.deposit_security_module = Mock()
     obj.deposit_security_module.get_guardians = Mock(return_value=guardians)
 
@@ -97,3 +101,57 @@ def test_dsm_contract_class_by_version():
     # v5 selects the delegation-aware contract class; v4 the legacy one.
     assert DSM_CONTRACT_BY_VERSION[5] is DepositSecurityModuleContractV5
     assert DSM_CONTRACT_BY_VERSION[4] is DepositSecurityModuleContract
+
+
+# ─── Delegate-map TTL cache ───────────────────────────────────────────────────
+# `_guardian_contract.call_count` is a faithful proxy for RPC load: it is invoked exactly once per
+# guardian per *rebuild*, so N guardians → +N per resolution and 0 on a cache hit.
+
+
+def _patch_clock(*values):
+    return mock.patch('blockchain.web3_extentions.lido_contracts.time.monotonic', side_effect=list(values))
+
+
+@pytest.mark.unit
+def test_delegates_cache_hit_within_ttl():
+    lido = _make_lido_contracts([_GUARDIAN_1, _GUARDIAN_2], {_GUARDIAN_1: _DELEGATE_1, _GUARDIAN_2: _DELEGATE_2})
+    with mock.patch.object(variables, 'GUARDIAN_DELEGATES_CACHE_TTL', 60), _patch_clock(1000.0, 1030.0):
+        first = lido.get_guardian_delegates()
+        second = lido.get_guardian_delegates()
+
+    assert first == {_DELEGATE_1: _GUARDIAN_1, _DELEGATE_2: _GUARDIAN_2}
+    assert second is first  # same cached object returned, no rebuild
+    assert lido._guardian_contract.call_count == 2  # resolved once (2 guardians)
+
+
+@pytest.mark.unit
+def test_delegates_cache_expires_after_ttl():
+    lido = _make_lido_contracts([_GUARDIAN_1, _GUARDIAN_2], {_GUARDIAN_1: _DELEGATE_1, _GUARDIAN_2: _DELEGATE_2})
+    # Second call is 80s after the first with a 60s TTL → cache expired → rebuild.
+    with mock.patch.object(variables, 'GUARDIAN_DELEGATES_CACHE_TTL', 60), _patch_clock(1000.0, 1080.0):
+        lido.get_guardian_delegates()
+        lido.get_guardian_delegates()
+
+    assert lido._guardian_contract.call_count == 4  # two rebuilds × 2 guardians
+
+
+@pytest.mark.unit
+def test_delegates_cache_disabled_when_ttl_zero():
+    lido = _make_lido_contracts([_GUARDIAN_1], {_GUARDIAN_1: _DELEGATE_1})
+    with mock.patch.object(variables, 'GUARDIAN_DELEGATES_CACHE_TTL', 0), _patch_clock(1000.0, 1000.0):
+        lido.get_guardian_delegates()
+        lido.get_guardian_delegates()
+
+    assert lido._guardian_contract.call_count == 2  # rebuilt on every call
+
+
+@pytest.mark.unit
+def test_delegates_explicit_block_bypasses_cache():
+    lido = _make_lido_contracts([_GUARDIAN_1], {_GUARDIAN_1: _DELEGATE_1})
+    # A non-'latest' read must never be served from (or populate) the cache — clock is never consulted.
+    with mock.patch.object(variables, 'GUARDIAN_DELEGATES_CACHE_TTL', 60), _patch_clock():
+        lido.get_guardian_delegates(block_identifier=123)
+        lido.get_guardian_delegates(block_identifier=123)
+
+    assert lido._guardian_contract.call_count == 2
+    assert lido._delegates_cache is None
