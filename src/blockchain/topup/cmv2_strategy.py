@@ -165,48 +165,69 @@ class CMv2TopUpStrategy(TopUpStrategy):
         )
 
         # Step 6: select candidates per operator (excluding keys in pending ConsolidationBus requests)
-        candidates: list[TopUpCandidate] = []
+
+        candidates_by_operator: dict[int, list[TopUpCandidate]] = {}
         total_consolidation_filtered = 0
+
         for op_id, op_allocation in allocation_by_operator.items():
-            selected, filtered = _select_operator_candidates(
-                keys_by_operator[op_id],
-                op_allocation,
-                beacon_data,
-                pending_consolidation,
-                target_balance_gwei,
-                min_top_up_gwei,
-                module_id,
+            op_candidates, filtered = _select_operator_candidates(
+                keys_by_operator[op_id], op_allocation, beacon_data, pending_consolidation, target_balance_gwei, min_top_up_gwei, module_id
             )
-            candidates.extend(selected)
+            if op_candidates:
+                candidates_by_operator[op_id] = op_candidates
+
             total_consolidation_filtered += filtered
 
         # LidoKey instances are no longer needed; free before the memory-heavy proof build.
         del keys_by_operator
         TOPUP_CONSOLIDATION_FILTERED.labels(module_id).set(total_consolidation_filtered)
 
-        # Step 7: TopUpGateway requires strictly ascending validator_indices across operators
-        candidates.sort(key=lambda c: c.validator_index)
-        # Step 8: limit to max_validators — everything past the cap loses purely to cross-operator
-        # competition for tx space, not to any eligibility problem of its own.
-        for excluded in candidates[max_validators:]:
-            _log_excluded_key(
-                module_id, excluded.operator_id, _pubkey_hex(excluded.pubkey), TopUpExclusionReason.TRUNCATED_BY_MAX_VALIDATORS
-            )
-        candidates = candidates[:max_validators]
         # Set before the early return so metrics are always fresh after a selection run,
         # including the 0 case — avoids stale values from a previous cycle.
-        now = time.time()
-        TOPUP_CANDIDATES_SELECTED.labels(module_id).set(len(candidates))
-        TOPUP_CANDIDATES_LAST_RUN_TIMESTAMP.labels(module_id).set(now)
 
-        if not candidates:
+        if not candidates_by_operator:
             logger.info({'msg': 'No eligible candidates.', 'module_id': module_id})
             return None
 
+        candidates = _distribute(candidates_by_operator, max_validators)
+        now = time.time()
+
+        TOPUP_CANDIDATES_SELECTED.labels(module_id).set(len(candidates))
+        TOPUP_CANDIDATES_LAST_RUN_TIMESTAMP.labels(module_id).set(now)
         logger.info({'msg': 'CMv2 candidates selected.', 'module_id': module_id, 'count': len(candidates)})
 
-        # Step 9: build proofs
+        # Step 7: TopUpGateway requires strictly ascending validator_indices across operators
+        candidates.sort(key=lambda c: c.validator_index)
+        # Step 8: build proofs
         return build_topup_proofs(beacon_data, candidates)
+
+
+def _distribute(candidates_by_operator: dict[int, list[TopUpCandidate]], limit: int) -> list[TopUpCandidate]:
+    selected: list[TopUpCandidate] = []
+
+    i = 0
+    circle = 0
+    operators = list(candidates_by_operator.keys())
+    while limit > 0 and operators:
+        op_id = operators[i]
+        candidates = candidates_by_operator[op_id]
+
+        if circle >= len(candidates):
+            # op_id no more has candidates
+            operators.remove(op_id)
+            if i >= len(operators):
+                # finished circle
+                i = 0
+                circle += 1
+            continue
+        selected.append(candidates[circle])
+        limit -= 1
+
+        i += 1
+        if i >= len(operators):
+            i = 0
+            circle += 1
+    return selected
 
 
 def _collect_pubkeys(keys_by_operator: dict[int, list[LidoKey]]) -> set[bytes]:
