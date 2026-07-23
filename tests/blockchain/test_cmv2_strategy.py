@@ -23,6 +23,7 @@ from blockchain.topup.cmv2_strategy import (
     _build_candidate_if_eligible,
     _collect_pubkeys,
     _distribute,
+    _log_excluded_key,
     _select_operator_candidates,
     _take_up_to_allocation,
 )
@@ -274,8 +275,9 @@ def test_build_candidate_if_eligible_returns_candidate(top_up_proof_fixtures):
     witness = top_up_proof_fixtures['validator_witnesses'][0]
     key = _make_key(witness['pubkey'], 7, 11)
 
-    candidate = _build_candidate_if_eligible(key, beacon_data, set(), TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI)
+    candidate, reason = _build_candidate_if_eligible(key, beacon_data, TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI)
 
+    assert reason is None
     assert candidate == TopUpCandidate(
         validator_index=int(witness['validatorIndex']),
         key_index=7,
@@ -293,37 +295,48 @@ def test_build_candidate_if_eligible_rejects_invalid_cases(top_up_proof_fixtures
     validator_index = int(witness['validatorIndex'])
     key = _make_key(witness['pubkey'], 7, 11)
 
-    assert (
-        _build_candidate_if_eligible(_make_key('0x' + '33' * 48, 7, 11), beacon_data, set(), TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI) is None
-    )
-
-    # key participating in a pending ConsolidationBus request is excluded
-    assert _build_candidate_if_eligible(key, beacon_data, {pubkey}, TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI) is None
+    candidate, reason = _build_candidate_if_eligible(_make_key('0x' + '33' * 48, 7, 11), beacon_data, TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI)
+    assert candidate is None
+    assert reason == 'not_in_beacon_state'
 
     beacon_data.consolidation_targets = {validator_index}
-    assert _build_candidate_if_eligible(key, beacon_data, set(), TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI) is None
+    candidate, reason = _build_candidate_if_eligible(key, beacon_data, TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI)
+    assert candidate is None
+    assert reason == 'beacon_consolidation_target'
+
     beacon_data.consolidation_targets = set()
 
     fields = beacon_data.validators_fields[validator_index]
 
     beacon_data.validators_fields[validator_index] = fields._replace(slashed=True)
-    assert _build_candidate_if_eligible(key, beacon_data, set(), TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI) is None
+
+    candidate, reason = _build_candidate_if_eligible(key, beacon_data, TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI)
+    assert candidate is None
+    assert reason == 'slashed'
 
     beacon_data.validators_fields[validator_index] = fields._replace(exit_epoch=1)
-    assert _build_candidate_if_eligible(key, beacon_data, set(), TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI) is None
+    candidate, reason = _build_candidate_if_eligible(key, beacon_data, TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI)
+    assert candidate is None
+    assert reason == 'exiting'
 
     beacon_data.validators_fields[validator_index] = fields._replace(
         exit_epoch=FAR_FUTURE_EPOCH,
         activation_epoch=beacon_data.slot + 1,
     )
-    assert _build_candidate_if_eligible(key, beacon_data, set(), TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI) is None
+
+    candidate, reason = _build_candidate_if_eligible(key, beacon_data, TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI)
+    assert candidate is None
+    assert reason == 'not_active'
 
     # balance exactly at the max eligible threshold + any pending pushes it over -> excluded
     beacon_data.validators_fields[validator_index] = fields._replace(
         effective_balance=MAX_ELIGIBLE_BALANCE_GWEI,
     )
     beacon_data.pending_deposits = {pubkey: 1}
-    assert _build_candidate_if_eligible(key, beacon_data, set(), TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI) is None
+
+    candidate, reason = _build_candidate_if_eligible(key, beacon_data, TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI)
+    assert candidate is None
+    assert reason == 'already_at_target_balance'
 
 
 @pytest.mark.unit
@@ -338,19 +351,38 @@ def test_select_operator_candidates_sorts_by_key_index():
         patch(
             'blockchain.topup.cmv2_strategy._build_candidate_if_eligible',
             side_effect=[
-                TopUpCandidate(1, 8, 11, bytes.fromhex('22' * 48), 0),
-                TopUpCandidate(0, 7, 11, bytes.fromhex('11' * 48), 0),
+                (TopUpCandidate(1, 8, 11, bytes.fromhex('22' * 48), 0), None),
+                (TopUpCandidate(0, 7, 11, bytes.fromhex('11' * 48), 0), None),
             ],
         ),
         patch(
             'blockchain.topup.cmv2_strategy._take_up_to_allocation',
-            side_effect=lambda candidates, allocation, beacon, target, min_top_up: candidates,
+            side_effect=lambda candidates, allocation, beacon, target, min_top_up, module_id: candidates,
         ) as take,
     ):
-        result = _select_operator_candidates(keys, 16 * 10**18, beacon_data, set(), TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI)
+        result, consolidation_filtered = _select_operator_candidates(
+            keys, 16 * 10**18, beacon_data, set(), TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI, 1
+        )
 
     assert [candidate.key_index for candidate in result] == [7, 8]
     assert take.call_args.args[0] == result
+    assert consolidation_filtered == 0
+
+
+@pytest.mark.unit
+def test_select_operator_candidates_counts_consolidation_filtered(top_up_proof_fixtures):
+    """Keys that pass all eligibility checks but are in the pending consolidation set are counted."""
+    beacon_data = _build_beacon_state_data(top_up_proof_fixtures)
+    witness = top_up_proof_fixtures['validator_witnesses'][0]
+    pubkey = bytes.fromhex(witness['pubkey'][2:])
+    key = _make_key(witness['pubkey'], 7, 11)
+
+    result, consolidation_filtered = _select_operator_candidates(
+        [key], 32 * 10**18, beacon_data, {pubkey}, TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI, 1
+    )
+
+    assert result == []
+    assert consolidation_filtered == 1
 
 
 @pytest.mark.unit
@@ -372,7 +404,7 @@ def test_take_up_to_allocation_respects_remaining_and_skips_below_min_topup():
 
     # 6 ETH allocation: candidate 0 (3 ETH) -> remaining 3 ETH, skip below-min/zero,
     # candidate 1 (4 ETH) exhausts remaining and stops.
-    result = _take_up_to_allocation(candidates, 6 * 10**18, beacon_data, TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI)
+    result = _take_up_to_allocation(candidates, 6 * 10**18, beacon_data, TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI, 1)
 
     assert result == [candidates[0], candidates[3]]
 
@@ -390,7 +422,7 @@ def test_take_up_to_allocation_skips_sub_min_tail():
     candidates = [TopUpCandidate(i, i, 0, bytes([i]), 0) for i in range(3)]
 
     # 4.5 ETH allocation
-    result = _take_up_to_allocation(candidates, 9 * 10**18 // 2, beacon_data, TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI)
+    result = _take_up_to_allocation(candidates, 9 * 10**18 // 2, beacon_data, TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI, 1)
 
     assert result == [candidates[0]]
 
@@ -408,7 +440,7 @@ def test_take_up_to_allocation_log_scenario_1216_eth():
 
     # 1216 ETH in Wei — from the log
     allocation_wei = 1216 * 10**18
-    result = _take_up_to_allocation(candidates, allocation_wei, beacon_data, TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI)
+    result = _take_up_to_allocation(candidates, allocation_wei, beacon_data, TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI, 1)
 
     # topup per validator = 2_014_750_000_000 Gwei (2014.75 ETH) > 1216 ETH allocation
     # first candidate exhausts allocation → only 1 selected
@@ -475,3 +507,68 @@ def test_distribute_three_operators_uneven_no_loss_no_dup():
     got = _distribute(by_op, 6)  # total is 6 → all selected, none lost or duplicated
     assert len(got) == 6
     assert sorted(c.operator_id for c in got) == [11, 11, 11, 12, 13, 13]
+
+
+# ─── Per-key exclusion reasons (answers "why wasn't key X topped up") ───
+
+
+@pytest.mark.unit
+def test_log_excluded_key_reports_metric_and_log_line():
+    with patch('blockchain.topup.cmv2_strategy.TOPUP_KEY_EXCLUDED') as counter:
+        _log_excluded_key(module_id=5, operator_id=11, pubkey='0xabc', reason='not_active')
+
+    counter.labels.assert_called_once_with(5, 'not_active')
+    counter.labels.return_value.inc.assert_called_once()
+
+
+@pytest.mark.unit
+def test_select_operator_candidates_logs_ineligible_reason(top_up_proof_fixtures):
+    beacon_data = _build_beacon_state_data(top_up_proof_fixtures)
+    key = _make_key('0x' + '33' * 48, 7, 11)  # not in beacon state
+
+    with patch('blockchain.topup.cmv2_strategy._log_excluded_key') as log_excluded:
+        _select_operator_candidates([key], 32 * 10**18, beacon_data, set(), TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI, module_id=5)
+
+    log_excluded.assert_called_once_with(5, 11, key.key, 'not_in_beacon_state')
+
+
+@pytest.mark.unit
+def test_select_operator_candidates_logs_pending_consolidation_reason(top_up_proof_fixtures):
+    beacon_data = _build_beacon_state_data(top_up_proof_fixtures)
+    witness = top_up_proof_fixtures['validator_witnesses'][0]
+    pubkey = bytes.fromhex(witness['pubkey'][2:])
+    key = _make_key(witness['pubkey'], 7, 11)
+
+    with patch('blockchain.topup.cmv2_strategy._log_excluded_key') as log_excluded:
+        _select_operator_candidates([key], 32 * 10**18, beacon_data, {pubkey}, TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI, module_id=5)
+
+    log_excluded.assert_called_once_with(5, 11, key.key, 'pending_consolidation_bus')
+
+
+@pytest.mark.unit
+def test_take_up_to_allocation_logs_budget_exhausted_for_remaining_tail():
+    beacon_data = Mock(validators_fields={0: _make_fields(TARGET_BALANCE_GWEI - 3 * 10**9)})
+    candidates = [
+        TopUpCandidate(0, 1, 11, b'a', 0),
+        TopUpCandidate(1, 2, 12, b'b', 0),  # never evaluated — budget already exhausted
+    ]
+
+    with patch('blockchain.topup.cmv2_strategy._log_excluded_key') as log_excluded:
+        # 3 ETH allocation: candidate 0 (needs 3 ETH) leaves 0 remaining < min (2 ETH) -> stop.
+        result = _take_up_to_allocation(candidates, 3 * 10**18, beacon_data, TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI, module_id=5)
+
+    assert result == [candidates[0]]
+    log_excluded.assert_called_once_with(5, 12, '0x62', 'operator_budget_exhausted')
+
+
+@pytest.mark.unit
+def test_take_up_to_allocation_logs_already_at_target_balance():
+    fields = _make_fields(TARGET_BALANCE_GWEI)  # needs 0 top-up
+    beacon_data = Mock(validators_fields={0: fields})
+    candidates = [TopUpCandidate(0, 1, 11, b'a', 0)]
+
+    with patch('blockchain.topup.cmv2_strategy._log_excluded_key') as log_excluded:
+        result = _take_up_to_allocation(candidates, 10 * 10**18, beacon_data, TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI, module_id=5)
+
+    assert result == []
+    log_excluded.assert_called_once_with(5, 11, '0x61', 'already_at_target_balance')

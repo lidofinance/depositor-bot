@@ -1,4 +1,6 @@
 import logging
+import time
+from enum import StrEnum
 from typing import cast
 
 from eth_typing import HexStr
@@ -15,10 +17,57 @@ from blockchain.topup.proofs import build_topup_proofs
 from blockchain.topup.strategy import TopUpStrategy
 from blockchain.topup.types import TopUpCandidate, TopUpProofData
 from blockchain.typings import Web3
+from metrics.metrics import (
+    TOPUP_CANDIDATES_LAST_RUN_TIMESTAMP,
+    TOPUP_CANDIDATES_SELECTED,
+    TOPUP_CONSOLIDATION_FILTERED,
+    TOPUP_KEY_EXCLUDED,
+)
 from providers.consensus import ConsensusClient
 from providers.keys_api import KeysAPIClient, LidoKey
 
 logger = logging.getLogger(__name__)
+
+
+class TopUpExclusionReason(StrEnum):
+    """Stable per-key exclusion reasons — used for both the per-cycle log line and TOPUP_KEY_EXCLUDED.
+
+    This is the full answer set for "why wasn't key X topped up this cycle" (see
+    _check_key_eligibility, _take_up_to_allocation and the max_validators truncation in
+    get_topup_candidates). A StrEnum member is a plain str at runtime, so it works directly as a
+    Prometheus label value and a JSON log field without a separate mapping.
+    """
+
+    NOT_IN_BEACON_STATE = 'not_in_beacon_state'
+    NOT_ACTIVE = 'not_active'
+    SLASHED = 'slashed'
+    EXITING = 'exiting'
+    BEACON_CONSOLIDATION_TARGET = 'beacon_consolidation_target'
+    ALREADY_AT_TARGET_BALANCE = 'already_at_target_balance'
+    PENDING_CONSOLIDATION_BUS = 'pending_consolidation_bus'
+    OPERATOR_BUDGET_EXHAUSTED = 'operator_budget_exhausted'
+    TRUNCATED_BY_MAX_VALIDATORS = 'truncated_by_max_validators'
+
+
+def _pubkey_hex(pubkey: bytes) -> str:
+    return '0x' + pubkey.hex()
+
+
+def _log_excluded_key(module_id: int, operator_id: int, pubkey: str, reason: TopUpExclusionReason) -> None:
+    """One INFO line per excluded top-up candidate — the way to answer "why wasn't key X topped
+    up this cycle" for a specific pubkey (grep logs by pubkey). `reason` is also counted in
+    TOPUP_KEY_EXCLUDED for trend visibility without per-key cardinality.
+    """
+    TOPUP_KEY_EXCLUDED.labels(module_id, reason).inc()
+    logger.info(
+        {
+            'msg': 'Top-up candidate excluded.',
+            'module_id': module_id,
+            'operator_id': operator_id,
+            'pubkey': pubkey,
+            'reason': reason,
+        }
+    )
 
 
 class CMv2TopUpStrategy(TopUpStrategy):
@@ -44,10 +93,23 @@ class CMv2TopUpStrategy(TopUpStrategy):
         allocated, operator_ids, allocations = cmv2.get_deposits_allocation(module_allocation)
 
         if allocated == 0:
+            now = time.time()
+            TOPUP_CANDIDATES_SELECTED.labels(module_id).set(0)
+            TOPUP_CANDIDATES_LAST_RUN_TIMESTAMP.labels(module_id).set(now)
+            TOPUP_CONSOLIDATION_FILTERED.labels(module_id).set(0)
             logger.info({'msg': 'No allocation from CMv2.', 'module_id': module_id})
             return None
 
         allocation_by_operator: dict[int, int] = {op_id: alloc for op_id, alloc in zip(operator_ids, allocations, strict=True) if alloc > 0}
+
+        if not allocation_by_operator:
+            now = time.time()
+            TOPUP_CANDIDATES_SELECTED.labels(module_id).set(0)
+            TOPUP_CANDIDATES_LAST_RUN_TIMESTAMP.labels(module_id).set(now)
+            TOPUP_CONSOLIDATION_FILTERED.labels(module_id).set(0)
+            logger.info({'msg': 'No operators with allocation.', 'module_id': module_id})
+            return None
+
         logger.info(
             {
                 'msg': 'CMv2 operator allocations.',
@@ -103,27 +165,35 @@ class CMv2TopUpStrategy(TopUpStrategy):
         )
 
         # Step 6: select candidates per operator (excluding keys in pending ConsolidationBus requests)
+
         candidates_by_operator: dict[int, list[TopUpCandidate]] = {}
+        total_consolidation_filtered = 0
+
         for op_id, op_allocation in allocation_by_operator.items():
-            op_candidates = _select_operator_candidates(
-                keys_by_operator[op_id],
-                op_allocation,
-                beacon_data,
-                pending_consolidation,
-                target_balance_gwei,
-                min_top_up_gwei,
+            op_candidates, filtered = _select_operator_candidates(
+                keys_by_operator[op_id], op_allocation, beacon_data, pending_consolidation, target_balance_gwei, min_top_up_gwei, module_id
             )
             if op_candidates:
                 candidates_by_operator[op_id] = op_candidates
 
+            total_consolidation_filtered += filtered
+
         # LidoKey instances are no longer needed; free before the memory-heavy proof build.
         del keys_by_operator
+        TOPUP_CONSOLIDATION_FILTERED.labels(module_id).set(total_consolidation_filtered)
+
+        # Set before the early return so metrics are always fresh after a selection run,
+        # including the 0 case — avoids stale values from a previous cycle.
 
         if not candidates_by_operator:
             logger.info({'msg': 'No eligible candidates.', 'module_id': module_id})
             return None
 
         candidates = _distribute(candidates_by_operator, max_validators)
+        now = time.time()
+
+        TOPUP_CANDIDATES_SELECTED.labels(module_id).set(len(candidates))
+        TOPUP_CANDIDATES_LAST_RUN_TIMESTAMP.labels(module_id).set(now)
         logger.info({'msg': 'CMv2 candidates selected.', 'module_id': module_id, 'count': len(candidates)})
 
         # Step 7: TopUpGateway requires strictly ascending validator_indices across operators
@@ -175,58 +245,72 @@ def _select_operator_candidates(
     pending_consolidation: set[bytes],
     target_balance_gwei: int,
     min_top_up_gwei: int,
-) -> list[TopUpCandidate]:
+    module_id: int,
+) -> tuple[list[TopUpCandidate], int]:
+    """Returns (selected_candidates, consolidation_filtered_count).
+
+    consolidation_filtered_count counts only keys that passed all other eligibility checks but
+    were blocked by a pending ConsolidationBus request — not all keys in the pending set.
+    """
+    consolidation_filtered = 0
     eligible = []
     for key in keys:
-        candidate = _build_candidate_if_eligible(key, beacon_data, pending_consolidation, target_balance_gwei, min_top_up_gwei)
-        if candidate is not None:
-            eligible.append(candidate)
+        candidate, reason = _build_candidate_if_eligible(key, beacon_data, target_balance_gwei, min_top_up_gwei)
+        if candidate is None:
+            assert reason is not None
+            _log_excluded_key(module_id, key.operatorIndex, key.key, reason)
+            continue
+        if candidate.pubkey in pending_consolidation:
+            consolidation_filtered += 1
+            _log_excluded_key(module_id, candidate.operator_id, key.key, TopUpExclusionReason.PENDING_CONSOLIDATION_BUS)
+            continue
+        eligible.append(candidate)
 
     eligible.sort(key=lambda c: c.validator_index)
-    return _take_up_to_allocation(eligible, allocation, beacon_data, target_balance_gwei, min_top_up_gwei)
+    selected = _take_up_to_allocation(eligible, allocation, beacon_data, target_balance_gwei, min_top_up_gwei, module_id)
+    return selected, consolidation_filtered
 
 
 def _build_candidate_if_eligible(
     key: LidoKey,
     beacon_data: BeaconStateData,
-    pending_consolidation: set[bytes],
     target_balance_gwei: int,
     min_top_up_gwei: int,
-) -> TopUpCandidate | None:
+) -> tuple[TopUpCandidate | None, TopUpExclusionReason | None]:
+    """Returns (candidate, exclusion_reason) — reason is set only when candidate is None."""
     pubkey = Web3.to_bytes(hexstr=HexStr(key.key))
-
-    # Exclude keys participating in a pending ConsolidationBus request (source or target).
-    if pubkey in pending_consolidation:
-        return None
 
     validator_index = beacon_data.pubkey_to_index.get(pubkey)
     if validator_index is None:
-        return None
+        return None, TopUpExclusionReason.NOT_IN_BEACON_STATE
 
     fields = beacon_data.validators_fields[validator_index]
     pending = beacon_data.pending_deposits.get(pubkey, 0)
     current_epoch = beacon_data.slot // SLOTS_PER_EPOCH
 
     if not _is_active(fields, current_epoch):
-        return None
+        return None, TopUpExclusionReason.NOT_ACTIVE
     if _is_slashed(fields):
-        return None
+        return None, TopUpExclusionReason.SLASHED
     if _is_exiting(fields):
-        return None
+        return None, TopUpExclusionReason.EXITING
     if validator_index in beacon_data.consolidation_targets:
-        return None
+        return None, TopUpExclusionReason.BEACON_CONSOLIDATION_TARGET
     # Mirror TopUpGateway._evaluateTopUpLimit: a balance above (target - min) leaves less than the
     # minimum meaningful top-up, so the contract would return limit 0 — exclude such keys here too.
     max_eligible_balance_gwei = target_balance_gwei - min_top_up_gwei
     if fields.effective_balance + pending > max_eligible_balance_gwei:
-        return None
+        return None, TopUpExclusionReason.ALREADY_AT_TARGET_BALANCE
 
-    return TopUpCandidate(
-        validator_index=validator_index,
-        key_index=key.index,
-        operator_id=key.operatorIndex,
-        pubkey=pubkey,
-        pending_balance=pending,
+    return (
+        TopUpCandidate(
+            validator_index=validator_index,
+            key_index=key.index,
+            operator_id=key.operatorIndex,
+            pubkey=pubkey,
+            pending_balance=pending,
+        ),
+        None,
     )
 
 
@@ -248,19 +332,25 @@ def _take_up_to_allocation(
     beacon_data: BeaconStateData,
     target_balance_gwei: int,
     min_top_up_gwei: int,
+    module_id: int,
 ) -> list[TopUpCandidate]:
     result = []
     remaining = allocation_wei // 10**9
-    for c in candidates:
+    for i, c in enumerate(candidates):
         # Stop before adding a validator the leftover budget can't fund to at least the minimum:
         # the contract spends the allocation in order and tops the last validator up only by what
         # remains — if that is < min it reverts. Checked before append so a sub-min tail is never selected.
         if remaining < min_top_up_gwei:
+            for excluded in candidates[i:]:
+                _log_excluded_key(
+                    module_id, excluded.operator_id, _pubkey_hex(excluded.pubkey), TopUpExclusionReason.OPERATOR_BUDGET_EXHAUSTED
+                )
             break
         balance = beacon_data.validators_fields[c.validator_index].effective_balance
         topup_amount = target_balance_gwei - (balance + c.pending_balance)
         # Already at/near the cap — the contract tops up nothing (mirrors TopUpGateway._evaluateTopUpLimit).
         if topup_amount < min_top_up_gwei:
+            _log_excluded_key(module_id, c.operator_id, _pubkey_hex(c.pubkey), TopUpExclusionReason.ALREADY_AT_TARGET_BALANCE)
             continue
         result.append(c)
         # May go negative: the last selected validator absorbs the remaining budget as a partial top-up.

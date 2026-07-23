@@ -7,6 +7,7 @@ from blockchain.consolidation.indexer import ConsolidationIndexer
 from blockchain.deposit_strategy.gas_price_calculator import GasPriceCalculator
 from blockchain.topup.types import TopUpProofData
 from blockchain.typings import Web3
+from metrics.metrics import TOPUP_GAS_FEE
 from providers.consensus import ConsensusClient
 from providers.keys_api import KeysAPIClient
 from web3.types import Wei
@@ -23,6 +24,8 @@ class TopUpStrategy(abc.ABC):
         current_gas_fee = self._gas_price_calculator.get_pending_base_fee()
         current_buffered_ether = self.w3.lido.lido.get_depositable_ether()
         recommended_gas_fee = self._gas_price_calculator.get_recommended_gas_fee()
+        TOPUP_GAS_FEE.labels('current_fee').set(current_gas_fee)
+        TOPUP_GAS_FEE.labels('recommended_fee').set(recommended_gas_fee)
 
         if current_buffered_ether > variables.MAX_BUFFERED_ETHERS:
             success = current_gas_fee <= variables.MAX_GAS_FEE
