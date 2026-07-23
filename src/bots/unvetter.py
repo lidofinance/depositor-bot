@@ -1,6 +1,6 @@
 import logging
 from collections.abc import Callable
-from typing import TypedDict
+from typing import TypedDict, cast
 
 from schema import Or, Schema
 from web3.types import BlockData
@@ -8,6 +8,7 @@ from web3.types import BlockData
 import variables
 from blockchain.executor import Executor
 from blockchain.typings import Web3
+from cryptography.verify_signature import to_guardian_signature
 from metrics.metrics import UNEXPECTED_EXCEPTIONS
 from metrics.transport_message_metrics import message_metrics_filter
 from transport.msg_providers.onchain_transport import OnchainTransportProvider, PingParser, UnvetParser
@@ -92,7 +93,7 @@ class UnvetterBot:
 
         actualize_filter = self._get_message_actualize_filter()
         prefix = self.w3.lido.deposit_security_module.get_unvet_message_prefix()
-        sign_filter = get_messages_sign_filter(prefix)
+        sign_filter = get_messages_sign_filter(prefix, delegated=self.w3.lido.guardian_delegation_active())
         return self.message_storage.get_messages_and_actualize(lambda x: sign_filter(x) and actualize_filter(x))
 
     def _get_message_actualize_filter(self) -> Callable[[UnvetMessage], bool]:
@@ -137,6 +138,12 @@ class UnvetterBot:
             )
             return False
 
+        signature = to_guardian_signature(
+            message['guardianAddress'],
+            cast(str, message['signature']['r']),
+            message['signature']['_vs'],
+            self.w3.lido.guardian_delegation_active(),
+        )
         unvet_tx = self.w3.lido.deposit_security_module.unvet_signing_keys(
             message['blockNumber'],
             message['blockHash'],
@@ -144,7 +151,7 @@ class UnvetterBot:
             message['nonce'],
             from_hex_string_to_bytes(message['operatorIds']),
             from_hex_string_to_bytes(message['vettedKeysByOperator']),
-            (message['signature']['r'], message['signature']['_vs']),
+            signature,
         )
 
         if not self.w3.transaction.check(unvet_tx):
@@ -156,7 +163,7 @@ class UnvetterBot:
 
     def _clear_outdated_messages_for_module(self, module_id: int, nonce: int):
         prefix = self.w3.lido.deposit_security_module.get_unvet_message_prefix()
-        is_message_signed_filter = get_messages_sign_filter(prefix)
+        is_message_signed_filter = get_messages_sign_filter(prefix, delegated=self.w3.lido.guardian_delegation_active())
 
         def is_unvet_message_relevant(msg: TypedDict) -> bool:
             is_message_relevant = msg['stakingModuleId'] != module_id or int(msg['nonce']) >= nonce

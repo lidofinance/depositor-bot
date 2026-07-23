@@ -3,7 +3,13 @@ from unittest.mock import Mock
 import pytest
 from web3 import Web3
 
-from blockchain.web3_extentions.lido_contracts import GUARDIAN_DELEGATION_DSM_VERSION, ZERO_ADDRESS, LidoContracts
+from blockchain.contracts.deposit_security_module import DepositSecurityModuleContract, DepositSecurityModuleContractV5
+from blockchain.web3_extentions.lido_contracts import (
+    DSM_CONTRACT_BY_VERSION,
+    GUARDIAN_DELEGATION_DSM_VERSION,
+    ZERO_ADDRESS,
+    LidoContracts,
+)
 
 # Distinct valid addresses used across the resolver tests.
 _GUARDIAN_1 = Web3.to_checksum_address('0x1111111111111111111111111111111111111111')
@@ -75,3 +81,19 @@ def test_get_guardian_delegates_pre_v5_returns_identity_map():
     )
     assert lido.get_guardian_delegates() == {_GUARDIAN_1: _GUARDIAN_1, _GUARDIAN_2: _GUARDIAN_2}
     lido._guardian_contract.assert_not_called()
+
+
+@pytest.mark.unit
+def test_guardian_delegation_active_gates_on_version():
+    lido = _make_lido_contracts(guardians=[], delegate_of={}, dsm_version=GUARDIAN_DELEGATION_DSM_VERSION)
+    assert lido.guardian_delegation_active()
+
+    lido.dsm_version = GUARDIAN_DELEGATION_DSM_VERSION - 1
+    assert not lido.guardian_delegation_active()
+
+
+@pytest.mark.unit
+def test_dsm_contract_class_by_version():
+    # v5 selects the delegation-aware contract class; v4 the legacy one.
+    assert DSM_CONTRACT_BY_VERSION[5] is DepositSecurityModuleContractV5
+    assert DSM_CONTRACT_BY_VERSION[4] is DepositSecurityModuleContract

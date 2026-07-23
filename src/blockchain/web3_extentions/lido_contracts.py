@@ -9,7 +9,7 @@ from web3.types import BlockIdentifier
 
 import variables
 from blockchain.contracts.deposit import DepositContract
-from blockchain.contracts.deposit_security_module import DepositSecurityModuleContract
+from blockchain.contracts.deposit_security_module import DepositSecurityModuleContract, DepositSecurityModuleContractV5
 from blockchain.contracts.guardian import GuardianContract
 from blockchain.contracts.lido import LidoContract
 from blockchain.contracts.lido_locator import LidoLocatorContract
@@ -19,14 +19,17 @@ from blockchain.contracts.topup_gateway import TopUpGatewayContract
 
 logger = logging.getLogger(__name__)
 
-SUPPORTED_DSM_VERSION = 4
-
 # The Execution Delegation Framework (LIP-37) — guardians as delegation contracts with rotatable
-# delegate EOAs — ships with DSM v5. The delegate-resolution path activates from this version on;
-# below it, guardians are plain EOAs. Note this is intentionally above SUPPORTED_DSM_VERSION: the
-# reception path exists and is correct, but the bot still refuses to run on v5 until the rest of v5
-# support (delegate-based signature verification, GuardianSignature submission) lands.
+# delegate EOAs — ships with DSM v5. From this version on, the delegate-resolution path is active
+# (guardians are contracts), guardian signatures are ERC-1271 blobs bound to the guardian address,
+# and the digest folds the guardian in; below it, guardians are plain EOAs (the legacy path).
 GUARDIAN_DELEGATION_DSM_VERSION = 5
+
+# DSM contract class per on-chain version. Adding a version here is what "supports" it.
+DSM_CONTRACT_BY_VERSION: dict[int, type[DepositSecurityModuleContract]] = {
+    4: DepositSecurityModuleContract,
+    5: DepositSecurityModuleContractV5,
+}
 
 ZERO_ADDRESS = '0x0000000000000000000000000000000000000000'
 
@@ -87,18 +90,30 @@ class LidoContracts(Module):
     def _load_dsm(self):
         dsm_address = self.lido_locator.deposit_security_module()
 
+        # Read the version off the base ABI (VERSION() is stable across versions), then bind the
+        # version-specific contract class so deposit/pause/unvet encode the right signature shape.
+        probe = cast(
+            DepositSecurityModuleContract,
+            self.w3.eth.contract(address=dsm_address, ContractFactoryClass=DepositSecurityModuleContract),
+        )
+        self.dsm_version = probe.version()
+        contract_class = DSM_CONTRACT_BY_VERSION.get(self.dsm_version)
+        if contract_class is None:
+            raise ValueError(f'Unsupported DSM version: {self.dsm_version} (expected one of {sorted(DSM_CONTRACT_BY_VERSION)})')
+
         self.deposit_security_module = cast(
             DepositSecurityModuleContract,
-            self.w3.eth.contract(
-                address=dsm_address,
-                ContractFactoryClass=DepositSecurityModuleContract,
-            ),
+            self.w3.eth.contract(address=dsm_address, ContractFactoryClass=contract_class),
         )
-
-        self.dsm_version = self.deposit_security_module.version()
-        if self.dsm_version != SUPPORTED_DSM_VERSION:
-            raise ValueError(f'Unsupported DSM version: {self.dsm_version} (expected {SUPPORTED_DSM_VERSION})')
         self._guardian_cache.clear()
+
+    def guardian_delegation_active(self) -> bool:
+        """Whether the DSM uses the LIP-37 delegation model (guardians are contracts with delegates).
+
+        Single source of truth for the version gate: drives delegate resolution, the guardian-bound
+        signing digest, and the GuardianSignature submission shape.
+        """
+        return self.dsm_version >= GUARDIAN_DELEGATION_DSM_VERSION
 
     def _guardian_contract(self, address: ChecksumAddress) -> GuardianContract:
         """Returns a (cached) GuardianContract wrapper for a guardian delegation contract address.
