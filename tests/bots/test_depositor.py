@@ -1328,6 +1328,10 @@ def setup_deposit_message(depositor_bot, block_data):
     )
     depositor_bot.w3.lido.staking_router.get_staking_module_nonce = Mock(return_value=12)
     depositor_bot.w3.lido.deposit_security_module.get_guardians = Mock(return_value=['0x43464Fe06c18848a2E2e913194D64c1970f4326a'])
+    # {delegate_EOA: guardian_contract}: delegate 0x7099… is the active delegate of guardian 0x4346….
+    depositor_bot.w3.lido.get_guardian_delegates = Mock(
+        return_value={'0x70997970C51812dc3A010C7d01b50e0d17dc79C8': '0x43464Fe06c18848a2E2e913194D64c1970f4326a'}
+    )
 
 
 @pytest.mark.unit
@@ -1338,7 +1342,35 @@ def test_depositor_message_actualizer(setup_deposit_message, depositor_bot, depo
 
 @pytest.mark.unit
 def test_depositor_message_actualizer_not_guardian(setup_deposit_message, depositor_bot, deposit_message, block_data):
-    depositor_bot.w3.lido.deposit_security_module.get_guardians = Mock(return_value=['0x13464Fe06c18848a2E2e913194D64c1970f4326a'])
+    # Legacy (no delegate on the message): guardian must still be registered — here it is not.
+    depositor_bot.w3.lido.get_guardian_delegates = Mock(
+        return_value={'0x70997970C51812dc3A010C7d01b50e0d17dc79C8': '0x13464Fe06c18848a2E2e913194D64c1970f4326a'}
+    )
+    message_filter = depositor_bot._get_message_actualize_filter()
+    assert not list(filter(message_filter, [deposit_message]))
+
+
+@pytest.mark.unit
+def test_depositor_message_actualizer_delegate_fresh(setup_deposit_message, depositor_bot, deposit_message, block_data):
+    # Data Bus message carrying its delegate; the delegate still maps to the claimed guardian → kept.
+    deposit_message['guardianDelegate'] = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8'
+    message_filter = depositor_bot._get_message_actualize_filter()
+    assert list(filter(message_filter, [deposit_message]))
+
+
+@pytest.mark.unit
+def test_depositor_message_actualizer_delegate_rotated(setup_deposit_message, depositor_bot, deposit_message, block_data):
+    # Signer delegate is no longer the guardian's active delegate (rotated/revoked/terminated) → dropped.
+    deposit_message['guardianDelegate'] = '0x000000000000000000000000000000000000dEaD'
+    message_filter = depositor_bot._get_message_actualize_filter()
+    assert not list(filter(message_filter, [deposit_message]))
+
+
+@pytest.mark.unit
+def test_depositor_message_actualizer_delegate_wrong_guardian(setup_deposit_message, depositor_bot, deposit_message, block_data):
+    # Delegate is active but now bound to a different guardian than the message claims → dropped.
+    deposit_message['guardianDelegate'] = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8'
+    deposit_message['guardianAddress'] = '0x33464Fe06c18848a2E2e913194D64c1970f4326a'
     message_filter = depositor_bot._get_message_actualize_filter()
     assert not list(filter(message_filter, [deposit_message]))
 

@@ -1,14 +1,16 @@
 # pyright: reportTypedDictNotRequiredAccess=false
 
 import logging
-from typing import Callable
+from collections.abc import Callable
+
+from schema import Or, Schema
+from web3.types import BlockData
 
 import variables
 from blockchain.executor import Executor
 from blockchain.typings import Web3
 from metrics.metrics import UNEXPECTED_EXCEPTIONS
 from metrics.transport_message_metrics import message_metrics_filter
-from schema import Or, Schema
 from transport.msg_providers.onchain_transport import OnchainTransportProvider, PauseV3Parser, PingParser
 from transport.msg_providers.rabbit import MessageType, RabbitProvider
 from transport.msg_storage import MessageStorage
@@ -16,7 +18,6 @@ from transport.msg_types.common import get_messages_sign_filter
 from transport.msg_types.pause import PauseMessage, PauseMessageSchema
 from transport.msg_types.ping import PingMessageSchema, to_check_sum_address
 from transport.types import TransportType
-from web3.types import BlockData
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +56,7 @@ class PauserBot:
                     onchain_address=variables.ONCHAIN_TRANSPORT_ADDRESS,
                     message_schema=Schema(Or(PauseMessageSchema, PingMessageSchema)),
                     parsers_providers=[PauseV3Parser, PingParser],
-                    allowed_guardians_provider=self.w3.lido.deposit_security_module.get_guardians,
+                    delegates_provider=self.w3.lido.get_guardian_delegates,
                 )
             )
 
