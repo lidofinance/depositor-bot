@@ -122,7 +122,8 @@ MAX_VALIDATORS_PER_TOP_UP = int(os.getenv('MAX_VALIDATORS_PER_TOP_UP', 32))
 # LidoLocator does not expose the Bus, so its address + deploy block are hardcoded per chain
 # (env can override for devnet/tests). deploy_block must be exact-or-earlier, never later.
 CONSOLIDATION_BUS_BY_CHAIN_ID: dict[int, dict] = {
-    # 1:      {'address': '0x...', 'deploy_block': 0},   # Mainnet — TODO: fill
+    # TODO: change block, when will know enactment time
+    1: {'address': '0xd907CE33B4Be423823d1CFFe80BD147E8b8554C8', 'deploy_block': 25603586},
     560048: {'address': '0xe09fBcE63826468867eE66Eda491E444829E022A', 'deploy_block': 2681949},  # Hoodi
 }
 CONSOLIDATION_BUS_ADDRESS = os.getenv('CONSOLIDATION_BUS_ADDRESS')
