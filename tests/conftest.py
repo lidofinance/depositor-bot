@@ -6,9 +6,11 @@ from fixtures import *  # noqa
 from web3.types import BlockData, Wei
 
 # https://etherscan.io/address/0xC77F8768774E1c9244BEed705C4354f2113CFc09#readContract#F12
-DSM_OWNER = '0x3e40D73EB977Dc6a537aF587D48316feE66E9C8c'
+# DSM_OWNER = '0x3e40D73EB977Dc6a537aF587D48316feE66E9C8c'
 # https://goerli.etherscan.io/address/0xe57025E250275cA56f92d76660DEcfc490C7E79A#readContract#F12
 # DSM_OWNER = '0xa5F1d7D49F581136Cf6e58B32cBE9a2039C48bA1'
+# hoodi
+DSM_OWNER = '0x0534aA41907c9631fae990960bCC72d75fA7cfeD'
 
 COUNCIL_ADDRESS_1 = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8'
 COUNCIL_PK_1 = '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d'
@@ -53,10 +55,13 @@ def ping_message():
 
 @pytest.fixture
 def add_accounts_to_guardian(web3_lido_integration, set_integration_account):
-    web3_lido_integration.provider.make_request('anvil_impersonateAccount', [DSM_OWNER])
-    web3_lido_integration.provider.make_request('anvil_setBalance', [DSM_OWNER, '0x500000000000000000000000'])
+    dsm = web3_lido_integration.lido.deposit_security_module
+    dsm_owner = dsm.functions.getOwner().call()
 
-    web3_lido_integration.lido.deposit_security_module.functions.addGuardian(COUNCIL_ADDRESS_1, 2).transact({'from': DSM_OWNER})
-    web3_lido_integration.lido.deposit_security_module.functions.addGuardian(COUNCIL_ADDRESS_2, 2).transact({'from': DSM_OWNER})
+    web3_lido_integration.provider.make_request('anvil_impersonateAccount', [dsm_owner])
+    web3_lido_integration.provider.make_request('anvil_setBalance', [dsm_owner, '0x500000000000000000000000'])
+
+    dsm.functions.addGuardian(COUNCIL_ADDRESS_1, 2).transact({'from': dsm_owner})
+    dsm.functions.addGuardian(COUNCIL_ADDRESS_2, 2).transact({'from': dsm_owner})
 
     yield web3_lido_integration

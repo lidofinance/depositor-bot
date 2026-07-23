@@ -1,7 +1,10 @@
 import logging
 import time
 from enum import StrEnum
-from typing import List, Optional, cast
+from typing import cast
+
+from eth_typing import HexStr
+from web3.types import Wei
 
 from blockchain.beacon_state.ssz_types import (
     FAR_FUTURE_EPOCH,
@@ -14,7 +17,6 @@ from blockchain.topup.proofs import build_topup_proofs
 from blockchain.topup.strategy import TopUpStrategy
 from blockchain.topup.types import TopUpCandidate, TopUpProofData
 from blockchain.typings import Web3
-from eth_typing import HexStr
 from metrics.metrics import (
     TOPUP_CANDIDATES_LAST_RUN_TIMESTAMP,
     TOPUP_CANDIDATES_SELECTED,
@@ -23,7 +25,6 @@ from metrics.metrics import (
 )
 from providers.consensus import ConsensusClient
 from providers.keys_api import KeysAPIClient, LidoKey
-from web3.types import Wei
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +80,7 @@ class CMv2TopUpStrategy(TopUpStrategy):
         module_allocation: Wei,
         max_validators: int,
         consolidation_indexer: ConsolidationIndexer,
-    ) -> Optional[TopUpProofData]:
+    ) -> TopUpProofData | None:
         """Select validators for top-up in a CMv2 module."""
         # Step 1: operator allocation
         cmv2 = cast(
@@ -99,7 +100,8 @@ class CMv2TopUpStrategy(TopUpStrategy):
             logger.info({'msg': 'No allocation from CMv2.', 'module_id': module_id})
             return None
 
-        allocation_by_operator: dict[int, int] = {op_id: alloc for op_id, alloc in zip(operator_ids, allocations) if alloc > 0}
+        allocation_by_operator: dict[int, int] = {op_id: alloc for op_id, alloc in zip(operator_ids, allocations, strict=True) if alloc > 0}
+
         if not allocation_by_operator:
             now = time.time()
             TOPUP_CANDIDATES_SELECTED.labels(module_id).set(0)
@@ -163,51 +165,72 @@ class CMv2TopUpStrategy(TopUpStrategy):
         )
 
         # Step 6: select candidates per operator (excluding keys in pending ConsolidationBus requests)
-        candidates: list[TopUpCandidate] = []
+
+        candidates_by_operator: dict[int, list[TopUpCandidate]] = {}
         total_consolidation_filtered = 0
+
         for op_id, op_allocation in allocation_by_operator.items():
-            selected, filtered = _select_operator_candidates(
-                keys_by_operator[op_id],
-                op_allocation,
-                beacon_data,
-                pending_consolidation,
-                target_balance_gwei,
-                min_top_up_gwei,
-                module_id,
+            op_candidates, filtered = _select_operator_candidates(
+                keys_by_operator[op_id], op_allocation, beacon_data, pending_consolidation, target_balance_gwei, min_top_up_gwei, module_id
             )
-            candidates.extend(selected)
+            if op_candidates:
+                candidates_by_operator[op_id] = op_candidates
+
             total_consolidation_filtered += filtered
 
         # LidoKey instances are no longer needed; free before the memory-heavy proof build.
         del keys_by_operator
         TOPUP_CONSOLIDATION_FILTERED.labels(module_id).set(total_consolidation_filtered)
 
-        # Step 7: TopUpGateway requires strictly ascending validator_indices across operators
-        candidates.sort(key=lambda c: c.validator_index)
-        # Step 8: limit to max_validators — everything past the cap loses purely to cross-operator
-        # competition for tx space, not to any eligibility problem of its own.
-        for excluded in candidates[max_validators:]:
-            _log_excluded_key(
-                module_id, excluded.operator_id, _pubkey_hex(excluded.pubkey), TopUpExclusionReason.TRUNCATED_BY_MAX_VALIDATORS
-            )
-        candidates = candidates[:max_validators]
         # Set before the early return so metrics are always fresh after a selection run,
         # including the 0 case — avoids stale values from a previous cycle.
-        now = time.time()
-        TOPUP_CANDIDATES_SELECTED.labels(module_id).set(len(candidates))
-        TOPUP_CANDIDATES_LAST_RUN_TIMESTAMP.labels(module_id).set(now)
 
-        if not candidates:
+        if not candidates_by_operator:
             logger.info({'msg': 'No eligible candidates.', 'module_id': module_id})
             return None
 
+        candidates = _distribute(candidates_by_operator, max_validators)
+        now = time.time()
+
+        TOPUP_CANDIDATES_SELECTED.labels(module_id).set(len(candidates))
+        TOPUP_CANDIDATES_LAST_RUN_TIMESTAMP.labels(module_id).set(now)
         logger.info({'msg': 'CMv2 candidates selected.', 'module_id': module_id, 'count': len(candidates)})
 
-        # Step 9: build proofs
+        # Step 7: TopUpGateway requires strictly ascending validator_indices across operators
+        candidates.sort(key=lambda c: c.validator_index)
+        # Step 8: build proofs
         return build_topup_proofs(beacon_data, candidates)
 
 
-def _collect_pubkeys(keys_by_operator: dict[int, List[LidoKey]]) -> set[bytes]:
+def _distribute(candidates_by_operator: dict[int, list[TopUpCandidate]], limit: int) -> list[TopUpCandidate]:
+    selected: list[TopUpCandidate] = []
+
+    i = 0
+    circle = 0
+    operators = list(candidates_by_operator.keys())
+    while limit > 0 and operators:
+        op_id = operators[i]
+        candidates = candidates_by_operator[op_id]
+
+        if circle >= len(candidates):
+            # op_id no more has candidates
+            operators.remove(op_id)
+            if i >= len(operators):
+                # finished circle
+                i = 0
+                circle += 1
+            continue
+        selected.append(candidates[circle])
+        limit -= 1
+
+        i += 1
+        if i >= len(operators):
+            i = 0
+            circle += 1
+    return selected
+
+
+def _collect_pubkeys(keys_by_operator: dict[int, list[LidoKey]]) -> set[bytes]:
     result = set()
     for keys in keys_by_operator.values():
         for k in keys:
@@ -216,14 +239,14 @@ def _collect_pubkeys(keys_by_operator: dict[int, List[LidoKey]]) -> set[bytes]:
 
 
 def _select_operator_candidates(
-    keys: List[LidoKey],
+    keys: list[LidoKey],
     allocation: int,
     beacon_data: BeaconStateData,
     pending_consolidation: set[bytes],
     target_balance_gwei: int,
     min_top_up_gwei: int,
     module_id: int,
-) -> tuple[List[TopUpCandidate], int]:
+) -> tuple[list[TopUpCandidate], int]:
     """Returns (selected_candidates, consolidation_filtered_count).
 
     consolidation_filtered_count counts only keys that passed all other eligibility checks but
@@ -232,7 +255,7 @@ def _select_operator_candidates(
     consolidation_filtered = 0
     eligible = []
     for key in keys:
-        candidate, reason = _check_key_eligibility(key, beacon_data, target_balance_gwei, min_top_up_gwei)
+        candidate, reason = _build_candidate_if_eligible(key, beacon_data, target_balance_gwei, min_top_up_gwei)
         if candidate is None:
             assert reason is not None
             _log_excluded_key(module_id, key.operatorIndex, key.key, reason)
@@ -248,12 +271,12 @@ def _select_operator_candidates(
     return selected, consolidation_filtered
 
 
-def _check_key_eligibility(
+def _build_candidate_if_eligible(
     key: LidoKey,
     beacon_data: BeaconStateData,
     target_balance_gwei: int,
     min_top_up_gwei: int,
-) -> tuple[Optional[TopUpCandidate], Optional[TopUpExclusionReason]]:
+) -> tuple[TopUpCandidate | None, TopUpExclusionReason | None]:
     """Returns (candidate, exclusion_reason) — reason is set only when candidate is None."""
     pubkey = Web3.to_bytes(hexstr=HexStr(key.key))
 
@@ -304,13 +327,13 @@ def _is_exiting(fields: ValidatorFields) -> bool:
 
 
 def _take_up_to_allocation(
-    candidates: List[TopUpCandidate],
+    candidates: list[TopUpCandidate],
     allocation_wei: int,
     beacon_data: BeaconStateData,
     target_balance_gwei: int,
     min_top_up_gwei: int,
     module_id: int,
-) -> List[TopUpCandidate]:
+) -> list[TopUpCandidate]:
     result = []
     remaining = allocation_wei // 10**9
     for i, c in enumerate(candidates):

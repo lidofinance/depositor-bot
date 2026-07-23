@@ -2,6 +2,8 @@ from typing import Any
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
+from web3.types import Wei
+
 from blockchain.beacon_state.ssz_types import (
     FAR_FUTURE_EPOCH,
     STATE_BALANCES,
@@ -18,15 +20,15 @@ from blockchain.beacon_state.ssz_types import (
 from blockchain.beacon_state.state import BeaconStateData, ValidatorFields
 from blockchain.topup.cmv2_strategy import (
     CMv2TopUpStrategy,
-    _check_key_eligibility,
+    _build_candidate_if_eligible,
     _collect_pubkeys,
+    _distribute,
     _log_excluded_key,
     _select_operator_candidates,
     _take_up_to_allocation,
 )
 from blockchain.topup.types import TopUpCandidate
 from providers.keys_api import LidoKey
-from web3.types import Wei
 
 # Mirror TopUpGateway limits (getTargetBalanceGwei / getMinTopUpGwei).
 TARGET_BALANCE_GWEI = 2_046_750_000_000  # 2046.75 ETH
@@ -268,12 +270,12 @@ def test_collect_pubkeys():
 
 
 @pytest.mark.unit
-def test_check_key_eligibility_returns_candidate(top_up_proof_fixtures):
+def test_build_candidate_if_eligible_returns_candidate(top_up_proof_fixtures):
     beacon_data = _build_beacon_state_data(top_up_proof_fixtures)
     witness = top_up_proof_fixtures['validator_witnesses'][0]
     key = _make_key(witness['pubkey'], 7, 11)
 
-    candidate, reason = _check_key_eligibility(key, beacon_data, TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI)
+    candidate, reason = _build_candidate_if_eligible(key, beacon_data, TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI)
 
     assert reason is None
     assert candidate == TopUpCandidate(
@@ -286,32 +288,34 @@ def test_check_key_eligibility_returns_candidate(top_up_proof_fixtures):
 
 
 @pytest.mark.unit
-def test_check_key_eligibility_rejects_invalid_cases(top_up_proof_fixtures):
+def test_build_candidate_if_eligible_rejects_invalid_cases(top_up_proof_fixtures):
     beacon_data = _build_beacon_state_data(top_up_proof_fixtures)
     witness = top_up_proof_fixtures['validator_witnesses'][0]
     pubkey = bytes.fromhex(witness['pubkey'][2:])
     validator_index = int(witness['validatorIndex'])
     key = _make_key(witness['pubkey'], 7, 11)
 
-    candidate, reason = _check_key_eligibility(_make_key('0x' + '33' * 48, 7, 11), beacon_data, TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI)
+    candidate, reason = _build_candidate_if_eligible(_make_key('0x' + '33' * 48, 7, 11), beacon_data, TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI)
     assert candidate is None
     assert reason == 'not_in_beacon_state'
 
     beacon_data.consolidation_targets = {validator_index}
-    candidate, reason = _check_key_eligibility(key, beacon_data, TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI)
+    candidate, reason = _build_candidate_if_eligible(key, beacon_data, TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI)
     assert candidate is None
     assert reason == 'beacon_consolidation_target'
+
     beacon_data.consolidation_targets = set()
 
     fields = beacon_data.validators_fields[validator_index]
 
     beacon_data.validators_fields[validator_index] = fields._replace(slashed=True)
-    candidate, reason = _check_key_eligibility(key, beacon_data, TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI)
+
+    candidate, reason = _build_candidate_if_eligible(key, beacon_data, TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI)
     assert candidate is None
     assert reason == 'slashed'
 
     beacon_data.validators_fields[validator_index] = fields._replace(exit_epoch=1)
-    candidate, reason = _check_key_eligibility(key, beacon_data, TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI)
+    candidate, reason = _build_candidate_if_eligible(key, beacon_data, TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI)
     assert candidate is None
     assert reason == 'exiting'
 
@@ -319,7 +323,8 @@ def test_check_key_eligibility_rejects_invalid_cases(top_up_proof_fixtures):
         exit_epoch=FAR_FUTURE_EPOCH,
         activation_epoch=beacon_data.slot + 1,
     )
-    candidate, reason = _check_key_eligibility(key, beacon_data, TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI)
+
+    candidate, reason = _build_candidate_if_eligible(key, beacon_data, TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI)
     assert candidate is None
     assert reason == 'not_active'
 
@@ -328,7 +333,8 @@ def test_check_key_eligibility_rejects_invalid_cases(top_up_proof_fixtures):
         effective_balance=MAX_ELIGIBLE_BALANCE_GWEI,
     )
     beacon_data.pending_deposits = {pubkey: 1}
-    candidate, reason = _check_key_eligibility(key, beacon_data, TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI)
+
+    candidate, reason = _build_candidate_if_eligible(key, beacon_data, TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI)
     assert candidate is None
     assert reason == 'already_at_target_balance'
 
@@ -343,7 +349,7 @@ def test_select_operator_candidates_sorts_by_key_index():
 
     with (
         patch(
-            'blockchain.topup.cmv2_strategy._check_key_eligibility',
+            'blockchain.topup.cmv2_strategy._build_candidate_if_eligible',
             side_effect=[
                 (TopUpCandidate(1, 8, 11, bytes.fromhex('22' * 48), 0), None),
                 (TopUpCandidate(0, 7, 11, bytes.fromhex('11' * 48), 0), None),
@@ -439,6 +445,68 @@ def test_take_up_to_allocation_log_scenario_1216_eth():
     # topup per validator = 2_014_750_000_000 Gwei (2014.75 ETH) > 1216 ETH allocation
     # first candidate exhausts allocation → only 1 selected
     assert len(result) == 1
+
+
+# ─── _distribute (round-robin across operators) ────────────────────
+
+
+def _cand(validator_index: int, operator_id: int) -> TopUpCandidate:
+    return TopUpCandidate(validator_index, validator_index, operator_id, bytes([validator_index % 256]), 0)
+
+
+@pytest.mark.unit
+def test_distribute_balances_equally():
+    # 2 operators × 3 candidates, limit 4 → 2 from each (not 3 + 1)
+    by_op = {11: [_cand(1, 11), _cand(3, 11), _cand(5, 11)], 12: [_cand(2, 12), _cand(4, 12), _cand(6, 12)]}
+    got = _distribute(by_op, 4)
+    assert len(got) == 4
+    assert sum(c.operator_id == 11 for c in got) == 2
+    assert sum(c.operator_id == 12 for c in got) == 2
+
+
+@pytest.mark.unit
+def test_distribute_leftover_to_operator_with_more():
+    # op11 has 3, op12 has 1, limit 4 → op12 gives its 1, the remaining slots go to op11
+    by_op = {11: [_cand(1, 11), _cand(3, 11), _cand(5, 11)], 12: [_cand(2, 12)]}
+    got = _distribute(by_op, 4)
+    assert sorted(c.operator_id for c in got) == [11, 11, 11, 12]
+
+
+@pytest.mark.unit
+def test_distribute_limit_above_total_returns_all():
+    by_op = {11: [_cand(1, 11)], 12: [_cand(2, 12)]}
+    assert len(_distribute(by_op, 10)) == 2
+
+
+@pytest.mark.unit
+def test_distribute_single_operator_keeps_order():
+    by_op = {11: [_cand(1, 11), _cand(2, 11), _cand(3, 11)]}
+    got = _distribute(by_op, 2)
+    assert [c.validator_index for c in got] == [1, 2]
+
+
+@pytest.mark.unit
+def test_distribute_takes_one_per_operator_per_round():
+    by_op = {11: [_cand(10, 11), _cand(20, 11)], 12: [_cand(15, 12), _cand(25, 12)]}
+    got = _distribute(by_op, 2)  # first round: one from each operator
+    assert [c.operator_id for c in got] == [11, 12]
+
+
+@pytest.mark.unit
+def test_distribute_zero_limit_returns_empty():
+    assert _distribute({11: [_cand(1, 11)]}, 0) == []
+
+
+@pytest.mark.unit
+def test_distribute_three_operators_uneven_no_loss_no_dup():
+    by_op = {
+        11: [_cand(1, 11), _cand(4, 11), _cand(7, 11)],
+        12: [_cand(2, 12)],
+        13: [_cand(3, 13), _cand(6, 13)],
+    }
+    got = _distribute(by_op, 6)  # total is 6 → all selected, none lost or duplicated
+    assert len(got) == 6
+    assert sorted(c.operator_id for c in got) == [11, 11, 11, 12, 13, 13]
 
 
 # ─── Per-key exclusion reasons (answers "why wasn't key X topped up") ───

@@ -4,7 +4,7 @@ from .contracts import (
     deposit_security_module,
     lido_contract,
     lido_locator,
-    staking_router_v4,
+    staking_router,
     topup_gateway,
     weth,
 )
@@ -32,7 +32,7 @@ __all__ = [
     'deposit_contract',
     'lido_contract',
     'deposit_security_module',
-    'staking_router_v4',
+    'staking_router',
     'topup_gateway',
     'top_up_proof_fixtures',
     'web3_lido_unit',

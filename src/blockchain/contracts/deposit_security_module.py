@@ -1,10 +1,11 @@
 import logging
 from functools import lru_cache
 
-from blockchain.contracts.base_interface import ContractInterface
 from eth_typing import ChecksumAddress, Hash32
 from web3.contract.contract import ContractFunction
 from web3.types import BlockIdentifier
+
+from blockchain.contracts.base_interface import ContractInterface
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +76,7 @@ class DepositSecurityModuleContract(ContractInterface):
         Signatures must be sorted in ascending order by address of the guardian. Each signature must
         be produced for the keccak256 hash of the following message (each component taking 32 bytes):
 
-        | ATTEST_MESSAGE_PREFIX | contractVersion | blockNumber | blockHash | depositRoot | stakingModuleId | nonce |
+        | ATTEST_MESSAGE_PREFIX | blockNumber | blockHash | depositRoot | stakingModuleId | nonce |
         """
         tx = self.functions.depositBufferedEther(
             block_number,

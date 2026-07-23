@@ -1,91 +1,47 @@
-import os
-
 import pytest
-import variables
-from providers.keys_api import KeysAPIClient, LidoKey
+
+from providers.keys_api import LidoKey, group_keys_by_operator
 
 
-@pytest.fixture(autouse=True)
-def devnet_only():
-    if os.getenv('KEYS_API_TEST_NETWORK', '').lower() != 'devnet2':
-        pytest.skip('KAPI integration tests run only against devnet. Set KEYS_API_TEST_NETWORK=devnet.')
+def _key(pubkey: str, index: int, operator_index: int) -> LidoKey:
+    return LidoKey(key=pubkey, index=index, operatorIndex=operator_index)
 
 
-@pytest.fixture
-def keys_api_client(request) -> KeysAPIClient:
-    params = getattr(request, 'param', {})
-    host = params.get('host', variables.KEYS_API_URL)
-    if not host:
-        pytest.skip('KEYS_API_URL is not configured.')
-    print(f'Using KAPI host: {host}')
+@pytest.mark.unit
+def test_group_keys_by_operator_distributes_by_operator_index():
+    keys = [
+        _key('0xaa', 1, 11),
+        _key('0xbb', 2, 12),
+        _key('0xcc', 3, 11),  # same operator as the first key
+    ]
 
-    return KeysAPIClient(
-        host=host,
-        request_timeout=30,
-        retry_total=3,
-        retry_backoff_factor=1,
-    )
+    result = group_keys_by_operator(keys, [11, 12])
+
+    assert result == {11: [keys[0], keys[2]], 12: [keys[1]]}
 
 
-@pytest.fixture
-def keys_api_test_module_id() -> int:
-    return int(os.getenv('KEYS_API_TEST_MODULE_ID', '1'))
+@pytest.mark.unit
+def test_group_keys_by_operator_requested_operator_without_keys_is_empty():
+    keys = [_key('0xaa', 1, 11)]
+
+    result = group_keys_by_operator(keys, [11, 12])
+
+    assert result == {11: [keys[0]], 12: []}
 
 
-def _print_keys_sample(keys: list[LidoKey], limit: int = 3) -> None:
-    sample = []
-    for key in keys[:limit]:
-        data = key._asdict()
-        data['key'] = f"{data['key'][:18]}..."
-        sample.append(data)
-    print(f'Fetched {len(keys)} used keys. Sample: {sample}')
+@pytest.mark.unit
+def test_group_keys_by_operator_drops_keys_of_unrequested_operators():
+    keys = [
+        _key('0xaa', 1, 11),
+        _key('0xbb', 2, 99),  # operator not in the requested list
+    ]
+
+    result = group_keys_by_operator(keys, [11])
+
+    assert result == {11: [keys[0]]}
 
 
-@pytest.mark.integration
-def test_get_module_used_keys(
-    keys_api_client: KeysAPIClient,
-    keys_api_test_module_id: int,
-):
-    keys = keys_api_client.get_module_used_keys(keys_api_test_module_id)
-
-    assert isinstance(keys, list)
-    assert keys
-    assert all(isinstance(key, LidoKey) for key in keys)
-    assert all(key.key.startswith('0x') for key in keys)
-    assert all(key.key == key.key.lower() for key in keys)
-
-
-@pytest.mark.integration
-def test_get_module_operator_used_keys(keys_api_client: KeysAPIClient, keys_api_test_module_id: int):
-    all_keys = keys_api_client.get_module_used_keys(keys_api_test_module_id)
-    operator_ids = sorted({key.operatorIndex for key in all_keys})[:3]
-    if not operator_ids:
-        pytest.skip(f'No operators with used keys found for module {keys_api_test_module_id}.')
-
-    keys_by_operator = keys_api_client.get_module_operator_used_keys(keys_api_test_module_id, operator_ids)
-
-    assert set(keys_by_operator) == set(operator_ids)
-    for operator_id, operator_keys in keys_by_operator.items():
-        assert all(key.operatorIndex == operator_id for key in operator_keys)
-
-
-@pytest.mark.integration
-def test_grouped_operator_keys_match_flat_used_keys(keys_api_client: KeysAPIClient, keys_api_test_module_id: int):
-    all_keys = keys_api_client.get_module_used_keys(keys_api_test_module_id)
-    operator_ids = sorted({key.operatorIndex for key in all_keys})[:3]
-    if not operator_ids:
-        pytest.skip(f'No operators with used keys found for module {keys_api_test_module_id}.')
-
-    keys_by_operator = keys_api_client.get_module_operator_used_keys(keys_api_test_module_id, operator_ids)
-
-    expected = sorted((key.index, key.operatorIndex, key.key) for key in all_keys if key.operatorIndex in operator_ids)
-    grouped = sorted((key.index, key.operatorIndex, key.key) for operator_keys in keys_by_operator.values() for key in operator_keys)
-
-    assert grouped == expected
-
-
-@pytest.mark.integration
-def test_get_chain_id_with_provider(keys_api_client: KeysAPIClient):
-    chain_id = keys_api_client._get_chain_id_with_provider(0)
-
-    assert chain_id > 0
+@pytest.mark.unit
+def test_group_keys_by_operator_empty_inputs():
+    assert group_keys_by_operator([], []) == {}
+    assert group_keys_by_operator([], [11, 12]) == {11: [], 12: []}

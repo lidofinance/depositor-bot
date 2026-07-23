@@ -25,52 +25,16 @@ from tests.transport.onchain_sender import OnchainTransportSender
 
 _DEFAULT_GUARDIAN = '0x1be2A219CBD0F18B825a4dDd580F7b3B33Bacb41'
 _ANVIL_GUARDIAN = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266'
-_FAKE_GUARDIAN = '0x4E93C8c7B06F1CEEb03A8e13B0371b35F0000000'
 
-
-# Started with config: {
-#  NODE_HOST: 'http://127.0.0.1:8888',
-#  DATA_BUS_ADDRESS: '0x5FbDB2315678afecb367f032d93F642f64180aa3'
-# }
-@pytest.mark.skip()
-@pytest.mark.integration
-@pytest.mark.parametrize(
-    'web3_provider_integration',
-    [{'endpoint': variables.ONCHAIN_TRANSPORT_RPC_ENDPOINTS[0]}],
-    indirect=['web3_provider_integration'],
-)
-def test_data_bus_provider(
-    web3_transaction_integration,
-):
-    """
-    Utilise this function for an adhoc testing of data bus transport
-    """
-    variables.ONCHAIN_TRANSPORT_ADDRESS = ChecksumAddress(HexAddress(HexStr('0x37De961D6bb5865867aDd416be07189D2Dd960e6')))
-    web3_transaction_integration.eth.get_balance = Mock(return_value=1)
-    provider = OnchainTransportProvider(
-        w3=web3_transaction_integration,
-        onchain_address=variables.ONCHAIN_TRANSPORT_ADDRESS,
-        message_schema=Schema(Or(DepositMessageSchema, PingMessageSchema)),
-        parsers_providers=[DepositParser, PingParser],
-        allowed_guardians_provider=lambda: [Web3.to_checksum_address(_FAKE_GUARDIAN)],
-    )
-    messages = provider.get_messages()
-    assert not messages
-    provider = OnchainTransportProvider(
-        w3=web3_transaction_integration,
-        onchain_address=variables.ONCHAIN_TRANSPORT_ADDRESS,
-        message_schema=Schema(Or(DepositMessageSchema, PingMessageSchema)),
-        parsers_providers=[DepositParser, PingParser],
-        allowed_guardians_provider=lambda: [Web3.to_checksum_address(_DEFAULT_GUARDIAN)],
-    )
-    messages = provider.get_messages()
-    assert messages
+# Resolved at import time by pytest's parametrize decorators. The endpoint is only used when the
+# integration tests actually run (env var set); unit collection must not fail when it is unset.
+_ONCHAIN_TRANSPORT_ENDPOINT = variables.ONCHAIN_TRANSPORT_RPC_ENDPOINTS[0] if variables.ONCHAIN_TRANSPORT_RPC_ENDPOINTS else ''
 
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
     'web3_provider_integration',
-    [{'endpoint': variables.ONCHAIN_TRANSPORT_RPC_ENDPOINTS[0]}],
+    [{'endpoint': _ONCHAIN_TRANSPORT_ENDPOINT}],
     indirect=['web3_provider_integration'],
 )
 def test_data_bus_provider_unvet(
@@ -125,7 +89,7 @@ def test_data_bus_provider_unvet(
 @pytest.mark.integration
 @pytest.mark.parametrize(
     'web3_provider_integration',
-    [{'endpoint': variables.ONCHAIN_TRANSPORT_RPC_ENDPOINTS[0]}],
+    [{'endpoint': _ONCHAIN_TRANSPORT_ENDPOINT}],
     indirect=['web3_provider_integration'],
 )
 def test_data_bus_provider_pause_v3(

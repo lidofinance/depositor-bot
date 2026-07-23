@@ -9,10 +9,19 @@ from web3 import Web3
 
 logger = logging.getLogger(__name__)
 
-# EL node
-WEB3_RPC_ENDPOINTS = [url for url in os.getenv('WEB3_RPC_ENDPOINTS', '').split(',') if url]
 
-TESTNET_WEB3_RPC_ENDPOINTS = [url for url in os.getenv('TESTNET_WEB3_RPC_ENDPOINTS', '').split(',') if url]
+def _env_list(name: str) -> list[str]:
+    """Parse a comma-separated env var into a list of non-empty, stripped values.
+
+    Unset/empty → [], and blank or whitespace-only items (stray commas, trailing spaces) are dropped.
+    """
+    return [item for raw in os.getenv(name, '').split(',') if (item := raw.strip())]
+
+
+# EL node
+WEB3_RPC_ENDPOINTS = _env_list('WEB3_RPC_ENDPOINTS')
+
+TESTNET_WEB3_RPC_ENDPOINTS = _env_list('TESTNET_WEB3_RPC_ENDPOINTS')
 
 # Account private key
 WALLET_PRIVATE_KEY = os.getenv('WALLET_PRIVATE_KEY', None)
@@ -49,7 +58,7 @@ DEPOSIT_TO_FIRST_HEALTHY_MODULE_ONLY: bool = os.getenv('DEPOSIT_TO_FIRST_HEALTHY
 
 # data bus
 # gnosis nodes
-ONCHAIN_TRANSPORT_RPC_ENDPOINTS = os.getenv('ONCHAIN_TRANSPORT_RPC_ENDPOINTS', '').split(',')
+ONCHAIN_TRANSPORT_RPC_ENDPOINTS = _env_list('ONCHAIN_TRANSPORT_RPC_ENDPOINTS')
 
 ONCHAIN_TRANSPORT_ADDRESS = os.getenv('ONCHAIN_TRANSPORT_ADDRESS')
 if ONCHAIN_TRANSPORT_ADDRESS:
@@ -137,7 +146,7 @@ def get_consolidation_bus_config(chain_id: int) -> tuple[ChecksumAddress | None,
 
 # Providers
 KEYS_API_URL = os.getenv('KEYS_API_URL', '')
-CL_API_URLS = [url for url in os.getenv('CL_API_URLS', '').split(',') if url]
+CL_API_URLS = _env_list('CL_API_URLS')
 HTTP_REQUEST_TIMEOUT_CONSENSUS: Final = int(os.getenv('HTTP_REQUEST_TIMEOUT_CONSENSUS', 5 * 60))
 HTTP_REQUEST_RETRY_COUNT_CONSENSUS: Final = int(os.getenv('HTTP_REQUEST_RETRY_COUNT_CONSENSUS', 5))
 HTTP_REQUEST_SLEEP_BEFORE_RETRY_IN_SECONDS_CONSENSUS: Final = int(os.getenv('HTTP_REQUEST_SLEEP_BEFORE_RETRY_IN_SECONDS_CONSENSUS', 5))

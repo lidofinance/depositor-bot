@@ -5,13 +5,11 @@ from tests.utils.regrex import check_value_type
 
 
 @pytest.mark.integration
-def test_staking_router_call_v4(staking_router_v4, caplog):
-    if staking_router_v4.get_contract_version() != 4:
-        pytest.skip('StakingRouter V4 is not deployed on the current RPC target.')
-
+def test_staking_router_call(staking_router, caplog):
     check_contract(
-        staking_router_v4,
+        staking_router,
         [
+            ('get_contract_version', None, lambda response: check_value_type(response, int)),
             (
                 'get_staking_module_ids',
                 None,
@@ -20,6 +18,7 @@ def test_staking_router_call_v4(staking_router_v4, caplog):
             ('is_staking_module_active', (1,), lambda response: check_value_type(response, bool)),
             ('get_staking_module_nonce', (1,), lambda response: check_value_type(response, int)),
             ('get_staking_module_max_deposits_count', (1, 100 * 10**18), lambda response: check_value_type(response, int)),
+            ('get_all_staking_module_digests', None, lambda response: check_value_type(response, list)),
             (
                 'get_deposit_allocations',
                 (32 * 10**18, False),
