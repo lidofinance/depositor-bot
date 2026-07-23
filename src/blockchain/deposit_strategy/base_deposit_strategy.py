@@ -1,11 +1,12 @@
 import logging
 
+from web3.types import Wei
+
 import variables
 from blockchain.deposit_strategy.gas_price_calculator import GasPriceCalculator
 from blockchain.deposit_strategy.strategy import DepositStrategy
 from blockchain.typings import Web3
 from metrics.metrics import GAS_FEE, GAS_OK
-from web3.types import Wei
 
 logger = logging.getLogger(__name__)
 

@@ -19,6 +19,7 @@ from blockchain.consolidation.store import InMemoryPendingStore
 from blockchain.contracts.consolidation_bus import ConsolidationBusContract
 from blockchain.typings import Web3
 from eth_abi.abi import decode as abi_decode
+from metrics.metrics import CONSOLIDATION_CURSOR_LAG, CONSOLIDATION_PENDING_BATCHES, CONSOLIDATION_PENDING_PUBKEYS
 from web3.types import EventData
 
 logger = logging.getLogger(__name__)
@@ -72,6 +73,10 @@ class ConsolidationIndexer:
         if start <= finalized:
             logger.info({'msg': 'Consolidation base sync.', 'from': start, 'to': finalized})
             self._sync_range(start, finalized)
+        CONSOLIDATION_PENDING_BATCHES.set(self.store.pending_batch_count())
+        CONSOLIDATION_PENDING_PUBKEYS.set(self.store.pending_pubkey_count())
+        cursor = self.store.get_cursor(default=self.deploy_block - 1)
+        CONSOLIDATION_CURSOR_LAG.set(max(0, finalized - cursor))
         return finalized
 
     def _sync_range(self, from_block: int, to_block: int) -> None:
