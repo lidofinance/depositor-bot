@@ -1,6 +1,9 @@
 import logging
 from typing import cast
 
+from eth_typing import HexStr
+from web3.types import Wei
+
 from blockchain.beacon_state.ssz_types import (
     FAR_FUTURE_EPOCH,
     SLOTS_PER_EPOCH,
@@ -12,10 +15,8 @@ from blockchain.topup.proofs import build_topup_proofs
 from blockchain.topup.strategy import TopUpStrategy
 from blockchain.topup.types import TopUpCandidate, TopUpProofData
 from blockchain.typings import Web3
-from eth_typing import HexStr
 from providers.consensus import ConsensusClient
 from providers.keys_api import KeysAPIClient, LidoKey
-from web3.types import Wei
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +47,7 @@ class CMv2TopUpStrategy(TopUpStrategy):
             logger.info({'msg': 'No allocation from CMv2.', 'module_id': module_id})
             return None
 
-        allocation_by_operator: dict[int, int] = {op_id: alloc for op_id, alloc in zip(operator_ids, allocations) if alloc > 0}
+        allocation_by_operator: dict[int, int] = {op_id: alloc for op_id, alloc in zip(operator_ids, allocations, strict=True) if alloc > 0}
         logger.info(
             {
                 'msg': 'CMv2 operator allocations.',
@@ -102,34 +103,61 @@ class CMv2TopUpStrategy(TopUpStrategy):
         )
 
         # Step 6: select candidates per operator (excluding keys in pending ConsolidationBus requests)
-        candidates: list[TopUpCandidate] = []
+        candidates_by_operator: dict[int, list[TopUpCandidate]] = {}
         for op_id, op_allocation in allocation_by_operator.items():
-            candidates.extend(
-                _select_operator_candidates(
-                    keys_by_operator[op_id],
-                    op_allocation,
-                    beacon_data,
-                    pending_consolidation,
-                    target_balance_gwei,
-                    min_top_up_gwei,
-                )
+            op_candidates = _select_operator_candidates(
+                keys_by_operator[op_id],
+                op_allocation,
+                beacon_data,
+                pending_consolidation,
+                target_balance_gwei,
+                min_top_up_gwei,
             )
+            if op_candidates:
+                candidates_by_operator[op_id] = op_candidates
 
         # LidoKey instances are no longer needed; free before the memory-heavy proof build.
         del keys_by_operator
 
-        if not candidates:
+        if not candidates_by_operator:
             logger.info({'msg': 'No eligible candidates.', 'module_id': module_id})
             return None
 
+        candidates = _distribute(candidates_by_operator, max_validators)
         logger.info({'msg': 'CMv2 candidates selected.', 'module_id': module_id, 'count': len(candidates)})
 
         # Step 7: TopUpGateway requires strictly ascending validator_indices across operators
         candidates.sort(key=lambda c: c.validator_index)
-        # Step 8: limit to max_validators
-        candidates = candidates[:max_validators]
-        # Step 9: build proofs
+        # Step 8: build proofs
         return build_topup_proofs(beacon_data, candidates)
+
+
+def _distribute(candidates_by_operator: dict[int, list[TopUpCandidate]], limit: int) -> list[TopUpCandidate]:
+    selected: list[TopUpCandidate] = []
+
+    i = 0
+    circle = 0
+    operators = list(candidates_by_operator.keys())
+    while limit > 0 and operators:
+        op_id = operators[i]
+        candidates = candidates_by_operator[op_id]
+
+        if circle >= len(candidates):
+            # op_id no more has candidates
+            operators.remove(op_id)
+            if i >= len(operators):
+                # finished circle
+                i = 0
+                circle += 1
+            continue
+        selected.append(candidates[circle])
+        limit -= 1
+
+        i += 1
+        if i >= len(operators):
+            i = 0
+            circle += 1
+    return selected
 
 
 def _collect_pubkeys(keys_by_operator: dict[int, list[LidoKey]]) -> set[bytes]:
