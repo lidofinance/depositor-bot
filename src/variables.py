@@ -1,23 +1,32 @@
 import logging
 import os
-from typing import Optional
+from typing import Final
 
 from eth_account import Account
 from eth_account.signers.local import LocalAccount
-from eth_typing import URI
+from eth_typing import URI, ChecksumAddress
 from web3 import Web3
 
 logger = logging.getLogger(__name__)
 
-# EL node
-WEB3_RPC_ENDPOINTS = os.getenv('WEB3_RPC_ENDPOINTS', '').split(',')
 
-TESTNET_WEB3_RPC_ENDPOINTS = os.getenv('TESTNET_WEB3_RPC_ENDPOINTS', '').split(',')
+def _env_list(name: str) -> list[str]:
+    """Parse a comma-separated env var into a list of non-empty, stripped values.
+
+    Unset/empty → [], and blank or whitespace-only items (stray commas, trailing spaces) are dropped.
+    """
+    return [item for raw in os.getenv(name, '').split(',') if (item := raw.strip())]
+
+
+# EL node
+WEB3_RPC_ENDPOINTS = _env_list('WEB3_RPC_ENDPOINTS')
+
+TESTNET_WEB3_RPC_ENDPOINTS = _env_list('TESTNET_WEB3_RPC_ENDPOINTS')
 
 # Account private key
 WALLET_PRIVATE_KEY = os.getenv('WALLET_PRIVATE_KEY', None)
 
-ACCOUNT: Optional[LocalAccount] = None
+ACCOUNT: LocalAccount | None = None
 if WALLET_PRIVATE_KEY:
     account = Account.from_key(WALLET_PRIVATE_KEY)
     logger.info({'msg': 'Load account from private key.', 'value': account.address})
@@ -49,7 +58,7 @@ DEPOSIT_TO_FIRST_HEALTHY_MODULE_ONLY: bool = os.getenv('DEPOSIT_TO_FIRST_HEALTHY
 
 # data bus
 # gnosis nodes
-ONCHAIN_TRANSPORT_RPC_ENDPOINTS = os.getenv('ONCHAIN_TRANSPORT_RPC_ENDPOINTS', '').split(',')
+ONCHAIN_TRANSPORT_RPC_ENDPOINTS = _env_list('ONCHAIN_TRANSPORT_RPC_ENDPOINTS')
 
 ONCHAIN_TRANSPORT_ADDRESS = os.getenv('ONCHAIN_TRANSPORT_ADDRESS')
 if ONCHAIN_TRANSPORT_ADDRESS:
@@ -104,6 +113,45 @@ x / 4(we assume that chances of significant gas drop during 8 hours are low)
 """
 GAS_ADDENDUM = Web3.to_wei(*os.getenv('GAS_ADDENDUM', '6 gwei').split(' '))
 
+# Top-up settings
+ENABLE_TOP_UP = os.getenv('ENABLE_TOP_UP', 'false').lower() == 'true'
+MAX_VALIDATORS_PER_TOP_UP = int(os.getenv('MAX_VALIDATORS_PER_TOP_UP', 32))
+
+# Consolidation indexer (ConsolidationBus).
+# Top-up filters out keys that participate in a pending ConsolidationBus request.
+# LidoLocator does not expose the Bus, so its address + deploy block are hardcoded per chain
+# (env can override for devnet/tests). deploy_block must be exact-or-earlier, never later.
+CONSOLIDATION_BUS_BY_CHAIN_ID: dict[int, dict] = {
+    # TODO: change block, when will know enactment time
+    1: {'address': '0xd907CE33B4Be423823d1CFFe80BD147E8b8554C8', 'deploy_block': 25603586},
+    560048: {'address': '0xe09fBcE63826468867eE66Eda491E444829E022A', 'deploy_block': 2681949},  # Hoodi
+}
+CONSOLIDATION_BUS_ADDRESS = os.getenv('CONSOLIDATION_BUS_ADDRESS')
+CONSOLIDATION_BUS_DEPLOY_BLOCK = os.getenv('CONSOLIDATION_BUS_DEPLOY_BLOCK')
+CONSOLIDATION_GETLOGS_CHUNK = int(os.getenv('CONSOLIDATION_GETLOGS_CHUNK', 10_000))
+
+
+def get_consolidation_bus_config(chain_id: int) -> tuple[ChecksumAddress | None, int | None]:
+    """Resolve (address, deploy_block) for ConsolidationBus on the given chain.
+
+    Env overrides win; otherwise look up the hardcoded per-chain table.
+    Returns (None, None) when not configured — indexer stays disabled, top-up is skipped.
+    """
+    if CONSOLIDATION_BUS_ADDRESS and CONSOLIDATION_BUS_DEPLOY_BLOCK is not None:
+        return Web3.to_checksum_address(CONSOLIDATION_BUS_ADDRESS), int(CONSOLIDATION_BUS_DEPLOY_BLOCK)
+    cfg = CONSOLIDATION_BUS_BY_CHAIN_ID.get(chain_id)
+    if cfg:
+        return Web3.to_checksum_address(cfg['address']), int(cfg['deploy_block'])
+    return None, None
+
+
+# Providers
+KEYS_API_URL = os.getenv('KEYS_API_URL', '')
+CL_API_URLS = _env_list('CL_API_URLS')
+HTTP_REQUEST_TIMEOUT_CONSENSUS: Final = int(os.getenv('HTTP_REQUEST_TIMEOUT_CONSENSUS', 5 * 60))
+HTTP_REQUEST_RETRY_COUNT_CONSENSUS: Final = int(os.getenv('HTTP_REQUEST_RETRY_COUNT_CONSENSUS', 5))
+HTTP_REQUEST_SLEEP_BEFORE_RETRY_IN_SECONDS_CONSENSUS: Final = int(os.getenv('HTTP_REQUEST_SLEEP_BEFORE_RETRY_IN_SECONDS_CONSENSUS', 5))
+
 # All non-private env variables to the logs in main
 PUBLIC_ENV_VARS = {
     'LIDO_LOCATOR': LIDO_LOCATOR,
@@ -128,6 +176,11 @@ PUBLIC_ENV_VARS = {
     'BLOCKS_BETWEEN_EXECUTION': BLOCKS_BETWEEN_EXECUTION,
     'QUORUM_RETENTION_MINUTES': QUORUM_RETENTION_MINUTES,
     'DEPOSIT_TO_FIRST_HEALTHY_MODULE_ONLY': DEPOSIT_TO_FIRST_HEALTHY_MODULE_ONLY,
+    'ENABLE_TOP_UP': ENABLE_TOP_UP,
+    'MAX_VALIDATORS_PER_TOP_UP': MAX_VALIDATORS_PER_TOP_UP,
+    'CONSOLIDATION_BUS_ADDRESS': CONSOLIDATION_BUS_ADDRESS,
+    'CONSOLIDATION_BUS_DEPLOY_BLOCK': CONSOLIDATION_BUS_DEPLOY_BLOCK,
+    'CONSOLIDATION_GETLOGS_CHUNK': CONSOLIDATION_GETLOGS_CHUNK,
 }
 
 PRIVATE_ENV_VARS = {

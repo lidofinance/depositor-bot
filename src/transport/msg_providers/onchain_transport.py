@@ -1,6 +1,6 @@
 import abc
 import logging
-from typing import Callable, List, Optional
+from typing import Callable, List
 
 import variables
 from eth_typing import ChecksumAddress
@@ -66,7 +66,7 @@ class EventParser(abc.ABC):
         _decode_event(log: LogReceipt) -> EventData:
             Decodes the given log using the provided 'Message' event ABI and returns the decoded event data.
 
-        parse(log: LogReceipt) -> Optional[dict]:
+        parse(log: LogReceipt) -> dict | None:
             Parses the given Ethereum log, decodes the 'Message' event data, and uses the subclass-specific
             message creation logic to return a structured message. If parsing fails, it returns None.
 
@@ -97,7 +97,7 @@ class EventParser(abc.ABC):
     def _decode_event(self, log: LogReceipt) -> EventData:
         return get_event_data(self._w3.codec, self._message_abi, log)
 
-    def parse(self, log: LogReceipt) -> Optional[dict]:
+    def parse(self, log: LogReceipt) -> dict | None:
         e = self._decode_event(log)
         unparsed_event = e['args']['data']
         guardian = e['args']['sender']
@@ -236,32 +236,6 @@ class PingParser(EventParser):
         )
 
 
-# event MessagePauseV2(address indexed guardianAddress, (uint256 blockNumber, bytes32 blockHash, (bytes32 r, bytes32 vs) signature,
-# uint256 stakingModuleId, (bytes32 version) app) data)
-class PauseV2Parser(EventParser):
-    PAUSE_V2_DATA_SCHEMA = '(uint256,bytes32,(bytes32,bytes32),uint256,(bytes32))'
-    message_abi = f'MessagePauseV2(address,{PAUSE_V2_DATA_SCHEMA})'
-
-    def __init__(self, w3: Web3):
-        super().__init__(w3, self.PAUSE_V2_DATA_SCHEMA)
-
-    def _create_message(self, parsed_data: tuple, guardian: str) -> dict:
-        block_number, block_hash, (r, vs), staking_module_id, (version,) = parsed_data
-        return PauseMessage(
-            type=MessageType.PAUSE,
-            blockNumber=block_number,
-            guardianAddress=guardian,
-            stakingModuleId=staking_module_id,
-            signature={
-                'r': bytes_to_hex_string(r),
-                '_vs': bytes_to_hex_string(vs),
-            },
-            app={
-                'version': _decode_version(version),
-            },
-        )
-
-
 # event MessagePauseV3(address indexed guardianAddress, (uint256 blockNumber, bytes32 blockHash, (bytes32 r, bytes32 vs) signature,
 # (bytes32 version) app) data)
 class PauseV3Parser(EventParser):
@@ -375,14 +349,14 @@ class OnchainTransportProvider(BaseMessageProvider):
             )
             return []
 
-    def _process_msg(self, log: LogReceipt) -> Optional[dict]:
+    def _process_msg(self, log: LogReceipt) -> dict | None:
         parsed = self._parse_log(log)
         if parsed:
             parsed['chain_id'] = self._chain_id
             parsed['transport'] = 'onchain'
         return parsed
 
-    def _parse_log(self, log: LogReceipt) -> Optional[dict]:
+    def _parse_log(self, log: LogReceipt) -> dict | None:
         for parser in self._parsers:
             try:
                 return parser.parse(log)

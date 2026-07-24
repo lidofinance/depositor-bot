@@ -129,37 +129,13 @@ def test_pause_bot_outdate_messages(pause_bot, block_data, pause_message, block_
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize(
-    'active_module',
-    [
-        False,
-        pytest.param(True, marks=pytest.mark.xfail(raises=AssertionError, strict=True)),
-    ],
-)
-def test_pause_bot_clean_messages(pause_bot, block_data, pause_message, active_module):
+def test_pause_bot_clean_messages(pause_bot, block_data, pause_message):
     pause_bot.message_storage.messages = [pause_message]
-    pause_bot.w3.lido.staking_router.is_staking_module_active = Mock(return_value=active_module)
 
     pause_bot._sign_filter = Mock(return_value=lambda _: True)
 
     pause_bot.execute(block_data)
     assert len(pause_bot.message_storage.messages) == 0
-
-
-@pytest.mark.unit
-def test_pause_message_filtered_by_module_id(pause_bot, block_data, pause_message):
-    new_message = pause_message.copy()
-    new_message['stakingModuleId'] = 2
-
-    pause_bot._sign_filter = Mock(return_value=lambda _: True)
-
-    pause_bot.message_storage.messages = [pause_message, pause_message, new_message]
-    pause_bot.w3.lido.staking_router.is_staking_module_active = lambda module_id: not module_id % 2
-
-    pause_bot.execute(block_data)
-
-    # Only module_id=1 messages filtered
-    assert len(pause_bot.message_storage.messages) == 1
 
 
 @pytest.mark.integration

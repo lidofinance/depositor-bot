@@ -1,14 +1,31 @@
 import logging
 from functools import lru_cache
+from typing import TypedDict
 
 from blockchain.contracts.base_interface import ContractInterface
 from web3.types import BlockIdentifier, Wei
 
 logger = logging.getLogger(__name__)
 
+MODULE_TYPE_CMV2 = b'curated-onchain-v2'.ljust(32, b'\x00')
+MODULE_TYPE_CSM = b'community-onchain-v1'.ljust(32, b'\x00')
 
-class StakingRouterContract(ContractInterface):
-    abi_path = './interfaces/StakingRouter.json'
+# withdrawalCredentialsType of a staking module (StakingModuleDigest field 13)
+WC_TYPE_0X01 = 1
+WC_TYPE_0X02 = 2
+
+
+class StakingModuleInfo(TypedDict):
+    """Parsed fields from a StakingModuleDigest tuple returned by StakingRouter."""
+
+    module_id: int
+    address: str
+    wc_type: int
+    status: int  # StakingModuleStatus: 0=Active, 1=DepositsPaused, 2=Stopped
+
+
+class StakingRouterContractV4(ContractInterface):
+    abi_path = './interfaces/StakingRouterV4.json'
 
     @lru_cache(maxsize=1)
     def get_contract_version(self, block_identifier: BlockIdentifier = 'latest') -> int:
@@ -29,18 +46,6 @@ class StakingRouterContract(ContractInterface):
         logger.info(
             {
                 'msg': 'Call `getStakingModuleIds()`.',
-                'value': response,
-                'block_identifier': block_identifier.__repr__(),
-            }
-        )
-        return response
-
-    def get_staking_module_digests(self, module_ids: list[int], block_identifier: BlockIdentifier = 'latest') -> list[list]:
-        """Returns staking module digest for passed staking module ids"""
-        response = self.functions.getStakingModuleDigests(module_ids).call(block_identifier=block_identifier)
-        logger.info(
-            {
-                'msg': f'Call `getStakingModuleDigests({module_ids})`.',
                 'value': response,
                 'block_identifier': block_identifier.__repr__(),
             }
@@ -96,6 +101,38 @@ class StakingRouterContract(ContractInterface):
         )
         return response
 
+    def get_all_staking_module_digests(self, block_identifier: BlockIdentifier = 'latest') -> list[StakingModuleInfo]:
+        """V4 state tuple includes wc_type at index 13."""
+        response = self.functions.getAllStakingModuleDigests().call(block_identifier=block_identifier)
+        logger.info(
+            {
+                'msg': 'Call getAllStakingModuleDigests().',
+                'value': response,
+                'block_identifier': block_identifier.__repr__(),
+            }
+        )
+        return [StakingModuleInfo(module_id=d[2][0], address=d[2][1], wc_type=d[2][13], status=d[2][5]) for d in response]
 
-class StakingRouterContractV2(StakingRouterContract):
-    abi_path = './interfaces/StakingRouterV2.json'
+    def get_deposit_allocations(
+        self,
+        deposit_amount: Wei,
+        is_top_up: bool,
+        block_identifier: BlockIdentifier = 'latest',
+    ) -> tuple:
+        """Returns deposit allocations across modules.
+
+        Returns:
+            (totalAllocated, allocated[], newAllocations[])
+        """
+        response = self.functions.getDepositAllocations(
+            deposit_amount,
+            is_top_up,
+        ).call(block_identifier=block_identifier)
+        logger.info(
+            {
+                'msg': f'Call `getDepositAllocations({deposit_amount}, {is_top_up})`.',
+                'value': response,
+                'block_identifier': repr(block_identifier),
+            }
+        )
+        return response

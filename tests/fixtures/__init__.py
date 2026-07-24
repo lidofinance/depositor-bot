@@ -1,11 +1,11 @@
 from .contracts import (
+    cmv2_contract,
     deposit_contract,
     deposit_security_module,
-    deposit_security_module_v2,
     lido_contract,
     lido_locator,
     staking_router,
-    staking_router_v2,
+    topup_gateway,
     weth,
 )
 from .provider import (
@@ -24,15 +24,17 @@ from .strategy import (
     gas_price_calculator,
     gas_price_calculator_integration,
 )
+from .top_up_proof_fixtures import top_up_proof_fixtures
 
 __all__ = [
     'lido_locator',
+    'cmv2_contract',
     'deposit_contract',
     'lido_contract',
     'deposit_security_module',
-    'deposit_security_module_v2',
     'staking_router',
-    'staking_router_v2',
+    'topup_gateway',
+    'top_up_proof_fixtures',
     'web3_lido_unit',
     'web3_provider_integration',
     'web3_lido_integration',

@@ -3,6 +3,12 @@ import logging
 from time import time
 
 
+def _json_default(obj: object) -> str:
+    if isinstance(obj, (bytes, bytearray)):
+        return '0x' + bytes(obj).hex()
+    return str(obj)
+
+
 class JsonFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         message = record.msg if isinstance(record.msg, dict) else {'msg': record.getMessage()}
@@ -17,7 +23,8 @@ class JsonFormatter(logging.Formatter):
                 'pathname': record.pathname,
                 'timestamp': int(time()),
                 **message,
-            }
+            },
+            default=_json_default,
         )
         return to_json_msg
 

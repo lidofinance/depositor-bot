@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 BotMessage = DepositMessage | PauseMessage | UnvetMessage | PingMessage
 
 
-def get_messages_sign_filter(prefix) -> Callable:
+def get_messages_sign_filter(prefix: bytes) -> Callable:
     """Returns filter that checks message validity"""
 
     def check_messages(msg: DepositMessage | PauseMessage | UnvetMessage) -> bool:
@@ -78,12 +78,8 @@ def _verification_data_deposit(prefix: bytes, msg: DepositMessage) -> tuple[List
 
 
 def _verification_data_pause(prefix: bytes, msg: PauseMessage) -> tuple[List[Any], List[str]]:
-    if 'stakingModuleId' in msg:
-        data = [prefix, msg['blockNumber'], msg['stakingModuleId']]
-        abi = ['bytes32', 'uint256', 'uint256']
-    else:
-        data = [prefix, msg['blockNumber']]
-        abi = ['bytes32', 'uint256']
+    data = [prefix, msg['blockNumber']]
+    abi = ['bytes32', 'uint256']
     return data, abi
 
 

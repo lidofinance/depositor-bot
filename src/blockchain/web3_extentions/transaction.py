@@ -23,7 +23,8 @@ class TransactionUtils(Module):
     @staticmethod
     def check(transaction: ContractFunction) -> bool:
         try:
-            transaction.call()
+            call_params = {'from': variables.ACCOUNT.address} if variables.ACCOUNT else {}
+            transaction.call(call_params)
         except (ValueError, ContractLogicError) as error:
             logger.error({'msg': 'Local transaction reverted.', 'error': str(error)})
             return False
