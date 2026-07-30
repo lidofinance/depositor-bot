@@ -336,6 +336,8 @@ for _module_id in DEPOSIT_MODULES_WHITELIST:
     for _kind in ('seed', 'topup'):
         MODULE_ALLOCATION.labels(_module_id, _kind).set(0)
         MODULE_STAKE.labels(_module_id, _kind).set(0)
+    POSSIBLE_DEPOSITS_AMOUNT.labels(_module_id).set(0)
+    DEPOSIT_AMOUNT_OK.labels(_module_id).set(0)
 
 # Absent Gauges are indistinguishable from "feature disabled"; 0 is more honest.
 DEPOSITS_PAUSED.set(0)
@@ -349,6 +351,7 @@ KEYS_API_BLOCK_NUMBER.set(0)
 KEYS_API_BLOCK_AGE_SECONDS.set(0)
 EL_HEAD_BLOCK_NUMBER.set(0)
 EL_HEAD_BLOCK_AGE_SECONDS.set(0)
+BOT_LAST_CYCLE_TIMESTAMP.set(0)
 
 INFO = Info(name='build', documentation='Info metric', namespace=PROMETHEUS_PREFIX)
 CONVERTED_PUBLIC_ENV = {k: str(v) for k, v in PUBLIC_ENV_VARS.items()}
