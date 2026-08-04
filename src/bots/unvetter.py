@@ -11,7 +11,7 @@ from blockchain.typings import Web3
 from cryptography.verify_signature import to_guardian_signature
 from metrics.metrics import UNEXPECTED_EXCEPTIONS
 from metrics.transport_message_metrics import message_metrics_filter
-from transport.msg_providers.onchain_transport import OnchainTransportProvider, PingParser, UnvetParser
+from transport.msg_providers.onchain_transport import OnchainTransportProvider, PingParser, UnvetV1Parser, UnvetV2Parser
 from transport.msg_providers.rabbit import MessageType, RabbitProvider
 from transport.msg_storage import MessageStorage
 from transport.msg_types.common import get_messages_sign_filter
@@ -61,7 +61,7 @@ class UnvetterBot:
                     w3=OnchainTransportProvider.create_onchain_transport_w3(),
                     onchain_address=variables.ONCHAIN_TRANSPORT_ADDRESS,
                     message_schema=Schema(Or(UnvetMessageSchema, PingMessageSchema)),
-                    parsers_providers=[UnvetParser, PingParser],
+                    parsers_providers=[UnvetV1Parser, UnvetV2Parser, PingParser],
                     delegates_provider=self.w3.lido.get_guardian_delegates,
                 )
             )

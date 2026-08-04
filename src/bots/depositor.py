@@ -61,7 +61,8 @@ from metrics.transport_message_metrics import message_metrics_filter
 from providers.consensus import ConsensusClient
 from providers.keys_api import KeysAPIClient
 from transport.msg_providers.onchain_transport import (
-    DepositParser,
+    DepositV1Parser,
+    DepositV2Parser,
     OnchainTransportProvider,
     PingParser,
 )
@@ -185,7 +186,7 @@ class DepositorBot:
                     w3=self._onchain_transport_w3,
                     onchain_address=variables.ONCHAIN_TRANSPORT_ADDRESS,
                     message_schema=Schema(Or(DepositMessageSchema, PingMessageSchema)),
-                    parsers_providers=[DepositParser, PingParser],
+                    parsers_providers=[DepositV1Parser, DepositV2Parser, PingParser],
                     delegates_provider=self.w3.lido.get_guardian_delegates,
                 )
             )

@@ -1,5 +1,5 @@
 from cryptography.verify_signature import compute_vs
-from transport.msg_providers.onchain_transport import DepositParser
+from transport.msg_providers.onchain_transport import build_deposit_message
 from transport.msg_types.deposit import DepositMessage
 from utils.bytes import from_hex_string_to_bytes
 
@@ -20,7 +20,7 @@ def get_deposit_message(web3, account_address, pk, module_id) -> DepositMessage:
     )
     signed = web3.eth.account._sign_hash(msg_hash, private_key=pk)
 
-    return DepositParser.build_message(
+    return build_deposit_message(
         block_number=latest.number,
         block_hash=latest.hash,
         guardian=account_address,

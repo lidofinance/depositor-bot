@@ -5,11 +5,12 @@ from eth_account import Account
 from eth_account.account import VRS
 from web3 import Web3
 
-from utils.bytes import from_hex_string_to_bytes
+from utils.bytes import bytes_to_hex_string, from_hex_string_to_bytes
 
 logger = logging.getLogger(__name__)
 
 V_OFFSET = 27
+SIGNATURE_LENGTH = 65
 
 
 def guardian_signature_bytes(r: str, vs: str) -> bytes:
@@ -69,6 +70,22 @@ def compute_vs(v: int, s: str) -> str:
         _vs[0] |= 0x80
 
     return '0x' + _vs.hex()
+
+
+def compact_signature(signature: bytes) -> tuple[bytes, bytes]:
+    """Splits a flat 65-byte ``r || s || v`` signature into the compact ``(r, _vs)`` pair.
+
+    Council v5 publishes Data Bus messages with the signature as a single ``bytes`` blob — the shape
+    DSMv5 verifies through ERC-1271. The bot keeps signatures in the compact ``(r, _vs)`` form
+    everywhere else (RabbitMQ transport, sign filter, DSMv4 submission), so blobs are normalised on
+    parse and a single representation travels downstream. The conversion is lossless: ``_vs`` is ``s``
+    with the parity of ``v`` folded into its top bit.
+    """
+    if len(signature) != SIGNATURE_LENGTH:
+        raise ValueError(f'Guardian signature must be {SIGNATURE_LENGTH} bytes, got {len(signature)}.')
+    r, s, v = signature[:32], signature[32:64], signature[64]
+    # Reuses compute_vs so the packing rule (and its v validation) has one implementation.
+    return r, from_hex_string_to_bytes(compute_vs(v, bytes_to_hex_string(s)))
 
 
 def verify_message_with_signature(data: list[Any], abi: list[str], address: str, vrs: tuple[VRS, VRS, VRS]) -> bool:

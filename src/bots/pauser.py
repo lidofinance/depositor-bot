@@ -13,7 +13,7 @@ from blockchain.typings import Web3
 from cryptography.verify_signature import to_guardian_signature
 from metrics.metrics import UNEXPECTED_EXCEPTIONS
 from metrics.transport_message_metrics import message_metrics_filter
-from transport.msg_providers.onchain_transport import OnchainTransportProvider, PauseV3Parser, PingParser
+from transport.msg_providers.onchain_transport import OnchainTransportProvider, PauseV3Parser, PauseV4Parser, PingParser
 from transport.msg_providers.rabbit import MessageType, RabbitProvider
 from transport.msg_storage import MessageStorage
 from transport.msg_types.common import get_messages_sign_filter
@@ -57,7 +57,7 @@ class PauserBot:
                     w3=OnchainTransportProvider.create_onchain_transport_w3(),
                     onchain_address=variables.ONCHAIN_TRANSPORT_ADDRESS,
                     message_schema=Schema(Or(PauseMessageSchema, PingMessageSchema)),
-                    parsers_providers=[PauseV3Parser, PingParser],
+                    parsers_providers=[PauseV3Parser, PauseV4Parser, PingParser],
                     delegates_provider=self.w3.lido.get_guardian_delegates,
                 )
             )
