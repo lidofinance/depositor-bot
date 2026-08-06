@@ -25,5 +25,7 @@
     "0x088B8b39854cbdFFb9439390bb05Ab3cc35720a6": "0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc",
     "0x9C4BFe063513CD6F6B69B319e14beaC74693C2E9": "0x976EA74026E726554dB657fA54763abd0C3a0aa9",
     "0xa6EF93dAaE1dE34612A080B04786854c624e1A0B": "0x14dC79964da2C08b23698B3D3cc7Ca32193d9955"
-  }
+  },
+  "chainHeight": 3365145,
+  "note": "Self-contained genesis: anvil --init chain.genesis.json needs no upstream node. forkBlock is provenance only."
 }

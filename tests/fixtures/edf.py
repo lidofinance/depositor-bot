@@ -2,13 +2,15 @@
 
 The chain is produced once, out of band, by running core's own upgrade against a forked testnet
 (`lidofinance/core@feat/edf`, `MODE=forking NETWORK=hoodi UPGRADE=true
-STEPS_FILE=upgrade/steps-edf-mock.json`) and dumping the result with `anvil_dumpState`. That dump is
-committed as `edf/upgrade-state.json.gz` and replayed here with `anvil --load-state`, so tests get
-DSM v5 and contract guardians without re-running an eight-minute upgrade.
+STEPS_FILE=upgrade/steps-edf-mock.json`) and captured as a genesis file, committed as
+`edf/upgrade-state.json.gz` and replayed with `anvil --load-state`, so tests get DSM v5 and contract
+guardians without re-running an eight-minute upgrade.
 
-Why the fork URL is still needed: an anvil dump contains only state the node *modified*, so the
-upgrade's own deployments are in it but the untouched protocol underneath is not. The fork supplies
-that base state; nothing about the upgrade is re-executed.
+Why an RPC endpoint is still needed: an anvil dump contains only state the node *modified*, so the
+upgrade's own deployments are in it but the untouched protocol underneath is not — the fork supplies
+that. A fully offline variant is possible (`anvil --init` from a merged genesis, see
+`tests/fork_snapshot.py` and edf/README.md) but needs a capture run that accumulates the base state;
+it is not committed yet.
 
 The node is session-scoped and each test is wrapped in evm_snapshot/evm_revert, so tests can deploy
 and grant roles freely without leaking into each other.
@@ -88,35 +90,21 @@ def edf_state_file(tmp_path_factory) -> str:
 @pytest.fixture(scope='session')
 def web3_edf_session(edf_manifest, edf_state_file):
     """One upgraded node for the whole session."""
-    rpc_endpoint = variables.WEB3_RPC_ENDPOINTS[0] if variables.WEB3_RPC_ENDPOINTS else ''
     previous_locator = variables.LIDO_LOCATOR
     # LidoContracts resolves everything from the locator, so it has to match the snapshot's chain.
     variables.LIDO_LOCATOR = Web3.to_checksum_address(edf_manifest['lidoLocator'])
 
-    fork_block = edf_manifest['forkBlock']
     fork = anvil_fork(
         os.getenv('ANVIL_PATH', ''),
-        rpc_endpoint,
-        fork_block,
+        fork_url=variables.WEB3_RPC_ENDPOINTS[0] if variables.WEB3_RPC_ENDPOINTS else None,
+        block_number=edf_manifest['forkBlock'],
         port=EDF_PORT,
         load_state=edf_state_file,
         # Mine on demand: these tests only send transactions and read them back, and a fixed block
         # interval would make every send wait for the next block.
         block_time=None,
     )
-    try:
-        fork.__enter__()
-    except (RuntimeError, ValueError) as error:
-        # The snapshot pins a historical block, so this breaks in two predictable ways that look like
-        # nothing to do with the snapshot: the endpoint is down, or it is not an archive node and the
-        # block has aged out of its window. Say which, and what to do about it.
-        raise RuntimeError(
-            f'Could not fork {rpc_endpoint or "<unset WEB3_RPC_ENDPOINTS>"} at block {fork_block}. '
-            'The EDF snapshot pins that block, so this needs an endpoint that still serves it — an '
-            'archive node, or a fresh snapshot. Regenerate per tests/fixtures/edf/README.md if the '
-            f'block has aged out. Underlying error: {error}'
-        ) from error
-
+    fork.__enter__()
     try:
         w3 = Web3(HTTPProvider(f'http://127.0.0.1:{EDF_PORT}', request_kwargs={'timeout': 3600}))
         assert w3.is_connected(), 'Failed to connect to the EDF fork.'
@@ -124,7 +112,7 @@ def web3_edf_session(edf_manifest, edf_state_file):
 
         expected = edf_manifest['dsmVersion']
         assert w3.lido.dsm_version == expected, (
-            f'EDF snapshot did not load: DSM version is {w3.lido.dsm_version}, expected {expected}. '
+            f'EDF chain did not load: DSM version is {w3.lido.dsm_version}, expected {expected}. '
             'Regenerate tests/fixtures/edf/upgrade-state.json.gz.'
         )
         _clear_delegate_code(w3, edf_manifest)

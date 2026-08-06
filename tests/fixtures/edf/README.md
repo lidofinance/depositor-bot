@@ -9,6 +9,30 @@ The fork URL is still required. An anvil dump contains only state the node *modi
 upgrade's own deployments are in it while the untouched protocol underneath is not — the fork supplies
 that base state. Nothing about the upgrade is re-executed.
 
+## Making it fully offline (not done yet)
+
+`anvil --init` can serve a self-contained genesis with no node at all, and `tests/fork_snapshot.py`
+builds one by merging the base state from foundry's RPC cache with the upgrade dump on top. This has
+been shown to work: DSM v5, guardians, delegates and `isMinDepositDistancePassed` all resolve with no
+`--fork-url`. What it needs is a *complete* cache, and that is the fiddly part:
+
+- The cache only holds what a fork actually fetched, and a read that was never warmed comes back as an
+  empty account or a zero slot — surfacing later as `Panic 0x32: array index out of bounds` rather
+  than anything that names the missing state.
+- Most of the base state is fetched by **the upgrade run itself**, not by the tests: with the dump
+  loaded, test reads resolve locally and never touch the network. So the cache directory for the
+  pinned block must **accumulate across both runs** — do not clear it between the upgrade and the
+  suite, or the base state is lost.
+- Capture order that should work: run the upgrade (populates base state) → run the full suite against
+  `--fork-url` + `--load-state` (adds whatever the tests additionally read) → stop anvil with SIGTERM
+  so the cache flushes (`kill -9` loses it) → `zstd -dc` the cache (foundry ≥1.7 compresses it, at
+  `<block>/storage.json`) → `python -m tests.fork_snapshot <cache.json> <genesis.json> <dump.json>
+  560048` → gzip.
+
+Warming with less than the real suite produces a genesis that boots and serves the protocol but
+panics on the first slot no one read during capture, which is a confusing failure to debug. That is
+why this is not committed yet.
+
 ## Why not the already-deployed EDF
 
 Hoodi has a `DelegationFactory` at `0x76Af23C7e71004038BeE4a1ceba8c441f4cA239b`, but it predates
