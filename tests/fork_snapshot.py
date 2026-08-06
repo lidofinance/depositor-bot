@@ -45,7 +45,12 @@ def _code_hex(code_field: Any) -> str:
     if isinstance(inner, str):
         return inner
     if variant == 'Eip7702':
-        return inner['raw']
+        # Serialised two ways depending on the foundry version: older builds carry the designator as
+        # `raw`, newer ones only the target, in which case it has to be rebuilt — a 7702 designator is
+        # the magic `0xef0100` followed by the 20-byte address.
+        if 'raw' in inner:
+            return inner['raw']
+        return '0xef0100' + inner['delegated_address'][2:]
 
     raw = inner.get('bytecode') or inner.get('raw') or '0x'
     original_len = inner.get('original_len')
