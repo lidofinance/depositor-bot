@@ -67,6 +67,50 @@ def _hex(value: Any) -> str:
     return hex(value) if isinstance(value, int) else value
 
 
+def merge_dump(genesis: dict, dump: dict) -> dict:
+    """Overlay `anvil_dumpState` output onto a genesis built from the RPC cache.
+
+    Both halves are needed and neither is sufficient. The RPC cache holds base chain state that was
+    *fetched* from the upstream node; a dump holds state the node *modified* locally. So after running
+    an upgrade on a fork, everything the upgrade deployed or wrote — new DSM, re-pointed locator,
+    delegation contracts — exists only in the dump, while the untouched protocol it builds on exists
+    only in the cache.
+
+    Merged per slot rather than per account: a dump carries only the slots it changed, so replacing an
+    account wholesale would drop every cached slot the upgrade did not touch (for a proxy, that means
+    losing everything except the implementation pointer).
+
+    The dump's block environment wins, since it describes the chain *after* the upgrade — including any
+    time the migration advanced to pass voting delays.
+    """
+    accounts = dict(genesis['alloc'])
+    for addr, account in dump.get('accounts', {}).items():
+        key = addr.lower()
+        existing = accounts.get(key, {})
+        storage = dict(existing.get('storage', {}))
+        storage.update({_pad32(slot): _pad32(value) for slot, value in account.get('storage', {}).items()})
+
+        merged = {
+            'balance': account.get('balance', existing.get('balance', '0x0')),
+            'nonce': _hex(account.get('nonce', existing.get('nonce', 0))),
+        }
+        code = _code_hex(account.get('code')) if account.get('code') is not None else existing.get('code', '0x')
+        if code != '0x':
+            merged['code'] = code
+        if storage:
+            merged['storage'] = storage
+        accounts[key] = merged
+
+    block = dump.get('block')
+    if block:
+        genesis = {**genesis, 'number': block['number'], 'timestamp': block['timestamp']}
+        for src, dst in (('gas_limit', 'gasLimit'), ('basefee', 'baseFeePerGas')):
+            if block.get(src) is not None:
+                genesis[dst] = _hex(block[src])
+
+    return {**genesis, 'alloc': accounts}
+
+
 def cache_to_genesis(cache: dict, chain_id: int = CHAIN_ID_HOODI) -> dict:
     """Build a geth-style genesis that starts at the forked block with the forked state.
 
@@ -124,15 +168,19 @@ def cache_to_genesis(cache: dict, chain_id: int = CHAIN_ID_HOODI) -> dict:
 
 def main(argv: list[str]) -> int:
     if len(argv) < 3:
-        print(f'usage: python -m tests.fork_snapshot <cache.json> <genesis.json> [chain_id={CHAIN_ID_HOODI}]')
+        print(f'usage: python -m tests.fork_snapshot <cache.json> <genesis.json> [dump.json] [chain_id={CHAIN_ID_HOODI}]')
         return 2
 
     src, dst = argv[1], argv[2]
-    chain_id = int(argv[3]) if len(argv) > 3 else CHAIN_ID_HOODI
+    dump_path = argv[3] if len(argv) > 3 and argv[3] != '-' else None
+    chain_id = int(argv[4]) if len(argv) > 4 else CHAIN_ID_HOODI
     with open(src) as fh:
         cache = json.load(fh)
 
     genesis = cache_to_genesis(cache, chain_id)
+    if dump_path:
+        with open(dump_path) as fh:
+            genesis = merge_dump(genesis, json.load(fh))
     with open(dst, 'w') as fh:
         json.dump(genesis, fh)
 
