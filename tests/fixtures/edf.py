@@ -93,16 +93,31 @@ def web3_edf_session(edf_manifest, edf_state_file):
     # LidoContracts resolves everything from the locator, so it has to match the snapshot's chain.
     variables.LIDO_LOCATOR = Web3.to_checksum_address(edf_manifest['lidoLocator'])
 
-    with anvil_fork(
+    fork_block = edf_manifest['forkBlock']
+    fork = anvil_fork(
         os.getenv('ANVIL_PATH', ''),
         rpc_endpoint,
-        edf_manifest['forkBlock'],
+        fork_block,
         port=EDF_PORT,
         load_state=edf_state_file,
         # Mine on demand: these tests only send transactions and read them back, and a fixed block
         # interval would make every send wait for the next block.
         block_time=None,
-    ):
+    )
+    try:
+        fork.__enter__()
+    except (RuntimeError, ValueError) as error:
+        # The snapshot pins a historical block, so this breaks in two predictable ways that look like
+        # nothing to do with the snapshot: the endpoint is down, or it is not an archive node and the
+        # block has aged out of its window. Say which, and what to do about it.
+        raise RuntimeError(
+            f'Could not fork {rpc_endpoint or "<unset WEB3_RPC_ENDPOINTS>"} at block {fork_block}. '
+            'The EDF snapshot pins that block, so this needs an endpoint that still serves it — an '
+            'archive node, or a fresh snapshot. Regenerate per tests/fixtures/edf/README.md if the '
+            f'block has aged out. Underlying error: {error}'
+        ) from error
+
+    try:
         w3 = Web3(HTTPProvider(f'http://127.0.0.1:{EDF_PORT}', request_kwargs={'timeout': 3600}))
         assert w3.is_connected(), 'Failed to connect to the EDF fork.'
         w3.attach_modules({'transaction': TransactionUtils, 'lido': LidoContracts})
@@ -114,8 +129,9 @@ def web3_edf_session(edf_manifest, edf_state_file):
         )
         _clear_delegate_code(w3, edf_manifest)
         yield w3
-
-    variables.LIDO_LOCATOR = previous_locator
+    finally:
+        fork.__exit__(None, None, None)
+        variables.LIDO_LOCATOR = previous_locator
 
 
 @pytest.fixture
