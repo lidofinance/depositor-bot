@@ -15,11 +15,18 @@ class anvil_fork:
     --state
     """
 
-    def __init__(self, path_to_anvil, fork_url, block_number=None, port='8545'):
+    def __init__(self, path_to_anvil, fork_url, block_number=None, port='8545', load_state=None, block_time='12'):
         self.path_to_anvil = path_to_anvil
         self.fork_url = fork_url
         self.port = port
         self.block_number = block_number
+        # Seconds per block. `None` mines on demand, which is much faster for suites that just send
+        # transactions and read them back — with a fixed interval every send waits for the next block.
+        self.block_time = block_time
+        # Path to an anvil state snapshot applied on top of the fork. Used to replay an expensive
+        # chain setup (e.g. core's EDF upgrade) without re-running it: the snapshot supplies the
+        # accounts and slots that setup created or modified, the fork supplies everything else.
+        self.load_state = load_state
 
     def __enter__(self):
         # Validate fork URL
@@ -36,6 +43,9 @@ class anvil_fork:
         if self.block_number is not None:
             block_command = ('--fork-block-number', str(self.block_number))
 
+        state_command = ('--load-state', str(self.load_state)) if self.load_state else tuple()
+        block_time_command = ('--block-time', str(self.block_time)) if self.block_time else tuple()
+
         anvil_command = [
             f'{self.path_to_anvil}anvil',
             '-f',
@@ -43,8 +53,8 @@ class anvil_fork:
             '-p',
             self.port,
             *block_command,
-            '--block-time',
-            '12',
+            *state_command,
+            *block_time_command,
             '--auto-impersonate',
         ]
 
@@ -213,7 +223,7 @@ class anvil_fork:
                 }
             )
             return False
-        except socket.timeout:
+        except TimeoutError:
             logger.debug({'msg': 'RPC health check failed - timeout'})
             return False
         except Exception as e:
