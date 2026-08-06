@@ -124,6 +124,18 @@ TOPUP_GATEWAY_PAUSED = Gauge(
     namespace=PROMETHEUS_PREFIX,
 )
 
+# States must stay in sync with bots.depositor.DelegationState's values (see note on PHASE_OUTCOME).
+# `disabled` means EDF_DELEGATION_CONTRACT is unset — top-ups go out as direct calls, which is a
+# valid configuration, not a fault. The other non-ready states each block every top-up, so they are
+# distinguished here: a bare "tx failed" counter cannot tell a delegation problem from a revert
+# inside topUp() itself.
+TOPUP_DELEGATION_STATE = Enum(
+    'topup_delegation_state',
+    'Whether the EDF delegation contract can currently execute top-ups.',
+    states=['disabled', 'ready', 'not_delegate', 'terminated', 'role_missing'],
+    namespace=PROMETHEUS_PREFIX,
+)
+
 MODULE_STATUS = Gauge(
     'module_status',
     'Staking module status from StakingRouter digest. 0=active 1=deposits_paused 2=stopped',

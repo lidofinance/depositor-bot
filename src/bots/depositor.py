@@ -51,6 +51,7 @@ from metrics.metrics import (
     POSSIBLE_DEPOSITS_AMOUNT,
     QUORUM,
     QUORUM_STATE,
+    TOPUP_DELEGATION_STATE,
     TOPUP_GAS_OK,
     TOPUP_GAS_OK_LAST_RUN_TIMESTAMP,
     TOPUP_GATEWAY_PAUSED,
@@ -87,6 +88,21 @@ class ModuleCandidate(NamedTuple):
     # Amount the StakingRouter (SR-lib) allocation algorithm decided should be allocated to this module
     # from the depositable buffer sum. Needed only for top-up; unused for deposits.
     allocation: Wei
+
+
+class DelegationState(StrEnum):
+    """Whether top-ups can be executed through the configured EDF delegation contract.
+
+    Everything but DISABLED and READY blocks every top-up, so the reason is checked at startup (the
+    bot refuses to start) and re-read every cycle — a delegate can be rotated or revoked, and the
+    contract terminated, while the bot runs. Values must stay in sync with TOPUP_DELEGATION_STATE.
+    """
+
+    DISABLED = 'disabled'  # no delegation contract configured → topUp() is called directly
+    READY = 'ready'  # bot's account is the active delegate and the contract holds TOP_UP_ROLE
+    NOT_DELEGATE = 'not_delegate'  # bot's account is not (or no longer) the active delegate
+    TERMINATED = 'terminated'  # delegation contract terminated — irreversible
+    ROLE_MISSING = 'role_missing'  # contract does not hold TOP_UP_ROLE on TopUpGateway
 
 
 class QuorumState(StrEnum):
@@ -163,6 +179,7 @@ class DepositorBot:
         self._keys_api = keys_api
         self._cl = cl
         self._consolidation_indexer = self._build_consolidation_indexer()
+        self._validate_topup_delegation()
         now = datetime.now()
         self._module_last_heart_beat: dict[int, datetime] = {module_id: now for module_id in variables.DEPOSIT_MODULES_WHITELIST}
         for module_id in variables.DEPOSIT_MODULES_WHITELIST:
@@ -296,9 +313,15 @@ class DepositorBot:
         if variables.ENABLE_TOP_UP:
             _tg_paused = self.w3.lido.topup_gateway.is_paused()
             TOPUP_GATEWAY_PAUSED.set(int(_tg_paused))
+            # Refreshed every iteration, next to the gateway pause state: both are top-up subsystem
+            # gates that hold for all modules, and both must stay current even on iterations where no
+            # module ends up being topped up. Not a gate here — a broken delegation still lets the tx
+            # be built and fail loudly on the dry-run, which is more informative than skipping early.
+            TOPUP_DELEGATION_STATE.state(self._topup_delegation_state())
             top_up_enabled = not _tg_paused
         else:
             TOPUP_GATEWAY_PAUSED.set(0)
+            TOPUP_DELEGATION_STATE.state(DelegationState.DISABLED)
             top_up_enabled = False
 
         logger.info({'msg': 'Phase B start: full deposits to 0x01 + top-up to 0x02.'})
@@ -548,6 +571,11 @@ class DepositorBot:
             return PhaseOutcome.SKIPPED
 
         tx = self.w3.lido.topup_gateway.top_up(module_id, proof_data)
+        # TOP_UP_ROLE may be held by an EDF delegation contract rather than by the bot's key. Wrapping
+        # must happen before check()/send() so the dry-run and the gas estimate cover the delegated
+        # call — the unwrapped one would revert with AccessControlUnauthorizedAccount.
+        if self.w3.lido.delegation is not None:
+            tx = self.w3.lido.delegation.wrap(tx)
         success = self.w3.transaction.check(tx) and self.w3.transaction.send(tx, False, 6)
         TOPUP_TX_SEND.labels('success' if success else 'failure', module_id).inc()
         logger.info({'msg': f'Top-up tx result: {success}.', 'module_id': module_id})
@@ -588,6 +616,58 @@ class DepositorBot:
         logger.info({'msg': 'ConsolidationBus indexer cold start.', 'address': address, 'deploy_block': deploy_block})
         indexer.cold_start()
         return indexer
+
+    def _topup_delegation_state(self) -> DelegationState:
+        """Reads whether the configured EDF delegation contract can execute a top-up right now.
+
+        Two live reads per call (`TOP_UP_ROLE` is a cached constant), so it runs once per iteration
+        rather than per module. It has to be re-read rather than trusted from startup: delegate
+        rotation, revocation and termination all take effect while the bot is running, and each of
+        them turns every top-up into a revert.
+
+        In dry mode (no account) the delegate check is skipped — there is no key to compare against
+        and nothing will be sent anyway.
+        """
+        delegation = self.w3.lido.delegation
+        if delegation is None:
+            return DelegationState.DISABLED
+
+        if delegation.is_terminated():
+            return DelegationState.TERMINATED
+
+        role = self.w3.lido.topup_gateway.top_up_role()
+        if not self.w3.lido.topup_gateway.has_role(role, delegation.address):
+            return DelegationState.ROLE_MISSING
+
+        if variables.ACCOUNT is None:
+            logger.warning({'msg': 'No account configured. Skipping the EDF delegate check.', 'delegation': delegation.address})
+            return DelegationState.READY
+
+        if delegation.get_delegate() != variables.ACCOUNT.address:
+            return DelegationState.NOT_DELEGATE
+
+        return DelegationState.READY
+
+    def _validate_topup_delegation(self) -> None:
+        """Refuse to start when top-up is enabled but delegated execution is misconfigured.
+
+        Same reasoning as the ConsolidationBus indexer: a broken delegation makes every single top-up
+        revert, and a crash loop with the reason in it is far easier to notice than a bot that keeps
+        running and quietly tops up nothing.
+        """
+        if not variables.ENABLE_TOP_UP:
+            return
+
+        state = self._topup_delegation_state()
+        TOPUP_DELEGATION_STATE.state(state)
+        if state not in (DelegationState.DISABLED, DelegationState.READY):
+            account = variables.ACCOUNT.address if variables.ACCOUNT else 'not configured'
+            raise ValueError(
+                f'EDF delegation contract {variables.EDF_DELEGATION_CONTRACT} cannot execute top-ups: {state}. '
+                f'It must hold TOP_UP_ROLE on TopUpGateway, not be terminated, and have the bot account '
+                f'({account}) as its active delegate.'
+            )
+        logger.info({'msg': 'Top-up delegation checked.', 'state': state, 'delegation': variables.EDF_DELEGATION_CONTRACT})
 
     def _check_balance(self):
         if variables.ACCOUNT:

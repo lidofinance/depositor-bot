@@ -8,7 +8,7 @@ from web3.types import Wei
 
 import variables
 from blockchain.contracts.staking_router import MODULE_TYPE_CMV2, MODULE_TYPE_CSM, StakingModuleInfo
-from bots.depositor import DepositorBot, PhaseOutcome, QuorumState
+from bots.depositor import DelegationState, DepositorBot, PhaseOutcome, QuorumState
 from tests.conftest import COUNCIL_ADDRESS_1, COUNCIL_ADDRESS_2, COUNCIL_PK_1, COUNCIL_PK_2
 from tests.utils.protocol_utils import get_deposit_message
 
@@ -23,11 +23,16 @@ def _make_digest(module_id, address, wc_type, status=0) -> StakingModuleInfo:
 def _make_bot():
     """Build a DepositorBot with all-MagicMock deps. No transports → MessageStorage stays empty."""
     variables.MESSAGE_TRANSPORTS = ''
+    w3 = MagicMock()
+    # w3.lido is a MagicMock, so `delegation` would auto-create a truthy child and silently turn on
+    # delegated top-up execution. Default to the direct-call configuration; tests that exercise
+    # delegation set it explicitly.
+    w3.lido.delegation = None
     # Skip the real ConsolidationBus backfill (needs RPC) — inject a mock indexer so top-up paths
     # are still exercised. ENABLE_TOP_UP is left untouched; tests set it as needed.
     with mock.patch.object(DepositorBot, '_build_consolidation_indexer', return_value=MagicMock()):
         bot = DepositorBot(
-            w3=MagicMock(),
+            w3=w3,
             sender=MagicMock(),
             base_deposit_strategy=MagicMock(),
             csm_strategy=MagicMock(),
@@ -776,6 +781,10 @@ def depositor_bot(
         variables.MESSAGE_TRANSPORTS = ''
         variables.DEPOSIT_MODULES_WHITELIST = [1, 2]
         web3_lido_unit.eth.get_block = Mock(return_value=block_data)
+        # w3.lido is a Mock, so `delegation` would auto-create a truthy child and silently turn on
+        # delegated execution. Default to the direct-call configuration; tests that need delegation
+        # set it explicitly. Must be set before construction — startup validation reads it.
+        web3_lido_unit.lido.delegation = None
         # Skip the real ConsolidationBus backfill (needs RPC) — inject a mock indexer.
         with mock.patch.object(DepositorBot, '_build_consolidation_indexer', return_value=MagicMock()):
             bot = DepositorBot(
@@ -1278,6 +1287,142 @@ def test_build_consolidation_indexer_raises_when_top_up_enabled_but_bus_unconfig
     bot = _make_bot()
     with mock.patch.object(variables, 'get_consolidation_bus_config', return_value=(None, None)), pytest.raises(ValueError):
         bot._build_consolidation_indexer()
+
+
+# ─── delegated top-up execution ────────────────────────────────────
+
+
+def _delegation_mock(bot, *, delegate, terminated=False, has_role=True):
+    """Attach a delegation contract mock in a given on-chain state."""
+    delegation = Mock()
+    delegation.address = '0xDe1e9a710000000000000000000000000000BEEF'
+    delegation.is_terminated = Mock(return_value=terminated)
+    delegation.get_delegate = Mock(return_value=delegate)
+    delegation.wrap = Mock(side_effect=lambda call: ('wrapped', call))
+    bot.w3.lido.delegation = delegation
+    bot.w3.lido.topup_gateway.top_up_role = Mock(return_value=b'\x01' * 32)
+    bot.w3.lido.topup_gateway.has_role = Mock(return_value=has_role)
+    return delegation
+
+
+@pytest.fixture
+def account(monkeypatch):
+    acc = Mock()
+    acc.address = '0xB07B07B07B07B07B07B07B07B07B07B07B07B07B'
+    monkeypatch.setattr(variables, 'ACCOUNT', acc)
+    return acc
+
+
+@pytest.mark.unit
+def test_delegation_state_disabled_when_not_configured(depositor_bot):
+    assert depositor_bot._topup_delegation_state() is DelegationState.DISABLED
+
+
+@pytest.mark.unit
+def test_delegation_state_ready_when_bot_is_active_delegate(depositor_bot, account):
+    _delegation_mock(depositor_bot, delegate=account.address)
+    assert depositor_bot._topup_delegation_state() is DelegationState.READY
+
+
+@pytest.mark.unit
+def test_delegation_state_not_delegate_after_rotation(depositor_bot, account):
+    """Delegate rotated away from the bot's key — every top-up would revert with NotDelegate."""
+    _delegation_mock(depositor_bot, delegate='0x0000000000000000000000000000000000000001')
+    assert depositor_bot._topup_delegation_state() is DelegationState.NOT_DELEGATE
+
+
+@pytest.mark.unit
+def test_delegation_state_terminated(depositor_bot, account):
+    _delegation_mock(depositor_bot, delegate=account.address, terminated=True)
+    assert depositor_bot._topup_delegation_state() is DelegationState.TERMINATED
+
+
+@pytest.mark.unit
+def test_delegation_state_role_missing(depositor_bot, account):
+    _delegation_mock(depositor_bot, delegate=account.address, has_role=False)
+    assert depositor_bot._topup_delegation_state() is DelegationState.ROLE_MISSING
+
+
+@pytest.mark.unit
+def test_delegation_state_ready_in_dry_mode_without_account(depositor_bot, monkeypatch):
+    """No key to compare against and nothing gets sent — don't block startup on the delegate check."""
+    monkeypatch.setattr(variables, 'ACCOUNT', None)
+    delegation = _delegation_mock(depositor_bot, delegate='0x0000000000000000000000000000000000000001')
+
+    assert depositor_bot._topup_delegation_state() is DelegationState.READY
+    delegation.get_delegate.assert_not_called()
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    'kwargs',
+    [
+        {'delegate': '0x0000000000000000000000000000000000000001'},  # not the delegate
+        {'delegate': None, 'terminated': True},
+        {'delegate': None, 'has_role': False},
+    ],
+)
+def test_validate_topup_delegation_refuses_to_start_on_misconfiguration(depositor_bot, account, kwargs):
+    kwargs['delegate'] = kwargs['delegate'] or account.address
+    _delegation_mock(depositor_bot, **kwargs)
+    with mock.patch.object(variables, 'ENABLE_TOP_UP', True), pytest.raises(ValueError, match='cannot execute top-ups'):
+        depositor_bot._validate_topup_delegation()
+
+
+@pytest.mark.unit
+def test_validate_topup_delegation_passes_when_ready(depositor_bot, account):
+    _delegation_mock(depositor_bot, delegate=account.address)
+    with mock.patch.object(variables, 'ENABLE_TOP_UP', True):
+        depositor_bot._validate_topup_delegation()  # does not raise
+
+
+@pytest.mark.unit
+def test_validate_topup_delegation_skipped_when_top_up_disabled(depositor_bot, account):
+    """A broken delegation is irrelevant while top-up is off — don't block the deposit-only bot."""
+    delegation = _delegation_mock(depositor_bot, delegate=account.address, terminated=True)
+    with mock.patch.object(variables, 'ENABLE_TOP_UP', False):
+        depositor_bot._validate_topup_delegation()
+    delegation.is_terminated.assert_not_called()
+
+
+@pytest.mark.unit
+def test_top_up_to_module_sends_direct_call_when_delegation_not_configured(depositor_bot):
+    tx = Mock(name='tx')
+    _stub_topup_happy_path(depositor_bot, tx)
+
+    assert depositor_bot._top_up_to_module(1, '0xAddr', 50) is PhaseOutcome.SENT
+    depositor_bot.w3.transaction.check.assert_called_once_with(tx)
+    depositor_bot.w3.transaction.send.assert_called_once_with(tx, False, 6)
+
+
+@pytest.mark.unit
+def test_top_up_to_module_wraps_call_before_dry_run_when_delegated(depositor_bot, account):
+    """The wrapped tx — not the bare topUp — must reach check() and send(): the direct call would
+    revert with AccessControlUnauthorizedAccount, since the role is held by the delegation contract."""
+    tx = Mock(name='tx')
+    _stub_topup_happy_path(depositor_bot, tx)
+    delegation = _delegation_mock(depositor_bot, delegate=account.address)
+
+    assert depositor_bot._top_up_to_module(1, '0xAddr', 50) is PhaseOutcome.SENT
+
+    delegation.wrap.assert_called_once_with(tx)
+    depositor_bot.w3.transaction.check.assert_called_once_with(('wrapped', tx))
+    depositor_bot.w3.transaction.send.assert_called_once_with(('wrapped', tx), False, 6)
+
+
+def _stub_topup_happy_path(bot, tx):
+    """Stub everything _top_up_to_module needs up to building the tx."""
+    mock_module = Mock()
+    mock_module.get_type.return_value = MODULE_TYPE_CMV2
+    bot.w3.lido.staking_module = Mock(return_value=mock_module)
+    strategy = Mock()
+    strategy.is_gas_price_ok = Mock(return_value=True)
+    strategy.get_topup_candidates = Mock(return_value=['proof'])
+    bot._select_topup_strategy = Mock(return_value=strategy)
+    bot.w3.lido.topup_gateway.get_max_validators_per_top_up = Mock(return_value=10)
+    bot.w3.lido.topup_gateway.top_up = Mock(return_value=tx)
+    bot.w3.transaction.check = Mock(return_value=True)
+    bot.w3.transaction.send = Mock(return_value=True)
 
 
 # ─── _select_topup_strategy ────────────────────────────────────────

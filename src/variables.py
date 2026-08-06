@@ -117,6 +117,15 @@ GAS_ADDENDUM = Web3.to_wei(*os.getenv('GAS_ADDENDUM', '6 gwei').split(' '))
 ENABLE_TOP_UP = os.getenv('ENABLE_TOP_UP', 'false').lower() == 'true'
 MAX_VALIDATORS_PER_TOP_UP = int(os.getenv('MAX_VALIDATORS_PER_TOP_UP', 32))
 
+# EDF delegation contract (LIP-37) holding TOP_UP_ROLE on TopUpGateway, with this bot's account as
+# its delegate. When set, top-ups are executed through it so the role can live on a stable address
+# and the bot's hot key can be rotated without an ACL change on TopUpGateway. When unset, topUp() is
+# called directly and TOP_UP_ROLE must be granted to the bot's account itself.
+# Only top-ups are routed this way: deposits, pause and unvet are authorised by guardian signatures
+# in calldata, so DSM does not care who sends them.
+_edf_delegation_contract = os.getenv('EDF_DELEGATION_CONTRACT')
+EDF_DELEGATION_CONTRACT: ChecksumAddress | None = Web3.to_checksum_address(_edf_delegation_contract) if _edf_delegation_contract else None
+
 # Consolidation indexer (ConsolidationBus).
 # Top-up filters out keys that participate in a pending ConsolidationBus request.
 # LidoLocator does not expose the Bus, so its address + deploy block are hardcoded per chain
@@ -178,6 +187,7 @@ PUBLIC_ENV_VARS = {
     'DEPOSIT_TO_FIRST_HEALTHY_MODULE_ONLY': DEPOSIT_TO_FIRST_HEALTHY_MODULE_ONLY,
     'ENABLE_TOP_UP': ENABLE_TOP_UP,
     'MAX_VALIDATORS_PER_TOP_UP': MAX_VALIDATORS_PER_TOP_UP,
+    'EDF_DELEGATION_CONTRACT': EDF_DELEGATION_CONTRACT,
     'CONSOLIDATION_BUS_ADDRESS': CONSOLIDATION_BUS_ADDRESS,
     'CONSOLIDATION_BUS_DEPLOY_BLOCK': CONSOLIDATION_BUS_DEPLOY_BLOCK,
     'CONSOLIDATION_GETLOGS_CHUNK': CONSOLIDATION_GETLOGS_CHUNK,

@@ -121,6 +121,14 @@ The general strategy uses a cubic formula to compute a recommended gas ceiling: 
 
 `TransactionUtils.send()` (`src/blockchain/web3_extentions/transaction.py`) builds an EIP-1559 transaction with dynamic gas estimation. If `RELAY_RPC` and `AUCTION_BUNDLER_PRIVATE_KEY` are configured, it attempts Flashbots relay first, falling back to classic broadcast on `PrivateRelayException`. When `CREATE_TRANSACTIONS=false` (default), the method logs and returns `True` without broadcasting — safe for dry runs.
 
+#### Delegated execution (EDF, LIP-37)
+
+`TopUpGateway.topUp` is the **only** permissioned call the bot makes (`TOP_UP_ROLE`, AccessControl). When `EDF_DELEGATION_CONTRACT` is set, the role lives on that delegation contract and the tx is wrapped as `delegation.execute(topUpGateway, <topUp calldata>)` — `DelegationContract.wrap()` in `src/blockchain/contracts/delegation.py`. The bot's key is then the contract's *delegate*, so rotating the key is a `nominateDelegate` by the contract's owner instead of a `grantRole`/`revokeRole` on TopUpGateway. Unset → direct call, and `TOP_UP_ROLE` must be on the bot's own account.
+
+Wrapping happens **before** `transaction.check()`/gas estimation, so the dry-run simulates what actually gets mined; simulating the unwrapped call would revert with `AccessControlUnauthorizedAccount`.
+
+Deposits, pause and unvet are deliberately **not** wrapped. DSM v5 authorises `depositBufferedEther` purely from the guardian signatures in calldata — it never reads `msg.sender` — so wrapping would only add gas and couple deposits to delegate state. `pauseDeposits`/`unvetSigningKeys` do have a `msg.sender`-is-guardian branch, but the bot always holds a signed council message, so the signature path is always open to it and making its hot key a guardian delegate would let that key pause deposits with no quorum.
+
 ### Logging convention
 
 All log calls use structured dict format:
@@ -154,18 +162,22 @@ Walk the gates in order; the first one that isn't "pass" is almost always the wh
 Module-level gates (Prometheus, defined in `src/metrics/metrics.py`, set in `src/bots/depositor.py`):
 
 1. `topup_gateway_paused == 0` (and `variables.ENABLE_TOP_UP` is true — checked at startup, not a metric).
-2. `module_allocation_wei{module_id, kind="topup"} > 0`. Zero here is the single most common reason
+2. `topup_delegation_state` is `disabled` (no EDF delegation contract — direct `topUp` calls) or
+   `ready`. `not_delegate` / `terminated` / `role_missing` each make *every* top-up revert, so the bot
+   refuses to start in those states; seeing one at runtime means the delegation changed under a
+   running bot (delegate rotated or revoked, contract terminated, role removed).
+3. `module_allocation_wei{module_id, kind="topup"} > 0`. Zero here is the single most common reason
    nothing happens — the StakingRouter allocation algorithm didn't route ETH to this module at all
    this cycle.
-3. `module_stake_wei{module_id, kind="topup"}` — lowest value across candidate modules goes first.
+4. `module_stake_wei{module_id, kind="topup"}` — lowest value across candidate modules goes first.
    Only **one** module is acted on per bot iteration (`_phase_full_and_topup` returns on the first
    non-`SKIPPED` outcome), so a module that lost the priority race this cycle never gets its
    `phase_outcome`/`quorum_state` touched — those stay at whatever they were last time this module
    *was* reached. Tell "evaluated and skipped" from "not reached this cycle" by comparing
    `phase_last_run_timestamp_seconds{phase="B", module_id}` against `module_allocation_wei`'s own
    freshness (both are set every cycle regardless of whether the module becomes a candidate).
-4. `topup_gas_ok{module_id}` / `topup_gas_fee_wei{type}`.
-5. `phase_outcome{phase="B", module_id} != wait_distance` (TopUpGateway block distance).
+5. `topup_gas_ok{module_id}` / `topup_gas_fee_wei{type}`.
+6. `phase_outcome{phase="B", module_id} != wait_distance` (TopUpGateway block distance).
 
 Key-level gates — module_id is now known, question narrows to pubkey X. Instrumented in
 `CMv2TopUpStrategy` (`src/blockchain/topup/cmv2_strategy.py`), evaluated in this order:
