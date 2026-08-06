@@ -211,7 +211,7 @@ class LidoContracts(Module):
         (DelegationFactory), not part of the protocol's address book. `None` means direct calls —
         `TOP_UP_ROLE` is then expected on the bot's own account.
         """
-        if variables.EDF_DELEGATION_CONTRACT is None:
+        if variables.DELEGATION_CONTRACT_ADDRESS is None:
             self.delegation: DelegationContract | None = None
             logger.debug({'msg': 'No EDF delegation contract configured. Top-ups will be sent as direct calls.'})
             return
@@ -219,8 +219,8 @@ class LidoContracts(Module):
         self.delegation = cast(
             DelegationContract,
             self.w3.eth.contract(
-                address=variables.EDF_DELEGATION_CONTRACT,
+                address=variables.DELEGATION_CONTRACT_ADDRESS,
                 ContractFactoryClass=DelegationContract,
             ),
         )
-        logger.debug({'msg': 'Loaded EDF delegation contract.', 'address': variables.EDF_DELEGATION_CONTRACT})
+        logger.debug({'msg': 'Loaded EDF delegation contract.', 'address': variables.DELEGATION_CONTRACT_ADDRESS})

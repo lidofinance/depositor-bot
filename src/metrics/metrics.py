@@ -124,15 +124,15 @@ TOPUP_GATEWAY_PAUSED = Gauge(
     namespace=PROMETHEUS_PREFIX,
 )
 
-# States must stay in sync with bots.depositor.DelegationState's values (see note on PHASE_OUTCOME).
-# `disabled` means EDF_DELEGATION_CONTRACT is unset — top-ups go out as direct calls, which is a
-# valid configuration, not a fault. The other non-ready states each block every top-up, so they are
-# distinguished here: a bare "tx failed" counter cannot tell a delegation problem from a revert
-# inside topUp() itself.
-TOPUP_DELEGATION_STATE = Enum(
-    'topup_delegation_state',
-    'Whether the EDF delegation contract can currently execute top-ups.',
-    states=['disabled', 'ready', 'not_delegate', 'terminated', 'role_missing'],
+# States must stay in sync with bots.depositor.TopUpPath's values (see note on PHASE_OUTCOME).
+# `direct` and `delegated` are both healthy — which one is live tells you whether TOP_UP_ROLE
+# currently sits on the bot's key or on the delegation contract, i.e. whether a migration has taken
+# effect. The rest each block every top-up, and they are distinguished here because a bare "tx
+# failed" counter cannot tell a role/delegate problem from a revert inside topUp() itself.
+TOPUP_EXECUTION_PATH = Enum(
+    'topup_execution_path',
+    'How TopUpGateway.topUp is executed, resolved from on-chain TOP_UP_ROLE assignment.',
+    states=['direct', 'delegated', 'not_delegate', 'terminated', 'no_role'],
     namespace=PROMETHEUS_PREFIX,
 )
 

@@ -8,7 +8,7 @@ from web3.types import Wei
 
 import variables
 from blockchain.contracts.staking_router import MODULE_TYPE_CMV2, MODULE_TYPE_CSM, StakingModuleInfo
-from bots.depositor import DelegationState, DepositorBot, PhaseOutcome, QuorumState
+from bots.depositor import DepositorBot, PhaseOutcome, QuorumState, TopUpPath
 from tests.conftest import COUNCIL_ADDRESS_1, COUNCIL_ADDRESS_2, COUNCIL_PK_1, COUNCIL_PK_2
 from tests.utils.protocol_utils import get_deposit_message
 
@@ -1289,20 +1289,32 @@ def test_build_consolidation_indexer_raises_when_top_up_enabled_but_bus_unconfig
         bot._build_consolidation_indexer()
 
 
-# ─── delegated top-up execution ────────────────────────────────────
+# ─── top-up execution path (direct vs delegated) ───────────────────
 
 
-def _delegation_mock(bot, *, delegate, terminated=False, has_role=True):
-    """Attach a delegation contract mock in a given on-chain state."""
+def _delegation_mock(bot, *, delegate, terminated=False, delegation_has_role=True, account_has_role=True):
+    """Attach a delegation contract mock plus a role table for (delegation, bot account)."""
     delegation = Mock()
     delegation.address = '0xDe1e9a710000000000000000000000000000BEEF'
     delegation.is_terminated = Mock(return_value=terminated)
     delegation.get_delegate = Mock(return_value=delegate)
     delegation.wrap = Mock(side_effect=lambda call: ('wrapped', call))
     bot.w3.lido.delegation = delegation
-    bot.w3.lido.topup_gateway.top_up_role = Mock(return_value=b'\x01' * 32)
-    bot.w3.lido.topup_gateway.has_role = Mock(return_value=has_role)
+    _role_table(bot, {delegation.address: delegation_has_role}, account_has_role)
     return delegation
+
+
+def _role_table(bot, holders: dict, account_has_role=True):
+    """Stub TOP_UP_ROLE lookups: holders maps address → hasRole, bot account handled separately."""
+    role = b'\x01' * 32
+    bot.w3.lido.topup_gateway.top_up_role = Mock(return_value=role)
+
+    def has_role(_role, address):
+        if variables.ACCOUNT is not None and address == variables.ACCOUNT.address:
+            return account_has_role
+        return holders.get(address, False)
+
+    bot.w3.lido.topup_gateway.has_role = Mock(side_effect=has_role)
 
 
 @pytest.fixture
@@ -1314,70 +1326,110 @@ def account(monkeypatch):
 
 
 @pytest.mark.unit
-def test_delegation_state_disabled_when_not_configured(depositor_bot):
-    assert depositor_bot._topup_delegation_state() is DelegationState.DISABLED
+def test_path_direct_when_no_delegation_configured(depositor_bot, account):
+    _role_table(depositor_bot, {}, account_has_role=True)
+    assert depositor_bot._resolve_topup_path() is TopUpPath.DIRECT
 
 
 @pytest.mark.unit
-def test_delegation_state_ready_when_bot_is_active_delegate(depositor_bot, account):
+def test_path_no_role_when_nobody_holds_the_role(depositor_bot, account):
+    """Pre-existing misconfiguration that used to be invisible: role never granted to the key."""
+    _role_table(depositor_bot, {}, account_has_role=False)
+    assert depositor_bot._resolve_topup_path() is TopUpPath.NO_ROLE
+
+
+@pytest.mark.unit
+def test_path_delegated_when_delegation_holds_role_and_bot_is_delegate(depositor_bot, account):
     _delegation_mock(depositor_bot, delegate=account.address)
-    assert depositor_bot._topup_delegation_state() is DelegationState.READY
+    assert depositor_bot._resolve_topup_path() is TopUpPath.DELEGATED
 
 
 @pytest.mark.unit
-def test_delegation_state_not_delegate_after_rotation(depositor_bot, account):
-    """Delegate rotated away from the bot's key — every top-up would revert with NotDelegate."""
-    _delegation_mock(depositor_bot, delegate='0x0000000000000000000000000000000000000001')
-    assert depositor_bot._topup_delegation_state() is DelegationState.NOT_DELEGATE
+def test_path_prefers_delegation_over_direct_when_both_hold_the_role(depositor_bot, account):
+    """The overlap state mid-migration: both identities hold the role. Delegation wins, so the
+    cutover is complete as soon as the grant lands — revoking from the key changes nothing."""
+    _delegation_mock(depositor_bot, delegate=account.address, account_has_role=True)
+    assert depositor_bot._resolve_topup_path() is TopUpPath.DELEGATED
 
 
 @pytest.mark.unit
-def test_delegation_state_terminated(depositor_bot, account):
-    _delegation_mock(depositor_bot, delegate=account.address, terminated=True)
-    assert depositor_bot._topup_delegation_state() is DelegationState.TERMINATED
+def test_path_direct_when_delegation_has_no_role_yet(depositor_bot, account):
+    """Before the grant lands: delegation is configured but the key still carries the role."""
+    _delegation_mock(depositor_bot, delegate=account.address, delegation_has_role=False)
+    assert depositor_bot._resolve_topup_path() is TopUpPath.DIRECT
 
 
 @pytest.mark.unit
-def test_delegation_state_role_missing(depositor_bot, account):
-    _delegation_mock(depositor_bot, delegate=account.address, has_role=False)
-    assert depositor_bot._topup_delegation_state() is DelegationState.ROLE_MISSING
-
-
-@pytest.mark.unit
-def test_delegation_state_ready_in_dry_mode_without_account(depositor_bot, monkeypatch):
-    """No key to compare against and nothing gets sent — don't block startup on the delegate check."""
-    monkeypatch.setattr(variables, 'ACCOUNT', None)
-    delegation = _delegation_mock(depositor_bot, delegate='0x0000000000000000000000000000000000000001')
-
-    assert depositor_bot._topup_delegation_state() is DelegationState.READY
-    delegation.get_delegate.assert_not_called()
+@pytest.mark.parametrize(
+    'kwargs,expected',
+    [
+        ({'delegate': '0x0000000000000000000000000000000000000001'}, TopUpPath.NOT_DELEGATE),
+        ({'delegate': None, 'terminated': True}, TopUpPath.TERMINATED),
+    ],
+)
+def test_path_reports_delegation_fault_when_direct_is_not_available(depositor_bot, account, kwargs, expected):
+    kwargs['delegate'] = kwargs['delegate'] or account.address
+    _delegation_mock(depositor_bot, account_has_role=False, **kwargs)
+    assert depositor_bot._resolve_topup_path() is expected
 
 
 @pytest.mark.unit
 @pytest.mark.parametrize(
     'kwargs',
     [
-        {'delegate': '0x0000000000000000000000000000000000000001'},  # not the delegate
+        {'delegate': '0x0000000000000000000000000000000000000001'},  # delegate rotated away
         {'delegate': None, 'terminated': True},
-        {'delegate': None, 'has_role': False},
     ],
 )
-def test_validate_topup_delegation_refuses_to_start_on_misconfiguration(depositor_bot, account, kwargs):
+def test_path_falls_back_to_direct_when_delegation_is_broken(depositor_bot, account, kwargs):
+    """A revoked delegate or a terminated contract must not strand the bot while its own key still
+    holds the role — this is what removes the need for a restart timed to the role transactions."""
     kwargs['delegate'] = kwargs['delegate'] or account.address
-    _delegation_mock(depositor_bot, **kwargs)
-    with mock.patch.object(variables, 'ENABLE_TOP_UP', True), pytest.raises(ValueError, match='cannot execute top-ups'):
+    _delegation_mock(depositor_bot, account_has_role=True, **kwargs)
+    assert depositor_bot._resolve_topup_path() is TopUpPath.DIRECT
+
+
+@pytest.mark.unit
+def test_path_direct_in_dry_mode_without_account(depositor_bot, monkeypatch):
+    """No key to compare against and nothing gets sent — don't block on identity checks."""
+    monkeypatch.setattr(variables, 'ACCOUNT', None)
+    _role_table(depositor_bot, {}, account_has_role=False)
+    assert depositor_bot._resolve_topup_path() is TopUpPath.DIRECT
+
+
+@pytest.mark.unit
+def test_validate_refuses_to_start_when_delegation_configured_but_no_path_works(depositor_bot, account):
+    _delegation_mock(depositor_bot, delegate='0x0000000000000000000000000000000000000001', account_has_role=False)
+    with (
+        mock.patch.object(variables, 'ENABLE_TOP_UP', True),
+        mock.patch.object(variables, 'DELEGATION_CONTRACT_ADDRESS', '0xDe1e9a710000000000000000000000000000BEEF'),
+        pytest.raises(ValueError, match='No usable path'),
+    ):
         depositor_bot._validate_topup_delegation()
 
 
 @pytest.mark.unit
-def test_validate_topup_delegation_passes_when_ready(depositor_bot, account):
-    _delegation_mock(depositor_bot, delegate=account.address)
-    with mock.patch.object(variables, 'ENABLE_TOP_UP', True):
+def test_validate_only_warns_when_no_role_and_no_delegation_configured(depositor_bot, account):
+    """Pre-existing deployments must not turn an upgrade into a boot failure."""
+    _role_table(depositor_bot, {}, account_has_role=False)
+    with (
+        mock.patch.object(variables, 'ENABLE_TOP_UP', True),
+        mock.patch.object(variables, 'DELEGATION_CONTRACT_ADDRESS', None),
+    ):
         depositor_bot._validate_topup_delegation()  # does not raise
+    assert depositor_bot._topup_path is TopUpPath.NO_ROLE
 
 
 @pytest.mark.unit
-def test_validate_topup_delegation_skipped_when_top_up_disabled(depositor_bot, account):
+def test_validate_passes_and_records_path_when_executable(depositor_bot, account):
+    _delegation_mock(depositor_bot, delegate=account.address)
+    with mock.patch.object(variables, 'ENABLE_TOP_UP', True):
+        depositor_bot._validate_topup_delegation()
+    assert depositor_bot._topup_path is TopUpPath.DELEGATED
+
+
+@pytest.mark.unit
+def test_validate_skipped_when_top_up_disabled(depositor_bot, account):
     """A broken delegation is irrelevant while top-up is off — don't block the deposit-only bot."""
     delegation = _delegation_mock(depositor_bot, delegate=account.address, terminated=True)
     with mock.patch.object(variables, 'ENABLE_TOP_UP', False):
@@ -1386,9 +1438,10 @@ def test_validate_topup_delegation_skipped_when_top_up_disabled(depositor_bot, a
 
 
 @pytest.mark.unit
-def test_top_up_to_module_sends_direct_call_when_delegation_not_configured(depositor_bot):
+def test_top_up_to_module_sends_direct_call_on_the_direct_path(depositor_bot):
     tx = Mock(name='tx')
     _stub_topup_happy_path(depositor_bot, tx)
+    depositor_bot._topup_path = TopUpPath.DIRECT
 
     assert depositor_bot._top_up_to_module(1, '0xAddr', 50) is PhaseOutcome.SENT
     depositor_bot.w3.transaction.check.assert_called_once_with(tx)
@@ -1396,12 +1449,13 @@ def test_top_up_to_module_sends_direct_call_when_delegation_not_configured(depos
 
 
 @pytest.mark.unit
-def test_top_up_to_module_wraps_call_before_dry_run_when_delegated(depositor_bot, account):
+def test_top_up_to_module_wraps_call_before_dry_run_on_the_delegated_path(depositor_bot, account):
     """The wrapped tx — not the bare topUp — must reach check() and send(): the direct call would
     revert with AccessControlUnauthorizedAccount, since the role is held by the delegation contract."""
     tx = Mock(name='tx')
     _stub_topup_happy_path(depositor_bot, tx)
     delegation = _delegation_mock(depositor_bot, delegate=account.address)
+    depositor_bot._topup_path = TopUpPath.DELEGATED
 
     assert depositor_bot._top_up_to_module(1, '0xAddr', 50) is PhaseOutcome.SENT
 

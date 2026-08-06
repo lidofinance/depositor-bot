@@ -63,9 +63,9 @@ def test_wrap_preserves_the_original_target_and_calldata(contracts, proof_data):
 
     wrapped = delegation.wrap(original)
 
-    target, calldata = delegation.decode_function_input(wrapped._encode_transaction_data())[1].values()
+    target, calldata = wrapped.args
     assert target == GATEWAY_ADDRESS
-    assert calldata == bytes.fromhex(original._encode_transaction_data()[2:])
+    assert calldata == bytes.fromhex(gateway.encode_abi(original.fn_name, original.args)[2:])
 
 
 @pytest.mark.unit
@@ -76,7 +76,7 @@ def test_wrapped_calldata_decodes_back_to_the_original_top_up_args(contracts, pr
     original = gateway.top_up(module_id, proof_data)
 
     wrapped = delegation.wrap(original)
-    _, inner_calldata = delegation.decode_function_input(wrapped._encode_transaction_data())[1].values()
+    _, inner_calldata = wrapped.args
     fn, args = gateway.decode_function_input(Web3.to_hex(inner_calldata))
 
     assert fn.fn_name == 'topUp'

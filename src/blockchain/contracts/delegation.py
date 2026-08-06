@@ -69,11 +69,11 @@ class DelegationContract(ContractInterface):
         would revert with `AccessControlUnauthorizedAccount`, since the role is held by this contract
         and not by the bot's key.
 
-        `_encode_transaction_data()` is web3's own calldata encoder (`build_transaction` uses it) and
-        keeps the argument encoding in one place — the call has already been assembled by the target
-        contract's wrapper.
+        The call has already been assembled by the target contract's wrapper, so it is re-encoded
+        here rather than rebuilt from arguments — argument encoding stays in one place.
         """
-        calldata = from_hex_string_to_bytes(call._encode_transaction_data())
+        target = self.w3.eth.contract(address=call.address, abi=call.contract_abi)
+        calldata = from_hex_string_to_bytes(target.encode_abi(call.fn_name, call.args))
         logger.debug(
             {
                 'msg': 'Wrap call into `execute()`.',

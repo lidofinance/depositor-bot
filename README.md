@@ -97,7 +97,7 @@ Next cases requires bot restart:
 | ONCHAIN_TRANSPORT_RPC_ENDPOINTS   | -             | RPC endpoint for the databus RPC, Gnosis at the moment                                                                   |
 | QUORUM_RETENTION_MINUTES          | 5             | TTL of quorum collection for marking module as healthy                                                                   |
 | MAX_VALIDATORS_PER_TOP_UP         | 32            | Maximum number of validators per top-up transaction                                                                      |
-| EDF_DELEGATION_CONTRACT           | -             | EDF delegation contract (LIP-37) holding TOP_UP_ROLE, with this bot's account as its delegate. Unset → direct topUp calls |
+| DELEGATION_CONTRACT_ADDRESS        | -             | EDF delegation contract (LIP-37) holding TOP_UP_ROLE, with this bot's account as its delegate. Used for top-ups when it holds the role; the bot falls back to a direct call when its own account holds it |
 | CONSOLIDATION_BUS_ADDRESS         | -             | ConsolidationBus address override. Defaults to the hardcoded per-chain value; top-up is skipped if the chain is unknown  |
 | CONSOLIDATION_BUS_DEPLOY_BLOCK    | -             | ConsolidationBus deploy block override (must be exact-or-earlier). Used together with CONSOLIDATION_BUS_ADDRESS          |
 | CONSOLIDATION_GETLOGS_CHUNK       | 10000         | Block-range size per getLogs call when indexing ConsolidationBus events                                                  |
