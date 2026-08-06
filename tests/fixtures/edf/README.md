@@ -9,29 +9,37 @@ The fork URL is still required. An anvil dump contains only state the node *modi
 upgrade's own deployments are in it while the untouched protocol underneath is not — the fork supplies
 that base state. Nothing about the upgrade is re-executed.
 
-## Making it fully offline (not done yet)
+## Making it fully offline — attempted, does not work this way
 
 `anvil --init` can serve a self-contained genesis with no node at all, and `tests/fork_snapshot.py`
-builds one by merging the base state from foundry's RPC cache with the upgrade dump on top. This has
-been shown to work: DSM v5, guardians, delegates and `isMinDepositDistancePassed` all resolve with no
-`--fork-url`. What it needs is a *complete* cache, and that is the fiddly part:
+builds one by merging a base state with the upgrade dump on top. The mechanism is proven: DSM v5,
+guardians, delegates and `isMinDepositDistancePassed` all resolve with no `--fork-url`, from a 282K
+gzipped file. What cannot currently be produced is a *complete* base state, and the reason is worth
+recording so nobody repeats the attempt.
 
-- The cache only holds what a fork actually fetched, and a read that was never warmed comes back as an
-  empty account or a zero slot — surfacing later as `Panic 0x32: array index out of bounds` rather
-  than anything that names the missing state.
-- Most of the base state is fetched by **the upgrade run itself**, not by the tests: with the dump
-  loaded, test reads resolve locally and never touch the network. So the cache directory for the
-  pinned block must **accumulate across both runs** — do not clear it between the upgrade and the
-  suite, or the base state is lost.
-- Capture order that should work: run the upgrade (populates base state) → run the full suite against
-  `--fork-url` + `--load-state` (adds whatever the tests additionally read) → stop anvil with SIGTERM
-  so the cache flushes (`kill -9` loses it) → `zstd -dc` the cache (foundry ≥1.7 compresses it, at
-  `<block>/storage.json`) → `python -m tests.fork_snapshot <cache.json> <genesis.json> <dump.json>
-  560048` → gzip.
+Measured, across four capture attempts:
 
-Warming with less than the real suite produces a genesis that boots and serves the protocol but
-panics on the first slot no one read during capture, which is a confusing failure to debug. That is
-why this is not committed yet.
+- **The upgrade run caches almost nothing.** After a full EDF upgrade against a clean fork, the RPC
+  cache held 5 accounts and **0 storage slots**. So "let the upgrade populate the base state" — the
+  obvious plan — is false.
+- **Warming through a `--load-state` node also fails.** Running the whole suite that way produced 7
+  storage addresses / 54 slots, and the genesis built from it boots but dies on the first deeper read
+  with `Panic 0x32: array index out of bounds`.
+- The consistent explanation for both: anvil appears to persist cache entries only for accounts it has
+  **no local entry** for. Anything the node modified (the upgrade) or preloaded (`--load-state`) is
+  local, so its fall-through slot reads are never written to the cache — and those are precisely the
+  slots the tests need.
+
+Untried hypothesis, if this is picked up again: do the whole capture on **one** node with no
+`--load-state` — fork clean, run the upgrade, run the suite against that same node, then take both
+`anvil_dumpState` (everything modified) and the cache (reads of accounts the upgrade never touched)
+and merge. That requires the fixture to attach to an already-running node instead of starting its own.
+Failing that, the base state has to come from somewhere other than anvil's cache: an explicit
+enumeration of the accounts and slots involved, or a real chain snapshot (geth datadir / devnet image).
+
+Practical notes that still hold if you try: stop anvil with SIGTERM, not `kill -9`, or the cache is
+never flushed; and foundry >= 1.7 stores the cache zstd-compressed, sometimes as `<block>` and
+sometimes as `<block>/storage.json`.
 
 ## Why not the already-deployed EDF
 
