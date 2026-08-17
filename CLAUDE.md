@@ -175,7 +175,9 @@ Module-level gates (Prometheus, defined in `src/metrics/metrics.py`, set in `src
 2. `topup_execution_path` is `direct` or `delegated` — both healthy, and which one is live tells you
    where `TOP_UP_ROLE` currently sits. `not_delegate` / `terminated` / `no_role` each make *every*
    top-up revert. Seeing one at runtime means the role assignment changed under a running bot
-   (delegate rotated or revoked, contract terminated, role removed from both identities).
+   (delegate rotated or revoked, contract terminated, role removed from both identities). Resolved
+   before every early return in `_execute_actual()` (alongside `topup_gateway_paused`), so it stays
+   trustworthy on idle iterations — an empty buffer would otherwise freeze it at its last value.
 3. `module_allocation_wei{module_id, kind="topup"} > 0`. Zero here is the single most common reason
    nothing happens — the StakingRouter allocation algorithm didn't route ETH to this module at all
    this cycle.

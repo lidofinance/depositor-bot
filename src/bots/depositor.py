@@ -266,6 +266,26 @@ class DepositorBot:
         deposits_paused = self.w3.lido.deposit_security_module.is_deposits_paused()
         DEPOSITS_PAUSED.set(int(deposits_paused))
 
+        # Top-up subsystem gates, resolved for the same reason DEPOSITS_PAUSED is read here: both hold
+        # for all modules and both are what an operator watches to see the bot can still act, so they
+        # must not freeze at their last value on the iterations that return early below — an empty
+        # buffer is the common idle state, and it would pin them indefinitely. A delegate can be
+        # rotated or revoked, and the delegation contract terminated, under a running bot; each turns
+        # every top-up into a revert, and this metric is how that gets noticed. Costs at most four
+        # `eth_call`s per iteration, on top of the per-module reads `_refresh_modules_state()` already
+        # does before the same early returns.
+        # Not a gate — an unusable path still lets the tx be built and fail loudly on the dry-run,
+        # which says more than skipping early.
+        top_up_enabled = False
+        if variables.ENABLE_TOP_UP:
+            _tg_paused = self.w3.lido.topup_gateway.is_paused()
+            TOPUP_GATEWAY_PAUSED.set(int(_tg_paused))
+            self._topup_path = self._resolve_topup_path()
+            TOPUP_EXECUTION_PATH.state(self._topup_path)
+            top_up_enabled = not _tg_paused
+        else:
+            TOPUP_GATEWAY_PAUSED.set(0)
+
         # Read depositable ether once; if 0 — nothing to do this iteration.
         depositable_ether = self.w3.lido.lido.get_depositable_ether()
         DEPOSITABLE_ETHER.set(depositable_ether)
@@ -316,23 +336,7 @@ class DepositorBot:
                 return outcome.is_backoff
 
         # Phase B: full deposits (0x01) + top-ups (0x02), gated independently inside the phase —
-        # 0x01 while deposits are not paused, 0x02 while top-up is enabled and the gateway is not paused.
-
-        top_up_enabled = False
-        if variables.ENABLE_TOP_UP:
-            _tg_paused = self.w3.lido.topup_gateway.is_paused()
-            TOPUP_GATEWAY_PAUSED.set(int(_tg_paused))
-            # Resolved here, next to the gateway pause state: both are top-up subsystem gates that
-            # hold for all modules, and both must stay current even on iterations where no module ends
-            # up being topped up. Not a gate — an unusable path still lets the tx be built and fail
-            # loudly on the dry-run, which says more than skipping early.
-            self._topup_path = self._resolve_topup_path()
-            TOPUP_EXECUTION_PATH.state(self._topup_path)
-            top_up_enabled = not _tg_paused
-        else:
-            TOPUP_GATEWAY_PAUSED.set(0)
-            top_up_enabled = False
-
+        # 0x01 while deposits are not paused, 0x02 while `top_up_enabled` (resolved above).
         logger.info({'msg': 'Phase B start: full deposits to 0x01 + top-up to 0x02.'})
         outcome = self._phase_full_and_topup(depositable_ether, seed_allocated, seed_new, digests, deposits_paused, top_up_enabled)
 

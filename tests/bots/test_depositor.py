@@ -826,6 +826,43 @@ def test_execute_actual_reports_depositable_ether_even_when_zero(depositor_bot):
 
 
 @pytest.mark.unit
+def test_execute_actual_refreshes_topup_path_on_empty_buffer(depositor_bot):
+    """The empty buffer is the common idle state, so resolving the path after that early return
+    would pin `topup_execution_path` at its last value while a delegate rotation, revocation or
+    termination goes unnoticed — the exact failure the metric exists to surface."""
+    variables.ENABLE_TOP_UP = True
+    depositor_bot._refresh_modules_state = Mock()
+    depositor_bot.w3.lido.staking_router.get_all_staking_module_digests = Mock(return_value=[])
+    depositor_bot.w3.lido.lido.get_depositable_ether = Mock(return_value=0)
+    depositor_bot._resolve_topup_path = Mock(return_value=TopUpPath.NOT_DELEGATE)
+
+    with mock.patch('bots.depositor.TOPUP_EXECUTION_PATH') as metric:
+        assert depositor_bot._execute_actual() is False
+
+    depositor_bot._resolve_topup_path.assert_called_once()
+    metric.state.assert_called_once_with(TopUpPath.NOT_DELEGATE)
+    assert depositor_bot._topup_path is TopUpPath.NOT_DELEGATE
+
+
+@pytest.mark.unit
+def test_execute_actual_refreshes_topup_path_when_phase_a_short_circuits(depositor_bot):
+    """Same reason, for the other early return: a Phase A deposit ends the iteration before Phase B."""
+    variables.ENABLE_TOP_UP = True
+    depositor_bot._refresh_modules_state = Mock()
+    depositor_bot.w3.lido.lido.get_depositable_ether = Mock(return_value=100)
+    depositor_bot.w3.lido.staking_router.get_deposit_allocations = Mock(return_value=(0, [], []))
+    depositor_bot.w3.lido.staking_router.get_all_staking_module_digests = Mock(return_value=[])
+    depositor_bot._phase_seed = Mock(return_value=PhaseOutcome.SENT)
+    depositor_bot._phase_full_and_topup = Mock()
+    depositor_bot._resolve_topup_path = Mock(return_value=TopUpPath.TERMINATED)
+
+    assert depositor_bot._execute_actual() is True
+    depositor_bot._phase_full_and_topup.assert_not_called()
+    depositor_bot._resolve_topup_path.assert_called_once()
+    assert depositor_bot._topup_path is TopUpPath.TERMINATED
+
+
+@pytest.mark.unit
 def test_execute_actual_phase_a_deposit_short_circuits(depositor_bot):
     """Phase A SENT → _execute_actual returns backoff=True, phase B not called."""
     depositor_bot._refresh_modules_state = Mock()
