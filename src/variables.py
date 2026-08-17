@@ -66,6 +66,12 @@ if ONCHAIN_TRANSPORT_ADDRESS:
     # Expecting onchain databus contract address
     ONCHAIN_TRANSPORT_ADDRESS = Web3.to_checksum_address(ONCHAIN_TRANSPORT_ADDRESS)
 
+# Seconds to cache the resolved {delegate: guardian} map (DSMv5). Bounds EL-provider load: the map is
+# rebuilt at most once per this window instead of on every module/quorum pass. Staleness is safe —
+# the on-chain ERC-1271 / getDelegate() check at deposit time is the real freshness backstop, so a
+# stale delegate only risks a wasted (reverted) tx, never an invalid deposit. 0 disables the cache.
+GUARDIAN_DELEGATES_CACHE_TTL = int(os.getenv('GUARDIAN_DELEGATES_CACHE_TTL', 60))
+
 # Transactions settings
 CREATE_TRANSACTIONS = os.getenv('CREATE_TRANSACTIONS') == 'true'
 
@@ -187,6 +193,7 @@ PUBLIC_ENV_VARS = {
     'DEPOSIT_MODULES_WHITELIST': DEPOSIT_MODULES_WHITELIST,
     'ACCOUNT': '' if ACCOUNT is None else ACCOUNT.address,
     'ONCHAIN_TRANSPORT_ADDRESS': ONCHAIN_TRANSPORT_ADDRESS,
+    'GUARDIAN_DELEGATES_CACHE_TTL': GUARDIAN_DELEGATES_CACHE_TTL,
     'BLOCKS_BETWEEN_EXECUTION': BLOCKS_BETWEEN_EXECUTION,
     'QUORUM_RETENTION_MINUTES': QUORUM_RETENTION_MINUTES,
     'DEPOSIT_TO_FIRST_HEALTHY_MODULE_ONLY': DEPOSIT_TO_FIRST_HEALTHY_MODULE_ONLY,

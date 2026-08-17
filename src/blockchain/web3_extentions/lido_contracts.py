@@ -1,4 +1,5 @@
 import logging
+import time
 from typing import cast
 
 from eth_typing import ChecksumAddress
@@ -40,6 +41,8 @@ class LidoContracts(Module):
         super().__init__(w3)
         self._staking_module_cache: dict[int, StakingModuleContract] = {}
         self._guardian_cache: dict[ChecksumAddress, GuardianContract] = {}
+        self._delegates_cache: dict[ChecksumAddress, ChecksumAddress] | None = None
+        self._delegates_cached_at: float = 0.0
         self._load_contracts()
 
     def has_contract_address_changed(self) -> bool:
@@ -108,6 +111,7 @@ class LidoContracts(Module):
             self.w3.eth.contract(address=dsm_address, ContractFactoryClass=contract_class),
         )
         self._guardian_cache.clear()
+        self._delegates_cache = None
 
     def guardian_delegation_active(self) -> bool:
         """Whether the DSM uses the LIP-37 delegation model (guardians are contracts with delegates).
@@ -133,11 +137,34 @@ class LidoContracts(Module):
         return contract
 
     def get_guardian_delegates(self, block_identifier: BlockIdentifier = 'latest') -> dict[ChecksumAddress, ChecksumAddress]:
-        """Resolves the current delegate EOA of every registered guardian.
+        """Resolves the current delegate EOA of every registered guardian (TTL-cached).
 
         Returns a reverse map ``{delegate_EOA: guardian_contract}``. This is the mapping the Data Bus
         transport needs: council messages are posted by the delegate EOA (the event `sender`), which
         must be resolved back to its guardian contract, and the topic filter is built from the keys.
+
+        The result is memoized for ``variables.GUARDIAN_DELEGATES_CACHE_TTL`` seconds. Without it the
+        map is rebuilt on every module/quorum pass — several ``getDelegate()`` calls per guardian per
+        bot iteration — which burns EL-provider quota. Caching is safe because the on-chain ERC-1271 /
+        ``getDelegate()`` check at deposit time is the real freshness backstop: a stale delegate only
+        risks a reverted tx, never an invalid deposit. Only the default ``'latest'`` read is cached;
+        an explicit block bypasses the cache. TTL ``0`` disables caching.
+
+        See :meth:`_resolve_guardian_delegates` for the resolution and version semantics.
+        """
+        if block_identifier != 'latest':
+            return self._resolve_guardian_delegates(block_identifier)
+
+        now = time.monotonic()
+        if self._delegates_cache is not None and now - self._delegates_cached_at < variables.GUARDIAN_DELEGATES_CACHE_TTL:
+            return self._delegates_cache
+
+        self._delegates_cache = self._resolve_guardian_delegates(block_identifier)
+        self._delegates_cached_at = now
+        return self._delegates_cache
+
+    def _resolve_guardian_delegates(self, block_identifier: BlockIdentifier = 'latest') -> dict[ChecksumAddress, ChecksumAddress]:
+        """Live resolution of ``{delegate_EOA: guardian_contract}`` (no caching).
 
         Guardians whose delegate is the zero address (never assigned, revoked, or terminated) are
         omitted — they cannot produce a valid message, so their absence makes such messages fail

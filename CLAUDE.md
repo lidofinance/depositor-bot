@@ -64,6 +64,16 @@ Node operators pre-submit validator signing keys to StakingRouter to get them ap
 - A single tx is capped at `getMaxOperatorsPerUnvetting()` operators.
 - Nonce filter: messages with `nonce < current_module_nonce` are discarded (the state has already advanced past them).
 
+### Guardian delegation (EDF / LIP-37, DSM v5)
+
+From DSM `version() == 5` a guardian is no longer an EOA but an ERC-1271 **delegation contract**. A rotatable **delegate EOA** (`getDelegate()`) is what signs council messages and posts to the Data Bus. The guardian contract stays the identity used for quorum/dedup; the delegate is the signer. The bot holds none of these keys — it receives, verifies, reshapes, and submits already-signed messages.
+
+- The switch is driven entirely by the on-chain version, never a flag: `LidoContracts.guardian_delegation_active()` (`dsm_version >= GUARDIAN_DELEGATION_DSM_VERSION`, `=5`). This one boolean (`delegated`) gates all delegation behavior. `DSM_CONTRACT_BY_VERSION` in `lido_contracts.py` is what "supports" a version — the bot now boots on both v4 and v5.
+- **Below v5 the delegation paths are exact no-ops**: the delegate map resolves to `{guardian: guardian}`, the digest/verification stay legacy, `getDelegate()` is never called (it would revert on an EOA). Don't add v5 special-casing without preserving this.
+- Three touchpoints, all gated by `delegated`: (1) Data Bus reception reverse-maps `sender → guardian` (`onchain_transport.py`); (2) off-chain sign filter folds the guardian address into the digest and checks the signer against the delegate (`msg_types/common.py`); (3) `to_guardian_signature` reshapes the compact `(r,_vs)` into the v5 `GuardianSignature` `(guardian, r‖s‖v)` — it does **not** sign (`cryptography/verify_signature.py`).
+- The `{delegate: guardian}` map is memoized for `GUARDIAN_DELEGATES_CACHE_TTL` seconds (default 60). Freshness backstop is the on-chain check at submission, not the cache.
+- **Full details: `docs/edf-guardian-delegation.md`.** Read it before touching signature shaping, the sign filter, or Data Bus sender handling.
+
 ## Architecture
 
 ### Entry point and Web3 extension pattern

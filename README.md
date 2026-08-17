@@ -70,6 +70,7 @@ Next cases requires bot restart:
 | ENABLE_TOP_UP             | false                                      | Enable top-up functionality. Must be disabled until Node Operators submit consolidation requests                         |
 | ---                       | ---	                                       | ---                                                                                                                      |
 | MESSAGE_TRANSPORTS        | -                                          | Transports used in bot. One of/or both: rabbit/onchain_transport. `rabbit` is DSMv4-only — its messages carry no guardian delegate, so they are dropped under DSMv5 delegation |
+| GUARDIAN_DELEGATES_CACHE_TTL | 60                                      | Seconds to cache the resolved delegate→guardian map (DSMv5). Bounds EL-provider load; on-chain checks remain the freshness backstop. 0 disables |
 | RABBIT_MQ_URL             | -                                          | RabbitMQ url                                                                                                             |
 | RABBIT_MQ_USERNAME        | -                                          | RabbitMQ username for virtualhost                                                                                        |
 | RABBIT_MQ_PASSWORD        | -                                          | RabbitMQ password for virtualhost                                                                                        |
