@@ -186,7 +186,7 @@ class DepositorBot:
                     onchain_address=variables.ONCHAIN_TRANSPORT_ADDRESS,
                     message_schema=Schema(Or(DepositMessageSchema, PingMessageSchema)),
                     parsers_providers=[DepositParser, PingParser],
-                    allowed_guardians_provider=self.w3.lido.deposit_security_module.get_guardians,
+                    delegates_provider=self.w3.lido.get_guardian_delegates,
                 )
             )
 
@@ -660,10 +660,23 @@ class DepositorBot:
     def _get_message_actualize_filter(self) -> Callable[[DepositMessage], bool]:
         latest = self.w3.eth.get_block('latest')
         deposit_root = '0x' + self.w3.lido.deposit_contract.get_deposit_root().hex()
-        guardians_list = self.w3.lido.deposit_security_module.get_guardians()
+        # {delegate_EOA: guardian_contract} at the current block. Rebuilt every cycle so a message
+        # whose signer is no longer the guardian's active delegate (rotated, revoked, terminated) is
+        # dropped — the off-chain mirror of the on-chain ERC-1271 check, which fails closed.
+        delegate_map = self.w3.lido.get_guardian_delegates()
+        guardians_list = set(delegate_map.values())
 
         def message_filter(message: DepositMessage) -> bool:
-            if message['guardianAddress'] not in guardians_list:
+            delegate = message.get('guardianDelegate')
+            if delegate is not None:
+                # Data Bus message under the delegation model: the delegate that signed must still be
+                # the guardian's active delegate, and still map to the same guardian.
+                if delegate_map.get(delegate) != message['guardianAddress']:
+                    UNEXPECTED_EXCEPTIONS.labels('unexpected_guardian_address').inc()
+                    return False
+            elif message['guardianAddress'] not in guardians_list:
+                # Legacy path (e.g. RabbitMQ) that carries no delegate: the guardian must still be
+                # registered.
                 UNEXPECTED_EXCEPTIONS.labels('unexpected_guardian_address').inc()
                 return False
 
@@ -697,6 +710,6 @@ class DepositorBot:
         # Fetch messages and apply filters
         actualize_filter = self._get_message_actualize_filter()
         prefix = self.w3.lido.deposit_security_module.get_attest_message_prefix()
-        sign_filter = get_messages_sign_filter(prefix)
+        sign_filter = get_messages_sign_filter(prefix, delegated=self.w3.lido.guardian_delegation_active())
 
         return self.message_storage.get_messages_and_actualize(lambda x: sign_filter(x) and actualize_filter(x))

@@ -1,11 +1,16 @@
-from cryptography.verify_signature import compute_vs, recover_vs, verify_message_with_signature
-from transport.msg_types.common import _vrs
-from transport.msg_types.deposit import DepositMessageSchema
-
+from cryptography.verify_signature import (
+    compute_vs,
+    guardian_signature_bytes,
+    recover_vs,
+    to_guardian_signature,
+    verify_message_with_signature,
+)
 from tests.fixtures.signature_fixtures import (
     deposit_messages,
     deposit_prefix,
 )
+from transport.msg_types.common import _vrs
+from transport.msg_types.deposit import DepositMessageSchema
 
 
 def test_deposit_schema():
@@ -32,3 +37,28 @@ def test_deposit_messages_sign_check():
             address=dm['guardianAddress'],
             vrs=vrs,
         )
+
+
+def test_guardian_signature_bytes_is_r_s_v():
+    # Uses a fixture message that carries explicit v and s so we can assemble the expected 65 bytes.
+    dm = next(m for m in deposit_messages if 'v' in m['signature'] and 's' in m['signature'])
+    sig = dm['signature']
+    blob = guardian_signature_bytes(sig['r'], sig['_vs'])
+
+    expected = bytes.fromhex(sig['r'][2:]) + bytes.fromhex(sig['s'][2:]) + bytes([sig['v']])
+    assert blob == expected
+    assert len(blob) == 65
+
+
+def test_to_guardian_signature_shape():
+    guardian = '0x43464Fe06c18848a2E2e913194D64c1970f4326a'
+    dm = next(m for m in deposit_messages if 'v' in m['signature'] and 's' in m['signature'])
+    r, vs = dm['signature']['r'], dm['signature']['_vs']
+
+    # DSMv4: compact (r, _vs) pair, guardian not included.
+    assert to_guardian_signature(guardian, r, vs, delegated=False) == (r, vs)
+
+    # DSMv5: (guardian, 65-byte blob).
+    g, blob = to_guardian_signature(guardian, r, vs, delegated=True)
+    assert g == guardian
+    assert blob == guardian_signature_bytes(r, vs)

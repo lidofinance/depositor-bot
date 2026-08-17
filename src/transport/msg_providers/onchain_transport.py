@@ -1,11 +1,17 @@
 import abc
 import logging
-from typing import Callable, List
+from collections.abc import Callable
 
-import variables
 from eth_typing import ChecksumAddress
 from eth_utils import to_bytes
 from schema import Schema
+from web3 import Web3
+from web3._utils.events import get_event_data
+from web3.exceptions import BlockNotFound
+from web3.types import EventData, FilterParams, LogReceipt
+from web3_multi_provider import FallbackProvider
+
+import variables
 from transport.msg_providers.common import BaseMessageProvider
 from transport.msg_providers.rabbit import MessageType
 from transport.msg_types.deposit import DepositMessage
@@ -13,11 +19,6 @@ from transport.msg_types.pause import PauseMessage
 from transport.msg_types.ping import PingMessage
 from transport.msg_types.unvet import UnvetMessage
 from utils.bytes import bytes_to_hex_string
-from web3 import Web3
-from web3._utils.events import get_event_data
-from web3.exceptions import BlockNotFound
-from web3.types import EventData, FilterParams, LogReceipt
-from web3_multi_provider import FallbackProvider
 
 logger = logging.getLogger(__name__)
 
@@ -297,7 +298,7 @@ class OnchainTransportProvider(BaseMessageProvider):
         onchain_address: ChecksumAddress,
         message_schema: Schema,
         parsers_providers: list[Callable[[Web3], EventParser]],
-        allowed_guardians_provider: Callable[[], list[ChecksumAddress]],
+        delegates_provider: Callable[[], dict[ChecksumAddress, ChecksumAddress]],
     ):
         super().__init__(message_schema)
         self._onchain_address = onchain_address
@@ -309,8 +310,13 @@ class OnchainTransportProvider(BaseMessageProvider):
 
         self._w3 = w3
         self._chain_id = str(self._w3.eth.chain_id)
-        self._allowed_guardians_provider = allowed_guardians_provider
-        self._parsers: List[EventParser] = [provider(w3) for provider in parsers_providers]
+        # Provides the current {delegate_EOA: guardian_contract} map. Under the LIP-37 delegation
+        # model guardians are contracts and their delegate EOAs are what actually post to the Data
+        # Bus, so the indexed `sender` topic must be filtered by delegates and mapped back to the
+        # guardian contract on receipt. Refreshed every fetch so rotations are picked up.
+        self._delegates_provider = delegates_provider
+        self._delegate_map: dict[ChecksumAddress, ChecksumAddress] = {}
+        self._parsers: list[EventParser] = [provider(w3) for provider in parsers_providers]
 
     def _fetch_messages(self) -> list:
         latest_block_number = self._w3.eth.block_number
@@ -319,8 +325,10 @@ class OnchainTransportProvider(BaseMessageProvider):
         if from_block == latest_block_number:
             return []
         event_ids = [self._w3.keccak(text=parser.message_abi) for parser in self._parsers]
-        guardians = self._allowed_guardians_provider()
-        addresses_with_padding = [_32padding_address(address) for address in guardians]
+        # Snapshot the delegate map for this fetch so _process_msg reverse-maps against the same set
+        # of delegates the topic filter was built from.
+        self._delegate_map = self._delegates_provider()
+        addresses_with_padding = [_32padding_address(address) for address in self._delegate_map]
         filter_params = FilterParams(
             fromBlock=from_block,
             toBlock=latest_block_number,
@@ -351,9 +359,23 @@ class OnchainTransportProvider(BaseMessageProvider):
 
     def _process_msg(self, log: LogReceipt) -> dict | None:
         parsed = self._parse_log(log)
-        if parsed:
-            parsed['chain_id'] = self._chain_id
-            parsed['transport'] = 'onchain'
+        if not parsed:
+            return None
+        # The parser sets guardianAddress to the event `sender`, which under the delegation model is
+        # the delegate EOA. Reverse-map it to the guardian contract: the guardian is the stable
+        # identity used for quorum/dedup, while the delegate is retained so downstream can re-check
+        # it against the guardian's current delegate (fail closed on rotation).
+        delegate = self._w3.to_checksum_address(parsed['guardianAddress'])
+        guardian = self._delegate_map.get(delegate)
+        if guardian is None:
+            # Should not happen — the topic filter only admits current delegates — but a delegate can
+            # rotate out between fetch and process. Drop rather than trust an unmapped sender.
+            logger.debug({'msg': 'Data Bus message sender is not a known guardian delegate.', 'delegate': delegate})
+            return None
+        parsed['guardianDelegate'] = delegate
+        parsed['guardianAddress'] = guardian
+        parsed['chain_id'] = self._chain_id
+        parsed['transport'] = 'onchain'
         return parsed
 
     def _parse_log(self, log: LogReceipt) -> dict | None:

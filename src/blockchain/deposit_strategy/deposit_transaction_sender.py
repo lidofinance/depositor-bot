@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import logging
+from typing import cast
 
-from blockchain.typings import Web3
-from eth_account.account import VRS
 from eth_typing import Hash32
+from web3.contract.contract import ContractFunction
+
+from blockchain.contracts.deposit_security_module import GuardianSignature
+from blockchain.typings import Web3
+from cryptography.verify_signature import to_guardian_signature
 from transport.msg_types.deposit import DepositMessage
 from utils.bytes import from_hex_string_to_bytes
-from web3.contract.contract import ContractFunction
 
 logger = logging.getLogger(__name__)
 
@@ -23,10 +26,15 @@ class Sender:
         self._w3 = w3
 
     @staticmethod
-    def _prepare_signs_for_deposit(quorum: list[DepositMessage]) -> tuple[tuple[VRS, str], ...]:
+    def _prepare_signs_for_deposit(quorum: list[DepositMessage], delegated: bool) -> tuple[GuardianSignature, ...]:
+        # The DSM requires signatures strictly ascending by guardian address; guardianAddress is the
+        # guardian EOA on DSMv4 and the guardian contract on DSMv5 — the sort key is the same either way.
         sorted_messages = sorted(quorum, key=lambda msg: int(msg['guardianAddress'], 16))
 
-        return tuple((msg['signature']['r'], msg['signature']['_vs']) for msg in sorted_messages)
+        return tuple(
+            to_guardian_signature(msg['guardianAddress'], cast(str, msg['signature']['r']), msg['signature']['_vs'], delegated)
+            for msg in sorted_messages
+        )
 
     def prepare_and_send(
         self,
@@ -42,7 +50,7 @@ class Sender:
         deposit_root = Hash32(from_hex_string_to_bytes(quorum[0]['depositRoot']))
         staking_module_id = quorum[0]['stakingModuleId']
         staking_module_nonce = quorum[0]['nonce']
-        guardian_signs = self._prepare_signs_for_deposit(quorum)
+        guardian_signs = self._prepare_signs_for_deposit(quorum, self._w3.lido.guardian_delegation_active())
 
         return self._w3.lido.deposit_security_module.deposit_buffered_ether(
             block_number,

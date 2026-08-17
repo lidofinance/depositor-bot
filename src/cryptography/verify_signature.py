@@ -1,13 +1,38 @@
 import logging
-from typing import Any, List, Tuple
+from typing import Any
 
 from eth_account import Account
 from eth_account.account import VRS
 from web3 import Web3
 
+from utils.bytes import from_hex_string_to_bytes
+
 logger = logging.getLogger(__name__)
 
 V_OFFSET = 27
+
+
+def guardian_signature_bytes(r: str, vs: str) -> bytes:
+    """Builds the 65-byte ``r || s || v`` signature blob for a DSMv5 ``GuardianSignature``.
+
+    Council messages carry the compact ``(r, _vs)`` pair. DSMv5 verifies the guardian signature via
+    ERC-1271 → ``ECDSA.recover``, which OpenZeppelin expects as ``r(32) || s(32) || v(1)`` (v is 27/28).
+    This unpacks ``_vs`` back into ``s`` and ``v`` and concatenates — mirroring the daemon's
+    ``concat([r, s, toBeHex(v, 1)])``.
+    """
+    v, s = recover_vs(vs)
+    return from_hex_string_to_bytes(r) + int(s).to_bytes(32, 'big') + int(v).to_bytes(1, 'big')
+
+
+def to_guardian_signature(guardian: str, r: str, vs: str, delegated: bool) -> tuple[str, str] | tuple[str, bytes]:
+    """Shapes one guardian signature for the DSM call, version-aware.
+
+    - DSMv5 (``delegated``): ``(guardian_contract, 65-byte r||s||v blob)`` for ERC-1271 verification.
+    - DSMv4: the compact ``(r, _vs)`` pair recovered on-chain to the guardian EOA.
+    """
+    if delegated:
+        return (guardian, guardian_signature_bytes(r, vs))
+    return (r, vs)
 
 
 # Solidity function
@@ -46,7 +71,7 @@ def compute_vs(v: int, s: str) -> str:
     return '0x' + _vs.hex()
 
 
-def verify_message_with_signature(data: List[Any], abi: List[str], address: str, vrs: Tuple[VRS, VRS, VRS]) -> bool:
+def verify_message_with_signature(data: list[Any], abi: list[str], address: str, vrs: tuple[VRS, VRS, VRS]) -> bool:
     """
     Check that message was correctly signed by provided address holder.
     """
