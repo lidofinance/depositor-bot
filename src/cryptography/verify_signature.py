@@ -59,13 +59,26 @@ def recover_vs(vs: str) -> tuple[VRS, VRS]:
 
 
 def compute_vs(v: int, s: str) -> str:
-    """Returns aggregated _vs value."""
-    if v < V_OFFSET and v not in [0, 1]:
+    """Packs ``(v, s)`` into the aggregated EIP-2098 ``_vs`` value.
+
+    ``_vs`` is ``s`` carrying the parity of ``v`` in its top bit, so the packing only round-trips
+    while ``v`` is a recovery id (0/1 or 27/28) and ``s`` is canonical — EIP-2 caps ``s`` at
+    ``n/2``, which leaves the top bit clear. Both are rejected rather than folded: a ``v`` outside
+    the recovery set would be reduced to an arbitrary parity, and an ``s`` whose top bit is already
+    set would be silently reinterpreted, so in either case a malformed input would come back out as
+    a *different*, well-formed-looking signature instead of failing.
+    """
+    if v not in (0, 1, V_OFFSET, V_OFFSET + 1):
         logger.error({'msg': 'Signature invalid v byte.', 'data': str(v)})
-        raise ValueError('Signature invalid v byte.')
+        raise ValueError(f'Signature invalid v byte: {v}.')
     if v < V_OFFSET:
         v += V_OFFSET
     _vs = bytearray.fromhex(s[2:])
+    if len(_vs) != 32:
+        raise ValueError(f'Signature s must be 32 bytes, got {len(_vs)}.')
+    if _vs[0] & 0x80:
+        logger.error({'msg': 'Signature s is non-canonical (high bit set).', 'data': s})
+        raise ValueError('Signature s is non-canonical (high bit set).')
     if not v % 2:
         _vs[0] |= 0x80
 
@@ -79,7 +92,9 @@ def compact_signature(signature: bytes) -> tuple[bytes, bytes]:
     DSMv5 verifies through ERC-1271. The bot keeps signatures in the compact ``(r, _vs)`` form
     everywhere else (RabbitMQ transport, sign filter, DSMv4 submission), so blobs are normalised on
     parse and a single representation travels downstream. The conversion is lossless: ``_vs`` is ``s``
-    with the parity of ``v`` folded into its top bit.
+    with the parity of ``v`` folded into its top bit, and blobs that could not survive the fold are
+    rejected by ``compute_vs`` rather than transformed. Raising is the intended way to drop them —
+    ``OnchainTransportProvider._parse_log`` treats a raising parser as an unparseable log.
     """
     if len(signature) != SIGNATURE_LENGTH:
         raise ValueError(f'Guardian signature must be {SIGNATURE_LENGTH} bytes, got {len(signature)}.')

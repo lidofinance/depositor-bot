@@ -19,6 +19,7 @@ from transport.msg_providers.onchain_transport import (
     PauseV4Parser,
     PingParser,
     UnvetV1Parser,
+    UnvetV2Parser,
 )
 from transport.msg_types.common import get_messages_sign_filter
 from transport.msg_types.deposit import DepositMessageSchema
@@ -325,6 +326,71 @@ def test_deposit_v2_signature_passes_sign_filter(web3_lido_unit):
 
 
 @pytest.mark.unit
+def test_unvet_v2_signature_passes_sign_filter(web3_lido_unit):
+    """Same round-trip as the deposit V2 case, for unvet: the flat blob must normalise into a compact
+    pair the sign filter still recovers the guardian from. This is what pins the V2 field order —
+    a reordered schema changes the digest and only shows up as a silently dropped message.
+    """
+    prefix = bytes(31) + b'\x02'
+    block_number, block_hash, module_id, nonce = 42, bytes(32), 1, 7
+    operator_ids, vetted_keys = (1).to_bytes(8, 'big'), (2).to_bytes(16, 'big')
+    msg_hash = Web3.solidity_keccak(
+        ['bytes32', 'uint256', 'bytes32', 'uint256', 'uint256', 'bytes', 'bytes'],
+        [prefix, block_number, block_hash, module_id, nonce, operator_ids, vetted_keys],
+    )
+    signed = web3_lido_unit.eth.account._sign_hash(msg_hash, private_key=COUNCIL_PK_1)
+    signature = signed.r.to_bytes(32, 'big') + signed.s.to_bytes(32, 'big') + signed.v.to_bytes(1, 'big')
+
+    parser = UnvetV2Parser(web3_lido_unit)
+    parser._decode_event = Mock(side_effect=lambda log: log)
+    message = parser.parse(
+        _unvet_v2_log(
+            web3_lido_unit,
+            block_number=block_number,
+            nonce=nonce,
+            signature=signature,
+            sender=COUNCIL_ADDRESS_1,
+            staking_module_id=module_id,
+            operator_ids=operator_ids,
+            vetted_keys_by_operator=vetted_keys,
+        )
+    )
+
+    assert UnvetMessageSchema.is_valid(message)
+    assert list(filter(get_messages_sign_filter(prefix), [message]))
+
+
+@pytest.mark.unit
+def test_unvet_parsers_are_dispatched_by_event_id(web3_lido_unit):
+    """Both unvet generations reach the storage through one provider, each via its own parser."""
+    with mock.patch('web3.eth.Eth.chain_id', new_callable=mock.PropertyMock) as mock_chain_id:
+        mock_chain_id.return_value = 1
+        v1_log = _unvet_v1_log(web3_lido_unit, block_number=11, nonce=1)
+        v2_log = _unvet_v2_log(web3_lido_unit, block_number=22, nonce=2, signature=bytes(65))
+        web3_lido_unit.eth.get_logs = Mock(side_effect=[[v1_log, v2_log], None])
+        web3_lido_unit.eth.get_block_number = Mock(return_value=1)
+        provider = _stubbed_provider(web3_lido_unit, [UnvetV1Parser, UnvetV2Parser], message_schema=Schema(UnvetMessageSchema))
+
+        messages = provider.get_messages()
+
+        assert [message['blockNumber'] for message in messages] == [11, 22]
+        assert [message['nonce'] for message in messages] == [1, 2]
+
+
+@pytest.mark.unit
+def test_unvet_v2_rejects_malformed_signature(web3_lido_unit):
+    """A signature blob of the wrong length is dropped, not silently truncated into a valid message."""
+    with mock.patch('web3.eth.Eth.chain_id', new_callable=mock.PropertyMock) as mock_chain_id:
+        mock_chain_id.return_value = 1
+        malformed = _unvet_v2_log(web3_lido_unit, block_number=1, nonce=1, signature=bytes(64))
+        web3_lido_unit.eth.get_logs = Mock(side_effect=[[malformed], None])
+        web3_lido_unit.eth.get_block_number = Mock(return_value=1)
+        provider = _stubbed_provider(web3_lido_unit, [UnvetV2Parser], message_schema=Schema(UnvetMessageSchema))
+
+        assert not provider.get_messages()
+
+
+@pytest.mark.unit
 def test_deposit_v2_rejects_malformed_signature(web3_lido_unit):
     """A signature blob of the wrong length is dropped, not silently truncated into a valid message."""
     with mock.patch('web3.eth.Eth.chain_id', new_callable=mock.PropertyMock) as mock_chain_id:
@@ -336,12 +402,17 @@ def test_deposit_v2_rejects_malformed_signature(web3_lido_unit):
         assert not provider.get_messages()
 
 
-def _stubbed_provider(w3: Web3, parsers_providers: list, delegates_provider=_delegate_map) -> OnchainTransportProvider:
+def _stubbed_provider(
+    w3: Web3,
+    parsers_providers: list,
+    delegates_provider=_delegate_map,
+    message_schema: Schema = Schema(Or(DepositMessageSchema, PingMessageSchema)),
+) -> OnchainTransportProvider:
     """Provider whose parsers skip log decoding — the mock logs already carry decoded `args`."""
     provider = OnchainTransportProvider(
         w3=w3,
         onchain_address=variables.ONCHAIN_TRANSPORT_ADDRESS,
-        message_schema=Schema(Or(DepositMessageSchema, PingMessageSchema)),
+        message_schema=message_schema,
         parsers_providers=parsers_providers,
         delegates_provider=delegates_provider,
     )
@@ -391,6 +462,53 @@ def _deposit_v2_log(
         args=[(block_number, _ZERO_HASH, _ZERO_HASH, staking_module_id, nonce, signature, (_ZERO_HASH,))],
     )
     return _log(w3, DepositV2Parser.message_abi, data, sender=sender)
+
+
+def _unvet_v1_log(w3: Web3, block_number: int, nonce: int, staking_module_id: int = 1) -> dict:
+    data = w3.codec.encode(
+        types=[UnvetV1Parser.UNVET_V1_DATA_SCHEMA],
+        args=[
+            (
+                block_number,
+                _ZERO_HASH,
+                staking_module_id,
+                nonce,
+                (0).to_bytes(8, 'big'),
+                (0).to_bytes(16, 'big'),
+                ((0).to_bytes(32), (0).to_bytes(32)),
+                (_ZERO_HASH,),
+            )
+        ],
+    )
+    return _log(w3, UnvetV1Parser.message_abi, data)
+
+
+def _unvet_v2_log(
+    w3: Web3,
+    block_number: int,
+    nonce: int,
+    signature: bytes,
+    sender: str = _DEFAULT_DELEGATE,
+    staking_module_id: int = 1,
+    operator_ids: bytes = (0).to_bytes(8, 'big'),
+    vetted_keys_by_operator: bytes = (0).to_bytes(16, 'big'),
+) -> dict:
+    data = w3.codec.encode(
+        types=[UnvetV2Parser.UNVET_V2_DATA_SCHEMA],
+        args=[
+            (
+                block_number,
+                _ZERO_HASH,
+                staking_module_id,
+                nonce,
+                operator_ids,
+                vetted_keys_by_operator,
+                signature,
+                (_ZERO_HASH,),
+            )
+        ],
+    )
+    return _log(w3, UnvetV2Parser.message_abi, data, sender=sender)
 
 
 def mock_receipts(w3: Web3) -> list[dict]:

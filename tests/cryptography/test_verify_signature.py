@@ -73,6 +73,25 @@ def test_compact_signature_rejects_wrong_length(length):
         compact_signature(bytes(length))
 
 
+@pytest.mark.unit
+@pytest.mark.parametrize('v', [2, 26, 29, 35, 37, 255])
+def test_compact_signature_rejects_v_outside_recovery_set(v):
+    """A v that is not a recovery id must be dropped, not reduced to an arbitrary parity."""
+    r, s = bytes(range(32)), bytes(32)
+    with pytest.raises(ValueError):
+        compact_signature(r + s + v.to_bytes(1, 'big'))
+
+
+@pytest.mark.unit
+def test_compact_signature_rejects_non_canonical_s():
+    """s with its top bit set collides with the packed v bit, so the blob must be dropped."""
+    r = bytes(range(32))
+    s = (2**255).to_bytes(32, 'big')
+    for v in (27, 28):
+        with pytest.raises(ValueError):
+            compact_signature(r + s + v.to_bytes(1, 'big'))
+
+
 def test_guardian_signature_bytes_is_r_s_v():
     # Uses a fixture message that carries explicit v and s so we can assemble the expected 65 bytes.
     dm = next(m for m in deposit_messages if 'v' in m['signature'] and 's' in m['signature'])
