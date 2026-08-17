@@ -1,6 +1,7 @@
 import abc
 import logging
 from collections.abc import Callable
+from typing import ClassVar
 
 from eth_typing import ChecksumAddress
 from eth_utils import to_bytes
@@ -12,6 +13,7 @@ from web3.types import EventData, FilterParams, LogReceipt
 from web3_multi_provider import FallbackProvider
 
 import variables
+from cryptography.verify_signature import compact_signature
 from transport.msg_providers.common import BaseMessageProvider
 from transport.msg_providers.rabbit import MessageType
 from transport.msg_types.deposit import DepositMessage
@@ -86,13 +88,13 @@ class EventParser(abc.ABC):
         self._schema = schema
         self._message_abi: dict = w3.eth.contract(abi=[EVENT_ABI]).events.Message().abi
 
+    # The event signature whose keccak is the Data Bus event id. A class attribute rather than a
+    # property because both the provider's topic filter and its parser dispatch map need it before any
+    # instance exists.
+    message_abi: ClassVar[str]
+
     @abc.abstractmethod
     def _create_message(self, parsed_data: dict, guardian: str) -> dict:
-        pass
-
-    @property
-    @abc.abstractmethod
-    def message_abi(self):
         pass
 
     def _decode_event(self, log: LogReceipt) -> EventData:
@@ -106,9 +108,104 @@ class EventParser(abc.ABC):
         return self._create_message(decoded_data, guardian)
 
 
+# Data Bus messages exist in two generations that must both be accepted for the duration of the
+# council v4 → v5 rollout, since the two council versions publish different events:
+#
+#   council v4 — MessageDepositV1 / MessagePauseV3 / MessageUnvetV1: compact `(bytes32 r, bytes32 vs)`
+#   council v5 — MessageDepositV2 / MessagePauseV4 / MessageUnvetV2: flat 65-byte `bytes` r||s||v
+#
+# Only the wire layout of the signature differs — the parsers normalise both into the compact
+# `(r, _vs)` internal form, so nothing downstream is version-aware. MessagePingV1 carries no
+# signature and is unchanged. Once every council is on v5 the V1/V3 parsers can be deleted.
+
+
+def build_deposit_message(
+    *,
+    block_number: int,
+    block_hash: bytes,
+    guardian: str,
+    deposit_root: bytes,
+    staking_module_id: int,
+    nonce: int,
+    r: bytes,
+    vs: bytes,
+    version: bytes,
+) -> DepositMessage:
+    return DepositMessage(
+        type=MessageType.DEPOSIT,
+        depositRoot=bytes_to_hex_string(deposit_root),
+        nonce=nonce,
+        blockNumber=block_number,
+        blockHash=bytes_to_hex_string(block_hash),
+        guardianAddress=guardian,
+        stakingModuleId=staking_module_id,
+        signature={
+            'r': bytes_to_hex_string(r),
+            '_vs': bytes_to_hex_string(vs),
+        },
+        app={
+            'version': _decode_version(version),
+        },
+    )
+
+
+def build_unvet_message(
+    *,
+    block_number: int,
+    block_hash: bytes,
+    guardian: str,
+    operator_ids: bytes,
+    staking_module_id: int,
+    vetted_keys_by_operator: bytes,
+    nonce: int,
+    r: bytes,
+    vs: bytes,
+    version: bytes,
+) -> UnvetMessage:
+    return UnvetMessage(
+        type=MessageType.UNVET,
+        nonce=nonce,
+        blockHash=bytes_to_hex_string(block_hash),
+        blockNumber=block_number,
+        guardianAddress=guardian,
+        stakingModuleId=staking_module_id,
+        signature={
+            'r': bytes_to_hex_string(r),
+            '_vs': bytes_to_hex_string(vs),
+        },
+        operatorIds=bytes_to_hex_string(operator_ids),
+        vettedKeysByOperator=bytes_to_hex_string(vetted_keys_by_operator),
+        app={
+            'version': _decode_version(version),
+        },
+    )
+
+
+def build_pause_message(
+    *,
+    block_number: int,
+    guardian: str,
+    r: bytes,
+    vs: bytes,
+    version: bytes,
+) -> PauseMessage:
+    return PauseMessage(
+        type=MessageType.PAUSE,
+        blockNumber=block_number,
+        guardianAddress=guardian,
+        signature={
+            'r': bytes_to_hex_string(r),
+            '_vs': bytes_to_hex_string(vs),
+        },
+        app={
+            'version': _decode_version(version),
+        },
+    )
+
+
 # event MessageDepositV1(address indexed guardianAddress, (uint256 blockNumber, bytes32 blockHash, bytes32 depositRoot,
 # uint256 stakingModuleId, uint256 nonce, (bytes32 r, bytes32 vs) signature, (bytes32 version) app) data),
-class DepositParser(EventParser):
+class DepositV1Parser(EventParser):
     DEPOSIT_V1_DATA_SCHEMA = '(uint256,bytes32,bytes32,uint256,uint256,(bytes32,bytes32),(bytes32))'
     message_abi = f'MessageDepositV1(address,{DEPOSIT_V1_DATA_SCHEMA})'
 
@@ -117,7 +214,7 @@ class DepositParser(EventParser):
 
     def _create_message(self, parsed_data: tuple, guardian: str) -> DepositMessage:
         block_number, block_hash, deposit_root, staking_module_id, nonce, (r, vs), (version,) = parsed_data
-        return DepositParser.build_message(
+        return build_deposit_message(
             block_number=block_number,
             block_hash=block_hash,
             guardian=guardian,
@@ -129,40 +226,35 @@ class DepositParser(EventParser):
             version=version,
         )
 
-    @staticmethod
-    def build_message(
-        *,
-        block_number: int,
-        block_hash: bytes,
-        guardian: str,
-        deposit_root: bytes,
-        staking_module_id: int,
-        nonce: int,
-        r: bytes,
-        vs: bytes,
-        version: bytes,
-    ) -> DepositMessage:
-        return DepositMessage(
-            type=MessageType.DEPOSIT,
-            depositRoot=bytes_to_hex_string(deposit_root),
+
+# event MessageDepositV2(address indexed guardianAddress, (uint256 blockNumber, bytes32 blockHash, bytes32 depositRoot,
+# uint256 stakingModuleId, uint256 nonce, bytes signature, (bytes32 version) app) data)
+class DepositV2Parser(EventParser):
+    DEPOSIT_V2_DATA_SCHEMA = '(uint256,bytes32,bytes32,uint256,uint256,bytes,(bytes32))'
+    message_abi = f'MessageDepositV2(address,{DEPOSIT_V2_DATA_SCHEMA})'
+
+    def __init__(self, w3: Web3):
+        super().__init__(w3, self.DEPOSIT_V2_DATA_SCHEMA)
+
+    def _create_message(self, parsed_data: tuple, guardian: str) -> DepositMessage:
+        block_number, block_hash, deposit_root, staking_module_id, nonce, signature, (version,) = parsed_data
+        r, vs = compact_signature(signature)
+        return build_deposit_message(
+            block_number=block_number,
+            block_hash=block_hash,
+            guardian=guardian,
+            deposit_root=deposit_root,
+            staking_module_id=staking_module_id,
             nonce=nonce,
-            blockNumber=block_number,
-            blockHash=bytes_to_hex_string(block_hash),
-            guardianAddress=guardian,
-            stakingModuleId=staking_module_id,
-            signature={
-                'r': bytes_to_hex_string(r),
-                '_vs': bytes_to_hex_string(vs),
-            },
-            app={
-                'version': _decode_version(version),
-            },
+            r=r,
+            vs=vs,
+            version=version,
         )
 
 
 # event MessageUnvetV1(address indexed guardianAddress, (uint256 blockNumber, bytes32 blockHash, uint256 stakingModuleId, uint256 nonce,
 # bytes operatorIds, bytes vettedKeysByOperator, (bytes32 r, bytes32 vs) signature, (bytes32 version) app) data)
-class UnvetParser(EventParser):
+class UnvetV1Parser(EventParser):
     UNVET_V1_DATA_SCHEMA = '(uint256,bytes32,uint256,uint256,bytes,bytes,(bytes32,bytes32),(bytes32))'
     message_abi = f'MessageUnvetV1(address,{UNVET_V1_DATA_SCHEMA})'
 
@@ -171,7 +263,7 @@ class UnvetParser(EventParser):
 
     def _create_message(self, parsed_data: tuple, guardian: str) -> UnvetMessage:
         block_number, block_hash, staking_module_id, nonce, operator_ids, vetted_keys_by_operator, (r, vs), (version,) = parsed_data
-        return self.build_message(
+        return build_unvet_message(
             block_number=block_number,
             block_hash=block_hash,
             guardian=guardian,
@@ -184,36 +276,30 @@ class UnvetParser(EventParser):
             version=version,
         )
 
-    @staticmethod
-    def build_message(
-        *,
-        block_number: int,
-        block_hash: bytes,
-        guardian: str,
-        operator_ids: bytes,
-        staking_module_id: int,
-        vetted_keys_by_operator: bytes,
-        nonce: int,
-        r: bytes,
-        vs: bytes,
-        version: bytes,
-    ) -> UnvetMessage:
-        return UnvetMessage(
-            type=MessageType.UNVET,
+
+# event MessageUnvetV2(address indexed guardianAddress, (uint256 blockNumber, bytes32 blockHash, uint256 stakingModuleId, uint256 nonce,
+# bytes operatorIds, bytes vettedKeysByOperator, bytes signature, (bytes32 version) app) data)
+class UnvetV2Parser(EventParser):
+    UNVET_V2_DATA_SCHEMA = '(uint256,bytes32,uint256,uint256,bytes,bytes,bytes,(bytes32))'
+    message_abi = f'MessageUnvetV2(address,{UNVET_V2_DATA_SCHEMA})'
+
+    def __init__(self, w3: Web3):
+        super().__init__(w3, self.UNVET_V2_DATA_SCHEMA)
+
+    def _create_message(self, parsed_data: tuple, guardian: str) -> UnvetMessage:
+        block_number, block_hash, staking_module_id, nonce, operator_ids, vetted_keys_by_operator, signature, (version,) = parsed_data
+        r, vs = compact_signature(signature)
+        return build_unvet_message(
+            block_number=block_number,
+            block_hash=block_hash,
+            guardian=guardian,
+            operator_ids=operator_ids,
+            staking_module_id=staking_module_id,
+            vetted_keys_by_operator=vetted_keys_by_operator,
             nonce=nonce,
-            blockHash=bytes_to_hex_string(block_hash),
-            blockNumber=block_number,
-            guardianAddress=guardian,
-            stakingModuleId=staking_module_id,
-            signature={
-                'r': bytes_to_hex_string(r),
-                '_vs': bytes_to_hex_string(vs),
-            },
-            operatorIds=bytes_to_hex_string(operator_ids),
-            vettedKeysByOperator=bytes_to_hex_string(vetted_keys_by_operator),
-            app={
-                'version': _decode_version(version),
-            },
+            r=r,
+            vs=vs,
+            version=version,
         )
 
 
@@ -246,41 +332,35 @@ class PauseV3Parser(EventParser):
     def __init__(self, w3: Web3):
         super().__init__(w3, self.PAUSE_V3_DATA_SCHEMA)
 
-    def _create_message(self, parsed_data: tuple, guardian: str) -> dict:
+    def _create_message(self, parsed_data: tuple, guardian: str) -> PauseMessage:
         block_number, block_hash, (r, vs), (version,) = parsed_data
-        return PauseMessage(
-            type=MessageType.PAUSE,
-            blockNumber=block_number,
-            guardianAddress=guardian,
-            signature={
-                'r': bytes_to_hex_string(r),
-                '_vs': bytes_to_hex_string(vs),
-            },
-            app={
-                'version': _decode_version(version),
-            },
+        return build_pause_message(
+            block_number=block_number,
+            guardian=guardian,
+            r=r,
+            vs=vs,
+            version=version,
         )
 
-    @staticmethod
-    def build_message(
-        *,
-        block_number: int,
-        guardian: str,
-        r: bytes,
-        vs: bytes,
-        version: bytes,
-    ) -> PauseMessage:
-        return PauseMessage(
-            type=MessageType.PAUSE,
-            blockNumber=block_number,
-            guardianAddress=guardian,
-            signature={
-                'r': bytes_to_hex_string(r),
-                '_vs': bytes_to_hex_string(vs),
-            },
-            app={
-                'version': _decode_version(version),
-            },
+
+# event MessagePauseV4(address indexed guardianAddress, (uint256 blockNumber, bytes32 blockHash, bytes signature,
+# (bytes32 version) app) data)
+class PauseV4Parser(EventParser):
+    PAUSE_V4_DATA_SCHEMA = '(uint256,bytes32,bytes,(bytes32))'
+    message_abi = f'MessagePauseV4(address,{PAUSE_V4_DATA_SCHEMA})'
+
+    def __init__(self, w3: Web3):
+        super().__init__(w3, self.PAUSE_V4_DATA_SCHEMA)
+
+    def _create_message(self, parsed_data: tuple, guardian: str) -> PauseMessage:
+        block_number, block_hash, signature, (version,) = parsed_data
+        r, vs = compact_signature(signature)
+        return build_pause_message(
+            block_number=block_number,
+            guardian=guardian,
+            r=r,
+            vs=vs,
+            version=version,
         )
 
 
@@ -316,7 +396,13 @@ class OnchainTransportProvider(BaseMessageProvider):
         # guardian contract on receipt. Refreshed every fetch so rotations are picked up.
         self._delegates_provider = delegates_provider
         self._delegate_map: dict[ChecksumAddress, ChecksumAddress] = {}
-        self._parsers: list[EventParser] = [provider(w3) for provider in parsers_providers]
+        # Keyed by event id (topic0) so a log is handed to exactly the parser that declared it. Trying
+        # parsers in turn until one does not raise is not safe here: the V1 and V2 layouts of the same
+        # message can both decode a given payload, which would silently yield a garbage message.
+        self._parsers_by_event_id: dict[bytes, EventParser] = {}
+        for parser_provider in parsers_providers:
+            parser = parser_provider(w3)
+            self._parsers_by_event_id[bytes(w3.keccak(text=parser.message_abi))] = parser
 
     def _fetch_messages(self) -> list:
         latest_block_number = self._w3.eth.block_number
@@ -324,7 +410,7 @@ class OnchainTransportProvider(BaseMessageProvider):
         # If block distance is 0, then skip fetching to avoid looping on a single block
         if from_block == latest_block_number:
             return []
-        event_ids = [self._w3.keccak(text=parser.message_abi) for parser in self._parsers]
+        event_ids = list(self._parsers_by_event_id)
         # Snapshot the delegate map for this fetch so _process_msg reverse-maps against the same set
         # of delegates the topic filter was built from.
         self._delegate_map = self._delegates_provider()
@@ -379,19 +465,25 @@ class OnchainTransportProvider(BaseMessageProvider):
         return parsed
 
     def _parse_log(self, log: LogReceipt) -> dict | None:
-        for parser in self._parsers:
-            try:
-                return parser.parse(log)
-            except Exception as error:
-                logger.debug(
-                    {
-                        'msg': 'Data Bus parser failed to parse log',
-                        'log': log,
-                        'error': str(error),
-                        'parser': type(parser).__name__,
-                    }
-                )
-        return None
+        event_id = bytes(log['topics'][0])
+        parser = self._parsers_by_event_id.get(event_id)
+        if parser is None:
+            # The topic filter only admits registered event ids, so this means the node returned a log
+            # the filter did not ask for.
+            logger.debug({'msg': 'Data Bus log has no parser for its event id', 'event_id': bytes_to_hex_string(event_id)})
+            return None
+        try:
+            return parser.parse(log)
+        except Exception as error:
+            logger.warning(
+                {
+                    'msg': 'Data Bus parser failed to parse log',
+                    'log': log,
+                    'error': str(error),
+                    'parser': type(parser).__name__,
+                }
+            )
+            return None
 
     @staticmethod
     def create_onchain_transport_w3() -> Web3:

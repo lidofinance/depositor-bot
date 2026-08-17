@@ -86,7 +86,24 @@ Each bot is driven by `Executor` (`src/blockchain/executor.py`), which polls for
 
 Council Daemon guardians broadcast signed messages over one or both transports:
 - **RabbitMQ** (`src/transport/msg_providers/rabbit.py`) — STOMP protocol
-- **Onchain DataBus** (`src/transport/msg_providers/onchain_transport.py`) — Gnosis chain contract events parsed by `EventParser` subclasses (`DepositParser`, `PingParser`, etc.)
+- **Onchain DataBus** (`src/transport/msg_providers/onchain_transport.py`) — Gnosis chain contract events parsed by `EventParser` subclasses (`DepositV1Parser`, `PingParser`, etc.)
+
+#### DataBus message generations (council v4 / v5)
+
+Two generations of DataBus events are live at once, because the change is rolled out council by council:
+
+| | council v4 | council v5 |
+|---|---|---|
+| deposit | `MessageDepositV1` | `MessageDepositV2` |
+| pause | `MessagePauseV3` | `MessagePauseV4` |
+| unvet | `MessageUnvetV1` | `MessageUnvetV2` |
+| ping | `MessagePingV1` | `MessagePingV1` (unchanged, unsigned) |
+
+The only difference is the guardian signature: v4 events carry the compact `(bytes32 r, bytes32 vs)` pair, v5 events carry a flat 65-byte `bytes` blob (`r ‖ s ‖ v`) — the shape DSMv5 verifies via ERC-1271. Parsers normalise the blob back into `(r, _vs)` (`compact_signature` in `src/cryptography/verify_signature.py`), so **nothing downstream is version-aware**: one internal signature representation serves RabbitMQ, the sign filter and both DSM versions.
+
+Both parser sets are registered in each bot (`parsers_providers=[...]`). **Cleanup after the on-chain rollout completes: delete the V1/V3 parsers and their tests.**
+
+Logs are dispatched to the parser that declared their event id (`topic0`), never by trying parsers until one does not raise — the V1 layout decodes a V2 payload *without* raising (the ABI offset word reads as `blockNumber`), so a fallback chain would silently turn every v5 message into garbage that only fails later, at signature verification.
 
 `MessageStorage` (`src/transport/msg_storage.py`) aggregates messages from all active transports, applies static filters (signature validity, checksum address normalization), and on each cycle calls `get_messages_and_actualize()` with a dynamic filter that discards messages older than 200 blocks or with a stale deposit root.
 
