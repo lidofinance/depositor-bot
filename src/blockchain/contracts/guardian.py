@@ -15,17 +15,18 @@ class GuardianContract(ContractInterface):
     council messages and posts them on the Data Bus is the guardian's *delegate* EOA, which the
     owner can rotate, revoke, or terminate. Only the single `getDelegate()` view is used here — the
     bot resolves a Data Bus message's sender (delegate EOA) back to its guardian contract through it.
-
-    `getDelegate()` returns the *currently effective* delegate: during a cooldown-gated rotation the
-    previous delegate stays effective until the new one matures, and it returns the zero address once
-    the delegate is revoked or the contract is terminated. Reading it fresh each cycle is therefore
-    what makes stale-delegate messages fail closed.
     """
 
     abi_path = './interfaces/Guardian.json'
 
     def get_delegate(self, block_identifier: BlockIdentifier = 'latest') -> ChecksumAddress:
-        """Returns the guardian's currently effective delegate EOA (zero address if none)."""
+        """Returns the guardian's *currently effective* delegate EOA (zero address if none).
+
+        During a cooldown-gated rotation the previous delegate stays effective until the new one
+        matures, and the zero address is returned once the delegate is revoked or the contract is
+        terminated. Reading this fresh each cycle is therefore what makes stale-delegate messages
+        fail closed.
+        """
         response = self.functions.getDelegate().call(block_identifier=block_identifier)
         logger.debug(
             {

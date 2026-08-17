@@ -69,7 +69,7 @@ Next cases requires bot restart:
 | CL_API_URLS               | -                                          | Comma-separated list of Consensus Layer client URIs                                                                      |
 | ENABLE_TOP_UP             | false                                      | Enable top-up functionality. Must be disabled until Node Operators submit consolidation requests                         |
 | ---                       | ---	                                       | ---                                                                                                                      |
-| MESSAGE_TRANSPORTS        | -                                          | Transports used in bot. One of/or both: rabbit/onchain_transport                                                         |
+| MESSAGE_TRANSPORTS        | -                                          | Transports used in bot. One of/or both: rabbit/onchain_transport. `rabbit` is DSMv4-only — its messages carry no guardian delegate, so they are dropped under DSMv5 delegation |
 | RABBIT_MQ_URL             | -                                          | RabbitMQ url                                                                                                             |
 | RABBIT_MQ_USERNAME        | -                                          | RabbitMQ username for virtualhost                                                                                        |
 | RABBIT_MQ_PASSWORD        | -                                          | RabbitMQ password for virtualhost                                                                                        |

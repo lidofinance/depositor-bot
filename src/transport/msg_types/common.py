@@ -29,6 +29,12 @@ def get_messages_sign_filter(prefix: bytes, delegated: bool = False) -> Callable
       in right after the prefix, and the signature must recover to the guardian's delegate EOA
       (``guardianDelegate``) — the off-chain equivalent of the on-chain ERC-1271 check against
       ``getDelegate()``.
+
+    Only the Data Bus transport carries ``guardianDelegate`` (the onchain transport reverse-maps the
+    event sender through the guardian delegate map). RabbitMQ messages do not, so under DSMv5 they
+    fall back to ``guardianAddress`` — the guardian *contract* address, which no EOA signature can
+    ever recover to — and are dropped here. RabbitMQ is therefore effectively unsupported once
+    delegation is active; it is kept for DSMv4 and must be migrated before the v5 cutover.
     """
 
     def check_messages(msg: DepositMessage | PauseMessage | UnvetMessage) -> bool:
