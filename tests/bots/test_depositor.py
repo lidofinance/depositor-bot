@@ -947,6 +947,52 @@ def test_execute_actual_routes_to_phase_full_and_topup_when_top_up_enabled(depos
 
     depositor_bot._execute_actual()
     depositor_bot._phase_full_and_topup.assert_called_once()
+    assert depositor_bot._phase_full_and_topup.call_args.args[-1] is True  # top_up_enabled
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize('path', [TopUpPath.NO_ROLE, TopUpPath.NOT_DELEGATE, TopUpPath.TERMINATED])
+def test_execute_actual_unusable_topup_path_gates_topup_off(depositor_bot, path):
+    """A path that cannot execute makes every topUp revert with AccessControlUnauthorizedAccount.
+    Skip the top-up branch instead of paying a Keys API page, a full BeaconState download and the
+    Merkle proofs every cycle just to reach that revert on the dry-run."""
+    variables.ENABLE_TOP_UP = True
+    depositor_bot._resolve_topup_path = Mock(return_value=path)
+    depositor_bot._refresh_modules_state = Mock()
+    depositor_bot.w3.lido.lido.get_depositable_ether = Mock(return_value=100)
+    depositor_bot.w3.lido.staking_router.get_deposit_allocations = Mock(return_value=(0, [], []))
+    depositor_bot.w3.lido.staking_router.get_all_staking_module_digests = Mock(return_value=[])
+    depositor_bot._phase_seed = Mock(return_value=PhaseOutcome.SKIPPED)
+    depositor_bot._phase_full_and_topup = Mock(return_value=PhaseOutcome.SKIPPED)
+
+    depositor_bot._execute_actual()
+
+    # Phase B still runs — 0x01 deposits need no role — but with top-ups gated off.
+    depositor_bot._phase_full_and_topup.assert_called_once()
+    assert depositor_bot._phase_full_and_topup.call_args.args[-1] is False  # top_up_enabled
+
+
+@pytest.mark.unit
+def test_execute_actual_unusable_topup_path_warns_once_per_transition(depositor_bot, caplog):
+    """The blocked path is reported on every transition and then left to `topup_execution_path` —
+    a per-cycle warning would just be the ERROR flood it replaces."""
+    variables.ENABLE_TOP_UP = True
+    depositor_bot._topup_path = TopUpPath.DIRECT
+    depositor_bot._resolve_topup_path = Mock(return_value=TopUpPath.NO_ROLE)
+    depositor_bot._refresh_modules_state = Mock()
+    depositor_bot.w3.lido.lido.get_depositable_ether = Mock(return_value=0)
+
+    with caplog.at_level('WARNING', logger='bots.depositor'):
+        depositor_bot._execute_actual()
+        depositor_bot._execute_actual()
+        assert len([r for r in caplog.records if 'cannot execute' in r.getMessage()]) == 1
+
+        # Role granted → recovery is logged too, and a later revocation warns again.
+        depositor_bot._resolve_topup_path = Mock(return_value=TopUpPath.DIRECT)
+        depositor_bot._execute_actual()
+        depositor_bot._resolve_topup_path = Mock(return_value=TopUpPath.NO_ROLE)
+        depositor_bot._execute_actual()
+        assert len([r for r in caplog.records if 'cannot execute' in r.getMessage()]) == 2
 
 
 @pytest.mark.unit

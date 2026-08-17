@@ -274,15 +274,30 @@ class DepositorBot:
         # every top-up into a revert, and this metric is how that gets noticed. Costs at most four
         # `eth_call`s per iteration, on top of the per-module reads `_refresh_modules_state()` already
         # does before the same early returns.
-        # Not a gate — an unusable path still lets the tx be built and fail loudly on the dry-run,
-        # which says more than skipping early.
+        #
+        # The resolved path is also a gate. A path that cannot execute (`no_role`, `not_delegate`,
+        # `terminated`) makes every `topUp` revert with `AccessControlUnauthorizedAccount`, and
+        # letting the tx be built to find that out is not free: a Keys API page, a full CL
+        # BeaconState download (tens of MB) and the Merkle proofs, every cycle, to reach a check
+        # these three `eth_call`s have already answered. So top-ups are skipped while the path is
+        # unusable — the reason stays on `topup_execution_path` and is logged on every transition.
+        # Deposits need no role and are unaffected.
         top_up_enabled = False
         if variables.ENABLE_TOP_UP:
             _tg_paused = self.w3.lido.topup_gateway.is_paused()
             TOPUP_GATEWAY_PAUSED.set(int(_tg_paused))
+            previous_path = self._topup_path
             self._topup_path = self._resolve_topup_path()
             TOPUP_EXECUTION_PATH.state(self._topup_path)
-            top_up_enabled = not _tg_paused
+            # Logged on change only: the steady state belongs on the metric, and the path the bot
+            # booted with was already reported by `_validate_topup_delegation()`.
+            if self._topup_path is not previous_path:
+                event = {'msg': 'Top-up execution path changed.', 'path': self._topup_path, 'previous': previous_path}
+                if self._topup_path.is_executable:
+                    logger.info(event)
+                else:
+                    logger.warning({**event, 'msg': 'Top-up execution path cannot execute — top-ups skipped until the role is granted.'})
+            top_up_enabled = not _tg_paused and self._topup_path.is_executable
         else:
             TOPUP_GATEWAY_PAUSED.set(0)
 
@@ -680,7 +695,8 @@ class DepositorBot:
         Scoped to the case where delegation is configured. `NO_ROLE` without any delegation is the
         pre-existing "role was never granted to the key" misconfiguration — it is now visible on
         `topup_execution_path`, but it must not turn an upgrade of a running deployment into a boot
-        failure, so it stays a warning.
+        failure, so it stays a warning; `_execute_actual()` then skips top-ups instead of building
+        a tx per cycle that can only revert.
         """
         if not variables.ENABLE_TOP_UP:
             return
