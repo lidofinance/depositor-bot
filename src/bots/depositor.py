@@ -51,6 +51,7 @@ from metrics.metrics import (
     POSSIBLE_DEPOSITS_AMOUNT,
     QUORUM,
     QUORUM_STATE,
+    TOPUP_EXECUTION_PATH,
     TOPUP_GAS_OK,
     TOPUP_GAS_OK_LAST_RUN_TIMESTAMP,
     TOPUP_GATEWAY_PAUSED,
@@ -87,6 +88,28 @@ class ModuleCandidate(NamedTuple):
     # Amount the StakingRouter (SR-lib) allocation algorithm decided should be allocated to this module
     # from the depositable buffer sum. Needed only for top-up; unused for deposits.
     allocation: Wei
+
+
+class TopUpPath(StrEnum):
+    """How `TopUpGateway.topUp` is executed, resolved from on-chain role assignment each cycle.
+
+    Derived from chain state rather than from configuration alone, so moving `TOP_UP_ROLE` from the
+    bot's key onto a delegation contract (or back) needs no restart timed to the `grantRole` /
+    `revokeRole` transactions — the bot follows the role. The same read also covers the case that
+    exists today without any delegation: the key simply not holding the role.
+
+    Values must stay in sync with TOPUP_EXECUTION_PATH.
+    """
+
+    DIRECT = 'direct'  # bot's own account holds TOP_UP_ROLE → call topUp() directly
+    DELEGATED = 'delegated'  # delegation contract holds it and our key is its active delegate
+    NOT_DELEGATE = 'not_delegate'  # delegation holds the role, but our key is not its delegate
+    TERMINATED = 'terminated'  # delegation holds the role but is terminated — irreversible
+    NO_ROLE = 'no_role'  # neither identity holds TOP_UP_ROLE → every top-up would revert
+
+    @property
+    def is_executable(self) -> bool:
+        return self in (TopUpPath.DIRECT, TopUpPath.DELEGATED)
 
 
 class QuorumState(StrEnum):
@@ -163,6 +186,9 @@ class DepositorBot:
         self._keys_api = keys_api
         self._cl = cl
         self._consolidation_indexer = self._build_consolidation_indexer()
+        # Resolved once here so it is never unset, then re-resolved every iteration.
+        self._topup_path = TopUpPath.DIRECT
+        self._validate_topup_delegation()
         now = datetime.now()
         self._module_last_heart_beat: dict[int, datetime] = {module_id: now for module_id in variables.DEPOSIT_MODULES_WHITELIST}
         for module_id in variables.DEPOSIT_MODULES_WHITELIST:
@@ -240,6 +266,26 @@ class DepositorBot:
         deposits_paused = self.w3.lido.deposit_security_module.is_deposits_paused()
         DEPOSITS_PAUSED.set(int(deposits_paused))
 
+        # Top-up subsystem gates, resolved for the same reason DEPOSITS_PAUSED is read here: both hold
+        # for all modules and both are what an operator watches to see the bot can still act, so they
+        # must not freeze at their last value on the iterations that return early below — an empty
+        # buffer is the common idle state, and it would pin them indefinitely. A delegate can be
+        # rotated or revoked, and the delegation contract terminated, under a running bot; each turns
+        # every top-up into a revert, and this metric is how that gets noticed. Costs at most four
+        # `eth_call`s per iteration, on top of the per-module reads `_refresh_modules_state()` already
+        # does before the same early returns.
+        # Not a gate — an unusable path still lets the tx be built and fail loudly on the dry-run,
+        # which says more than skipping early.
+        top_up_enabled = False
+        if variables.ENABLE_TOP_UP:
+            _tg_paused = self.w3.lido.topup_gateway.is_paused()
+            TOPUP_GATEWAY_PAUSED.set(int(_tg_paused))
+            self._topup_path = self._resolve_topup_path()
+            TOPUP_EXECUTION_PATH.state(self._topup_path)
+            top_up_enabled = not _tg_paused
+        else:
+            TOPUP_GATEWAY_PAUSED.set(0)
+
         # Read depositable ether once; if 0 — nothing to do this iteration.
         depositable_ether = self.w3.lido.lido.get_depositable_ether()
         DEPOSITABLE_ETHER.set(depositable_ether)
@@ -290,17 +336,7 @@ class DepositorBot:
                 return outcome.is_backoff
 
         # Phase B: full deposits (0x01) + top-ups (0x02), gated independently inside the phase —
-        # 0x01 while deposits are not paused, 0x02 while top-up is enabled and the gateway is not paused.
-
-        top_up_enabled = False
-        if variables.ENABLE_TOP_UP:
-            _tg_paused = self.w3.lido.topup_gateway.is_paused()
-            TOPUP_GATEWAY_PAUSED.set(int(_tg_paused))
-            top_up_enabled = not _tg_paused
-        else:
-            TOPUP_GATEWAY_PAUSED.set(0)
-            top_up_enabled = False
-
+        # 0x01 while deposits are not paused, 0x02 while `top_up_enabled` (resolved above).
         logger.info({'msg': 'Phase B start: full deposits to 0x01 + top-up to 0x02.'})
         outcome = self._phase_full_and_topup(depositable_ether, seed_allocated, seed_new, digests, deposits_paused, top_up_enabled)
 
@@ -548,6 +584,12 @@ class DepositorBot:
             return PhaseOutcome.SKIPPED
 
         tx = self.w3.lido.topup_gateway.top_up(module_id, proof_data)
+        # When TOP_UP_ROLE sits on the delegation contract rather than on the bot's key, wrapping must
+        # happen before check()/send() so the dry-run and the gas estimate cover the delegated call —
+        # the unwrapped one would revert with AccessControlUnauthorizedAccount.
+        delegation = self.w3.lido.delegation
+        if delegation is not None and self._topup_path is TopUpPath.DELEGATED:
+            tx = delegation.wrap(tx)
         success = self.w3.transaction.check(tx) and self.w3.transaction.send(tx, False, 6)
         TOPUP_TX_SEND.labels('success' if success else 'failure', module_id).inc()
         logger.info({'msg': f'Top-up tx result: {success}.', 'module_id': module_id})
@@ -588,6 +630,77 @@ class DepositorBot:
         logger.info({'msg': 'ConsolidationBus indexer cold start.', 'address': address, 'deploy_block': deploy_block})
         indexer.cold_start()
         return indexer
+
+    def _resolve_topup_path(self) -> TopUpPath:
+        """Resolves how `topUp` must be sent, from who currently holds `TOP_UP_ROLE`.
+
+        Delegation is preferred when it is usable, and the bot's own key is the fallback — so during
+        a migration either order of the `grantRole`/`revokeRole` pair keeps working, and neither
+        direction needs a restart timed to a block. Re-resolved every cycle and never carried over:
+        a delegate can be rotated or revoked, and the contract terminated, under a running bot, and
+        each of those turns every top-up into a revert.
+
+        At most three reads (`TOP_UP_ROLE` is a cached constant), so it runs once per iteration
+        rather than once per module.
+
+        In dry mode (no account) there is no key to compare against and nothing gets sent, so the
+        identity checks are skipped rather than failing the bot.
+        """
+        gateway = self.w3.lido.topup_gateway
+        role = gateway.top_up_role()
+        delegation = self.w3.lido.delegation
+        blocked: TopUpPath | None = None
+
+        if delegation is not None and gateway.has_role(role, delegation.address):
+            if delegation.is_terminated():
+                blocked = TopUpPath.TERMINATED
+            elif variables.ACCOUNT is None or delegation.get_delegate() == variables.ACCOUNT.address:
+                return TopUpPath.DELEGATED
+            else:
+                blocked = TopUpPath.NOT_DELEGATE
+            logger.warning(
+                {
+                    'msg': 'Delegation contract holds TOP_UP_ROLE but cannot be used. Falling back to a direct call.',
+                    'reason': blocked,
+                    'delegation': delegation.address,
+                }
+            )
+
+        if variables.ACCOUNT is None or gateway.has_role(role, variables.ACCOUNT.address):
+            return TopUpPath.DIRECT
+
+        return blocked or TopUpPath.NO_ROLE
+
+    def _validate_topup_delegation(self) -> None:
+        """Refuse to start when a delegation contract is configured but no path can execute a top-up.
+
+        Same reasoning as the ConsolidationBus indexer: nothing would ever be topped up, and a crash
+        loop carrying the reason is far easier to notice than a bot that keeps running quietly.
+
+        Scoped to the case where delegation is configured. `NO_ROLE` without any delegation is the
+        pre-existing "role was never granted to the key" misconfiguration — it is now visible on
+        `topup_execution_path`, but it must not turn an upgrade of a running deployment into a boot
+        failure, so it stays a warning.
+        """
+        if not variables.ENABLE_TOP_UP:
+            return
+
+        self._topup_path = self._resolve_topup_path()
+        TOPUP_EXECUTION_PATH.state(self._topup_path)
+        if self._topup_path.is_executable:
+            logger.info({'msg': 'Top-up execution path resolved.', 'path': self._topup_path})
+            return
+
+        account = variables.ACCOUNT.address if variables.ACCOUNT else 'not configured'
+        message = (
+            f'No usable path for TopUpGateway.topUp: {self._topup_path}. TOP_UP_ROLE must be held either by the '
+            f'bot account ({account}) or by delegation contract {variables.DELEGATION_CONTRACT_ADDRESS}, which '
+            f'must then be un-terminated with that account as its active delegate.'
+        )
+        if variables.DELEGATION_CONTRACT_ADDRESS is None:
+            logger.warning({'msg': message})
+            return
+        raise ValueError(message)
 
     def _check_balance(self):
         if variables.ACCOUNT:

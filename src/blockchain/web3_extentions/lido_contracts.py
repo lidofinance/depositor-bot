@@ -8,6 +8,7 @@ from web3.module import Module
 from web3.types import BlockIdentifier
 
 import variables
+from blockchain.contracts.delegation import DelegationContract
 from blockchain.contracts.deposit import DepositContract
 from blockchain.contracts.deposit_security_module import DepositSecurityModuleContract, DepositSecurityModuleContractV5
 from blockchain.contracts.guardian import GuardianContract
@@ -75,6 +76,7 @@ class LidoContracts(Module):
         self._load_staking_router()
         self._load_dsm()
         self._load_topup_gateway()
+        self._load_delegation()
         self._load_staking_modules()
 
     def _load_staking_router(self):
@@ -201,3 +203,24 @@ class LidoContracts(Module):
             ),
         )
         logger.debug({'msg': 'Loaded TopUpGateway.', 'address': topup_gateway_address})
+
+    def _load_delegation(self):
+        """Binds the EDF delegation contract top-ups are executed through, if one is configured.
+
+        Comes from configuration rather than LidoLocator: the contract is deployed per bot operator
+        (DelegationFactory), not part of the protocol's address book. `None` means direct calls —
+        `TOP_UP_ROLE` is then expected on the bot's own account.
+        """
+        if variables.DELEGATION_CONTRACT_ADDRESS is None:
+            self.delegation: DelegationContract | None = None
+            logger.debug({'msg': 'No EDF delegation contract configured. Top-ups will be sent as direct calls.'})
+            return
+
+        self.delegation = cast(
+            DelegationContract,
+            self.w3.eth.contract(
+                address=variables.DELEGATION_CONTRACT_ADDRESS,
+                ContractFactoryClass=DelegationContract,
+            ),
+        )
+        logger.debug({'msg': 'Loaded EDF delegation contract.', 'address': variables.DELEGATION_CONTRACT_ADDRESS})

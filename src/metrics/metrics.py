@@ -124,6 +124,18 @@ TOPUP_GATEWAY_PAUSED = Gauge(
     namespace=PROMETHEUS_PREFIX,
 )
 
+# States must stay in sync with bots.depositor.TopUpPath's values (see note on PHASE_OUTCOME).
+# `direct` and `delegated` are both healthy — which one is live tells you whether TOP_UP_ROLE
+# currently sits on the bot's key or on the delegation contract, i.e. whether a migration has taken
+# effect. The rest each block every top-up, and they are distinguished here because a bare "tx
+# failed" counter cannot tell a role/delegate problem from a revert inside topUp() itself.
+TOPUP_EXECUTION_PATH = Enum(
+    'topup_execution_path',
+    'How TopUpGateway.topUp is executed, resolved from on-chain TOP_UP_ROLE assignment.',
+    states=['direct', 'delegated', 'not_delegate', 'terminated', 'no_role'],
+    namespace=PROMETHEUS_PREFIX,
+)
+
 MODULE_STATUS = Gauge(
     'module_status',
     'Staking module status from StakingRouter digest. 0=active 1=deposits_paused 2=stopped',
