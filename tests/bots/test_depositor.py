@@ -1781,3 +1781,34 @@ def test_depositor_bot(
     db.message_storage.messages = deposit_messages
     assert db.execute(latest)
     assert web3_lido_integration.lido.staking_router.get_staking_module_nonce(module_id) == old_module_nonce + 1
+
+
+def _phase_b_top_up_enabled(depositor_bot, path: TopUpPath) -> bool:
+    """Drive _execute_actual to Phase B and return the top_up_enabled it was called with."""
+    variables.ENABLE_TOP_UP = True
+    depositor_bot._refresh_modules_state = Mock()
+    depositor_bot.w3.lido.lido.get_depositable_ether = Mock(return_value=100)
+    depositor_bot.w3.lido.staking_router.get_deposit_allocations = Mock(return_value=(0, [], []))
+    depositor_bot.w3.lido.staking_router.get_all_staking_module_digests = Mock(return_value=[])
+    depositor_bot._phase_seed = Mock(return_value=PhaseOutcome.SKIPPED)
+    depositor_bot._phase_full_and_topup = Mock(return_value=PhaseOutcome.SKIPPED)
+    depositor_bot._resolve_topup_path = Mock(return_value=path)
+
+    depositor_bot._execute_actual()
+
+    depositor_bot._phase_full_and_topup.assert_called_once()
+    return depositor_bot._phase_full_and_topup.call_args.args[-1]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize('path', [TopUpPath.NOT_DELEGATE, TopUpPath.TERMINATED, TopUpPath.NO_ROLE])
+def test_execute_actual_disables_topup_when_path_not_executable(depositor_bot, path):
+    """An unusable path must not admit top-up candidates: the revert would preempt the 0x01
+    deposits later in the same Phase B loop, which do not need TOP_UP_ROLE at all."""
+    assert _phase_b_top_up_enabled(depositor_bot, path) is False
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize('path', [TopUpPath.DIRECT, TopUpPath.DELEGATED])
+def test_execute_actual_enables_topup_when_path_executable(depositor_bot, path):
+    assert _phase_b_top_up_enabled(depositor_bot, path) is True

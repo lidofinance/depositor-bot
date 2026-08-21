@@ -274,15 +274,13 @@ class DepositorBot:
         # every top-up into a revert, and this metric is how that gets noticed. Costs at most four
         # `eth_call`s per iteration, on top of the per-module reads `_refresh_modules_state()` already
         # does before the same early returns.
-        # Not a gate — an unusable path still lets the tx be built and fail loudly on the dry-run,
-        # which says more than skipping early.
         top_up_enabled = False
         if variables.ENABLE_TOP_UP:
             _tg_paused = self.w3.lido.topup_gateway.is_paused()
             TOPUP_GATEWAY_PAUSED.set(int(_tg_paused))
             self._topup_path = self._resolve_topup_path()
             TOPUP_EXECUTION_PATH.state(self._topup_path)
-            top_up_enabled = not _tg_paused
+            top_up_enabled = not _tg_paused and self._topup_path.is_executable
         else:
             TOPUP_GATEWAY_PAUSED.set(0)
 

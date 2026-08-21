@@ -139,7 +139,7 @@ The general strategy uses a cubic formula to compute a recommended gas ceiling: 
 |---|---|
 | `delegated` | `DELEGATION_CONTRACT_ADDRESS` holds `TOP_UP_ROLE`, is not terminated, and the bot's key is its active delegate → tx wrapped as `delegation.execute(topUpGateway, <topUp calldata>)` (`DelegationContract.wrap()`) |
 | `direct` | otherwise, and the bot's own account holds the role → plain `topUp` call |
-| `not_delegate` / `terminated` / `no_role` | nothing can execute; see the gate ladder below |
+| `not_delegate` / `terminated` / `no_role` | nothing can execute, so `top_up_enabled` is false and no top-up is attempted; see the gate ladder below |
 
 Delegation is preferred and the key is the fallback, so migrating the role in either direction needs no restart timed to the `grantRole`/`revokeRole` transactions — the bot follows the role on its next cycle. Same idea as `SignerModule.process_members` in lido-oracle, which resolves the active identity from the HashConsensus member list each cycle. With the role on the delegation contract, rotating the bot's key becomes a `nominateDelegate` by the contract's owner instead of an ACL change on TopUpGateway.
 
@@ -183,11 +183,19 @@ Module-level gates (Prometheus, defined in `src/metrics/metrics.py`, set in `src
 
 1. `topup_gateway_paused == 0` (and `variables.ENABLE_TOP_UP` is true — checked at startup, not a metric).
 2. `topup_execution_path` is `direct` or `delegated` — both healthy, and which one is live tells you
-   where `TOP_UP_ROLE` currently sits. `not_delegate` / `terminated` / `no_role` each make *every*
-   top-up revert. Seeing one at runtime means the role assignment changed under a running bot
+   where `TOP_UP_ROLE` currently sits. `not_delegate` / `terminated` / `no_role` mean no top-up is
+   even attempted: `top_up_enabled` requires `TopUpPath.is_executable`, so no 0x02 candidate is
+   collected at all. Seeing one at runtime means the role assignment changed under a running bot
    (delegate rotated or revoked, contract terminated, role removed from both identities). Resolved
    before every early return in `_execute_actual()` (alongside `topup_gateway_paused`), so it stays
    trustworthy on idle iterations — an empty buffer would otherwise freeze it at its last value.
+
+   This gate is **not** just an optimisation. Attempting a top-up on an unusable path builds an
+   unwrapped `topUp` call from an account known not to hold the role, whose preflight reverts and
+   returns `TX_FAILED` — which, before this gate existed, ended Phase B before the 0x01 full
+   deposits queued behind it, and did so every block. A routine delegate rotation could therefore
+   stall guardian-authorized deposits that need no top-up authorization at all. Visibility was the
+   original argument for attempting anyway; this metric already provides it without a revert.
 3. `module_allocation_wei{module_id, kind="topup"} > 0`. Zero here is the single most common reason
    nothing happens — the StakingRouter allocation algorithm didn't route ETH to this module at all
    this cycle.
