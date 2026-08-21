@@ -32,8 +32,6 @@ def _make_bot(attest_prefix: bytes | None = None):
     # delegation set it explicitly.
     w3.lido.delegation = None
     if attest_prefix is not None:
-        # The storage's sign filter is built in __init__ from these two, so they must be set before
-        # construction for a test to feed real signatures through it.
         w3.lido.deposit_security_module.get_attest_message_prefix.return_value = attest_prefix
         w3.lido.guardian_delegation_active.return_value = False
     # Skip the real ConsolidationBus backfill (needs RPC) — inject a mock indexer so top-up paths
@@ -1669,8 +1667,6 @@ def test_depositor_message_actualizer_far_future_block(setup_deposit_message, de
     deposit_message['blockNumber'] = block_data['number'] + MESSAGE_BLOCK_WINDOW + 1
     assert not list(filter(message_filter, [deposit_message]))
 
-    # `blockNumber` is inside the signed digest, so without the upper bound a guardian could sign an
-    # unlimited number of messages the chain will never reach and keep every one of them retained.
     deposit_message['blockNumber'] = block_data['number'] + 10**9
     assert not list(filter(message_filter, [deposit_message]))
 
@@ -1719,7 +1715,7 @@ def test_bad_signature_dropped_on_ingestion():
     bot = _make_bot(attest_prefix=_ATTEST_PREFIX)
     good = _signed_deposit_message()
     tampered = _signed_deposit_message()
-    tampered['nonce'] += 1  # signature no longer matches the digest
+    tampered['nonce'] += 1
 
     bot.message_storage.clear()
     bot.message_storage._transports = [_StubTransport([good, tampered])]
@@ -1732,12 +1728,7 @@ def test_bad_signature_dropped_on_ingestion():
 
 @pytest.mark.unit
 def test_retained_messages_are_not_reverified_every_cycle():
-    """Regression: verification used to re-run over the whole retained list on every call.
-
-    `_fetch_actual_messages()` is called once per whitelisted module per cycle, so re-verifying there
-    turned each retained message into N ecrecovers (and N `ATTEST_MESSAGE_PREFIX()` calls) per cycle —
-    the amplification that made flooding the storage a cheap way to stall a cycle.
-    """
+    """Verification must not re-run over the retained list on every call."""
     bot = _make_bot()
     prefix_calls = bot.w3.lido.deposit_security_module.get_attest_message_prefix
     assert prefix_calls.call_count == 1, 'the attest prefix is a constant — read once at startup'
