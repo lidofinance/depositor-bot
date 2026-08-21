@@ -76,6 +76,21 @@ from transport.types import TransportType
 
 logger = logging.getLogger(__name__)
 
+# A deposit message is only relevant while its `blockNumber` is within this many blocks of this node's
+# head, in either direction.
+#
+# Behind: the message is too stale to act on — the deposit root has moved and the DSM would revert.
+#
+# Ahead: this node is lagging the council's, so the message cannot be checked against a block we have
+# not seen and is kept until the chain catches up. That side needs a bound just as much as the other
+# one. `blockNumber` is part of the signed digest, so a guardian can sign messages for an arbitrarily
+# far-future block, and each one stays "unverifiable, keep it" for as long as the chain has not
+# reached it — i.e. forever. Unbounded, one guardian can grow MessageStorage without limit until the
+# per-cycle work over the retained list exceeds MAX_CYCLE_LIFETIME_IN_SECONDS and the daemon is shut
+# down, which also takes down the top-up path — a path that needs no guardian quorum and must not be
+# reachable by a single guardian.
+MESSAGE_BLOCK_WINDOW = 200
+
 
 class ModuleCandidate(NamedTuple):
     """Module candidate selected for a deposit/top-up in one bot iteration."""
@@ -225,11 +240,30 @@ class DepositorBot:
                 }
             )
 
+        # Whether a message's guardian signature is valid is a property of the message alone: the
+        # digest covers every signed field, and the two inputs that are not on the message — the
+        # attest prefix and the delegation mode — are fixed for the lifetime of the process (both
+        # change only on a DSM upgrade, which already requires a restart; `dsm_version` is likewise
+        # resolved once at startup). So it is verified once, here on the ingestion path, which sees
+        # each message exactly once.
+        #
+        # It used to sit in the actualize filter instead, which re-runs over the *whole retained
+        # list* on every `_fetch_actual_messages()` call — and that is called once per whitelisted
+        # module per cycle by `_refresh_modules_state`, plus once more per deposit attempt. Every
+        # retained message therefore cost N ecrecovers per cycle instead of one ever, which is what
+        # made flooding the storage a cheap way to push a cycle past MAX_CYCLE_LIFETIME_IN_SECONDS.
+        # It also called `ATTEST_MESSAGE_PREFIX()` once per module per cycle for a constant.
         self.message_storage = MessageStorage(
             transports,
             filters=[
                 message_metrics_filter,
                 to_check_sum_address,
+                # Must come after to_check_sum_address: verification compares the address recovered
+                # from the signature, which is checksummed, against the one on the message.
+                get_messages_sign_filter(
+                    self.w3.lido.deposit_security_module.get_attest_message_prefix(),
+                    delegated=self.w3.lido.guardian_delegation_active(),
+                ),
             ],
         )
 
@@ -794,12 +828,13 @@ class DepositorBot:
                 UNEXPECTED_EXCEPTIONS.labels('unexpected_guardian_address').inc()
                 return False
 
-            if message['blockNumber'] < latest['number'] - 200:
+            head = latest['number']
+            if not head - MESSAGE_BLOCK_WINDOW <= message['blockNumber'] <= head + MESSAGE_BLOCK_WINDOW:
                 return False
 
             # Message from council is newer than depositor node latest block
-            if message['blockNumber'] > latest['number']:
-                # can't be verified, so skip
+            if message['blockNumber'] > head:
+                # can't be verified yet, so keep it until the chain catches up — bounded above
                 return True
 
             return message['depositRoot'] == deposit_root
@@ -821,9 +856,7 @@ class DepositorBot:
         return success
 
     def _fetch_actual_messages(self) -> list[BotMessage]:
-        # Fetch messages and apply filters
-        actualize_filter = self._get_message_actualize_filter()
-        prefix = self.w3.lido.deposit_security_module.get_attest_message_prefix()
-        sign_filter = get_messages_sign_filter(prefix, delegated=self.w3.lido.guardian_delegation_active())
-
-        return self.message_storage.get_messages_and_actualize(lambda x: sign_filter(x) and actualize_filter(x))
+        # Signature verification is deliberately absent here — it runs once per message on ingestion
+        # (see the MessageStorage filters in __init__). Only checks against mutable chain state belong
+        # in this filter, because it re-runs over the entire retained list on every call.
+        return self.message_storage.get_messages_and_actualize(self._get_message_actualize_filter())
