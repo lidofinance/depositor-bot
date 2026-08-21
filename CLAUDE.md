@@ -201,9 +201,44 @@ Module-level gates (Prometheus, defined in `src/metrics/metrics.py`, set in `src
 5. `topup_gas_ok{module_id}` / `topup_gas_fee_wei{type}`.
 6. `phase_outcome{phase="B", module_id} != wait_distance` (TopUpGateway block distance).
 
+**Undocumented assumption worth knowing before changing module routing:** `CMv2TopUpStrategy`
+selects and orders candidates by validator index, which is what `CuratedModule` accepts — it imposes
+no ordering. Its sibling in the same repo, `CSModule`, instead keeps its own `topUpQueue` and reverts
+`InvalidTopUpOrder` unless the batch matches the queue head in order (`TopUpQueueOps.allocateDeposits`),
+and offers `getKeysForTopUp(maxKeyCount)` for exactly that. This strategy would revert on every
+attempt against such a module. Nothing breaks today because `_select_topup_strategy` returns a
+strategy only for `MODULE_TYPE_CMV2` and `None` (→ `SKIPPED`) otherwise, but that gate is the only
+thing holding the assumption up.
+
 Key-level gates — module_id is now known, question narrows to pubkey X. Instrumented in
 `CMv2TopUpStrategy` (`src/blockchain/topup/cmv2_strategy.py`), evaluated in this order:
 
+- `conflicting_key_record` — the Keys API returned X's pubkey more than once, so
+  `_drop_repeated_pubkeys` dropped every copy. Checked first, right after the Keys API read and
+  before the beacon load.
+
+  Why it can happen: the Keys API's primary key is `(index, operatorIndex, moduleAddress)` and `key`
+  carries **no unique constraint** (`RegistryKey` in lidofinance/lido-keys-api), so one pubkey can
+  legitimately arrive under a second key index of the same operator, or under a second operator. A
+  byte-identical row cannot arrive — that *is* the primary key.
+
+  Why every copy is dropped rather than one being picked: **not** because a wrong pick reverts — it
+  does not. `CuratedModule.allocateDeposits` only checks the pubkey against `(operatorId, keyIndex)`
+  (`_validateTopUpPublicKeys`) and both identities are genuinely on-chain, so either would pass. But
+  it caps and credits **per key** (`NodeOperatorOps.capTopUpLimitsByKeyBalance`), and only one of the
+  repeated slots belongs to the validator that actually exists; the other is a phantom key record.
+  Which is which is not derivable from the Keys API fields (`key`, `index`, `operatorIndex`), so the
+  choice cannot be made here. Skipping one validator — logged and counted — is cheaper than updating
+  the wrong key's balance record, which would not self-correct.
+
+  Why it matters at all: TopUpGateway requires strictly increasing `validatorIndices`
+  (`validatorIndex <= prevValidatorIndex` → `InvalidValidatorIndicesSortOrder`, `TopUpGateway.sol`),
+  and both rows resolve to the same validator, so one repeat reverts the module's whole batch — and
+  before that, double-counts the operator's allocation and consumes a `max_validators` slot.
+
+  Note the top-up path has no council involvement (no message type, no quorum), so a guardian
+  refusing to sign — the mechanism that guards duplicate keys on the deposit path — has no
+  equivalent here.
 - `not_in_beacon_state` / `not_active` / `slashed` / `exiting` / `beacon_consolidation_target` /
   `already_at_target_balance` — `_check_key_eligibility`.
 - `pending_consolidation_bus` — excluded by a pending ConsolidationBus request.

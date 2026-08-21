@@ -47,6 +47,7 @@ class TopUpExclusionReason(StrEnum):
     PENDING_CONSOLIDATION_BUS = 'pending_consolidation_bus'
     OPERATOR_BUDGET_EXHAUSTED = 'operator_budget_exhausted'
     TRUNCATED_BY_MAX_VALIDATORS = 'truncated_by_max_validators'
+    CONFLICTING_KEY_RECORD = 'conflicting_key_record'
 
 
 def _pubkey_hex(pubkey: bytes) -> str:
@@ -120,6 +121,7 @@ class CMv2TopUpStrategy(TopUpStrategy):
 
         # Step 2: keys from Keys API
         keys_by_operator = keys_api.get_module_operator_used_keys(module_id, list(allocation_by_operator.keys()))
+        keys_by_operator = _drop_repeated_pubkeys(keys_by_operator, module_id)
 
         # Step 3: advance the consolidation base to finalized BEFORE the heavy SSZ load (outside the proof window).
         # Any failure here -> skip the top-up rather than risk topping up a consolidating key.
@@ -228,6 +230,38 @@ def _distribute(candidates_by_operator: dict[int, list[TopUpCandidate]], limit: 
             i = 0
             circle += 1
     return selected
+
+
+def _drop_repeated_pubkeys(keys_by_operator: dict[int, list[LidoKey]], module_id: int) -> dict[int, list[LidoKey]]:
+    """Drop every copy of a pubkey the Keys API returned more than once.
+
+    The API's primary key is (index, operatorIndex, moduleAddress) and `key` carries no unique
+    constraint, so one pubkey can arrive under several identities: a second key index of the same
+    operator, or a second operator. Both rows resolve to the same validator, and TopUpGateway
+    requires strictly increasing validatorIndices, so the whole batch would be rejected.
+
+    Every copy is dropped rather than one being picked. Nothing reverts on a wrong pick — the module
+    only checks pubkey against (operatorId, keyIndex), and both identities are genuinely on-chain —
+    but it caps and credits per key (CuratedModule.allocateDeposits ->
+    NodeOperatorOps.capTopUpLimitsByKeyBalance), and only one of the repeated slots belongs to the
+    validator that exists. Which one is not derivable from the Keys API fields, so the choice cannot
+    be made here and the rest of the batch proceeds without them.
+    """
+    counts: dict[str, int] = {}
+    for keys in keys_by_operator.values():
+        for k in keys:
+            counts[k.key] = counts.get(k.key, 0) + 1
+
+    result: dict[int, list[LidoKey]] = {}
+    for op_id, keys in keys_by_operator.items():
+        kept: list[LidoKey] = []
+        for k in keys:
+            if counts[k.key] > 1:
+                _log_excluded_key(module_id, k.operatorIndex, k.key, TopUpExclusionReason.CONFLICTING_KEY_RECORD)
+            else:
+                kept.append(k)
+        result[op_id] = kept
+    return result
 
 
 def _collect_pubkeys(keys_by_operator: dict[int, list[LidoKey]]) -> set[bytes]:
