@@ -11,6 +11,7 @@ from schema import Or, Schema
 from web3.types import BlockData, Wei
 
 import variables
+from blockchain.beacon_state.state import BeaconStateData, load_raw_beacon_state
 from blockchain.consolidation.indexer import ConsolidationIndexer
 from blockchain.consolidation.store import InMemoryPendingStore
 from blockchain.contracts.consolidation_bus import ConsolidationBusContract
@@ -31,6 +32,7 @@ from blockchain.deposit_strategy.gas_price_calculator import GasPriceCalculator
 from blockchain.deposit_strategy.strategy import DepositStrategy
 from blockchain.executor import Executor
 from blockchain.topup.cmv2_strategy import CMv2TopUpStrategy
+from blockchain.topup.csm02_strategy import CSM02TopUpStrategy
 from blockchain.topup.strategy import TopUpStrategy
 from blockchain.typings import Web3
 from metrics.metrics import (
@@ -183,6 +185,7 @@ class DepositorBot:
         self._csm_strategy = csm_strategy
         self._gas_price_calculator = gas_price_calculator
         self._cmv2_topup_strategy = CMv2TopUpStrategy(w3, gas_price_calculator)
+        self._csm02_topup_strategy = CSM02TopUpStrategy(w3, gas_price_calculator)
         self._keys_api = keys_api
         self._cl = cl
         self._consolidation_indexer = self._build_consolidation_indexer()
@@ -399,14 +402,14 @@ class DepositorBot:
         PHASE_LAST_RUN_TIMESTAMP.labels(phase, module_id).set(now)
         return outcome
 
-    def _try_top_up(self, candidate: ModuleCandidate, phase: Phase) -> PhaseOutcome:
+    def _try_top_up(self, candidate: ModuleCandidate, phase: Phase, ensure_beacon_state: Callable[[], BeaconStateData]) -> PhaseOutcome:
         """One top-up attempt on a 0x02 module (no quorum needed). SKIPPED → caller tries the next candidate."""
         module_id = candidate.module_id
         if not self.w3.lido.topup_gateway.is_block_distance_passed():
             logger.info({'msg': f'Phase {phase}: top-up block distance not passed — wait next iteration.', 'module_id': module_id})
             outcome = PhaseOutcome.WAIT_DISTANCE
         else:
-            outcome = self._top_up_to_module(module_id, candidate.address, candidate.allocation)
+            outcome = self._top_up_to_module(module_id, candidate.address, candidate.allocation, ensure_beacon_state)
         now = time.time()
         PHASE_OUTCOME.labels(phase, module_id).state(outcome)
         PHASE_LAST_RUN_TIMESTAMP.labels(phase, module_id).set(now)
@@ -509,11 +512,22 @@ class DepositorBot:
             }
         )
 
+        # Heavy beacon-state read, done at most once per iteration and reused across modules.
+        # Lazy: fires on the first top-up that reaches step 4 of its strategy, so an all-deposit
+        # cycle never pays the SSZ read. Loop-local — no state kept on self between iterations.
+        raw_beacon_state: BeaconStateData | None = None
+
+        def ensure_beacon_state() -> BeaconStateData:
+            nonlocal raw_beacon_state
+            if raw_beacon_state is None:
+                raw_beacon_state = load_raw_beacon_state(self.w3, self._cl)
+            return raw_beacon_state
+
         for candidate in candidates:
             # The consolidation indexer is guaranteed present and ready in the top-up path — validated
             # at startup when ENABLE_TOP_UP is on (otherwise the bot would not have started).
             if candidate.wc_type == WC_TYPE_0X02:
-                outcome = self._try_top_up(candidate, 'Phase B')
+                outcome = self._try_top_up(candidate, 'Phase B', ensure_beacon_state)
             else:
                 outcome = self._try_deposit(candidate.module_id, 'Phase B')
             if outcome is not PhaseOutcome.SKIPPED:
@@ -537,7 +551,9 @@ class DepositorBot:
         self._flashbots_works = not self._flashbots_works or success
         return success
 
-    def _top_up_to_module(self, module_id: int, module_address: str, module_allocation: Wei) -> PhaseOutcome:
+    def _top_up_to_module(
+        self, module_id: int, module_address: str, module_allocation: Wei, ensure_beacon_state: Callable[[], BeaconStateData]
+    ) -> PhaseOutcome:
         module_type = self.w3.lido.staking_module(module_id).get_type()
         strategy = self._select_topup_strategy(module_type)
         if strategy is None:
@@ -572,7 +588,7 @@ class DepositorBot:
 
         proof_data = strategy.get_topup_candidates(
             self._keys_api,
-            self._cl,
+            ensure_beacon_state,
             module_id,
             module_address,
             module_allocation,
@@ -598,6 +614,8 @@ class DepositorBot:
     def _select_topup_strategy(self, module_type: bytes) -> TopUpStrategy | None:
         if module_type == MODULE_TYPE_CMV2:
             return self._cmv2_topup_strategy
+        if module_type == MODULE_TYPE_CSM:
+            return self._csm02_topup_strategy
         return None
 
     def _build_consolidation_indexer(self) -> ConsolidationIndexer | None:

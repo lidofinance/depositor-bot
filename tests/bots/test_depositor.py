@@ -624,7 +624,7 @@ class TestPhaseFullAndTopup(unittest.TestCase):
         self.bot._phase_full_and_topup(Wei(100), [50, 999, 999, 999], [70, 1002, 1050, 1050], digests, top_up_enabled=True)
 
         # m1 (0x02) goes first
-        self.bot._top_up_to_module.assert_called_once_with(1, '0xA1', 70)
+        self.bot._top_up_to_module.assert_called_once_with(1, '0xA1', 70, mock.ANY)
         self.bot._deposit_to_module.assert_not_called()
 
     def test_sorts_by_per_type_stake_asc(self):
@@ -664,7 +664,7 @@ class TestPhaseFullAndTopup(unittest.TestCase):
         outcome = self.bot._phase_full_and_topup(Wei(100), [0], [0], digests, top_up_enabled=True)
 
         self.assertEqual(PhaseOutcome.SENT, outcome)
-        self.bot._top_up_to_module.assert_called_once_with(1, '0xA1', 42)
+        self.bot._top_up_to_module.assert_called_once_with(1, '0xA1', 42, mock.ANY)
 
     # ─── 0x01 branch ───────────────────────────────────────────
 
@@ -718,7 +718,7 @@ class TestPhaseFullAndTopup(unittest.TestCase):
         outcome = self.bot._phase_full_and_topup(Wei(100), [50, 999], [60, 999], digests, top_up_enabled=True)
 
         self.assertEqual(PhaseOutcome.SENT, outcome)
-        self.bot._top_up_to_module.assert_called_once_with(2, '0xA2', 50)
+        self.bot._top_up_to_module.assert_called_once_with(2, '0xA2', 50, mock.ANY)
         self.bot._deposit_to_module.assert_not_called()
 
     # ─── distance cooldown ─────────────────────────────────────
@@ -734,7 +734,7 @@ class TestPhaseFullAndTopup(unittest.TestCase):
         outcome = self.bot._phase_full_and_topup(Wei(100), [50, 999], [60, 999], digests, deposits_paused=True, top_up_enabled=True)
 
         self.assertEqual(PhaseOutcome.SENT, outcome)
-        self.bot._top_up_to_module.assert_called_once_with(2, '0xA2', 50)
+        self.bot._top_up_to_module.assert_called_once_with(2, '0xA2', 50, mock.ANY)
         self.bot._deposit_to_module.assert_not_called()
 
     def test_deposits_paused_and_topup_disabled_skips_all(self):
@@ -1193,7 +1193,7 @@ def test_top_up_to_module_unknown_type_returns_false(depositor_bot):
     depositor_bot.w3.lido.staking_module = Mock(return_value=mock_module)
     depositor_bot._select_topup_strategy = Mock(return_value=None)
 
-    assert depositor_bot._top_up_to_module(1, '0xAddr', 50) is PhaseOutcome.SKIPPED
+    assert depositor_bot._top_up_to_module(1, '0xAddr', 50, Mock()) is PhaseOutcome.SKIPPED
 
 
 @pytest.mark.unit
@@ -1206,7 +1206,7 @@ def test_top_up_to_module_gas_too_high_returns_false(depositor_bot):
     strategy.get_topup_candidates = Mock()
     depositor_bot._select_topup_strategy = Mock(return_value=strategy)
 
-    assert depositor_bot._top_up_to_module(1, '0xAddr', 50) is PhaseOutcome.SKIPPED
+    assert depositor_bot._top_up_to_module(1, '0xAddr', 50, Mock()) is PhaseOutcome.SKIPPED
     strategy.get_topup_candidates.assert_not_called()
 
 
@@ -1222,7 +1222,7 @@ def test_top_up_to_module_no_proof_data_returns_false(depositor_bot):
     depositor_bot.w3.lido.topup_gateway.get_max_validators_per_top_up = Mock(return_value=10)
     depositor_bot.w3.lido.topup_gateway.top_up = Mock()
 
-    assert depositor_bot._top_up_to_module(1, '0xAddr', 50) is PhaseOutcome.SKIPPED
+    assert depositor_bot._top_up_to_module(1, '0xAddr', 50, Mock()) is PhaseOutcome.SKIPPED
     depositor_bot.w3.lido.topup_gateway.top_up.assert_not_called()
 
 
@@ -1250,7 +1250,7 @@ def test_top_up_to_module_max_validators_uses_min(depositor_bot, config_limit, g
         depositor_bot.w3.transaction.check = Mock(return_value=True)
         depositor_bot.w3.transaction.send = Mock(return_value=True)
 
-        depositor_bot._top_up_to_module(1, '0xAddr', 50)
+        depositor_bot._top_up_to_module(1, '0xAddr', 50, Mock())
 
         # max_validators is positional arg index 5
         assert strategy.get_topup_candidates.call_args.args[5] == expected
@@ -1277,7 +1277,7 @@ def test_top_up_to_module_happy_path_calls_top_up_check_send(depositor_bot):
     depositor_bot.w3.transaction.check = check
     depositor_bot.w3.transaction.send = Mock(return_value=True)
 
-    assert depositor_bot._top_up_to_module(1, '0xAddr', 50) is PhaseOutcome.SENT
+    assert depositor_bot._top_up_to_module(1, '0xAddr', 50, Mock()) is PhaseOutcome.SENT
 
     top_up.assert_called_once_with(1, proof_data)
     check.assert_called_once_with(tx)
@@ -1300,7 +1300,7 @@ def test_top_up_to_module_passes_module_allocation_through_to_strategy(depositor
     depositor_bot.w3.transaction.send = Mock(return_value=True)
     depositor_bot.w3.lido.staking_router.get_deposit_allocations = Mock()
 
-    depositor_bot._top_up_to_module(7, '0xModule7', 1234)
+    depositor_bot._top_up_to_module(7, '0xModule7', 1234, Mock())
 
     # allocation 1234 forwarded; getDepositAllocations NOT re-queried
     assert strategy.get_topup_candidates.call_args.args[4] == 1234
@@ -1480,7 +1480,7 @@ def test_top_up_to_module_sends_direct_call_on_the_direct_path(depositor_bot):
     _stub_topup_happy_path(depositor_bot, tx)
     depositor_bot._topup_path = TopUpPath.DIRECT
 
-    assert depositor_bot._top_up_to_module(1, '0xAddr', 50) is PhaseOutcome.SENT
+    assert depositor_bot._top_up_to_module(1, '0xAddr', 50, Mock()) is PhaseOutcome.SENT
     depositor_bot.w3.transaction.check.assert_called_once_with(tx)
     depositor_bot.w3.transaction.send.assert_called_once_with(tx, False, 6)
 
@@ -1494,7 +1494,7 @@ def test_top_up_to_module_wraps_call_before_dry_run_on_the_delegated_path(deposi
     delegation = _delegation_mock(depositor_bot, delegate=account.address)
     depositor_bot._topup_path = TopUpPath.DELEGATED
 
-    assert depositor_bot._top_up_to_module(1, '0xAddr', 50) is PhaseOutcome.SENT
+    assert depositor_bot._top_up_to_module(1, '0xAddr', 50, Mock()) is PhaseOutcome.SENT
 
     delegation.wrap.assert_called_once_with(tx)
     depositor_bot.w3.transaction.check.assert_called_once_with(('wrapped', tx))

@@ -115,7 +115,6 @@ def test_get_cmv2_topup_candidates_builds_proofs_from_fixture_data(top_up_proof_
 
     keys_api = Mock()
     keys_api.get_module_operator_used_keys.return_value = {11: [key_1], 12: [key_2]}
-    cl = Mock()
 
     strategy = CMv2TopUpStrategy(w3=w3, gas_price_calculator=Mock())
 
@@ -123,10 +122,10 @@ def test_get_cmv2_topup_candidates_builds_proofs_from_fixture_data(top_up_proof_
     consolidation_indexer.sync_base_to_finalized.return_value = 100
     consolidation_indexer.get_filter_set.return_value = set()
 
-    with patch('blockchain.topup.cmv2_strategy.load_beacon_state_data', return_value=beacon_data) as load_beacon_state_data:
+    with patch('blockchain.topup.cmv2_strategy.extract_state_data', return_value=beacon_data) as extract_state_data:
         result = strategy.get_topup_candidates(
             keys_api=keys_api,
-            cl=cl,
+            ensure_beacon_state=Mock(),
             module_id=1,
             module_address='0x0000000000000000000000000000000000000002',
             module_allocation=Wei(32 * 10**18),
@@ -141,7 +140,7 @@ def test_get_cmv2_topup_candidates_builds_proofs_from_fixture_data(top_up_proof_
     assert [w.pubkey for w in result.witnesses] == [bytes.fromhex(witnesses[0]['pubkey'][2:]), bytes.fromhex(witnesses[1]['pubkey'][2:])]
 
     keys_api.get_module_operator_used_keys.assert_called_once_with(1, [11, 12])
-    load_beacon_state_data.assert_called_once()
+    extract_state_data.assert_called_once()
 
 
 def _make_topup_setup(top_up_proof_fixtures):
@@ -170,10 +169,10 @@ def _make_topup_setup(top_up_proof_fixtures):
 
 
 def _call_topup(strategy, keys_api, beacon_data, consolidation_indexer):
-    with patch('blockchain.topup.cmv2_strategy.load_beacon_state_data', return_value=beacon_data):
+    with patch('blockchain.topup.cmv2_strategy.extract_state_data', return_value=beacon_data):
         return strategy.get_topup_candidates(
             keys_api=keys_api,
-            cl=Mock(),
+            ensure_beacon_state=Mock(),
             module_id=1,
             module_address='0x0000000000000000000000000000000000000002',
             module_allocation=Wei(32 * 10**18),
@@ -239,14 +238,15 @@ def test_get_topup_candidates_syncs_base_before_ssz_then_tail(top_up_proof_fixtu
     indexer.sync_base_to_finalized.return_value = 100
     indexer.get_filter_set.return_value = set()
 
+    ensure_beacon_state = Mock()
     manager = Mock()
     manager.attach_mock(indexer.sync_base_to_finalized, 'sync')
     manager.attach_mock(indexer.get_filter_set, 'tail')
-    with patch('blockchain.topup.cmv2_strategy.load_beacon_state_data', return_value=beacon_data) as load:
-        manager.attach_mock(load, 'ssz')
+    manager.attach_mock(ensure_beacon_state, 'ssz')
+    with patch('blockchain.topup.cmv2_strategy.extract_state_data', return_value=beacon_data):
         strategy.get_topup_candidates(
             keys_api=keys_api,
-            cl=Mock(),
+            ensure_beacon_state=ensure_beacon_state,
             module_id=1,
             module_address='0x0000000000000000000000000000000000000002',
             module_allocation=Wei(32 * 10**18),
