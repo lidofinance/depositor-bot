@@ -62,8 +62,21 @@ class CSM02TopUpStrategy(TopUpStrategy):
         # Shared heavy read (once per iteration), sliced to just the queued pubkeys.
         beacon_data = extract_state_data(ensure_beacon_state(), set(pubkeys))
 
+        # Balance limits mirror TopUpGateway (target it tops validators up to; minimum meaningful
+        # top-up). module_allocation is the ETH the StakingRouter routed to this module — a budget we
+        # spend in queue order and stop at, exactly like CMv2's _take_up_to_allocation.
+        gateway = self.w3.lido.topup_gateway
+        target_balance_gwei = gateway.get_target_balance_gwei()
+        min_top_up_gwei = gateway.get_min_top_up_gwei()
+        remaining = module_allocation // 10**9  # module budget, wei -> gwei
+
         candidates: list[TopUpCandidate] = []
         for pubkey in pubkeys:
+            # Budget spent — the contract funds the queue in order and reverts a sub-minimum tail, so
+            # stop before taking a key the leftover can't fund to at least the minimum.
+            if remaining < min_top_up_gwei:
+                logger.info({'msg': 'CSM top-up: module allocation spent, stop.', 'module_id': module_id, 'selected': len(candidates)})
+                break
             lido_key = key_by_pubkey.get(_pubkey_hex(pubkey))
             validator_index = beacon_data.pubkey_to_index.get(pubkey)
             # A key must resolve in both sources to build a proof; otherwise skip it (data
@@ -79,15 +92,23 @@ class CSM02TopUpStrategy(TopUpStrategy):
                     }
                 )
                 continue
+            pending = beacon_data.pending_deposits.get(pubkey, 0)
+            balance = beacon_data.validators_fields[validator_index].effective_balance
+            topup_amount = target_balance_gwei - (balance + pending)
+            # Already at/near the target cap — the gateway would top up nothing; skip without budget.
+            if topup_amount < min_top_up_gwei:
+                logger.info({'msg': 'CSM top-up key skipped — already at target.', 'module_id': module_id, 'pubkey': _pubkey_hex(pubkey)})
+                continue
             candidates.append(
                 TopUpCandidate(
                     validator_index=validator_index,
                     key_index=lido_key.index,
                     operator_id=lido_key.operatorIndex,
                     pubkey=pubkey,
-                    pending_balance=beacon_data.pending_deposits.get(pubkey, 0),
+                    pending_balance=pending,
                 )
             )
+            remaining -= topup_amount
 
         TOPUP_CANDIDATES_SELECTED.labels(module_id).set(len(candidates))
         if not candidates:
