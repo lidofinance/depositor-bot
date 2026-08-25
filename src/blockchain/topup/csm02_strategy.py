@@ -5,6 +5,7 @@ from typing import cast
 
 from web3.types import Wei
 
+from blockchain.beacon_state.ssz_types import FAR_FUTURE_EPOCH, SLOTS_PER_EPOCH
 from blockchain.beacon_state.state import BeaconStateData, extract_state_data
 from blockchain.consolidation.indexer import ConsolidationIndexer
 from blockchain.contracts.csm02 import CSM02Contract
@@ -70,6 +71,7 @@ class CSM02TopUpStrategy(TopUpStrategy):
         min_top_up_gwei = gateway.get_min_top_up_gwei()
         remaining = module_allocation // 10**9  # module budget, wei -> gwei
 
+        current_epoch = beacon_data.slot // SLOTS_PER_EPOCH
         candidates: list[TopUpCandidate] = []
         for pubkey in pubkeys:
             # Budget spent — the contract funds the queue in order and reverts a sub-minimum tail, so
@@ -77,28 +79,29 @@ class CSM02TopUpStrategy(TopUpStrategy):
             if remaining < min_top_up_gwei:
                 logger.info({'msg': 'CSM top-up: module allocation spent, stop.', 'module_id': module_id, 'selected': len(candidates)})
                 break
+
             lido_key = key_by_pubkey.get(_pubkey_hex(pubkey))
             validator_index = beacon_data.pubkey_to_index.get(pubkey)
-            # A key must resolve in both sources to build a proof; otherwise skip it (data
-            # availability, not eligibility) so build_topup_proofs never KeyErrors on it.
+            # A queued key MUST exist in both the Keys API and the beacon state — impossible in normal
+            # operation. Fail loudly rather than drop it or send a partial FIFO batch.
             if lido_key is None or validator_index is None:
-                logger.info(
-                    {
-                        'msg': 'CSM top-up key skipped — not resolvable.',
-                        'module_id': module_id,
-                        'pubkey': _pubkey_hex(pubkey),
-                        'in_keys_api': lido_key is not None,
-                        'in_beacon_state': validator_index is not None,
-                    }
+                raise ValueError(
+                    f'CSM top-up module {module_id}: queued key {_pubkey_hex(pubkey)} not resolvable '
+                    f'(in_keys_api={lido_key is not None}, in_beacon_state={validator_index is not None})'
                 )
-                continue
+
+            fields = beacon_data.validators_fields[validator_index]
             pending = beacon_data.pending_deposits.get(pubkey, 0)
-            balance = beacon_data.validators_fields[validator_index].effective_balance
-            topup_amount = target_balance_gwei - (balance + pending)
-            # Already at/near the target cap — the gateway would top up nothing; skip without budget.
-            if topup_amount < min_top_up_gwei:
-                logger.info({'msg': 'CSM top-up key skipped — already at target.', 'module_id': module_id, 'pubkey': _pubkey_hex(pubkey)})
-                continue
+            # We never drop a queued key (FIFO). A key the gateway will top up by 0 on-chain — one not
+            # active yet, slashed, exiting, or already at the target cap — still goes into the batch,
+            # but counts as spending nothing from the module allocation.
+            not_active = fields.activation_epoch > current_epoch
+            slashed = fields.slashed
+            exiting = fields.exit_epoch != FAR_FUTURE_EPOCH
+            topup_amount = target_balance_gwei - (fields.effective_balance + pending)
+            if not_active or slashed or exiting or topup_amount < min_top_up_gwei:
+                topup_amount = 0
+
             candidates.append(
                 TopUpCandidate(
                     validator_index=validator_index,

@@ -31,16 +31,23 @@ def _beacon_data(
     pubkey_to_index: dict[bytes, int],
     balances: dict[bytes, int] | None = None,
     pending: dict[bytes, int] | None = None,
+    slashed: set[bytes] | None = None,
+    exiting: set[bytes] | None = None,
+    not_active: set[bytes] | None = None,
 ) -> BeaconStateData:
     balances = balances or {}
+    slashed = slashed or set()
+    exiting = exiting or set()
+    not_active = not_active or set()
+    # slot 0 → current_epoch 0, so activation_epoch 1 makes a key "not active yet".
     validators_fields = {
         index: ValidatorFields(
             pubkey=pk,
             effective_balance=balances.get(pk, 0),
-            slashed=False,
+            slashed=pk in slashed,
             activation_eligibility_epoch=0,
-            activation_epoch=0,
-            exit_epoch=FAR_FUTURE_EPOCH,
+            activation_epoch=1 if pk in not_active else 0,
+            exit_epoch=1 if pk in exiting else FAR_FUTURE_EPOCH,
             withdrawable_epoch=FAR_FUTURE_EPOCH,
         )
         for pk, index in pubkey_to_index.items()
@@ -118,35 +125,30 @@ def test_empty_queue_returns_none():
 
 
 @pytest.mark.unit
-def test_skips_key_missing_in_keys_api():
+def test_raises_when_key_missing_in_keys_api():
     strategy, _ = _make_strategy([PK_A, PK_B])
     keys_api = Mock()
     keys_api.get_module_used_keys.return_value = [_lido_key(PK_A, 7, 11)]  # PK_B absent
-    beacon_data = _beacon_data({PK_A: 100, PK_B: 50}, balances={PK_A: 40, PK_B: 50})
-    result, build_proofs = _call(strategy, keys_api, beacon_data)
-    _, candidates = build_proofs.call_args.args
-    assert [c.pubkey for c in candidates] == [PK_A]
+    with pytest.raises(ValueError):
+        _call(strategy, keys_api, _beacon_data({PK_A: 100, PK_B: 50}, balances={PK_A: 40, PK_B: 50}))
 
 
 @pytest.mark.unit
-def test_skips_key_missing_in_beacon_state():
+def test_raises_when_key_missing_in_beacon_state():
     strategy, _ = _make_strategy([PK_A, PK_B])
     keys_api = Mock()
     keys_api.get_module_used_keys.return_value = [_lido_key(PK_A, 7, 11), _lido_key(PK_B, 8, 12)]
-    beacon_data = _beacon_data({PK_A: 100}, balances={PK_A: 40})  # PK_B not in state
-    result, build_proofs = _call(strategy, keys_api, beacon_data)
-    _, candidates = build_proofs.call_args.args
-    assert [c.pubkey for c in candidates] == [PK_A]
+    with pytest.raises(ValueError):
+        _call(strategy, keys_api, _beacon_data({PK_A: 100}, balances={PK_A: 40}))  # PK_B not in state
 
 
 @pytest.mark.unit
-def test_all_unresolvable_returns_none():
+def test_raises_when_key_unresolvable():
     strategy, _ = _make_strategy([PK_A])
     keys_api = Mock()
     keys_api.get_module_used_keys.return_value = []
-    result, build_proofs = _call(strategy, keys_api, _beacon_data({}))
-    assert result is None
-    build_proofs.assert_not_called()
+    with pytest.raises(ValueError):
+        _call(strategy, keys_api, _beacon_data({}))
 
 
 @pytest.mark.unit
@@ -167,24 +169,43 @@ def test_stops_at_module_allocation():
     keys_api.get_module_used_keys.return_value = [_lido_key(PK_A, 7, 11), _lido_key(PK_B, 8, 12)]
     beacon_data = _beacon_data({PK_A: 10, PK_B: 20}, balances={PK_A: 40, PK_B: 40})
 
-    result, build_proofs = _call(strategy, keys_api, beacon_data, module_allocation=Wei(65 * 10**9))
+    _, build_proofs = _call(strategy, keys_api, beacon_data, module_allocation=Wei(65 * 10**9))
 
     _, candidates = build_proofs.call_args.args
     assert [c.pubkey for c in candidates] == [PK_A]
 
 
 @pytest.mark.unit
-def test_skips_key_already_at_target_but_continues():
-    # PK_A is at the target cap (top-up 5 < min 10) → skipped, but the loop continues and takes PK_B.
+def test_at_target_key_kept_with_zero_topup():
+    # PK_A is at the target cap (top-up 5 < min 10) → kept in the FIFO batch with a 0 top-up; PK_B is
+    # funded normally. Nothing is dropped.
     strategy, _ = _make_strategy([PK_A, PK_B])
     keys_api = Mock()
     keys_api.get_module_used_keys.return_value = [_lido_key(PK_A, 7, 11), _lido_key(PK_B, 8, 12)]
     beacon_data = _beacon_data({PK_A: 10, PK_B: 20}, balances={PK_A: 95, PK_B: 40})
 
-    result, build_proofs = _call(strategy, keys_api, beacon_data)
+    _, build_proofs = _call(strategy, keys_api, beacon_data)
 
     _, candidates = build_proofs.call_args.args
-    assert [c.pubkey for c in candidates] == [PK_B]
+    assert [c.pubkey for c in candidates] == [PK_A, PK_B]  # sorted by validator_index
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize('kind', ['slashed', 'exiting', 'not_active'])
+def test_ineligible_kept_and_spends_no_budget(kind):
+    # An ineligible key (slashed / exiting / not active yet) stays in the FIFO batch but its top-up
+    # is 0, so it spends nothing from the allocation — PK_B is still funded within the tight budget.
+    strategy, _ = _make_strategy([PK_A, PK_B])
+    keys_api = Mock()
+    keys_api.get_module_used_keys.return_value = [_lido_key(PK_A, 7, 11), _lido_key(PK_B, 8, 12)]
+    beacon_data = _beacon_data({PK_A: 10, PK_B: 20}, balances={PK_A: 40, PK_B: 40}, **{kind: {PK_A}})
+
+    # Budget 65: had PK_A consumed its 60, only 5 would remain and PK_B would be cut — but PK_A is
+    # ineligible → 0 budget, so PK_B (60) is still funded.
+    _, build_proofs = _call(strategy, keys_api, beacon_data, module_allocation=Wei(65 * 10**9))
+
+    _, candidates = build_proofs.call_args.args
+    assert [c.pubkey for c in candidates] == [PK_A, PK_B]
 
 
 @pytest.mark.unit
