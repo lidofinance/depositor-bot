@@ -44,6 +44,7 @@ from metrics.metrics import (
     DEPOSITS_PAUSED,
     GUARDIAN_BALANCE,
     MODULE_ALLOCATION,
+    MODULE_CONTRACT_MISSING,
     MODULE_QUORUM_LAST_SEEN_TIMESTAMP,
     MODULE_STAKE,
     MODULE_STATUS,
@@ -356,6 +357,8 @@ class DepositorBot:
             }
         )
         for module_id in variables.DEPOSIT_MODULES_WHITELIST:
+            if not self._module_is_known(module_id):
+                continue
             # Probe gas-price strategy purely for metrics — gas is re-checked right before the tx is sent.
             self._select_strategy(module_id).is_gas_price_ok(module_id)
             # Route through _resolve_quorum (not a bare _get_quorum call) so QUORUM_STATE is refreshed
@@ -446,6 +449,8 @@ class DepositorBot:
             if digest['status'] != 0:  # only Active modules (replaces SR.canDeposit activity check)
                 continue
             if allocated[i] == 0:
+                continue
+            if not self._module_is_known(digest['module_id']):
                 continue
             candidates.append(
                 ModuleCandidate(
@@ -554,7 +559,12 @@ class DepositorBot:
     def _top_up_to_module(
         self, module_id: int, module_address: str, module_allocation: Wei, ensure_beacon_state: Callable[[], BeaconStateData]
     ) -> PhaseOutcome:
-        module_type = self.w3.lido.staking_module(module_id).get_type()
+        module = self.w3.lido.staking_module(module_id)
+        if module is None:
+            logger.warning({'msg': 'No contract for module, skip top-up.', 'module_id': module_id})
+            return PhaseOutcome.SKIPPED
+
+        module_type = module.get_type()
         strategy = self._select_topup_strategy(module_type)
         if strategy is None:
             logger.info(
@@ -745,9 +755,22 @@ class DepositorBot:
             GUARDIAN_BALANCE.labels(address=address, chain_id=chain_id).set(balance)
 
     def _select_strategy(self, module_id: int) -> DepositStrategy:
-        if self.w3.lido.staking_module(module_id).get_type() == MODULE_TYPE_CSM:
+        module = self.w3.lido.staking_module(module_id)
+        if module is not None and module.get_type() == MODULE_TYPE_CSM:
             return self._csm_strategy
         return self._general_strategy
+
+    def _module_is_known(self, module_id: int) -> bool:
+        known = self.w3.lido.staking_module(module_id) is not None
+        MODULE_CONTRACT_MISSING.labels(module_id).set(int(not known))
+        if not known:
+            logger.warning(
+                {
+                    'msg': 'Whitelisted module has no contract — skipped. Restart the bot once it is deployed.',
+                    'module_id': module_id,
+                }
+            )
+        return known
 
     def _get_quorum(self, module_id: int) -> list[DepositMessage] | None:
         """
