@@ -1,6 +1,7 @@
 from unittest.mock import MagicMock
 
 import pytest
+
 from blockchain.beacon_state.merkle_tree import (
     MerkleTree,
     compute_merkle_root_sparse,
@@ -26,9 +27,10 @@ from blockchain.beacon_state.state import (
     extract_consolidation_targets,
     extract_header_proof,
     extract_pending_deposits,
+    extract_state_data,
     extract_validator_proof,
     get_validators_hash_tree_roots,
-    load_beacon_state_data,
+    load_raw_beacon_state,
     verify_header_proof,
     verify_validator_proof,
 )
@@ -100,7 +102,7 @@ def test_verify_validator_and_header_proofs():
 
 
 @pytest.mark.unit
-def test_load_beacon_state_data_matches_fixture(top_up_proof_fixtures):
+def test_load_raw_and_extract_match_fixture(top_up_proof_fixtures):
     beacon_block_header = top_up_proof_fixtures['beacon_block_header']
     execution_block = top_up_proof_fixtures['execution_block']
     pubkeys = {bytes.fromhex(w['pubkey'][2:]) for w in top_up_proof_fixtures['validator_witnesses']}
@@ -121,7 +123,7 @@ def test_load_beacon_state_data_matches_fixture(top_up_proof_fixtures):
     }
     cl.get_beacon_state_ssz.return_value = top_up_proof_fixtures['beacon_state_ssz']
 
-    result = load_beacon_state_data(w3, cl, pubkeys)
+    result = extract_state_data(load_raw_beacon_state(w3, cl), pubkeys)
 
     assert result.slot == beacon_block_header[0]
     assert result.timestamp == execution_block['timestamp']

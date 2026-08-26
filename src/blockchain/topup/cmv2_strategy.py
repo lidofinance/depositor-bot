@@ -1,5 +1,6 @@
 import logging
 import time
+from collections.abc import Callable
 from enum import StrEnum
 from typing import cast
 
@@ -10,7 +11,7 @@ from blockchain.beacon_state.ssz_types import (
     FAR_FUTURE_EPOCH,
     SLOTS_PER_EPOCH,
 )
-from blockchain.beacon_state.state import BeaconStateData, ValidatorFields, load_beacon_state_data
+from blockchain.beacon_state.state import BeaconStateData, ValidatorFields, extract_state_data
 from blockchain.consolidation.indexer import ConsolidationIndexer
 from blockchain.contracts.cmv2 import CMV2Contract
 from blockchain.topup.proofs import build_topup_proofs
@@ -23,7 +24,6 @@ from metrics.metrics import (
     TOPUP_CONSOLIDATION_FILTERED,
     TOPUP_KEY_EXCLUDED,
 )
-from providers.consensus import ConsensusClient
 from providers.keys_api import KeysAPIClient, LidoKey
 
 logger = logging.getLogger(__name__)
@@ -74,7 +74,7 @@ class CMv2TopUpStrategy(TopUpStrategy):
     def get_topup_candidates(
         self,
         keys_api: KeysAPIClient,
-        cl: ConsensusClient,
+        ensure_beacon_state: Callable[[], BeaconStateData],
         module_id: int,
         module_address: str,
         module_allocation: Wei,
@@ -129,9 +129,10 @@ class CMv2TopUpStrategy(TopUpStrategy):
             logger.error({'msg': 'Consolidation base sync failed — skip top-up.', 'module_id': module_id, 'err': repr(e)})
             return None
 
-        # Step 4: load beacon state (anchors the proof slot; ~2 min)
+        # Step 4: slice the beacon state (loaded lazily and once per iteration; anchors the proof slot).
+        # ensure_beacon_state() does the heavy read on the first top-up that reaches here, then reuses it.
         all_pubkeys = _collect_pubkeys(keys_by_operator)
-        beacon_data = load_beacon_state_data(self.w3, cl, all_pubkeys)
+        beacon_data = extract_state_data(ensure_beacon_state(), all_pubkeys)
 
         # Step 5: read the fresh ADD-only tail (finalized -> latest) and build the pending filter set.
         try:
