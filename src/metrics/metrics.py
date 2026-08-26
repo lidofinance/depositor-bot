@@ -143,6 +143,14 @@ MODULE_STATUS = Gauge(
     namespace=PROMETHEUS_PREFIX,
 )
 
+MODULE_CONTRACT_MISSING = Gauge(
+    'module_contract_missing',
+    '1 when a whitelisted module has no contract known to the bot — not deployed at startup, or '
+    'deployed after it. The module is skipped every cycle until the bot is restarted.',
+    ['module_id'],
+    namespace=PROMETHEUS_PREFIX,
+)
+
 # --- Phase outcomes ---
 # States must stay in sync with bots.depositor.PhaseOutcome's values — kept as plain strings here
 # rather than imported, since metrics.py has no dependency on bots/ (importing it back would cycle).
@@ -350,6 +358,7 @@ for _module_id in DEPOSIT_MODULES_WHITELIST:
         MODULE_STAKE.labels(_module_id, _kind).set(0)
     POSSIBLE_DEPOSITS_AMOUNT.labels(_module_id).set(0)
     DEPOSIT_AMOUNT_OK.labels(_module_id).set(0)
+    MODULE_CONTRACT_MISSING.labels(_module_id).set(0)
 
 # Absent Gauges are indistinguishable from "feature disabled"; 0 is more honest.
 DEPOSITS_PAUSED.set(0)

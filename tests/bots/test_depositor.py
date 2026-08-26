@@ -141,6 +141,34 @@ class TestRefreshModulesState(unittest.TestCase):
         self.bot._get_quorum.assert_not_called()
         self.bot._select_strategy.assert_not_called()
 
+    def test_skips_module_without_contract(self):
+        self.bot.w3.lido.staking_module = Mock(side_effect=lambda module_id: None if module_id == 2 else MagicMock())
+        self.bot._get_quorum = Mock(return_value=None)
+        self.bot._select_strategy = Mock(return_value=Mock())
+
+        self.bot._refresh_modules_state()
+
+        called_ids = sorted(c.args[0] for c in self.bot._get_quorum.call_args_list)
+        self.assertEqual([1, 3], called_ids)
+
+    def test_missing_contract_metric_set_per_module(self):
+        self.bot.w3.lido.staking_module = Mock(side_effect=lambda module_id: None if module_id == 2 else MagicMock())
+        self.bot._get_quorum = Mock(return_value=None)
+        self.bot._select_strategy = Mock(return_value=Mock())
+
+        recorded = {}
+
+        def _labels(module_id):
+            child = Mock()
+            child.set = Mock(side_effect=lambda value: recorded.update({module_id: value}))
+            return child
+
+        with mock.patch('bots.depositor.MODULE_CONTRACT_MISSING') as gauge:
+            gauge.labels.side_effect = _labels
+            self.bot._refresh_modules_state()
+
+        self.assertEqual({1: 0, 2: 1, 3: 0}, recorded)
+
     def test_quorum_called_only_for_whitelisted(self):
         # Regression: previous implementation accidentally iterated all SR modules.
         variables.DEPOSIT_MODULES_WHITELIST = [1, 3]
@@ -291,6 +319,12 @@ class TestCollectCandidates(unittest.TestCase):
         # status: 0=Active (kept), 1=DepositsPaused, 2=Stopped (both skipped)
         digests = [_make_digest(1, '0xA1', 1, status=1), _make_digest(2, '0xA2', 1, status=0), _make_digest(3, '0xA3', 1, status=2)]
         cands = self.bot._collect_candidates(digests, 1, [50, 50, 50], [100, 100, 100])
+        self.assertEqual([2], [c.module_id for c in cands])
+
+    def test_filters_module_without_contract(self):
+        self.bot.w3.lido.staking_module = Mock(side_effect=lambda module_id: None if module_id == 1 else MagicMock())
+        digests = [_make_digest(1, '0xA1', 1), _make_digest(2, '0xA2', 1)]
+        cands = self.bot._collect_candidates(digests, 1, [50, 50], [100, 100])
         self.assertEqual([2], [c.module_id for c in cands])
 
     def test_builds_fields_and_stake(self):
@@ -1182,6 +1216,18 @@ def test_deposit_to_module_general_strategy_for_non_csm_module_type(depositor_bo
     depositor_bot._csm_strategy.is_gas_price_ok.assert_not_called()
 
 
+@pytest.mark.unit
+def test_deposit_to_module_general_strategy_when_module_unknown(depositor_bot):
+    depositor_bot.w3.lido.staking_module = Mock(return_value=None)
+    depositor_bot._csm_strategy.is_gas_price_ok = Mock(return_value=False)
+    depositor_bot._general_strategy.is_gas_price_ok = Mock(return_value=False)
+
+    depositor_bot._deposit_to_module(6)
+
+    depositor_bot._general_strategy.is_gas_price_ok.assert_called_once_with(6)
+    depositor_bot._csm_strategy.is_gas_price_ok.assert_not_called()
+
+
 # ─── _top_up_to_module ─────────────────────────────────────────────
 
 
@@ -1194,6 +1240,13 @@ def test_top_up_to_module_unknown_type_returns_false(depositor_bot):
     depositor_bot._select_topup_strategy = Mock(return_value=None)
 
     assert depositor_bot._top_up_to_module(1, '0xAddr', 50, Mock()) is PhaseOutcome.SKIPPED
+
+
+@pytest.mark.unit
+def test_top_up_to_module_without_contract_skips(depositor_bot):
+    depositor_bot.w3.lido.staking_module = Mock(return_value=None)
+
+    assert depositor_bot._top_up_to_module(6, '0xAddr', 50, Mock()) is PhaseOutcome.SKIPPED
 
 
 @pytest.mark.unit

@@ -188,18 +188,22 @@ Module-level gates (Prometheus, defined in `src/metrics/metrics.py`, set in `src
    (delegate rotated or revoked, contract terminated, role removed from both identities). Resolved
    before every early return in `_execute_actual()` (alongside `topup_gateway_paused`), so it stays
    trustworthy on idle iterations — an empty buffer would otherwise freeze it at its last value.
-3. `module_allocation_wei{module_id, kind="topup"} > 0`. Zero here is the single most common reason
+3. `module_contract_missing{module_id} == 0`. 1 means the module is whitelisted but the bot holds
+   no contract for it — it was not in the StakingRouter digests when the contract cache was built at
+   startup (not deployed yet, or deployed after the bot started). The module is skipped every cycle
+   until the bot is restarted; the cache is never rebuilt at runtime.
+4. `module_allocation_wei{module_id, kind="topup"} > 0`. Zero here is the single most common reason
    nothing happens — the StakingRouter allocation algorithm didn't route ETH to this module at all
    this cycle.
-4. `module_stake_wei{module_id, kind="topup"}` — lowest value across candidate modules goes first.
+5. `module_stake_wei{module_id, kind="topup"}` — lowest value across candidate modules goes first.
    Only **one** module is acted on per bot iteration (`_phase_full_and_topup` returns on the first
    non-`SKIPPED` outcome), so a module that lost the priority race this cycle never gets its
    `phase_outcome`/`quorum_state` touched — those stay at whatever they were last time this module
    *was* reached. Tell "evaluated and skipped" from "not reached this cycle" by comparing
    `phase_last_run_timestamp_seconds{phase="B", module_id}` against `module_allocation_wei`'s own
    freshness (both are set every cycle regardless of whether the module becomes a candidate).
-5. `topup_gas_ok{module_id}` / `topup_gas_fee_wei{type}`.
-6. `phase_outcome{phase="B", module_id} != wait_distance` (TopUpGateway block distance).
+6. `topup_gas_ok{module_id}` / `topup_gas_fee_wei{type}`.
+7. `phase_outcome{phase="B", module_id} != wait_distance` (TopUpGateway block distance).
 
 Key-level gates — module_id is now known, question narrows to pubkey X. Instrumented in
 `CMv2TopUpStrategy` (`src/blockchain/topup/cmv2_strategy.py`), evaluated in this order:
@@ -230,8 +234,8 @@ module's registry contract (NodeOperatorsRegistry / CSM), based on operator stak
 submission order. That logic lives outside this repo and this repo has no metric for it — don't go
 looking for one.
 
-Check, in order: `deposits_paused`, `depositable_ether`, `module_status{module_id}` +
-`module_allocation_wei{module_id, kind="seed"}`, `quorum_state{module_id}` (deposits require a
+Check, in order: `deposits_paused`, `depositable_ether`, `module_contract_missing{module_id}`,
+`module_status{module_id}` + `module_allocation_wei{module_id, kind="seed"}`, `quorum_state{module_id}` (deposits require a
 signed guardian quorum; top-ups don't — this gate has no equivalent on the top-up path),
 `phase_outcome{phase, module_id}`.
 

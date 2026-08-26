@@ -216,9 +216,9 @@ class LidoContracts(Module):
             )
         logger.debug({'msg': 'Loaded staking modules for whitelist.', 'ids': list(self._staking_module_cache.keys())})
 
-    def staking_module(self, module_id: int) -> StakingModuleContract:
-        """Returns the cached StakingModuleContract for the given module id."""
-        return self._staking_module_cache[module_id]
+    def staking_module(self, module_id: int) -> StakingModuleContract | None:
+        """Returns the cached StakingModuleContract for the given module id, or None if unknown."""
+        return self._staking_module_cache.get(module_id)
 
     def _load_topup_gateway(self):
         topup_gateway_address = self.lido_locator.top_up_gateway()

@@ -155,3 +155,20 @@ def test_delegates_explicit_block_bypasses_cache():
 
     assert lido._guardian_contract.call_count == 2
     assert lido._delegates_cache is None
+
+
+@pytest.mark.unit
+def test_staking_module_returns_none_for_unknown_module():
+    lido = LidoContracts.__new__(LidoContracts)
+    lido._staking_module_cache = {1: Mock()}
+
+    assert lido.staking_module(6) is None
+
+
+@pytest.mark.unit
+def test_staking_module_returns_cached_contract():
+    lido = LidoContracts.__new__(LidoContracts)
+    contract = Mock()
+    lido._staking_module_cache = {1: contract}
+
+    assert lido.staking_module(1) is contract
