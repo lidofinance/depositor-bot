@@ -587,11 +587,23 @@ class DepositorBot:
             variables.MAX_VALIDATORS_PER_TOP_UP,
             self.w3.lido.topup_gateway.get_max_validators_per_top_up(),
         )
+
+        # SR.topUp funds a module at most min(allocation, maxTopUpPerBlockGwei) per call, and
+        # getDepositAllocations does NOT apply this cap. Without capping here, a module can be handed
+        # more full-fund keys than the cap covers: CSM's FIFO queue then reverts UnexpectedExtraKey
+        # (a non-last key ends up partial), while CMv2 silently under-fills. Cap so both strategies
+        # plan within what actually gets funded this block.
+        cap_wei = Wei(cast(StakingRouterContractV4, self.w3.lido.staking_router).get_max_top_up_per_block_gwei() * 10**9)
+        raw_allocation = module_allocation
+        module_allocation = Wei(min(module_allocation, cap_wei))
+
         logger.info(
             {
                 'msg': 'Top-up: collecting candidates.',
                 'module_id': module_id,
                 'module_allocation': int(module_allocation),
+                'raw_allocation': int(raw_allocation),
+                'max_top_up_per_block_wei': int(cap_wei),
                 'max_validators': max_validators,
             }
         )
@@ -610,6 +622,10 @@ class DepositorBot:
             return PhaseOutcome.SKIPPED
 
         tx = self.w3.lido.topup_gateway.top_up(module_id, proof_data)
+        try:
+            logger.info({'msg': 'DEBUG topUp calldata (inner, pre-wrap).', 'module_id': module_id, 'data': tx._encode_transaction_data()})
+        except Exception as _e:
+            logger.info({'msg': 'DEBUG topUp calldata encode failed.', 'err': repr(_e)})
         # When TOP_UP_ROLE sits on the delegation contract rather than on the bot's key, wrapping must
         # happen before check()/send() so the dry-run and the gas estimate cover the delegated call —
         # the unwrapped one would revert with AccessControlUnauthorizedAccount.
