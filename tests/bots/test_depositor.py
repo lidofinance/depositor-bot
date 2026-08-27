@@ -826,6 +826,9 @@ def depositor_bot(
             )
         bot.w3.lido.deposit_security_module.is_deposits_paused = Mock(return_value=False)
         bot.w3.lido.topup_gateway.is_paused = Mock(return_value=False)
+        # Huge SR per-block top-up cap so _top_up_to_module never caps in these tests; the cap itself
+        # is covered by TestTopUpToModuleCap.
+        bot.w3.lido.staking_router.get_max_top_up_per_block_gwei = Mock(return_value=10**18)
         yield bot
 
 
@@ -1029,6 +1032,44 @@ def test_execute_actual_both_phases_return_false(depositor_bot):
     depositor_bot._phase_seed = Mock(return_value=PhaseOutcome.SKIPPED)
 
     assert depositor_bot._execute_actual() is False
+
+
+@pytest.mark.unit
+class TestTopUpToModuleCap(unittest.TestCase):
+    """_top_up_to_module caps the allocation at the SR per-block top-up limit before the strategy,
+    so both CMv2 and CSM plan within what SR.topUp will actually fund in one call."""
+
+    def setUp(self):
+        self.bot = _make_bot()
+        module = MagicMock()
+        module.get_type.return_value = MODULE_TYPE_CMV2
+        self.bot.w3.lido.staking_module = Mock(return_value=module)
+        self.bot.w3.lido.topup_gateway.get_max_validators_per_top_up.return_value = 32
+        # Strategy returns None so we assert on what it received, without proof/tx machinery.
+        self.strategy = MagicMock()
+        self.strategy.is_gas_price_ok.return_value = True
+        self.strategy.get_topup_candidates.return_value = None
+        self.bot._select_topup_strategy = Mock(return_value=self.strategy)
+
+    def _allocation_passed_to_strategy(self):
+        return self.strategy.get_topup_candidates.call_args.args[4]
+
+    def test_allocation_above_cap_is_capped(self):
+        # cap 3200 ETH < raw 9696 ETH → strategy gets 3200 ETH.
+        self.bot.w3.lido.staking_router.get_max_top_up_per_block_gwei.return_value = 3200 * 10**9
+
+        outcome = self.bot._top_up_to_module(1, '0xA1', Wei(9696 * 10**18), Mock())
+
+        self.assertEqual(PhaseOutcome.SKIPPED, outcome)
+        self.assertEqual(Wei(3200 * 10**18), self._allocation_passed_to_strategy())
+
+    def test_allocation_below_cap_passes_through(self):
+        # cap 3200 ETH > raw 100 ETH → strategy gets the raw 100 ETH unchanged.
+        self.bot.w3.lido.staking_router.get_max_top_up_per_block_gwei.return_value = 3200 * 10**9
+
+        self.bot._top_up_to_module(1, '0xA1', Wei(100 * 10**18), Mock())
+
+        self.assertEqual(Wei(100 * 10**18), self._allocation_passed_to_strategy())
 
 
 @pytest.mark.unit
