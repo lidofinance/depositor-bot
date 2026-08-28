@@ -342,6 +342,34 @@ class TestCollectCandidates(unittest.TestCase):
         self.assertEqual([0, 1, 2], [c.digest_index for c in cands])
         self.assertEqual([1, 2, 3], [c.module_id for c in cands])
 
+    def test_zero_allocation_csm_kept_with_flush_flag(self):
+        # A CSM 0x02 module at zero allocation is kept when allow_csm_flush=True, so its queue can be flushed.
+        module = MagicMock()
+        module.get_type.return_value = MODULE_TYPE_CSM
+        self.bot.w3.lido.staking_module = Mock(return_value=module)
+        digests = [_make_digest(1, '0xA1', 2)]
+        cands = self.bot._collect_candidates(digests, 2, [0], [100], allow_csm_flush=True)
+        self.assertEqual([1], [c.module_id for c in cands])
+        self.assertEqual(0, cands[0].allocation)
+
+    def test_zero_allocation_csm_dropped_without_flush_flag(self):
+        # Without the flag the default zero-allocation filter still drops it.
+        module = MagicMock()
+        module.get_type.return_value = MODULE_TYPE_CSM
+        self.bot.w3.lido.staking_module = Mock(return_value=module)
+        digests = [_make_digest(1, '0xA1', 2)]
+        cands = self.bot._collect_candidates(digests, 2, [0], [100])
+        self.assertEqual([], [c.module_id for c in cands])
+
+    def test_zero_allocation_non_csm_dropped_even_with_flush_flag(self):
+        # A non-CSM 0x02 module (e.g. CMv2) at zero allocation is dropped even with the flag.
+        module = MagicMock()
+        module.get_type.return_value = MODULE_TYPE_CMV2
+        self.bot.w3.lido.staking_module = Mock(return_value=module)
+        digests = [_make_digest(1, '0xA1', 2)]
+        cands = self.bot._collect_candidates(digests, 2, [0], [100], allow_csm_flush=True)
+        self.assertEqual([], [c.module_id for c in cands])
+
 
 # ─── _phase_seed ───────────────────────────────────────────────────
 
@@ -699,6 +727,21 @@ class TestPhaseFullAndTopup(unittest.TestCase):
 
         self.assertEqual(PhaseOutcome.SENT, outcome)
         self.bot._top_up_to_module.assert_called_once_with(1, '0xA1', 42, mock.ANY)
+
+    def test_csm_zero_topup_allocation_still_reaches_top_up_for_flush(self):
+        # A CSM 0x02 module with zero top-up allocation must still reach _top_up_to_module so its queue
+        # can be flushed — verifies _phase_full_and_topup wires allow_csm_flush through.
+        module = MagicMock()
+        module.get_type.return_value = MODULE_TYPE_CSM
+        self.bot.w3.lido.staking_module = Mock(return_value=module)
+        self.bot._top_up_to_module = Mock(return_value=PhaseOutcome.SENT)
+        digests = [_make_digest(1, '0xA1', 2)]
+        self._set_topup_allocation([0], [100])  # zero top-up allocation
+
+        outcome = self.bot._phase_full_and_topup(Wei(100), [0], [0], digests, top_up_enabled=True)
+
+        self.assertEqual(PhaseOutcome.SENT, outcome)
+        self.bot._top_up_to_module.assert_called_once_with(1, '0xA1', 0, mock.ANY)
 
     # ─── 0x01 branch ───────────────────────────────────────────
 
