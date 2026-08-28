@@ -28,6 +28,14 @@ from providers.keys_api import KeysAPIClient, LidoKey
 
 logger = logging.getLogger(__name__)
 
+# Module-tracked balance at/above which allocateDeposits returns 0 — drop such keys to avoid a
+# "Zero TopUp" loop when their CL balance later slips below the cap. Module-internal, not on-chain.
+MAX_EFFECTIVE_BALANCE_0x02 = 2048
+MIN_ACTIVATION_BALANCE = 32
+TOP_UP_STEP = 2
+
+TOP_UPPED_MAXIMUM = (MAX_EFFECTIVE_BALANCE_0x02 - MIN_ACTIVATION_BALANCE - TOP_UP_STEP) * 10**18  # 2014 ETH, in wei
+
 
 class TopUpExclusionReason(StrEnum):
     """Stable per-key exclusion reasons — used for both the per-cycle log line and TOPUP_KEY_EXCLUDED.
@@ -44,6 +52,7 @@ class TopUpExclusionReason(StrEnum):
     EXITING = 'exiting'
     BEACON_CONSOLIDATION_TARGET = 'beacon_consolidation_target'
     ALREADY_AT_TARGET_BALANCE = 'already_at_target_balance'
+    MODULE_KEY_FULL = 'module_key_full'
     PENDING_CONSOLIDATION_BUS = 'pending_consolidation_bus'
     OPERATOR_BUDGET_EXHAUSTED = 'operator_budget_exhausted'
     TRUNCATED_BY_MAX_VALIDATORS = 'truncated_by_max_validators'
@@ -172,7 +181,14 @@ class CMv2TopUpStrategy(TopUpStrategy):
 
         for op_id, op_allocation in allocation_by_operator.items():
             op_candidates, filtered = _select_operator_candidates(
-                keys_by_operator[op_id], op_allocation, beacon_data, pending_consolidation, target_balance_gwei, min_top_up_gwei, module_id
+                cmv2,
+                keys_by_operator[op_id],
+                op_allocation,
+                beacon_data,
+                pending_consolidation,
+                target_balance_gwei,
+                min_top_up_gwei,
+                module_id,
             )
             if op_candidates:
                 candidates_by_operator[op_id] = op_candidates
@@ -239,7 +255,32 @@ def _collect_pubkeys(keys_by_operator: dict[int, list[LidoKey]]) -> set[bytes]:
     return result
 
 
+def _drop_module_full_keys(cmv2: CMV2Contract, eligible: list[TopUpCandidate], module_id: int) -> list[TopUpCandidate]:
+    """Drop keys the module already topped up to TOP_UPPED_MAXIMUM — it would return a 0 top-up.
+
+    One batch read per operator over the eligible keys' index range: start = min(index),
+    count = max(index) - min(index) + 1, so every checked key falls inside the range and no per-key
+    call is made. Skipped entirely when there are no eligible keys.
+    """
+    if not eligible:
+        return eligible
+    operator_id = eligible[0].operator_id
+    indices = [c.key_index for c in eligible]
+    start = min(indices)
+    count = max(indices) - start + 1
+    allocated = cmv2.get_key_allocated_balances(operator_id, start, count)
+
+    kept: list[TopUpCandidate] = []
+    for c in eligible:
+        if allocated[c.key_index - start] >= TOP_UPPED_MAXIMUM:
+            _log_excluded_key(module_id, c.operator_id, _pubkey_hex(c.pubkey), TopUpExclusionReason.MODULE_KEY_FULL)
+            continue
+        kept.append(c)
+    return kept
+
+
 def _select_operator_candidates(
+    cmv2: CMV2Contract,
     keys: list[LidoKey],
     allocation: int,
     beacon_data: BeaconStateData,
@@ -266,6 +307,9 @@ def _select_operator_candidates(
             _log_excluded_key(module_id, candidate.operator_id, key.key, TopUpExclusionReason.PENDING_CONSOLIDATION_BUS)
             continue
         eligible.append(candidate)
+
+    # Drop keys the module already topped up to its cap (CL balance can lag behind the module's).
+    eligible = _drop_module_full_keys(cmv2, eligible, module_id)
 
     eligible.sort(key=lambda c: c.validator_index)
     selected = _take_up_to_allocation(eligible, allocation, beacon_data, target_balance_gwei, min_top_up_gwei, module_id)

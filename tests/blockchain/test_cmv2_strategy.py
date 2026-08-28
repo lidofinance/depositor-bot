@@ -19,10 +19,12 @@ from blockchain.beacon_state.ssz_types import (
 )
 from blockchain.beacon_state.state import BeaconStateData, ValidatorFields
 from blockchain.topup.cmv2_strategy import (
+    TOP_UPPED_MAXIMUM,
     CMv2TopUpStrategy,
     _build_candidate_if_eligible,
     _collect_pubkeys,
     _distribute,
+    _drop_module_full_keys,
     _log_excluded_key,
     _select_operator_candidates,
     _take_up_to_allocation,
@@ -111,6 +113,7 @@ def test_get_cmv2_topup_candidates_builds_proofs_from_fixture_data(top_up_proof_
         [11, 12],
         [16 * 10**18, 16 * 10**18],
     )
+    cmv2_contract.get_key_allocated_balances.return_value = [0]  # below the cap → keys are kept
     w3.eth.contract.return_value = cmv2_contract
 
     keys_api = Mock()
@@ -159,6 +162,7 @@ def _make_topup_setup(top_up_proof_fixtures):
     w3.lido.topup_gateway.get_min_top_up_gwei.return_value = MIN_TOP_UP_GWEI
     cmv2_contract = Mock()
     cmv2_contract.get_deposits_allocation.return_value = (32 * 10**18, [11, 12], [16 * 10**18, 16 * 10**18])
+    cmv2_contract.get_key_allocated_balances.return_value = [0]  # below the cap → keys are kept
     w3.eth.contract.return_value = cmv2_contract
 
     keys_api = Mock()
@@ -360,8 +364,10 @@ def test_select_operator_candidates_sorts_by_key_index():
             side_effect=lambda candidates, allocation, beacon, target, min_top_up, module_id: candidates,
         ) as take,
     ):
+        cmv2 = Mock()
+        cmv2.get_key_allocated_balances.return_value = [0, 0]  # indices 7,8 below cap → kept
         result, consolidation_filtered = _select_operator_candidates(
-            keys, 16 * 10**18, beacon_data, set(), TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI, 1
+            cmv2, keys, 16 * 10**18, beacon_data, set(), TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI, 1
         )
 
     assert [candidate.key_index for candidate in result] == [7, 8]
@@ -378,7 +384,7 @@ def test_select_operator_candidates_counts_consolidation_filtered(top_up_proof_f
     key = _make_key(witness['pubkey'], 7, 11)
 
     result, consolidation_filtered = _select_operator_candidates(
-        [key], 32 * 10**18, beacon_data, {pubkey}, TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI, 1
+        Mock(), [key], 32 * 10**18, beacon_data, {pubkey}, TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI, 1
     )
 
     assert result == []
@@ -527,7 +533,7 @@ def test_select_operator_candidates_logs_ineligible_reason(top_up_proof_fixtures
     key = _make_key('0x' + '33' * 48, 7, 11)  # not in beacon state
 
     with patch('blockchain.topup.cmv2_strategy._log_excluded_key') as log_excluded:
-        _select_operator_candidates([key], 32 * 10**18, beacon_data, set(), TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI, module_id=5)
+        _select_operator_candidates(Mock(), [key], 32 * 10**18, beacon_data, set(), TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI, module_id=5)
 
     log_excluded.assert_called_once_with(5, 11, key.key, 'not_in_beacon_state')
 
@@ -540,7 +546,7 @@ def test_select_operator_candidates_logs_pending_consolidation_reason(top_up_pro
     key = _make_key(witness['pubkey'], 7, 11)
 
     with patch('blockchain.topup.cmv2_strategy._log_excluded_key') as log_excluded:
-        _select_operator_candidates([key], 32 * 10**18, beacon_data, {pubkey}, TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI, module_id=5)
+        _select_operator_candidates(Mock(), [key], 32 * 10**18, beacon_data, {pubkey}, TARGET_BALANCE_GWEI, MIN_TOP_UP_GWEI, module_id=5)
 
     log_excluded.assert_called_once_with(5, 11, key.key, 'pending_consolidation_bus')
 
@@ -572,3 +578,28 @@ def test_take_up_to_allocation_logs_already_at_target_balance():
 
     assert result == []
     log_excluded.assert_called_once_with(5, 11, '0x61', 'already_at_target_balance')
+
+
+@pytest.mark.unit
+def test_drop_module_full_keys_excludes_at_or_above_cap():
+    # key_index 5 is topped up to the module cap → dropped; key_index 7 still has room → kept.
+    cmv2 = Mock()
+    # start = min(5, 7) = 5, count = 7 - 5 + 1 = 3 → balances for indices 5, 6, 7
+    cmv2.get_key_allocated_balances.return_value = [TOP_UPPED_MAXIMUM, 0, 0]
+    eligible = [
+        TopUpCandidate(validator_index=0, key_index=5, operator_id=11, pubkey=b'\x05' * 48, pending_balance=0),
+        TopUpCandidate(validator_index=1, key_index=7, operator_id=11, pubkey=b'\x07' * 48, pending_balance=0),
+    ]
+
+    kept = _drop_module_full_keys(cmv2, eligible, module_id=1)
+
+    assert [c.key_index for c in kept] == [7]
+    # one batch read covering every checked key: start = min index, count = max - min + 1
+    cmv2.get_key_allocated_balances.assert_called_once_with(11, 5, 3)
+
+
+@pytest.mark.unit
+def test_drop_module_full_keys_no_read_when_empty():
+    cmv2 = Mock()
+    assert _drop_module_full_keys(cmv2, [], module_id=1) == []
+    cmv2.get_key_allocated_balances.assert_not_called()
