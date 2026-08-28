@@ -23,6 +23,7 @@ from blockchain.topup.cmv2_strategy import (
     _build_candidate_if_eligible,
     _collect_pubkeys,
     _distribute,
+    _drop_repeated_pubkeys,
     _log_excluded_key,
     _select_operator_candidates,
     _take_up_to_allocation,
@@ -572,3 +573,88 @@ def test_take_up_to_allocation_logs_already_at_target_balance():
 
     assert result == []
     log_excluded.assert_called_once_with(5, 11, '0x61', 'already_at_target_balance')
+
+
+# ─── repeated Keys API records ─────────────────────────────────────
+
+
+@pytest.mark.unit
+def test_drop_repeated_pubkeys_leaves_clean_input_untouched():
+    keys = {11: [_make_key('0xaa', 1, 11), _make_key('0xbb', 2, 11)], 12: [_make_key('0xcc', 3, 12)]}
+    assert _drop_repeated_pubkeys(keys, module_id=1) == keys
+
+
+@pytest.mark.unit
+def test_drop_repeated_pubkeys_drops_byte_identical_rows_too():
+    """The Keys API cannot produce this — (index, operatorIndex, moduleAddress) is its primary key.
+    Kept as a safety property: if a serialization bug ever duplicated a row, dropping both is the
+    safe degradation, never a batch-wide revert.
+    """
+    with patch('blockchain.topup.cmv2_strategy._log_excluded_key'):
+        result = _drop_repeated_pubkeys({11: [_make_key('0xaa', 1, 11), _make_key('0xaa', 1, 11)]}, module_id=1)
+    assert result == {11: []}
+
+
+@pytest.mark.unit
+def test_drop_repeated_pubkeys_drops_pubkey_claimed_by_two_operators():
+    """Attribution is passed on to the module as (operatorId, keyIndex), so guessing is not safe."""
+    with patch('blockchain.topup.cmv2_strategy._log_excluded_key') as log_excluded:
+        result = _drop_repeated_pubkeys({11: [_make_key('0xaa', 1, 11)], 12: [_make_key('0xaa', 4, 12)]}, module_id=1)
+
+    assert result == {11: [], 12: []}
+    assert [c.args[1:] for c in log_excluded.call_args_list] == [
+        (11, '0xaa', 'conflicting_key_record'),
+        (12, '0xaa', 'conflicting_key_record'),
+    ]
+
+
+@pytest.mark.unit
+def test_drop_repeated_pubkeys_drops_pubkey_with_two_key_indices():
+    """Same operator, same pubkey, different key index — needs no API bug: `key` has no unique
+    constraint, only (index, operatorIndex, moduleAddress) does. This is the realistic trigger.
+    """
+    with patch('blockchain.topup.cmv2_strategy._log_excluded_key'):
+        result = _drop_repeated_pubkeys({11: [_make_key('0xaa', 1, 11), _make_key('0xaa', 2, 11)]}, module_id=1)
+    assert result == {11: []}
+
+
+@pytest.mark.unit
+def test_drop_repeated_pubkeys_keeps_other_keys_of_a_conflicted_operator():
+    with patch('blockchain.topup.cmv2_strategy._log_excluded_key'):
+        result = _drop_repeated_pubkeys(
+            {11: [_make_key('0xaa', 1, 11), _make_key('0xbb', 2, 11)], 12: [_make_key('0xaa', 4, 12)]}, module_id=1
+        )
+    assert result == {11: [_make_key('0xbb', 2, 11)], 12: []}
+
+
+@pytest.mark.unit
+def test_get_topup_candidates_never_emits_duplicate_validator_index(top_up_proof_fixtures):
+    """TopUpGateway reverts a batch whose validatorIndices are not strictly increasing
+    (`validatorIndex <= prevValidatorIndex` -> InvalidValidatorIndicesSortOrder), which would deny
+    the module's whole top-up. A repeated Keys API record must not be able to produce that batch.
+    """
+    strategy, keys_api, beacon_data = _make_topup_setup(top_up_proof_fixtures)
+    witnesses = top_up_proof_fixtures['validator_witnesses']
+    key_1 = _make_key(witnesses[0]['pubkey'], 7, 11)
+    key_2 = _make_key(witnesses[1]['pubkey'], 8, 12)
+    # Operator 11 holds the same pubkey at a second key index — the shape the API's schema allows.
+    keys_api.get_module_operator_used_keys.return_value = {11: [key_1, _make_key(witnesses[0]['pubkey'], 9, 11)], 12: [key_2]}
+    # The fixture validators sit at 32 ETH, so one top-up costs ~2014 ETH. The default 16 ETH per
+    # operator would drop the repeat as OPERATOR_BUDGET_EXHAUSTED and hide the bug, so fund both.
+    big = 5_000 * 10**18
+    strategy.w3.eth.contract.return_value.get_deposits_allocation.return_value = (2 * big, [11, 12], [big, big])
+
+    consolidation_indexer = Mock()
+    consolidation_indexer.sync_base_to_finalized.return_value = 100
+    consolidation_indexer.get_filter_set.return_value = set()
+
+    result = _call_topup(strategy, keys_api, beacon_data, consolidation_indexer)
+
+    assert result is not None
+    indices = result.validator_indices
+    assert len(indices) == len(set(indices)), 'duplicate validator index reached the payload'
+    assert indices == sorted(indices), 'validator indices must be strictly increasing'
+    assert result.key_indices == [8], 'both copies of the repeated pubkey must be dropped'
+    assert result.operator_ids == [12]
+    assert result.key_indices == [8], 'both copies of the repeated pubkey must be dropped'
+    assert result.operator_ids == [12]
