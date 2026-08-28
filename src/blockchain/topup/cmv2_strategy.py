@@ -28,14 +28,13 @@ from providers.keys_api import KeysAPIClient, LidoKey
 
 logger = logging.getLogger(__name__)
 
-# A key whose module-tracked top-up balance is at least this much will not be topped up any further —
-# the module's allocateDeposits returns 0 for it. This guards the divergence between CL and module
-# balances: the module already topped a validator to its cap, but its CL balance later slipped
-# (inactivity / slashing) below the 2044.75 CL cap, so the bot's CL check would re-select it — yet the
-# module returns 0, looping a "Zero TopUp" alert every cycle. Equals the module cap
-# MAX_EFFECTIVE_BALANCE − MIN_ACTIVATION_BALANCE − TOP_UP_STEP; those are internal library `constant`s
-# in the module, not exposed on-chain, so the value is hardcoded here.
-TOP_UPPED_MAXIMUM = (2048 - 32 - 2) * 10**18  # 2014 ETH, in wei
+# Module-tracked balance at/above which allocateDeposits returns 0 — drop such keys to avoid a
+# "Zero TopUp" loop when their CL balance later slips below the cap. Module-internal, not on-chain.
+MAX_EFFECTIVE_BALANCE_0x02 = 2048
+MIN_ACTIVATION_BALANCE = 32
+TOP_UP_STEP = 2
+
+TOP_UPPED_MAXIMUM = (MAX_EFFECTIVE_BALANCE_0x02 - MIN_ACTIVATION_BALANCE - TOP_UP_STEP) * 10**18  # 2014 ETH, in wei
 
 
 class TopUpExclusionReason(StrEnum):
