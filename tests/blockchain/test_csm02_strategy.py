@@ -138,13 +138,14 @@ def test_empty_queue_returns_none():
 
 
 @pytest.mark.unit
-def test_fundable_head_below_min_allocation_skips():
-    # A fundable head (positive gateway limit) with allocation below a minimal top-up → nothing to
-    # fund and nothing to flush → skip.
+@pytest.mark.parametrize('allocation', [Wei(0), Wei(5 * 10**9)])  # zero and below-min: same skip branch
+def test_fundable_head_without_enough_allocation_skips(allocation):
+    # A fundable head (positive gateway limit) with allocation below a minimal top-up (0 included) →
+    # nothing to fund and nothing to flush → skip, so the bot moves on to the next module.
     strategy, _ = _make_strategy([PK_A])
     keys_api = Mock()
     keys_api.get_module_used_keys.return_value = [_lido_key(PK_A, 7, 11)]
-    result, build_proofs = _call(strategy, keys_api, _beacon_data({PK_A: 5}), module_allocation=Wei(5 * 10**9))
+    result, build_proofs = _call(strategy, keys_api, _beacon_data({PK_A: 5}), module_allocation=allocation)
     assert result is None
     build_proofs.assert_not_called()
 
