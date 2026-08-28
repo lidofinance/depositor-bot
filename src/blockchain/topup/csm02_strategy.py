@@ -5,7 +5,7 @@ from typing import cast
 
 from web3.types import Wei
 
-from blockchain.beacon_state.ssz_types import SLOTS_PER_EPOCH
+from blockchain.beacon_state.ssz_types import FAR_FUTURE_EPOCH, SLOTS_PER_EPOCH
 from blockchain.beacon_state.state import BeaconStateData, extract_state_data
 from blockchain.consolidation.indexer import ConsolidationIndexer
 from blockchain.contracts.csm02 import CSM02Contract
@@ -25,18 +25,19 @@ def _pubkey_hex(pubkey: bytes) -> str:
 class CSM02TopUpStrategy(TopUpStrategy):
     """Top-up strategy for a community-onchain-v1 (CSM) module with 0x02 withdrawal credentials.
 
-    We bring a single validator per top-up: it keeps the queue handling simple and avoids the
-    validator-index ordering problem for the TopUpGateway input. With one key several checks fall away:
+    Bring a single validator per top-up — the queue head — which keeps queue handling simple and
+    avoids the validator-index ordering problem for the TopUpGateway input.
 
-    - target / slashed / exiting: the gateway derives the real limit from the proof and returns 0 for
-      these, so a single last key is accepted at any amount and just flushes from the queue;
-    - cross-key budget: one key can never overrun the SR per-block cap.
+    Cases:
 
-    We do keep the "activated" check: we don't top up validators that are not active yet, so a
-    non-active queue head is skipped and we move on to the next module (it stays in the queue until
-    it activates).
-
-    The only budget check left is that the (SR-capped) allocation covers a minimal single-key top-up.
+    - head is slashed / marked for exit / at target / top-up to reach target < min top-up: the gateway
+      sets its limit to 0, so submitting it flushes it from the queue. With budget we flush to reach
+      the fundable keys behind it; at zero budget we flush only when the queue is full — the one case
+      where it unblocks anything (a full queue caps the module's seed capacity to zero via
+      getStakingModuleSummary and blocks all new deposits until the queue is drained);
+    - otherwise the head needs a real top-up and allocation >= min top-up: send tx (value top-up);
+    - skip: head not on the beacon chain yet / not past its activation epoch / not in the Keys API /
+      a fundable head with no budget / a zero-limit head at zero budget while the queue still has room.
     """
 
     def get_topup_candidates(
@@ -62,21 +63,6 @@ class CSM02TopUpStrategy(TopUpStrategy):
         if not pubkeys:
             TOPUP_CANDIDATES_SELECTED.labels(module_id).set(0)
             logger.info({'msg': 'No keys from CSM top-up queue.', 'module_id': module_id})
-            return None
-
-        # The (already SR-capped) allocation must cover at least a minimal single-key top-up, else the
-        # module quantizes it toward zero and the tx does nothing.
-        min_top_up_gwei = self.w3.lido.topup_gateway.get_min_top_up_gwei()
-        if module_allocation // 10**9 < min_top_up_gwei:
-            TOPUP_CANDIDATES_SELECTED.labels(module_id).set(0)
-            logger.info(
-                {
-                    'msg': 'CSM top-up: allocation below a minimal single-key top-up, skip.',
-                    'module_id': module_id,
-                    'module_allocation': int(module_allocation),
-                    'min_top_up_gwei': min_top_up_gwei,
-                }
-            )
             return None
 
         pubkey = pubkeys[0]
@@ -113,12 +99,51 @@ class CSM02TopUpStrategy(TopUpStrategy):
             logger.warning({'msg': 'CSM top-up: queued key not in Keys API, skip.', 'module_id': module_id, 'pubkey': _pubkey_hex(pubkey)})
             return None
 
+        # Classify the head against the gateway limit (mirrors TopUpGateway._evaluateTopUpLimit) to
+        # pick the flush path from the value path.
+        gateway = self.w3.lido.topup_gateway
+        target_balance_gwei = gateway.get_target_balance_gwei()
+        min_top_up_gwei = gateway.get_min_top_up_gwei()
+        pending = beacon_data.pending_deposits.get(pubkey, 0)
+        headroom_gwei = target_balance_gwei - (fields.effective_balance + pending)
+        # A 0 gateway limit → the module dequeues the head at any budget (flush). Otherwise the head
+        # needs a real top-up, which needs allocation.
+        head_is_zero_limit = fields.slashed or fields.exit_epoch != FAR_FUTURE_EPOCH or headroom_gwei < min_top_up_gwei
+
+        # No budget for a value top-up. Whether we still submit depends on the head and the queue.
+        if module_allocation // 10**9 < min_top_up_gwei:
+            if not head_is_zero_limit:
+                # Fundable head, nothing to flush — wait for allocation.
+                TOPUP_CANDIDATES_SELECTED.labels(module_id).set(0)
+                logger.info(
+                    {
+                        'msg': 'CSM top-up: fundable head but allocation below a minimal top-up, skip.',
+                        'module_id': module_id,
+                        'module_allocation': int(module_allocation),
+                        'min_top_up_gwei': min_top_up_gwei,
+                    }
+                )
+                return None
+            if csm.get_top_up_queue_capacity() > 0:
+                # A zero-limit head with a 0 budget is only worth flushing to unblock seed — and seed is
+                # blocked only by a full queue. Free seats left → nothing to unblock, don't burn gas.
+                TOPUP_CANDIDATES_SELECTED.labels(module_id).set(0)
+                logger.info(
+                    {
+                        'msg': 'CSM top-up: zero-limit head but queue is not full — no seed to unblock, skip.',
+                        'module_id': module_id,
+                        'pubkey': _pubkey_hex(pubkey),
+                    }
+                )
+                return None
+            # Zero-limit head + full queue → flush to unblock seed (fall through to build).
+
         candidate = TopUpCandidate(
             validator_index=validator_index,
             key_index=lido_key.index,
             operator_id=lido_key.operatorIndex,
             pubkey=pubkey,
-            pending_balance=beacon_data.pending_deposits.get(pubkey, 0),
+            pending_balance=pending,
         )
         TOPUP_CANDIDATES_SELECTED.labels(module_id).set(1)
         logger.info(
@@ -129,6 +154,7 @@ class CSM02TopUpStrategy(TopUpStrategy):
                 'key_index': lido_key.index,
                 'validator_index': validator_index,
                 'pubkey': _pubkey_hex(pubkey),
+                'flush': head_is_zero_limit,
             }
         )
         return build_topup_proofs(beacon_data, [candidate])

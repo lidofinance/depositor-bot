@@ -432,13 +432,20 @@ class DepositorBot:
             MODULE_STAKE.labels(module_id, kind).set(new[i] - allocated[i])
 
     def _collect_candidates(
-        self, digests: list[StakingModuleInfo], wc_type: int, allocated: list[int], new: list[int]
+        self,
+        digests: list[StakingModuleInfo],
+        wc_type: int,
+        allocated: list[int],
+        new: list[int],
+        allow_csm_flush: bool = False,
     ) -> list[ModuleCandidate]:
         """Select whitelisted modules of one wc_type that have a non-zero allocation, and build their
         candidate entries (stake = new - allocated, used for ordering).
 
         Single type per call — the mixed (full + top-up) phase calls it once per type and merges.
         Sorting and logging stay in the caller.
+
+        allow_csm_flush lets a CSM 0x02 module through even at zero allocation, so its queue can be flushed.
         """
         candidates: list[ModuleCandidate] = []
         for i, digest in enumerate(digests):
@@ -448,7 +455,7 @@ class DepositorBot:
                 continue
             if digest['status'] != 0:  # only Active modules (replaces SR.canDeposit activity check)
                 continue
-            if allocated[i] == 0:
+            if allocated[i] == 0 and not (allow_csm_flush and self._is_csm_module(digest['module_id'])):
                 continue
             if not self._module_is_known(digest['module_id']):
                 continue
@@ -507,7 +514,9 @@ class DepositorBot:
             sr_v4 = cast(StakingRouterContractV4, self.w3.lido.staking_router)
             _total, topup_allocated, topup_new = sr_v4.get_deposit_allocations(depositable_ether, is_top_up=True)
             self._publish_allocation_metrics(digests, topup_allocated, topup_new, 'topup')
-            candidates += self._collect_candidates(digests, wc_type=WC_TYPE_0X02, allocated=topup_allocated, new=topup_new)
+            candidates += self._collect_candidates(
+                digests, wc_type=WC_TYPE_0X02, allocated=topup_allocated, new=topup_new, allow_csm_flush=True
+            )
 
         candidates.sort(key=lambda c: (c.stake, c.digest_index))
         logger.info(
@@ -622,10 +631,6 @@ class DepositorBot:
             return PhaseOutcome.SKIPPED
 
         tx = self.w3.lido.topup_gateway.top_up(module_id, proof_data)
-        try:
-            logger.info({'msg': 'DEBUG topUp calldata (inner, pre-wrap).', 'module_id': module_id, 'data': tx._encode_transaction_data()})
-        except Exception as _e:
-            logger.info({'msg': 'DEBUG topUp calldata encode failed.', 'err': repr(_e)})
         # When TOP_UP_ROLE sits on the delegation contract rather than on the bot's key, wrapping must
         # happen before check()/send() so the dry-run and the gas estimate cover the delegated call —
         # the unwrapped one would revert with AccessControlUnauthorizedAccount.
@@ -775,6 +780,10 @@ class DepositorBot:
         if module is not None and module.get_type() == MODULE_TYPE_CSM:
             return self._csm_strategy
         return self._general_strategy
+
+    def _is_csm_module(self, module_id: int) -> bool:
+        module = self.w3.lido.staking_module(module_id)
+        return module is not None and module.get_type() == MODULE_TYPE_CSM
 
     def _module_is_known(self, module_id: int) -> bool:
         known = self.w3.lido.staking_module(module_id) is not None

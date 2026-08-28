@@ -24,3 +24,19 @@ class CSM02Contract(ContractInterface):
             }
         )
         return response
+
+    def get_top_up_queue_capacity(self, block_identifier: BlockIdentifier = 'latest') -> int:
+        """Free seats left in the top-up queue (limit - length). 0 means the queue is full, which
+        caps the module's seed capacity to zero (getStakingModuleSummary)."""
+        _enabled, limit, length, _head = self.functions.getTopUpQueue().call(block_identifier=block_identifier)
+        capacity = limit - length
+        logger.info(
+            {
+                'msg': 'Call `getTopUpQueue()`.',
+                'limit': limit,
+                'length': length,
+                'capacity': capacity,
+                'block_identifier': repr(block_identifier),
+            }
+        )
+        return capacity
