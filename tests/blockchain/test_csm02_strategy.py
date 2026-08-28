@@ -76,6 +76,7 @@ def _make_strategy(queue_pubkeys: list[bytes]):
     w3.lido.topup_gateway.get_min_top_up_gwei.return_value = MIN_TOP_UP_GWEI
     csm_contract = Mock()
     csm_contract.get_keys_for_top_up.return_value = queue_pubkeys
+    csm_contract.get_top_up_queue_capacity.return_value = 0  # full queue by default (so 0-budget flush proceeds)
     w3.eth.contract.return_value = csm_contract
     strategy = CSM02TopUpStrategy(w3=w3, gas_price_calculator=Mock())
     return strategy, csm_contract
@@ -160,10 +161,11 @@ def test_fundable_head_without_enough_allocation_skips(allocation):
         {'balances': {PK_A: TARGET_BALANCE_GWEI - 1}},  # headroom 1 < min 10
     ],
 )
-def test_flushes_zero_limit_head_at_zero_allocation(beacon_kwargs):
+def test_flushes_zero_limit_head_at_zero_allocation_when_queue_full(beacon_kwargs):
     # A zero-limit head (slashed / exiting / at target / headroom < min) is submitted even at zero
-    # allocation so the module dequeues it (flush).
-    strategy, _ = _make_strategy([PK_A])
+    # allocation to flush it — but only because the queue is full (default), which is what blocks seed.
+    strategy, csm = _make_strategy([PK_A])
+    csm.get_top_up_queue_capacity.return_value = 0  # full queue → flush unblocks seed
     keys_api = Mock()
     keys_api.get_module_used_keys.return_value = [_lido_key(PK_A, 7, 11)]
     beacon_data = _beacon_data({PK_A: 5}, **beacon_kwargs)
@@ -173,6 +175,22 @@ def test_flushes_zero_limit_head_at_zero_allocation(beacon_kwargs):
     assert result is build_proofs.return_value
     _, candidates = build_proofs.call_args.args
     assert [c.pubkey for c in candidates] == [PK_A]
+
+
+@pytest.mark.unit
+def test_zero_limit_head_at_zero_allocation_skips_when_queue_not_full():
+    # A zero-limit head at zero budget, but the queue has free seats → seed is not queue-blocked, so a
+    # 0-budget flush would just burn gas → skip.
+    strategy, csm = _make_strategy([PK_A])
+    csm.get_top_up_queue_capacity.return_value = 3  # free seats left
+    keys_api = Mock()
+    keys_api.get_module_used_keys.return_value = [_lido_key(PK_A, 7, 11)]
+    beacon_data = _beacon_data({PK_A: 5}, slashed={PK_A})
+
+    result, build_proofs = _call(strategy, keys_api, beacon_data, module_allocation=Wei(0))
+
+    assert result is None
+    build_proofs.assert_not_called()
 
 
 @pytest.mark.unit

@@ -31,12 +31,13 @@ class CSM02TopUpStrategy(TopUpStrategy):
     Cases:
 
     - head is slashed / marked for exit / at target / top-up to reach target < min top-up: the gateway
-      sets its limit to 0, so send tx at any allocation (including 0) to flush it from the queue. This
-      is required — a full queue of such heads caps the module's seed capacity to zero
-      (getStakingModuleSummary) and blocks all new deposits until the queue is drained;
+      sets its limit to 0, so submitting it flushes it from the queue. With budget we flush to reach
+      the fundable keys behind it; at zero budget we flush only when the queue is full — the one case
+      where it unblocks anything (a full queue caps the module's seed capacity to zero via
+      getStakingModuleSummary and blocks all new deposits until the queue is drained);
     - otherwise the head needs a real top-up and allocation >= min top-up: send tx (value top-up);
     - skip: head not on the beacon chain yet / not past its activation epoch / not in the Keys API /
-      a fundable head but allocation < min top-up.
+      a fundable head with no budget / a zero-limit head at zero budget while the queue still has room.
     """
 
     def get_topup_candidates(
@@ -109,18 +110,33 @@ class CSM02TopUpStrategy(TopUpStrategy):
         # needs a real top-up, which needs allocation.
         head_is_zero_limit = fields.slashed or fields.exit_epoch != FAR_FUTURE_EPOCH or headroom_gwei < min_top_up_gwei
 
-        if not head_is_zero_limit and module_allocation // 10**9 < min_top_up_gwei:
-            # Fundable head, but no budget to fund it and nothing to flush — wait for allocation.
-            TOPUP_CANDIDATES_SELECTED.labels(module_id).set(0)
-            logger.info(
-                {
-                    'msg': 'CSM top-up: fundable head but allocation below a minimal top-up, skip.',
-                    'module_id': module_id,
-                    'module_allocation': int(module_allocation),
-                    'min_top_up_gwei': min_top_up_gwei,
-                }
-            )
-            return None
+        # No budget for a value top-up. Whether we still submit depends on the head and the queue.
+        if module_allocation // 10**9 < min_top_up_gwei:
+            if not head_is_zero_limit:
+                # Fundable head, nothing to flush — wait for allocation.
+                TOPUP_CANDIDATES_SELECTED.labels(module_id).set(0)
+                logger.info(
+                    {
+                        'msg': 'CSM top-up: fundable head but allocation below a minimal top-up, skip.',
+                        'module_id': module_id,
+                        'module_allocation': int(module_allocation),
+                        'min_top_up_gwei': min_top_up_gwei,
+                    }
+                )
+                return None
+            if csm.get_top_up_queue_capacity() > 0:
+                # A zero-limit head with a 0 budget is only worth flushing to unblock seed — and seed is
+                # blocked only by a full queue. Free seats left → nothing to unblock, don't burn gas.
+                TOPUP_CANDIDATES_SELECTED.labels(module_id).set(0)
+                logger.info(
+                    {
+                        'msg': 'CSM top-up: zero-limit head but queue is not full — no seed to unblock, skip.',
+                        'module_id': module_id,
+                        'pubkey': _pubkey_hex(pubkey),
+                    }
+                )
+                return None
+            # Zero-limit head + full queue → flush to unblock seed (fall through to build).
 
         candidate = TopUpCandidate(
             validator_index=validator_index,
