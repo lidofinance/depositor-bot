@@ -79,6 +79,8 @@ from transport.types import TransportType
 
 logger = logging.getLogger(__name__)
 
+MESSAGE_BLOCK_WINDOW = 200
+
 
 class ModuleCandidate(NamedTuple):
     """Module candidate selected for a deposit/top-up in one bot iteration."""
@@ -234,6 +236,10 @@ class DepositorBot:
             filters=[
                 message_metrics_filter,
                 to_check_sum_address,
+                get_messages_sign_filter(
+                    self.w3.lido.deposit_security_module.get_attest_message_prefix(),
+                    delegated=self.w3.lido.guardian_delegation_active(),
+                ),
             ],
         )
 
@@ -851,11 +857,12 @@ class DepositorBot:
                 UNEXPECTED_EXCEPTIONS.labels('unexpected_guardian_address').inc()
                 return False
 
-            if message['blockNumber'] < latest['number'] - 200:
+            head = latest['number']
+            if not head - MESSAGE_BLOCK_WINDOW <= message['blockNumber'] <= head + MESSAGE_BLOCK_WINDOW:
                 return False
 
             # Message from council is newer than depositor node latest block
-            if message['blockNumber'] > latest['number']:
+            if message['blockNumber'] > head:
                 # can't be verified, so skip
                 return True
 
@@ -878,9 +885,4 @@ class DepositorBot:
         return success
 
     def _fetch_actual_messages(self) -> list[BotMessage]:
-        # Fetch messages and apply filters
-        actualize_filter = self._get_message_actualize_filter()
-        prefix = self.w3.lido.deposit_security_module.get_attest_message_prefix()
-        sign_filter = get_messages_sign_filter(prefix, delegated=self.w3.lido.guardian_delegation_active())
-
-        return self.message_storage.get_messages_and_actualize(lambda x: sign_filter(x) and actualize_filter(x))
+        return self.message_storage.get_messages_and_actualize(self._get_message_actualize_filter())

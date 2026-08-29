@@ -4,11 +4,14 @@ from unittest import mock
 from unittest.mock import MagicMock, Mock
 
 import pytest
+from eth_account import Account
+from web3 import Web3
 from web3.types import Wei
 
 import variables
 from blockchain.contracts.staking_router import MODULE_TYPE_CMV2, MODULE_TYPE_CSM, StakingModuleInfo
-from bots.depositor import DepositorBot, PhaseOutcome, QuorumState, TopUpPath
+from bots.depositor import MESSAGE_BLOCK_WINDOW, DepositorBot, PhaseOutcome, QuorumState, TopUpPath
+from cryptography.verify_signature import compute_vs
 from tests.conftest import COUNCIL_ADDRESS_1, COUNCIL_ADDRESS_2, COUNCIL_PK_1, COUNCIL_PK_2
 from tests.utils.protocol_utils import get_deposit_message
 
@@ -20,7 +23,7 @@ def _make_digest(module_id, address, wc_type, status=0) -> StakingModuleInfo:
     return StakingModuleInfo(module_id=module_id, address=address, wc_type=wc_type, status=status)
 
 
-def _make_bot():
+def _make_bot(attest_prefix: bytes | None = None):
     """Build a DepositorBot with all-MagicMock deps. No transports → MessageStorage stays empty."""
     variables.MESSAGE_TRANSPORTS = ''
     w3 = MagicMock()
@@ -28,6 +31,9 @@ def _make_bot():
     # delegated top-up execution. Default to the direct-call configuration; tests that exercise
     # delegation set it explicitly.
     w3.lido.delegation = None
+    if attest_prefix is not None:
+        w3.lido.deposit_security_module.get_attest_message_prefix.return_value = attest_prefix
+        w3.lido.guardian_delegation_active.return_value = False
     # Skip the real ConsolidationBus backfill (needs RPC) — inject a mock indexer so top-up paths
     # are still exercised. ENABLE_TOP_UP is left untouched; tests set it as needed.
     with mock.patch.object(DepositorBot, '_build_consolidation_indexer', return_value=MagicMock()):
@@ -1742,6 +1748,94 @@ def test_depositor_message_actualizer_root(setup_deposit_message, depositor_bot,
 
     deposit_message['blockNumber'] = block_data['number'] + 100
     assert list(filter(message_filter, [deposit_message]))
+
+
+@pytest.mark.unit
+def test_depositor_message_actualizer_far_future_block(setup_deposit_message, depositor_bot, deposit_message, block_data):
+    """A blockNumber far ahead of head must be dropped, not retained as "cannot verify yet"."""
+    message_filter = depositor_bot._get_message_actualize_filter()
+
+    deposit_message['blockNumber'] = block_data['number'] + MESSAGE_BLOCK_WINDOW
+    assert list(filter(message_filter, [deposit_message])), 'edge of the window is still relevant'
+
+    deposit_message['blockNumber'] = block_data['number'] + MESSAGE_BLOCK_WINDOW + 1
+    assert not list(filter(message_filter, [deposit_message]))
+
+    deposit_message['blockNumber'] = block_data['number'] + 10**9
+    assert not list(filter(message_filter, [deposit_message]))
+
+
+# ─── Signature verification happens on ingestion, once per message ──
+
+
+_ATTEST_PREFIX = b'\x11' * 32
+_BLOCK_HASH = '0x432e218931e9b94f0702ecb1b0d084c467a86b384767ce38c4fe164463070532'
+_DEPOSIT_ROOT = '0x64dcf70a7ad7fc6b1a55db6b08b86e9d80736259916fcaef98f4710f0bac687b'
+
+
+class _StubTransport:
+    def __init__(self, messages):
+        self._messages = messages
+
+    def get_messages(self):
+        return self._messages
+
+
+def _signed_deposit_message(nonce: int = 12) -> dict:
+    """Deposit message signed by COUNCIL_1 under the v4 (non-delegated) scheme."""
+    digest = Web3.solidity_keccak(
+        ['bytes32', 'uint256', 'bytes32', 'bytes32', 'uint256', 'uint256'],
+        [_ATTEST_PREFIX, 10, _BLOCK_HASH, _DEPOSIT_ROOT, 1, nonce],
+    )
+    signed = Account.unsafe_sign_hash(digest, COUNCIL_PK_1)
+    return {
+        'type': 'deposit',
+        'blockNumber': 10,
+        'blockHash': _BLOCK_HASH,
+        'depositRoot': _DEPOSIT_ROOT,
+        'stakingModuleId': 1,
+        'nonce': nonce,
+        'guardianAddress': COUNCIL_ADDRESS_1,
+        'signature': {
+            'r': '0x' + signed.r.to_bytes(32, 'big').hex(),
+            '_vs': compute_vs(signed.v, '0x' + signed.s.to_bytes(32, 'big').hex()),
+        },
+    }
+
+
+@pytest.mark.unit
+def test_bad_signature_dropped_on_ingestion():
+    """The sign filter must be wired into the storage's static (per-message) filters."""
+    bot = _make_bot(attest_prefix=_ATTEST_PREFIX)
+    good = _signed_deposit_message()
+    tampered = _signed_deposit_message()
+    tampered['nonce'] += 1
+
+    bot.message_storage.clear()
+    bot.message_storage._transports = [_StubTransport([good, tampered])]
+    try:
+        kept = bot.message_storage.get_messages_and_actualize(lambda x: True)
+        assert [m['nonce'] for m in kept] == [good['nonce']]
+    finally:
+        bot.message_storage.clear()
+
+
+@pytest.mark.unit
+def test_retained_messages_are_not_reverified_every_cycle():
+    """Verification must not re-run over the retained list on every call."""
+    bot = _make_bot()
+    prefix_calls = bot.w3.lido.deposit_security_module.get_attest_message_prefix
+    assert prefix_calls.call_count == 1, 'the attest prefix is a constant — read once at startup'
+
+    bot.message_storage.clear()
+    bot._get_message_actualize_filter = Mock(return_value=lambda x: True)
+    try:
+        for _ in range(5):
+            bot._fetch_actual_messages()
+    finally:
+        bot.message_storage.clear()
+
+    assert prefix_calls.call_count == 1
 
 
 @pytest.mark.unit
