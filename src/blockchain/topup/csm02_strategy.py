@@ -5,7 +5,7 @@ from typing import cast
 
 from web3.types import Wei
 
-from blockchain.beacon_state.ssz_types import SLOTS_PER_EPOCH
+from blockchain.beacon_state.constants import SLOTS_PER_EPOCH
 from blockchain.beacon_state.state import BeaconStateData, extract_state_data
 from blockchain.consolidation.indexer import ConsolidationIndexer
 from blockchain.contracts.csm02 import CSM02Contract

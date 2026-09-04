@@ -1,15 +1,5 @@
 import pytest
-from blockchain.beacon_state.ssz_types import (
-    STATE_VALIDATORS,
-    VALIDATOR_ACTIVATION_ELIGIBILITY_EPOCH,
-    VALIDATOR_ACTIVATION_EPOCH,
-    VALIDATOR_EFFECTIVE_BALANCE,
-    VALIDATOR_EXIT_EPOCH,
-    VALIDATOR_PUBKEY,
-    VALIDATOR_SLASHED,
-    VALIDATOR_WITHDRAWABLE_EPOCH,
-    Validator,
-)
+
 from blockchain.beacon_state.state import BeaconStateData, ValidatorFields
 from blockchain.topup.proofs import build_topup_proofs
 from blockchain.topup.types import TopUpCandidate
@@ -18,26 +8,24 @@ from blockchain.topup.types import TopUpCandidate
 def _build_beacon_state_data(top_up_proof_fixtures) -> BeaconStateData:
     beacon_block_header = top_up_proof_fixtures['beacon_block_header']
     execution_block = top_up_proof_fixtures['execution_block']
-    decoded_beacon_state = top_up_proof_fixtures['decoded_beacon_state']
-    pubkeys = {bytes.fromhex(w['pubkey'][2:]) for w in top_up_proof_fixtures['validator_witnesses']}
+    state = top_up_proof_fixtures['decoded_beacon_state']
 
     pubkey_to_index: dict[bytes, int] = {}
-    validators_roots: list[bytes] = []
     validators_fields: dict[int, ValidatorFields] = {}
-    for index, validator in enumerate(decoded_beacon_state[STATE_VALIDATORS]):
-        validators_roots.append(Validator.get_hash_tree_root(validator))
-        pubkey = bytes(validator[VALIDATOR_PUBKEY])
-        if pubkey in pubkeys:
-            pubkey_to_index[pubkey] = index
-            validators_fields[index] = ValidatorFields(
-                pubkey=pubkey,
-                effective_balance=int(validator[VALIDATOR_EFFECTIVE_BALANCE]),
-                slashed=bool(validator[VALIDATOR_SLASHED]),
-                activation_eligibility_epoch=int(validator[VALIDATOR_ACTIVATION_ELIGIBILITY_EPOCH]),
-                activation_epoch=int(validator[VALIDATOR_ACTIVATION_EPOCH]),
-                exit_epoch=int(validator[VALIDATOR_EXIT_EPOCH]),
-                withdrawable_epoch=int(validator[VALIDATOR_WITHDRAWABLE_EPOCH]),
-            )
+    for w in top_up_proof_fixtures['validator_witnesses']:
+        pubkey = bytes.fromhex(w['pubkey'][2:])
+        index = int(w['validatorIndex'])
+        v = state.validators[index]
+        pubkey_to_index[pubkey] = index
+        validators_fields[index] = ValidatorFields(
+            pubkey=pubkey,
+            effective_balance=int(v.effective_balance),
+            slashed=bool(v.slashed),
+            activation_eligibility_epoch=int(v.activation_eligibility_epoch),
+            activation_epoch=int(v.activation_epoch),
+            exit_epoch=int(v.exit_epoch),
+            withdrawable_epoch=int(v.withdrawable_epoch),
+        )
 
     return BeaconStateData(
         slot=beacon_block_header[0],
@@ -45,12 +33,11 @@ def _build_beacon_state_data(top_up_proof_fixtures) -> BeaconStateData:
         parent_beacon_block_root=bytes.fromhex(execution_block['parentBeaconBlockRoot'][2:]),
         state_root=beacon_block_header[3],
         header=beacon_block_header,
-        state_field_roots=top_up_proof_fixtures['beacon_state_field_roots'],
         pubkey_to_index=pubkey_to_index,
         pending_deposits={},
         consolidation_targets=set(),
-        validators_roots=validators_roots,
         validators_fields=validators_fields,
+        raw_state=state,
     )
 
 
@@ -85,7 +72,7 @@ def test_build_topup_proofs_matches_fixture_witnesses(top_up_proof_fixtures):
     assert result.operator_ids == [11, 12]
     assert result.pending_balances_gwei == [13, 21]
 
-    for built_witness, fixture_witness in zip(result.witnesses, fixture_witnesses):
+    for built_witness, fixture_witness in zip(result.witnesses, fixture_witnesses, strict=True):
         assert built_witness.proofs == [bytes.fromhex(item[2:]) for item in fixture_witness['proofs']]
         assert built_witness.pubkey == bytes.fromhex(fixture_witness['pubkey'][2:])
         assert built_witness.effective_balance == fixture_witness['effectiveBalance']
