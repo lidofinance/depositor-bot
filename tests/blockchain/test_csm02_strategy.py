@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, Mock, patch
 import pytest
 from web3.types import Wei
 
-from blockchain.beacon_state.ssz_types import FAR_FUTURE_EPOCH
+from blockchain.beacon_state.constants import FAR_FUTURE_EPOCH
 from blockchain.beacon_state.state import BeaconStateData, ValidatorFields
 from blockchain.topup.csm02_strategy import CSM02TopUpStrategy
 from providers.keys_api import LidoKey
@@ -53,7 +53,6 @@ def _beacon_data(
         parent_beacon_block_root=b'',
         state_root=b'',
         header=(0, 0, b'', b'', b''),
-        state_field_roots=[],
         pubkey_to_index=pubkey_to_index,
         pending_deposits=pending or {},
         consolidation_targets=set(),
