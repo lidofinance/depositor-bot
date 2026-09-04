@@ -3,17 +3,10 @@ import time
 from dataclasses import dataclass
 from typing import NamedTuple
 
-from metrics.metrics import KEYS_API_BLOCK_AGE_SECONDS, KEYS_API_BLOCK_NUMBER
-from prometheus_client import Histogram
+from metrics.metrics import KEYS_API_BLOCK_AGE_SECONDS, KEYS_API_BLOCK_NUMBER, KEYS_API_REQUESTS_DURATION
 from providers.http_provider import HTTPProvider, data_is_dict
 
 logger = logging.getLogger(__name__)
-
-KEYS_API_REQUESTS_DURATION = Histogram(
-    'keys_api_requests_duration_seconds',
-    'Keys API request duration',
-    ['endpoint', 'code', 'domain'],
-)
 
 
 class LidoKey(NamedTuple):
@@ -44,6 +37,20 @@ class KeysApiStatus:
     @classmethod
     def from_response(cls, **kwargs) -> 'KeysApiStatus':
         return cls(appVersion=kwargs['appVersion'], chainId=kwargs['chainId'])
+
+
+def group_keys_by_operator(keys: list[LidoKey], operator_ids: list[int]) -> dict[int, list[LidoKey]]:
+    """Group keys by their operatorIndex, keeping only operators in `operator_ids`.
+
+    Every requested operator gets an entry (empty list if it has no keys); keys whose operator
+    is not requested are dropped.
+    """
+    wanted = set(operator_ids)
+    result: dict[int, list[LidoKey]] = {op_id: [] for op_id in operator_ids}
+    for k in keys:
+        if k.operatorIndex in wanted:
+            result[k.operatorIndex].append(k)
+    return result
 
 
 class KeysAPIClient(HTTPProvider):
@@ -109,11 +116,7 @@ class KeysAPIClient(HTTPProvider):
         Get used keys grouped by operator.
         """
         all_keys = self.get_module_used_keys(module_id)
-        operator_ids_set = set(operator_ids)
-        result: dict[int, list[LidoKey]] = {op_id: [] for op_id in operator_ids}
-        for k in all_keys:
-            if k.operatorIndex in operator_ids_set:
-                result[k.operatorIndex].append(k)
+        result = group_keys_by_operator(all_keys, operator_ids)
 
         logger.info(
             {

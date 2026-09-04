@@ -18,9 +18,6 @@ class InMemoryPendingStore:
         self._pending: Counter[bytes] = Counter()
         self._cursor: int | None = None
 
-    def close(self) -> None:
-        """No resources to release; kept for a uniform store interface."""
-
     def wipe(self) -> None:
         self._batches.clear()
         self._pending.clear()

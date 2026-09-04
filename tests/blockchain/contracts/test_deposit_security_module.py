@@ -19,6 +19,7 @@ def test_deposit_security_module_call(caplog, deposit_security_module):
             ('get_pause_message_prefix', None, lambda response: check_value_type(response, bytes)),
             ('get_pause_intent_validity_period_blocks', None, lambda response: check_value_type(response, int)),
             ('is_deposits_paused', None, lambda response: check_value_type(response, bool)),
+            ('is_min_deposit_distance_passed', (1,), lambda response: check_value_type(response, bool)),
         ],
         caplog,
     )

@@ -1,4 +1,5 @@
-from prometheus_client.metrics import Counter, Enum, Gauge, Info
+from prometheus_client.metrics import Counter, Enum, Gauge, Histogram, Info
+
 from variables import DEPOSIT_MODULES_WHITELIST, PROMETHEUS_PREFIX, PUBLIC_ENV_VARS
 
 GAS_FEE = Gauge(
@@ -60,6 +61,13 @@ QUORUM = Gauge(
     namespace=PROMETHEUS_PREFIX,
 )
 
+DEPOSIT_AMOUNT_OK = Gauge(
+    'is_deposit_amount_ok',
+    'Represents is_deposit_amount_ok check.',
+    ['module_id'],
+    namespace=PROMETHEUS_PREFIX,
+)
+
 GAS_OK = Gauge(
     'is_gas_ok',
     'Represents is_gas_ok check.',
@@ -93,6 +101,14 @@ MODULES = Gauge('modules', 'Modules gauge', ['module_id'], namespace=PROMETHEUS_
 
 for module_id in DEPOSIT_MODULES_WHITELIST:
     MODULES.labels(module_id).set(1)
+
+
+KEYS_API_REQUESTS_DURATION = Histogram(
+    'keys_api_requests_duration_seconds',
+    'Keys API request duration',
+    ['endpoint', 'code', 'domain'],
+)
+
 
 # --- Deposit / top-up gate state ---
 
@@ -233,6 +249,14 @@ BOT_LAST_CYCLE_TIMESTAMP = Gauge(
 DEPOSITABLE_ETHER = Gauge(
     'depositable_ether',
     'Depositable Ether, read once per bot iteration.',
+    namespace=PROMETHEUS_PREFIX,
+)
+
+
+POSSIBLE_DEPOSITS_AMOUNT = Gauge(
+    'possible_deposits_amount',
+    'Possible deposits amount.',
+    ['module_id'],
     namespace=PROMETHEUS_PREFIX,
 )
 

@@ -18,14 +18,15 @@ import os
 import time
 
 import pytest
+from web3 import HTTPProvider, Web3
+
 import variables
 from blockchain.beacon_state.state import load_beacon_state_data
-from blockchain.topup.cmv2_strategy import _check_key_eligibility
+from blockchain.topup.cmv2_strategy import _build_candidate_if_eligible
 from blockchain.topup.proofs import build_topup_proofs
 from blockchain.topup.types import TopUpCandidate
 from providers.consensus import ConsensusClient
 from providers.keys_api import KeysAPIClient
-from web3 import HTTPProvider, Web3
 
 MODULE_ID = 3
 CANDIDATE_COUNTS = [10, 25, 50, 75, 100]
@@ -97,7 +98,7 @@ def eligible_candidates(module_keys, beacon_data_and_timing) -> list[TopUpCandid
     beacon_data = beacon_data_and_timing[0]
     candidates = []
     for key in module_keys:
-        candidate, _ = _check_key_eligibility(key, beacon_data, 2_046_750_000_000, 2_000_000_000)
+        candidate, _ = _build_candidate_if_eligible(key, beacon_data, 2_046_750_000_000, 2_000_000_000)
         if candidate is not None:
             candidates.append(candidate)
     candidates.sort(key=lambda c: c.key_index)

@@ -20,9 +20,7 @@ def _hash(s: str) -> str:
 
 @pytest.fixture
 def store():
-    s = InMemoryPendingStore()
-    yield s
-    s.close()
+    return InMemoryPendingStore()
 
 
 # ---- 1. add + is_pending ----
