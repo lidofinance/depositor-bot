@@ -64,6 +64,16 @@ Node operators pre-submit validator signing keys to StakingRouter to get them ap
 - A single tx is capped at `getMaxOperatorsPerUnvetting()` operators.
 - Nonce filter: messages with `nonce < current_module_nonce` are discarded (the state has already advanced past them).
 
+### Guardian delegation (EDF / LIP-37, DSM v5)
+
+From DSM `version() == 5` a guardian is no longer an EOA but an ERC-1271 **delegation contract**. A rotatable **delegate EOA** (`getDelegate()`) is what signs council messages and posts to the Data Bus. The guardian contract stays the identity used for quorum/dedup; the delegate is the signer. The bot holds none of these keys — it receives, verifies, reshapes, and submits already-signed messages.
+
+- The switch is driven entirely by the on-chain version, never a flag: `LidoContracts.guardian_delegation_active()` (`dsm_version >= GUARDIAN_DELEGATION_DSM_VERSION`, `=5`). This one boolean (`delegated`) gates all delegation behavior. `DSM_CONTRACT_BY_VERSION` in `lido_contracts.py` is what "supports" a version — the bot now boots on both v4 and v5.
+- **Below v5 the delegation paths are exact no-ops**: the delegate map resolves to `{guardian: guardian}`, the digest/verification stay legacy, `getDelegate()` is never called (it would revert on an EOA). Don't add v5 special-casing without preserving this.
+- Three touchpoints, all gated by `delegated`: (1) Data Bus reception reverse-maps `sender → guardian` (`onchain_transport.py`); (2) off-chain sign filter folds the guardian address into the digest and checks the signer against the delegate (`msg_types/common.py`); (3) `to_guardian_signature` reshapes the compact `(r,_vs)` into the v5 `GuardianSignature` `(guardian, r‖s‖v)` — it does **not** sign (`cryptography/verify_signature.py`).
+- The `{delegate: guardian}` map is memoized for `GUARDIAN_DELEGATES_CACHE_TTL` seconds (default 60). Freshness backstop is the on-chain check at submission, not the cache.
+- **Full details: `docs/edf-guardian-delegation.md`.** Read it before touching signature shaping, the sign filter, or Data Bus sender handling.
+
 ## Architecture
 
 ### Entry point and Web3 extension pattern
@@ -86,7 +96,24 @@ Each bot is driven by `Executor` (`src/blockchain/executor.py`), which polls for
 
 Council Daemon guardians broadcast signed messages over one or both transports:
 - **RabbitMQ** (`src/transport/msg_providers/rabbit.py`) — STOMP protocol
-- **Onchain DataBus** (`src/transport/msg_providers/onchain_transport.py`) — Gnosis chain contract events parsed by `EventParser` subclasses (`DepositParser`, `PingParser`, etc.)
+- **Onchain DataBus** (`src/transport/msg_providers/onchain_transport.py`) — Gnosis chain contract events parsed by `EventParser` subclasses (`DepositV1Parser`, `PingParser`, etc.)
+
+#### DataBus message generations (council v4 / v5)
+
+Two generations of DataBus events are live at once, because the change is rolled out council by council:
+
+| | council v4 | council v5 |
+|---|---|---|
+| deposit | `MessageDepositV1` | `MessageDepositV2` |
+| pause | `MessagePauseV3` | `MessagePauseV4` |
+| unvet | `MessageUnvetV1` | `MessageUnvetV2` |
+| ping | `MessagePingV1` | `MessagePingV1` (unchanged, unsigned) |
+
+The only difference is the guardian signature: v4 events carry the compact `(bytes32 r, bytes32 vs)` pair, v5 events carry a flat 65-byte `bytes` blob (`r ‖ s ‖ v`) — the shape DSMv5 verifies via ERC-1271. Parsers normalise the blob back into `(r, _vs)` (`compact_signature` in `src/cryptography/verify_signature.py`), so **nothing downstream is version-aware**: one internal signature representation serves RabbitMQ, the sign filter and both DSM versions.
+
+Both parser sets are registered in each bot (`parsers_providers=[...]`). **Cleanup after the on-chain rollout completes: delete the V1/V3 parsers and their tests.**
+
+Logs are dispatched to the parser that declared their event id (`topic0`), never by trying parsers until one does not raise — the V1 layout decodes a V2 payload *without* raising (the ABI offset word reads as `blockNumber`), so a fallback chain would silently turn every v5 message into garbage that only fails later, at signature verification.
 
 `MessageStorage` (`src/transport/msg_storage.py`) aggregates messages from all active transports, applies static filters (signature validity, checksum address normalization), and on each cycle calls `get_messages_and_actualize()` with a dynamic filter that discards messages older than 200 blocks or with a stale deposit root.
 
@@ -103,6 +130,24 @@ The general strategy uses a cubic formula to compute a recommended gas ceiling: 
 ### Transaction sending
 
 `TransactionUtils.send()` (`src/blockchain/web3_extentions/transaction.py`) builds an EIP-1559 transaction with dynamic gas estimation. If `RELAY_RPC` and `AUCTION_BUNDLER_PRIVATE_KEY` are configured, it attempts Flashbots relay first, falling back to classic broadcast on `PrivateRelayException`. When `CREATE_TRANSACTIONS=false` (default), the method logs and returns `True` without broadcasting — safe for dry runs.
+
+#### Delegated execution (EDF, LIP-37)
+
+`TopUpGateway.topUp` is the **only** permissioned call the bot makes (`TOP_UP_ROLE`, AccessControl). It can be sent by either identity, and **which one is used is resolved from chain state, not from configuration** — `DepositorBot._resolve_topup_path()`, once per iteration:
+
+| resolved path | condition |
+|---|---|
+| `delegated` | `DELEGATION_CONTRACT_ADDRESS` holds `TOP_UP_ROLE`, is not terminated, and the bot's key is its active delegate → tx wrapped as `delegation.execute(topUpGateway, <topUp calldata>)` (`DelegationContract.wrap()`) |
+| `direct` | otherwise, and the bot's own account holds the role → plain `topUp` call |
+| `not_delegate` / `terminated` / `no_role` | nothing can execute; see the gate ladder below |
+
+Delegation is preferred and the key is the fallback, so migrating the role in either direction needs no restart timed to the `grantRole`/`revokeRole` transactions — the bot follows the role on its next cycle. Same idea as `SignerModule.process_members` in lido-oracle, which resolves the active identity from the HashConsensus member list each cycle. With the role on the delegation contract, rotating the bot's key becomes a `nominateDelegate` by the contract's owner instead of an ACL change on TopUpGateway.
+
+Startup refuses to boot only when a delegation contract *is* configured and no path can execute. `no_role` with no delegation configured is the pre-existing "role was never granted to the key" mistake — now visible on the metric, but kept a warning so upgrading a running deployment can't turn into a boot failure.
+
+Wrapping happens **before** `transaction.check()`/gas estimation, so the dry-run simulates what actually gets mined; simulating the unwrapped call would revert with `AccessControlUnauthorizedAccount`.
+
+Deposits, pause and unvet are deliberately **not** wrapped. DSM v5 authorises `depositBufferedEther` purely from the guardian signatures in calldata — it never reads `msg.sender` — so wrapping would only add gas and couple deposits to delegate state. `pauseDeposits`/`unvetSigningKeys` do have a `msg.sender`-is-guardian branch, but the bot always holds a signed council message, so the signature path is always open to it and making its hot key a guardian delegate would let that key pause deposits with no quorum.
 
 ### Logging convention
 
@@ -137,18 +182,28 @@ Walk the gates in order; the first one that isn't "pass" is almost always the wh
 Module-level gates (Prometheus, defined in `src/metrics/metrics.py`, set in `src/bots/depositor.py`):
 
 1. `topup_gateway_paused == 0` (and `variables.ENABLE_TOP_UP` is true — checked at startup, not a metric).
-2. `module_allocation_wei{module_id, kind="topup"} > 0`. Zero here is the single most common reason
+2. `topup_execution_path` is `direct` or `delegated` — both healthy, and which one is live tells you
+   where `TOP_UP_ROLE` currently sits. `not_delegate` / `terminated` / `no_role` each make *every*
+   top-up revert. Seeing one at runtime means the role assignment changed under a running bot
+   (delegate rotated or revoked, contract terminated, role removed from both identities). Resolved
+   before every early return in `_execute_actual()` (alongside `topup_gateway_paused`), so it stays
+   trustworthy on idle iterations — an empty buffer would otherwise freeze it at its last value.
+3. `module_contract_missing{module_id} == 0`. 1 means the module is whitelisted but the bot holds
+   no contract for it — it was not in the StakingRouter digests when the contract cache was built at
+   startup (not deployed yet, or deployed after the bot started). The module is skipped every cycle
+   until the bot is restarted; the cache is never rebuilt at runtime.
+4. `module_allocation_wei{module_id, kind="topup"} > 0`. Zero here is the single most common reason
    nothing happens — the StakingRouter allocation algorithm didn't route ETH to this module at all
    this cycle.
-3. `module_stake_wei{module_id, kind="topup"}` — lowest value across candidate modules goes first.
+5. `module_stake_wei{module_id, kind="topup"}` — lowest value across candidate modules goes first.
    Only **one** module is acted on per bot iteration (`_phase_full_and_topup` returns on the first
    non-`SKIPPED` outcome), so a module that lost the priority race this cycle never gets its
    `phase_outcome`/`quorum_state` touched — those stay at whatever they were last time this module
    *was* reached. Tell "evaluated and skipped" from "not reached this cycle" by comparing
    `phase_last_run_timestamp_seconds{phase="B", module_id}` against `module_allocation_wei`'s own
    freshness (both are set every cycle regardless of whether the module becomes a candidate).
-4. `topup_gas_ok{module_id}` / `topup_gas_fee_wei{type}`.
-5. `phase_outcome{phase="B", module_id} != wait_distance` (TopUpGateway block distance).
+6. `topup_gas_ok{module_id}` / `topup_gas_fee_wei{type}`.
+7. `phase_outcome{phase="B", module_id} != wait_distance` (TopUpGateway block distance).
 
 Key-level gates — module_id is now known, question narrows to pubkey X. Instrumented in
 `CMv2TopUpStrategy` (`src/blockchain/topup/cmv2_strategy.py`), evaluated in this order:
@@ -179,8 +234,8 @@ module's registry contract (NodeOperatorsRegistry / CSM), based on operator stak
 submission order. That logic lives outside this repo and this repo has no metric for it — don't go
 looking for one.
 
-Check, in order: `deposits_paused`, `depositable_ether`, `module_status{module_id}` +
-`module_allocation_wei{module_id, kind="seed"}`, `quorum_state{module_id}` (deposits require a
+Check, in order: `deposits_paused`, `depositable_ether`, `module_contract_missing{module_id}`,
+`module_status{module_id}` + `module_allocation_wei{module_id, kind="seed"}`, `quorum_state{module_id}` (deposits require a
 signed guardian quorum; top-ups don't — this gate has no equivalent on the top-up path),
 `phase_outcome{phase, module_id}`.
 

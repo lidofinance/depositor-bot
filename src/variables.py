@@ -66,6 +66,12 @@ if ONCHAIN_TRANSPORT_ADDRESS:
     # Expecting onchain databus contract address
     ONCHAIN_TRANSPORT_ADDRESS = Web3.to_checksum_address(ONCHAIN_TRANSPORT_ADDRESS)
 
+# Seconds to cache the resolved {delegate: guardian} map (DSMv5). Bounds EL-provider load: the map is
+# rebuilt at most once per this window instead of on every module/quorum pass. Staleness is safe —
+# the on-chain ERC-1271 / getDelegate() check at deposit time is the real freshness backstop, so a
+# stale delegate only risks a wasted (reverted) tx, never an invalid deposit. 0 disables the cache.
+GUARDIAN_DELEGATES_CACHE_TTL = int(os.getenv('GUARDIAN_DELEGATES_CACHE_TTL', 60))
+
 # Transactions settings
 CREATE_TRANSACTIONS = os.getenv('CREATE_TRANSACTIONS') == 'true'
 
@@ -116,6 +122,20 @@ GAS_ADDENDUM = Web3.to_wei(*os.getenv('GAS_ADDENDUM', '6 gwei').split(' '))
 # Top-up settings
 ENABLE_TOP_UP = os.getenv('ENABLE_TOP_UP', 'false').lower() == 'true'
 MAX_VALIDATORS_PER_TOP_UP = int(os.getenv('MAX_VALIDATORS_PER_TOP_UP', 32))
+
+# EDF delegation contract (LIP-37) that can hold TOP_UP_ROLE on TopUpGateway, with this bot's account
+# as its delegate. Keeping the role on a stable address is what lets the hot key be rotated without an
+# ACL change on TopUpGateway.
+# This is a candidate, not a switch: which identity actually sends topUp() is resolved from who holds
+# the role on-chain each cycle (DepositorBot._resolve_topup_path), so the role can be migrated in
+# either direction without a restart. Unset → always a direct call, and the role must be on the
+# bot's own account.
+# Only top-ups are routed this way: deposits, pause and unvet are authorised by guardian signatures
+# in calldata, so DSM does not care who sends them.
+_delegation_contract_address = os.getenv('DELEGATION_CONTRACT_ADDRESS')
+DELEGATION_CONTRACT_ADDRESS: ChecksumAddress | None = (
+    Web3.to_checksum_address(_delegation_contract_address) if _delegation_contract_address else None
+)
 
 # Consolidation indexer (ConsolidationBus).
 # Top-up filters out keys that participate in a pending ConsolidationBus request.
@@ -173,11 +193,13 @@ PUBLIC_ENV_VARS = {
     'DEPOSIT_MODULES_WHITELIST': DEPOSIT_MODULES_WHITELIST,
     'ACCOUNT': '' if ACCOUNT is None else ACCOUNT.address,
     'ONCHAIN_TRANSPORT_ADDRESS': ONCHAIN_TRANSPORT_ADDRESS,
+    'GUARDIAN_DELEGATES_CACHE_TTL': GUARDIAN_DELEGATES_CACHE_TTL,
     'BLOCKS_BETWEEN_EXECUTION': BLOCKS_BETWEEN_EXECUTION,
     'QUORUM_RETENTION_MINUTES': QUORUM_RETENTION_MINUTES,
     'DEPOSIT_TO_FIRST_HEALTHY_MODULE_ONLY': DEPOSIT_TO_FIRST_HEALTHY_MODULE_ONLY,
     'ENABLE_TOP_UP': ENABLE_TOP_UP,
     'MAX_VALIDATORS_PER_TOP_UP': MAX_VALIDATORS_PER_TOP_UP,
+    'DELEGATION_CONTRACT_ADDRESS': DELEGATION_CONTRACT_ADDRESS,
     'CONSOLIDATION_BUS_ADDRESS': CONSOLIDATION_BUS_ADDRESS,
     'CONSOLIDATION_BUS_DEPLOY_BLOCK': CONSOLIDATION_BUS_DEPLOY_BLOCK,
     'CONSOLIDATION_GETLOGS_CHUNK': CONSOLIDATION_GETLOGS_CHUNK,

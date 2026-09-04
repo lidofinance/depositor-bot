@@ -1,10 +1,12 @@
 import logging
 from functools import lru_cache
 
-from blockchain.contracts.base_interface import ContractInterface
-from blockchain.topup.types import TopUpProofData
+from eth_typing import ChecksumAddress
 from web3.contract.contract import ContractFunction
 from web3.types import BlockIdentifier
+
+from blockchain.contracts.base_interface import ContractInterface
+from blockchain.topup.types import TopUpProofData
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +40,26 @@ class TopUpGatewayContract(ContractInterface):
     def is_block_distance_passed(self, block_identifier: BlockIdentifier = 'latest') -> bool:
         response = self.functions.isBlockDistancePassed().call(block_identifier=block_identifier)
         logger.info({'msg': 'Call `isBlockDistancePassed()`.', 'value': response, 'block_identifier': repr(block_identifier)})
+        return response
+
+    @lru_cache(maxsize=1)
+    def top_up_role(self, block_identifier: BlockIdentifier = 'latest') -> bytes:
+        """The AccessControl role required to call `topUp()`. An immutable constant, so cached."""
+        response = self.functions.TOP_UP_ROLE().call(block_identifier=block_identifier)
+        logger.info({'msg': 'Call `TOP_UP_ROLE()`.', 'value': response.hex(), 'block_identifier': repr(block_identifier)})
+        return response
+
+    def has_role(self, role: bytes, account: ChecksumAddress, block_identifier: BlockIdentifier = 'latest') -> bool:
+        response = self.functions.hasRole(role, account).call(block_identifier=block_identifier)
+        logger.info(
+            {
+                'msg': 'Call `hasRole()`.',
+                'value': response,
+                'role': role.hex(),
+                'account': account,
+                'block_identifier': repr(block_identifier),
+            }
+        )
         return response
 
     def top_up(self, module_id: int, proof_data: 'TopUpProofData') -> ContractFunction:

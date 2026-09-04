@@ -118,8 +118,8 @@ deposit transaction.
 
   Runs the checks for one `0x02` module and sends the top-up. No guardian quorum is
   involved — only the bot can call top-up.
-  - pick the strategy by module type — `CMv2TopUpStrategy` for `curated-onchain-v2`;
-    unknown type → stop;
+  - pick the strategy by module type — `CMv2TopUpStrategy` for `curated-onchain-v2`,
+    `CSM02TopUpStrategy` for `community-onchain-v1` (0x02 CSM); unknown type → stop;
   - gas check — `strategy.is_gas_price_ok()`; too high → stop;
   - cap the batch — `max_validators = min(MAX_VALIDATORS_PER_TOP_UP,
     topup_gateway.get_max_validators_per_top_up())`;
@@ -137,8 +137,9 @@ deposit transaction.
   - fetch those operators' used keys from the Keys API;
   - sync the consolidation index up to the finalized block (before the heavy load);
     if it fails → skip the top-up, so we never risk topping up a consolidating key;
-  - load the beacon state for these keys (anchors the proof slot — the heavy step):
-    gives each validator's index, balance and pending deposits;
+  - slice the beacon state for these keys (loaded once per iteration, shared across modules;
+    anchors the proof slot — the heavy step): gives each validator's index, balance and
+    pending deposits;
   - read the set of keys in pending ConsolidationBus requests (to exclude them);
   - read the top-up balance limits from the gateway (target balance, min top-up);
     a validator is eligible only up to `target − min`;
@@ -148,3 +149,18 @@ deposit transaction.
     the operator's allocation runs out (never leaving a below-minimum top-up);
   - sort all candidates by validator index (the gateway requires strictly ascending),
     cap to `max_validators`, and build the SSZ proofs (`build_topup_proofs`).
+
+  ### Selecting validators (`get_topup_candidates`, CSM 0x02)
+
+  The module owns a FIFO top-up queue, so we walk it in order and never reorder or drop keys:
+  - read the queue — `getKeysForTopUp(max_validators)` (pubkeys only); empty → stop;
+  - resolve each pubkey to its operator/key index (Keys API) and validator index + pending
+    deposits (beacon state);
+  - read the gateway's target balance and min top-up;
+  - walk the queue in order:
+    - a key not ready yet (still pending on the CL, missing from the Keys API, or not active)
+      stops the walk — it stays in the queue for a later cycle;
+    - a key the gateway will top up by 0 (slashed / exiting / already at target) stays in the
+      batch to flush it from the queue, but spends nothing from the allocation;
+    - otherwise it spends the module allocation, stopping once the leftover can't fund the next key;
+  - sort the batch by validator index and build the SSZ proofs.
