@@ -11,6 +11,7 @@ from schema import Or, Schema
 from web3.types import BlockData, Wei
 
 import variables
+from blockchain.beacon_state.state import BeaconStateData, load_raw_beacon_state
 from blockchain.consolidation.indexer import ConsolidationIndexer
 from blockchain.consolidation.store import InMemoryPendingStore
 from blockchain.contracts.consolidation_bus import ConsolidationBusContract
@@ -31,6 +32,7 @@ from blockchain.deposit_strategy.gas_price_calculator import GasPriceCalculator
 from blockchain.deposit_strategy.strategy import DepositStrategy
 from blockchain.executor import Executor
 from blockchain.topup.cmv2_strategy import CMv2TopUpStrategy
+from blockchain.topup.csm02_strategy import CSM02TopUpStrategy
 from blockchain.topup.strategy import TopUpStrategy
 from blockchain.typings import Web3
 from metrics.metrics import (
@@ -42,6 +44,7 @@ from metrics.metrics import (
     DEPOSITS_PAUSED,
     GUARDIAN_BALANCE,
     MODULE_ALLOCATION,
+    MODULE_CONTRACT_MISSING,
     MODULE_QUORUM_LAST_SEEN_TIMESTAMP,
     MODULE_STAKE,
     MODULE_STATUS,
@@ -51,6 +54,7 @@ from metrics.metrics import (
     POSSIBLE_DEPOSITS_AMOUNT,
     QUORUM,
     QUORUM_STATE,
+    TOPUP_EXECUTION_PATH,
     TOPUP_GAS_OK,
     TOPUP_GAS_OK_LAST_RUN_TIMESTAMP,
     TOPUP_GATEWAY_PAUSED,
@@ -61,7 +65,8 @@ from metrics.transport_message_metrics import message_metrics_filter
 from providers.consensus import ConsensusClient
 from providers.keys_api import KeysAPIClient
 from transport.msg_providers.onchain_transport import (
-    DepositParser,
+    DepositV1Parser,
+    DepositV2Parser,
     OnchainTransportProvider,
     PingParser,
 )
@@ -86,6 +91,28 @@ class ModuleCandidate(NamedTuple):
     # Amount the StakingRouter (SR-lib) allocation algorithm decided should be allocated to this module
     # from the depositable buffer sum. Needed only for top-up; unused for deposits.
     allocation: Wei
+
+
+class TopUpPath(StrEnum):
+    """How `TopUpGateway.topUp` is executed, resolved from on-chain role assignment each cycle.
+
+    Derived from chain state rather than from configuration alone, so moving `TOP_UP_ROLE` from the
+    bot's key onto a delegation contract (or back) needs no restart timed to the `grantRole` /
+    `revokeRole` transactions — the bot follows the role. The same read also covers the case that
+    exists today without any delegation: the key simply not holding the role.
+
+    Values must stay in sync with TOPUP_EXECUTION_PATH.
+    """
+
+    DIRECT = 'direct'  # bot's own account holds TOP_UP_ROLE → call topUp() directly
+    DELEGATED = 'delegated'  # delegation contract holds it and our key is its active delegate
+    NOT_DELEGATE = 'not_delegate'  # delegation holds the role, but our key is not its delegate
+    TERMINATED = 'terminated'  # delegation holds the role but is terminated — irreversible
+    NO_ROLE = 'no_role'  # neither identity holds TOP_UP_ROLE → every top-up would revert
+
+    @property
+    def is_executable(self) -> bool:
+        return self in (TopUpPath.DIRECT, TopUpPath.DELEGATED)
 
 
 class QuorumState(StrEnum):
@@ -159,9 +186,13 @@ class DepositorBot:
         self._csm_strategy = csm_strategy
         self._gas_price_calculator = gas_price_calculator
         self._cmv2_topup_strategy = CMv2TopUpStrategy(w3, gas_price_calculator)
+        self._csm02_topup_strategy = CSM02TopUpStrategy(w3, gas_price_calculator)
         self._keys_api = keys_api
         self._cl = cl
         self._consolidation_indexer = self._build_consolidation_indexer()
+        # Resolved once here so it is never unset, then re-resolved every iteration.
+        self._topup_path = TopUpPath.DIRECT
+        self._validate_topup_delegation()
         now = datetime.now()
         self._module_last_heart_beat: dict[int, datetime] = {module_id: now for module_id in variables.DEPOSIT_MODULES_WHITELIST}
         for module_id in variables.DEPOSIT_MODULES_WHITELIST:
@@ -185,8 +216,8 @@ class DepositorBot:
                     w3=self._onchain_transport_w3,
                     onchain_address=variables.ONCHAIN_TRANSPORT_ADDRESS,
                     message_schema=Schema(Or(DepositMessageSchema, PingMessageSchema)),
-                    parsers_providers=[DepositParser, PingParser],
-                    allowed_guardians_provider=self.w3.lido.deposit_security_module.get_guardians,
+                    parsers_providers=[DepositV1Parser, DepositV2Parser, PingParser],
+                    delegates_provider=self.w3.lido.get_guardian_delegates,
                 )
             )
 
@@ -239,6 +270,26 @@ class DepositorBot:
         deposits_paused = self.w3.lido.deposit_security_module.is_deposits_paused()
         DEPOSITS_PAUSED.set(int(deposits_paused))
 
+        # Top-up subsystem gates, resolved for the same reason DEPOSITS_PAUSED is read here: both hold
+        # for all modules and both are what an operator watches to see the bot can still act, so they
+        # must not freeze at their last value on the iterations that return early below — an empty
+        # buffer is the common idle state, and it would pin them indefinitely. A delegate can be
+        # rotated or revoked, and the delegation contract terminated, under a running bot; each turns
+        # every top-up into a revert, and this metric is how that gets noticed. Costs at most four
+        # `eth_call`s per iteration, on top of the per-module reads `_refresh_modules_state()` already
+        # does before the same early returns.
+        # Not a gate — an unusable path still lets the tx be built and fail loudly on the dry-run,
+        # which says more than skipping early.
+        top_up_enabled = False
+        if variables.ENABLE_TOP_UP:
+            _tg_paused = self.w3.lido.topup_gateway.is_paused()
+            TOPUP_GATEWAY_PAUSED.set(int(_tg_paused))
+            self._topup_path = self._resolve_topup_path()
+            TOPUP_EXECUTION_PATH.state(self._topup_path)
+            top_up_enabled = not _tg_paused
+        else:
+            TOPUP_GATEWAY_PAUSED.set(0)
+
         # Read depositable ether once; if 0 — nothing to do this iteration.
         depositable_ether = self.w3.lido.lido.get_depositable_ether()
         DEPOSITABLE_ETHER.set(depositable_ether)
@@ -289,17 +340,7 @@ class DepositorBot:
                 return outcome.is_backoff
 
         # Phase B: full deposits (0x01) + top-ups (0x02), gated independently inside the phase —
-        # 0x01 while deposits are not paused, 0x02 while top-up is enabled and the gateway is not paused.
-
-        top_up_enabled = False
-        if variables.ENABLE_TOP_UP:
-            _tg_paused = self.w3.lido.topup_gateway.is_paused()
-            TOPUP_GATEWAY_PAUSED.set(int(_tg_paused))
-            top_up_enabled = not _tg_paused
-        else:
-            TOPUP_GATEWAY_PAUSED.set(0)
-            top_up_enabled = False
-
+        # 0x01 while deposits are not paused, 0x02 while `top_up_enabled` (resolved above).
         logger.info({'msg': 'Phase B start: full deposits to 0x01 + top-up to 0x02.'})
         outcome = self._phase_full_and_topup(depositable_ether, seed_allocated, seed_new, digests, deposits_paused, top_up_enabled)
 
@@ -316,6 +357,8 @@ class DepositorBot:
             }
         )
         for module_id in variables.DEPOSIT_MODULES_WHITELIST:
+            if not self._module_is_known(module_id):
+                continue
             # Probe gas-price strategy purely for metrics — gas is re-checked right before the tx is sent.
             self._select_strategy(module_id).is_gas_price_ok(module_id)
             # Route through _resolve_quorum (not a bare _get_quorum call) so QUORUM_STATE is refreshed
@@ -362,14 +405,14 @@ class DepositorBot:
         PHASE_LAST_RUN_TIMESTAMP.labels(phase, module_id).set(now)
         return outcome
 
-    def _try_top_up(self, candidate: ModuleCandidate, phase: Phase) -> PhaseOutcome:
+    def _try_top_up(self, candidate: ModuleCandidate, phase: Phase, ensure_beacon_state: Callable[[], BeaconStateData]) -> PhaseOutcome:
         """One top-up attempt on a 0x02 module (no quorum needed). SKIPPED → caller tries the next candidate."""
         module_id = candidate.module_id
         if not self.w3.lido.topup_gateway.is_block_distance_passed():
             logger.info({'msg': f'Phase {phase}: top-up block distance not passed — wait next iteration.', 'module_id': module_id})
             outcome = PhaseOutcome.WAIT_DISTANCE
         else:
-            outcome = self._top_up_to_module(module_id, candidate.address, candidate.allocation)
+            outcome = self._top_up_to_module(module_id, candidate.address, candidate.allocation, ensure_beacon_state)
         now = time.time()
         PHASE_OUTCOME.labels(phase, module_id).state(outcome)
         PHASE_LAST_RUN_TIMESTAMP.labels(phase, module_id).set(now)
@@ -406,6 +449,8 @@ class DepositorBot:
             if digest['status'] != 0:  # only Active modules (replaces SR.canDeposit activity check)
                 continue
             if allocated[i] == 0:
+                continue
+            if not self._module_is_known(digest['module_id']):
                 continue
             candidates.append(
                 ModuleCandidate(
@@ -472,11 +517,22 @@ class DepositorBot:
             }
         )
 
+        # Heavy beacon-state read, done at most once per iteration and reused across modules.
+        # Lazy: fires on the first top-up that reaches step 4 of its strategy, so an all-deposit
+        # cycle never pays the SSZ read. Loop-local — no state kept on self between iterations.
+        raw_beacon_state: BeaconStateData | None = None
+
+        def ensure_beacon_state() -> BeaconStateData:
+            nonlocal raw_beacon_state
+            if raw_beacon_state is None:
+                raw_beacon_state = load_raw_beacon_state(self.w3, self._cl)
+            return raw_beacon_state
+
         for candidate in candidates:
             # The consolidation indexer is guaranteed present and ready in the top-up path — validated
             # at startup when ENABLE_TOP_UP is on (otherwise the bot would not have started).
             if candidate.wc_type == WC_TYPE_0X02:
-                outcome = self._try_top_up(candidate, 'Phase B')
+                outcome = self._try_top_up(candidate, 'Phase B', ensure_beacon_state)
             else:
                 outcome = self._try_deposit(candidate.module_id, 'Phase B')
             if outcome is not PhaseOutcome.SKIPPED:
@@ -500,8 +556,15 @@ class DepositorBot:
         self._flashbots_works = not self._flashbots_works or success
         return success
 
-    def _top_up_to_module(self, module_id: int, module_address: str, module_allocation: Wei) -> PhaseOutcome:
-        module_type = self.w3.lido.staking_module(module_id).get_type()
+    def _top_up_to_module(
+        self, module_id: int, module_address: str, module_allocation: Wei, ensure_beacon_state: Callable[[], BeaconStateData]
+    ) -> PhaseOutcome:
+        module = self.w3.lido.staking_module(module_id)
+        if module is None:
+            logger.warning({'msg': 'No contract for module, skip top-up.', 'module_id': module_id})
+            return PhaseOutcome.SKIPPED
+
+        module_type = module.get_type()
         strategy = self._select_topup_strategy(module_type)
         if strategy is None:
             logger.info(
@@ -524,18 +587,30 @@ class DepositorBot:
             variables.MAX_VALIDATORS_PER_TOP_UP,
             self.w3.lido.topup_gateway.get_max_validators_per_top_up(),
         )
+
+        # SR.topUp funds a module at most min(allocation, maxTopUpPerBlockGwei) per call, and
+        # getDepositAllocations does NOT apply this cap. Without capping here, a module can be handed
+        # more full-fund keys than the cap covers: CSM's FIFO queue then reverts UnexpectedExtraKey
+        # (a non-last key ends up partial), while CMv2 silently under-fills. Cap so both strategies
+        # plan within what actually gets funded this block.
+        cap_wei = Wei(cast(StakingRouterContractV4, self.w3.lido.staking_router).get_max_top_up_per_block_gwei() * 10**9)
+        raw_allocation = module_allocation
+        module_allocation = Wei(min(module_allocation, cap_wei))
+
         logger.info(
             {
                 'msg': 'Top-up: collecting candidates.',
                 'module_id': module_id,
                 'module_allocation': int(module_allocation),
+                'raw_allocation': int(raw_allocation),
+                'max_top_up_per_block_wei': int(cap_wei),
                 'max_validators': max_validators,
             }
         )
 
         proof_data = strategy.get_topup_candidates(
             self._keys_api,
-            self._cl,
+            ensure_beacon_state,
             module_id,
             module_address,
             module_allocation,
@@ -547,6 +622,16 @@ class DepositorBot:
             return PhaseOutcome.SKIPPED
 
         tx = self.w3.lido.topup_gateway.top_up(module_id, proof_data)
+        try:
+            logger.info({'msg': 'DEBUG topUp calldata (inner, pre-wrap).', 'module_id': module_id, 'data': tx._encode_transaction_data()})
+        except Exception as _e:
+            logger.info({'msg': 'DEBUG topUp calldata encode failed.', 'err': repr(_e)})
+        # When TOP_UP_ROLE sits on the delegation contract rather than on the bot's key, wrapping must
+        # happen before check()/send() so the dry-run and the gas estimate cover the delegated call —
+        # the unwrapped one would revert with AccessControlUnauthorizedAccount.
+        delegation = self.w3.lido.delegation
+        if delegation is not None and self._topup_path is TopUpPath.DELEGATED:
+            tx = delegation.wrap(tx)
         success = self.w3.transaction.check(tx) and self.w3.transaction.send(tx, False, 6)
         TOPUP_TX_SEND.labels('success' if success else 'failure', module_id).inc()
         logger.info({'msg': f'Top-up tx result: {success}.', 'module_id': module_id})
@@ -555,6 +640,8 @@ class DepositorBot:
     def _select_topup_strategy(self, module_type: bytes) -> TopUpStrategy | None:
         if module_type == MODULE_TYPE_CMV2:
             return self._cmv2_topup_strategy
+        if module_type == MODULE_TYPE_CSM:
+            return self._csm02_topup_strategy
         return None
 
     def _build_consolidation_indexer(self) -> ConsolidationIndexer | None:
@@ -588,6 +675,77 @@ class DepositorBot:
         indexer.cold_start()
         return indexer
 
+    def _resolve_topup_path(self) -> TopUpPath:
+        """Resolves how `topUp` must be sent, from who currently holds `TOP_UP_ROLE`.
+
+        Delegation is preferred when it is usable, and the bot's own key is the fallback — so during
+        a migration either order of the `grantRole`/`revokeRole` pair keeps working, and neither
+        direction needs a restart timed to a block. Re-resolved every cycle and never carried over:
+        a delegate can be rotated or revoked, and the contract terminated, under a running bot, and
+        each of those turns every top-up into a revert.
+
+        At most three reads (`TOP_UP_ROLE` is a cached constant), so it runs once per iteration
+        rather than once per module.
+
+        In dry mode (no account) there is no key to compare against and nothing gets sent, so the
+        identity checks are skipped rather than failing the bot.
+        """
+        gateway = self.w3.lido.topup_gateway
+        role = gateway.top_up_role()
+        delegation = self.w3.lido.delegation
+        blocked: TopUpPath | None = None
+
+        if delegation is not None and gateway.has_role(role, delegation.address):
+            if delegation.is_terminated():
+                blocked = TopUpPath.TERMINATED
+            elif variables.ACCOUNT is None or delegation.get_delegate() == variables.ACCOUNT.address:
+                return TopUpPath.DELEGATED
+            else:
+                blocked = TopUpPath.NOT_DELEGATE
+            logger.warning(
+                {
+                    'msg': 'Delegation contract holds TOP_UP_ROLE but cannot be used. Falling back to a direct call.',
+                    'reason': blocked,
+                    'delegation': delegation.address,
+                }
+            )
+
+        if variables.ACCOUNT is None or gateway.has_role(role, variables.ACCOUNT.address):
+            return TopUpPath.DIRECT
+
+        return blocked or TopUpPath.NO_ROLE
+
+    def _validate_topup_delegation(self) -> None:
+        """Refuse to start when a delegation contract is configured but no path can execute a top-up.
+
+        Same reasoning as the ConsolidationBus indexer: nothing would ever be topped up, and a crash
+        loop carrying the reason is far easier to notice than a bot that keeps running quietly.
+
+        Scoped to the case where delegation is configured. `NO_ROLE` without any delegation is the
+        pre-existing "role was never granted to the key" misconfiguration — it is now visible on
+        `topup_execution_path`, but it must not turn an upgrade of a running deployment into a boot
+        failure, so it stays a warning.
+        """
+        if not variables.ENABLE_TOP_UP:
+            return
+
+        self._topup_path = self._resolve_topup_path()
+        TOPUP_EXECUTION_PATH.state(self._topup_path)
+        if self._topup_path.is_executable:
+            logger.info({'msg': 'Top-up execution path resolved.', 'path': self._topup_path})
+            return
+
+        account = variables.ACCOUNT.address if variables.ACCOUNT else 'not configured'
+        message = (
+            f'No usable path for TopUpGateway.topUp: {self._topup_path}. TOP_UP_ROLE must be held either by the '
+            f'bot account ({account}) or by delegation contract {variables.DELEGATION_CONTRACT_ADDRESS}, which '
+            f'must then be un-terminated with that account as its active delegate.'
+        )
+        if variables.DELEGATION_CONTRACT_ADDRESS is None:
+            logger.warning({'msg': message})
+            return
+        raise ValueError(message)
+
     def _check_balance(self):
         if variables.ACCOUNT:
             balance = self.w3.eth.get_balance(variables.ACCOUNT.address)
@@ -613,9 +771,22 @@ class DepositorBot:
             GUARDIAN_BALANCE.labels(address=address, chain_id=chain_id).set(balance)
 
     def _select_strategy(self, module_id: int) -> DepositStrategy:
-        if self.w3.lido.staking_module(module_id).get_type() == MODULE_TYPE_CSM:
+        module = self.w3.lido.staking_module(module_id)
+        if module is not None and module.get_type() == MODULE_TYPE_CSM:
             return self._csm_strategy
         return self._general_strategy
+
+    def _module_is_known(self, module_id: int) -> bool:
+        known = self.w3.lido.staking_module(module_id) is not None
+        MODULE_CONTRACT_MISSING.labels(module_id).set(int(not known))
+        if not known:
+            logger.warning(
+                {
+                    'msg': 'Whitelisted module has no contract — skipped. Restart the bot once it is deployed.',
+                    'module_id': module_id,
+                }
+            )
+        return known
 
     def _get_quorum(self, module_id: int) -> list[DepositMessage] | None:
         """
@@ -660,10 +831,23 @@ class DepositorBot:
     def _get_message_actualize_filter(self) -> Callable[[DepositMessage], bool]:
         latest = self.w3.eth.get_block('latest')
         deposit_root = '0x' + self.w3.lido.deposit_contract.get_deposit_root().hex()
-        guardians_list = self.w3.lido.deposit_security_module.get_guardians()
+        # {delegate_EOA: guardian_contract} at the current block. Rebuilt every cycle so a message
+        # whose signer is no longer the guardian's active delegate (rotated, revoked, terminated) is
+        # dropped — the off-chain mirror of the on-chain ERC-1271 check, which fails closed.
+        delegate_map = self.w3.lido.get_guardian_delegates()
+        guardians_list = set(delegate_map.values())
 
         def message_filter(message: DepositMessage) -> bool:
-            if message['guardianAddress'] not in guardians_list:
+            delegate = message.get('guardianDelegate')
+            if delegate is not None:
+                # Data Bus message under the delegation model: the delegate that signed must still be
+                # the guardian's active delegate, and still map to the same guardian.
+                if delegate_map.get(delegate) != message['guardianAddress']:
+                    UNEXPECTED_EXCEPTIONS.labels('unexpected_guardian_address').inc()
+                    return False
+            elif message['guardianAddress'] not in guardians_list:
+                # Legacy path (e.g. RabbitMQ) that carries no delegate: the guardian must still be
+                # registered.
                 UNEXPECTED_EXCEPTIONS.labels('unexpected_guardian_address').inc()
                 return False
 
@@ -697,6 +881,6 @@ class DepositorBot:
         # Fetch messages and apply filters
         actualize_filter = self._get_message_actualize_filter()
         prefix = self.w3.lido.deposit_security_module.get_attest_message_prefix()
-        sign_filter = get_messages_sign_filter(prefix)
+        sign_filter = get_messages_sign_filter(prefix, delegated=self.w3.lido.guardian_delegation_active())
 
         return self.message_storage.get_messages_and_actualize(lambda x: sign_filter(x) and actualize_filter(x))

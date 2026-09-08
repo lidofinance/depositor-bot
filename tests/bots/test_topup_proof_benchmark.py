@@ -21,7 +21,7 @@ import pytest
 from web3 import HTTPProvider, Web3
 
 import variables
-from blockchain.beacon_state.state import load_beacon_state_data
+from blockchain.beacon_state.state import extract_state_data, load_raw_beacon_state
 from blockchain.topup.cmv2_strategy import _build_candidate_if_eligible
 from blockchain.topup.proofs import build_topup_proofs
 from blockchain.topup.types import TopUpCandidate
@@ -87,9 +87,10 @@ def beacon_data_and_timing(w3: Web3, cl: ConsensusClient, module_keys):
         pubkeys.add(bytes.fromhex(raw))
 
     t0 = time.monotonic()
-    beacon_data = load_beacon_state_data(w3, cl, pubkeys)
+    raw = load_raw_beacon_state(w3, cl)
+    beacon_data = extract_state_data(raw, pubkeys)
     elapsed = time.monotonic() - t0
-    print(f'\n[load_beacon_state_data] {elapsed:.2f}s for {len(pubkeys)} pubkeys')
+    print(f'\n[load_raw_beacon_state + extract_state_data] {elapsed:.2f}s for {len(pubkeys)} pubkeys')
     return beacon_data, elapsed
 
 

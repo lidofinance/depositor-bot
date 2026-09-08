@@ -69,7 +69,8 @@ Next cases requires bot restart:
 | CL_API_URLS               | -                                          | Comma-separated list of Consensus Layer client URIs                                                                      |
 | ENABLE_TOP_UP             | false                                      | Enable top-up functionality. Must be disabled until Node Operators submit consolidation requests                         |
 | ---                       | ---	                                       | ---                                                                                                                      |
-| MESSAGE_TRANSPORTS        | -                                          | Transports used in bot. One of/or both: rabbit/onchain_transport                                                         |
+| MESSAGE_TRANSPORTS        | -                                          | Transports used in bot. One of/or both: rabbit/onchain_transport. `rabbit` is DSMv4-only — its messages carry no guardian delegate, so they are dropped under DSMv5 delegation |
+| GUARDIAN_DELEGATES_CACHE_TTL | 60                                      | Seconds to cache the resolved delegate→guardian map (DSMv5). Bounds EL-provider load; on-chain checks remain the freshness backstop. 0 disables |
 | RABBIT_MQ_URL             | -                                          | RabbitMQ url                                                                                                             |
 | RABBIT_MQ_USERNAME        | -                                          | RabbitMQ username for virtualhost                                                                                        |
 | RABBIT_MQ_PASSWORD        | -                                          | RabbitMQ password for virtualhost                                                                                        |
@@ -97,6 +98,7 @@ Next cases requires bot restart:
 | ONCHAIN_TRANSPORT_RPC_ENDPOINTS   | -             | RPC endpoint for the databus RPC, Gnosis at the moment                                                                   |
 | QUORUM_RETENTION_MINUTES          | 5             | TTL of quorum collection for marking module as healthy                                                                   |
 | MAX_VALIDATORS_PER_TOP_UP         | 32            | Maximum number of validators per top-up transaction                                                                      |
+| DELEGATION_CONTRACT_ADDRESS        | -             | EDF delegation contract (LIP-37) holding TOP_UP_ROLE, with this bot's account as its delegate. Used for top-ups when it holds the role; the bot falls back to a direct call when its own account holds it |
 | CONSOLIDATION_BUS_ADDRESS         | -             | ConsolidationBus address override. Defaults to the hardcoded per-chain value; top-up is skipped if the chain is unknown  |
 | CONSOLIDATION_BUS_DEPLOY_BLOCK    | -             | ConsolidationBus deploy block override (must be exact-or-earlier). Used together with CONSOLIDATION_BUS_ADDRESS          |
 | CONSOLIDATION_GETLOGS_CHUNK       | 10000         | Block-range size per getLogs call when indexing ConsolidationBus events                                                  |

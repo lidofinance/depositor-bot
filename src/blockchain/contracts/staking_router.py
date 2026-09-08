@@ -2,8 +2,9 @@ import logging
 from functools import lru_cache
 from typing import TypedDict
 
-from blockchain.contracts.base_interface import ContractInterface
 from web3.types import BlockIdentifier, Wei
+
+from blockchain.contracts.base_interface import ContractInterface
 
 logger = logging.getLogger(__name__)
 
@@ -131,6 +132,20 @@ class StakingRouterContractV4(ContractInterface):
         logger.info(
             {
                 'msg': f'Call `getDepositAllocations({deposit_amount}, {is_top_up})`.',
+                'value': response,
+                'block_identifier': repr(block_identifier),
+            }
+        )
+        return response
+
+    def get_max_top_up_per_block_gwei(self, block_identifier: BlockIdentifier = 'latest') -> int:
+        """Global per-block top-up cap (LIP-35). `topUp` funds a module at most
+        min(module allocation, this) per call; `getDepositAllocations` does NOT apply it.
+        Not cached — it can change via `setMaxTopUpPerBlockGwei`."""
+        response = self.functions.getMaxTopUpPerBlockGwei().call(block_identifier=block_identifier)
+        logger.info(
+            {
+                'msg': 'Call `getMaxTopUpPerBlockGwei()`.',
                 'value': response,
                 'block_identifier': repr(block_identifier),
             }

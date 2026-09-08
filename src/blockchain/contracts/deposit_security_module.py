@@ -9,6 +9,12 @@ from blockchain.contracts.base_interface import ContractInterface
 
 logger = logging.getLogger(__name__)
 
+# A guardian signature as passed to the DSM.
+# - DSMv4: the compact ECDSA pair ``(r, _vs)`` recovered on-chain to the guardian EOA.
+# - DSMv5: ``(guardian_contract, signature_bytes)`` where signature_bytes is the 65-byte ``r||s||v``
+#   blob verified via the guardian contract's ERC-1271 ``isValidSignature`` (LIP-37 / EDF).
+GuardianSignature = tuple[str, str] | tuple[str, bytes]
+
 
 class DepositSecurityModuleContract(ContractInterface):
     abi_path = './interfaces/DepositSecurityModuleV4.json'
@@ -58,7 +64,7 @@ class DepositSecurityModuleContract(ContractInterface):
         deposit_root: Hash32,
         staking_module_id: int,
         nonce: int,
-        guardian_signatures: tuple[tuple[str, str], ...],
+        guardian_signatures: tuple[GuardianSignature, ...],
     ) -> ContractFunction:
         """
         Calls STAKING_ROUTER.deposit(stakingModuleId, "") (deposit calldata is always empty in DSMv4).
@@ -110,7 +116,7 @@ class DepositSecurityModuleContract(ContractInterface):
     def pause_deposits(
         self,
         block_number: int,
-        guardian_signature: tuple[str, str],
+        guardian_signature: GuardianSignature,
     ) -> ContractFunction:
         """
         Pauses deposits given that both conditions are satisfied (reverts otherwise):
@@ -144,7 +150,7 @@ class DepositSecurityModuleContract(ContractInterface):
         nonce: int,
         operator_ids: bytes,
         vetted_keys_by_operator: bytes,
-        guardian_signature: tuple[str, str],
+        guardian_signature: GuardianSignature,
     ) -> ContractFunction:
         tx = self.functions.unvetSigningKeys(
             block_number,
@@ -201,3 +207,16 @@ class DepositSecurityModuleContract(ContractInterface):
             }
         )
         return response
+
+
+class DepositSecurityModuleContractV5(DepositSecurityModuleContract):
+    """DSM v5 (LIP-37 / Execution Delegation Framework).
+
+    The read interface and the argument *order* of deposit/pause/unvet are unchanged from v4, so the
+    inherited methods forward as-is. What changes is the guardian-signature encoding: each signature
+    is now a ``(guardian_contract, signature_bytes)`` tuple (the ``GuardianSignature`` struct) instead
+    of the compact ``(r, _vs)`` pair, and the signed digest binds the guardian address. Callers build
+    the correct shape based on the DSM version; only the ABI needs to differ here.
+    """
+
+    abi_path = './interfaces/DepositSecurityModuleV5.json'

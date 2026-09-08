@@ -1,8 +1,10 @@
 import logging
-from typing import Any, Callable, List, cast
+from collections.abc import Callable
+from typing import Any, cast
+
+from eth_account.account import VRS
 
 from cryptography.verify_signature import recover_vs, verify_message_with_signature
-from eth_account.account import VRS
 from metrics.metrics import UNEXPECTED_EXCEPTIONS
 from transport.msg_providers.rabbit import MessageType
 from transport.msg_types.deposit import DepositMessage
@@ -16,17 +18,36 @@ logger = logging.getLogger(__name__)
 BotMessage = DepositMessage | PauseMessage | UnvetMessage | PingMessage
 
 
-def get_messages_sign_filter(prefix: bytes) -> Callable:
-    """Returns filter that checks message validity"""
+def get_messages_sign_filter(prefix: bytes, delegated: bool = False) -> Callable:
+    """Returns a filter that checks a message's guardian signature.
+
+    ``delegated`` selects the signing scheme:
+
+    - ``False`` (DSMv4, guardians are EOAs): the digest is ``prefix || fields`` and the signature must
+      recover to ``guardianAddress`` (the guardian EOA).
+    - ``True`` (DSMv5 / EDF, guardians are contracts): the digest folds the guardian contract address
+      in right after the prefix, and the signature must recover to the guardian's delegate EOA
+      (``guardianDelegate``) — the off-chain equivalent of the on-chain ERC-1271 check against
+      ``getDelegate()``.
+
+    Only the Data Bus transport carries ``guardianDelegate`` (the onchain transport reverse-maps the
+    event sender through the guardian delegate map). RabbitMQ messages do not, so under DSMv5 they
+    fall back to ``guardianAddress`` — the guardian *contract* address, which no EOA signature can
+    ever recover to — and are dropped here. RabbitMQ is therefore effectively unsupported once
+    delegation is active; it is kept for DSMv4 and must be migrated before the v5 cutover.
+    """
 
     def check_messages(msg: DepositMessage | PauseMessage | UnvetMessage) -> bool:
         v, r, s = _vrs(msg)
-        data, abi = _verification_data(prefix, msg)
+        data, abi = _verification_data(prefix, msg, delegated)
+        # Under delegation the signer is the guardian's delegate EOA (carried on the message by the
+        # onchain transport); fall back to guardianAddress if it is absent (e.g. legacy transports).
+        expected_signer = cast(dict, msg).get('guardianDelegate', msg['guardianAddress']) if delegated else msg['guardianAddress']
 
         is_valid = verify_message_with_signature(
             data=data,
             abi=abi,
-            address=msg['guardianAddress'],
+            address=expected_signer,
             vrs=(v, r, s),
         )
 
@@ -59,31 +80,38 @@ def _select_label(msg: DepositMessage | PauseMessage | UnvetMessage) -> str:
         raise ValueError('Unsupported message type')
 
 
-def _verification_data(prefix: bytes, msg: BotMessage) -> tuple[List[Any], List[str]]:
+def _verification_data(prefix: bytes, msg: BotMessage, delegated: bool = False) -> tuple[list[Any], list[str]]:
     t = msg['type']
     if t == MessageType.PAUSE:
-        return _verification_data_pause(prefix, cast(PauseMessage, msg))
+        data, abi = _verification_data_pause(prefix, cast(PauseMessage, msg))
     elif t == MessageType.UNVET:
-        return _verification_data_unvet(prefix, cast(UnvetMessage, msg))
+        data, abi = _verification_data_unvet(prefix, cast(UnvetMessage, msg))
     elif t == MessageType.DEPOSIT:
-        return _verification_data_deposit(prefix, cast(DepositMessage, msg))
+        data, abi = _verification_data_deposit(prefix, cast(DepositMessage, msg))
     else:
         raise ValueError('Unsupported message type')
 
+    if delegated:
+        # DSMv5 binds the digest to the guardian contract: keccak(prefix, guardian, ...fields).
+        # `address` packs to 20 bytes under solidity_keccak, matching the contract's abi.encodePacked.
+        data.insert(1, msg['guardianAddress'])
+        abi.insert(1, 'address')
+    return data, abi
 
-def _verification_data_deposit(prefix: bytes, msg: DepositMessage) -> tuple[List[Any], List[str]]:
+
+def _verification_data_deposit(prefix: bytes, msg: DepositMessage) -> tuple[list[Any], list[str]]:
     data = [prefix, msg['blockNumber'], msg['blockHash'], msg['depositRoot'], msg['stakingModuleId'], msg['nonce']]
     abi = ['bytes32', 'uint256', 'bytes32', 'bytes32', 'uint256', 'uint256']
     return data, abi
 
 
-def _verification_data_pause(prefix: bytes, msg: PauseMessage) -> tuple[List[Any], List[str]]:
+def _verification_data_pause(prefix: bytes, msg: PauseMessage) -> tuple[list[Any], list[str]]:
     data = [prefix, msg['blockNumber']]
     abi = ['bytes32', 'uint256']
     return data, abi
 
 
-def _verification_data_unvet(prefix: bytes, msg: UnvetMessage) -> tuple[List[Any], List[str]]:
+def _verification_data_unvet(prefix: bytes, msg: UnvetMessage) -> tuple[list[Any], list[str]]:
     data = [
         prefix,
         msg['blockNumber'],

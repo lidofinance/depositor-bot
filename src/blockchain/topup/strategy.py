@@ -1,16 +1,17 @@
 import abc
 import logging
-from typing import Optional
+from collections.abc import Callable
+
+from web3.types import Wei
 
 import variables
+from blockchain.beacon_state.state import BeaconStateData
 from blockchain.consolidation.indexer import ConsolidationIndexer
 from blockchain.deposit_strategy.gas_price_calculator import GasPriceCalculator
 from blockchain.topup.types import TopUpProofData
 from blockchain.typings import Web3
 from metrics.metrics import TOPUP_GAS_FEE
-from providers.consensus import ConsensusClient
 from providers.keys_api import KeysAPIClient
-from web3.types import Wei
 
 logger = logging.getLogger(__name__)
 
@@ -48,11 +49,11 @@ class TopUpStrategy(abc.ABC):
     def get_topup_candidates(
         self,
         keys_api: KeysAPIClient,
-        cl: ConsensusClient,
+        ensure_beacon_state: Callable[[], BeaconStateData],
         module_id: int,
         module_address: str,
         module_allocation: Wei,
         max_validators: int,
         consolidation_indexer: ConsolidationIndexer,
-    ) -> Optional[TopUpProofData]:
+    ) -> TopUpProofData | None:
         pass

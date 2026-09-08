@@ -5,7 +5,10 @@ Beacon state loading, data extraction, and proof building.
 # pyright: reportTypedDictNotRequiredAccess=false
 import logging
 from dataclasses import dataclass, field
-from typing import NamedTuple
+from typing import Any, NamedTuple
+
+from ssz import decode  # type: ignore[attr-defined]
+from web3.types import BlockData
 
 # from typing import TYPE_CHECKING, Any
 from blockchain.beacon_state.merkle_tree import (
@@ -36,8 +39,6 @@ from blockchain.beacon_state.ssz_types import (
 )
 from blockchain.typings import Web3
 from providers.consensus import ConsensusClient
-from ssz import decode  # type: ignore[attr-defined]
-from web3.types import BlockData
 
 logger = logging.getLogger(__name__)
 
@@ -71,14 +72,21 @@ class BeaconStateData:
     validators_roots: list[bytes] = field(default_factory=list)
     # compact fields for validators whose pubkey is in our set (pubkey_to_index.values())
     validators_fields: dict[int, ValidatorFields] = field(default_factory=dict)
+    # Heavy, pubkey-independent load state, filled only by load_raw_beacon_state and shared by
+    # reference into the slices extract_state_data returns. Empty on instances built the old way.
+    all_pubkey_to_index: dict[bytes, int] = field(default_factory=dict, repr=False)
+    raw_state: Any = field(default=None, repr=False)  # decoded BeaconState, retained for extract_state_data
 
 
-def load_beacon_state_data(
-    w3: Web3,
-    cl: ConsensusClient,
-    pubkeys: set[bytes],
-) -> BeaconStateData:
-    """Load beacon state and extract data needed for filtering and proofs."""
+def load_raw_beacon_state(w3: Web3, cl: ConsensusClient) -> BeaconStateData:
+    """Read the beacon state and compute everything that does NOT depend on which pubkeys we care
+    about: per-validator hashes, state field roots, header/anchor and a full pubkey->index map.
+    This is the expensive part (SSZ I/O, decode, hashing all validators).
+
+    Do it once per iteration, then slice per module with extract_state_data — so evaluating a second
+    module in the same cycle reuses this instead of downloading the state again. The pubkey-specific
+    fields are left empty on the returned object; fill them per module with extract_state_data.
+    """
     # Anchor
     block: BlockData = w3.eth.get_block('latest')
     parent_beacon_block_root = bytes(block['parentBeaconBlockRoot'])
@@ -103,38 +111,19 @@ def load_beacon_state_data(
 
     logger.info({'msg': 'Beacon state loaded.', 'slot': slot})
 
-    # Single pass over validators: hash every validator (for the merkle tree)
-    # and extract compact fields for validators whose pubkey is in our set.
-    pubkey_to_index: dict[bytes, int] = {}
+    # Single pass over validators: hash every validator (for the merkle tree) and record its index.
+    # Both are pubkey-independent, so this pass is shared across all modules in one iteration.
+    all_pubkey_to_index: dict[bytes, int] = {}
     validators_roots: list[bytes] = []
-    validators_fields: dict[int, ValidatorFields] = {}
     for i, v in enumerate(state[STATE_VALIDATORS]):
         validators_roots.append(Validator.get_hash_tree_root(v))
-        pubkey = bytes(v[VALIDATOR_PUBKEY])
-        if pubkey in pubkeys:
-            pubkey_to_index[pubkey] = i
-            validators_fields[i] = ValidatorFields(
-                pubkey=pubkey,
-                effective_balance=int(v[VALIDATOR_EFFECTIVE_BALANCE]),
-                slashed=bool(v[VALIDATOR_SLASHED]),
-                activation_eligibility_epoch=int(v[VALIDATOR_ACTIVATION_ELIGIBILITY_EPOCH]),
-                activation_epoch=int(v[VALIDATOR_ACTIVATION_EPOCH]),
-                exit_epoch=int(v[VALIDATOR_EXIT_EPOCH]),
-                withdrawable_epoch=int(v[VALIDATOR_WITHDRAWABLE_EPOCH]),
-            )
-
-    validator_indices = set(pubkey_to_index.values())
-    pending_deposits = extract_pending_deposits(state, pubkeys)
-    consolidation_targets = extract_consolidation_targets(state, validator_indices)
+        all_pubkey_to_index[bytes(v[VALIDATOR_PUBKEY])] = i
 
     # For proofs
     state_field_roots = compute_state_field_roots(state)
     computed_state_root = MerkleTree(state_field_roots).root
     if computed_state_root != state_root:
         raise ValueError(f'state_root mismatch: computed=0x{computed_state_root.hex()}, expected=0x{state_root.hex()}')
-
-    # All data needed from the decoded state has been extracted; drop it.
-    del state
 
     return BeaconStateData(
         slot=slot,
@@ -143,11 +132,60 @@ def load_beacon_state_data(
         state_root=state_root,
         header=header,
         state_field_roots=state_field_roots,
+        pubkey_to_index={},
+        pending_deposits={},
+        consolidation_targets=set(),
+        validators_roots=validators_roots,
+        validators_fields={},
+        all_pubkey_to_index=all_pubkey_to_index,
+        raw_state=state,
+    )
+
+
+def extract_state_data(raw: BeaconStateData, pubkeys: set[bytes]) -> BeaconStateData:
+    """Cheap, pubkey-specific slice of a state already read by load_raw_beacon_state: resolve the
+    requested pubkeys to indices/fields and pull their pending deposits and consolidation targets.
+
+    Returns a new BeaconStateData that shares the heavy fields by reference and fills the
+    pubkey-specific ones. Safe to call once per module without reloading.
+    """
+    validators = raw.raw_state[STATE_VALIDATORS]
+    pubkey_to_index: dict[bytes, int] = {}
+    validators_fields: dict[int, ValidatorFields] = {}
+    for pubkey in pubkeys:
+        i = raw.all_pubkey_to_index.get(pubkey)
+        if i is None:
+            continue
+        pubkey_to_index[pubkey] = i
+        v = validators[i]
+        validators_fields[i] = ValidatorFields(
+            pubkey=pubkey,
+            effective_balance=int(v[VALIDATOR_EFFECTIVE_BALANCE]),
+            slashed=bool(v[VALIDATOR_SLASHED]),
+            activation_eligibility_epoch=int(v[VALIDATOR_ACTIVATION_ELIGIBILITY_EPOCH]),
+            activation_epoch=int(v[VALIDATOR_ACTIVATION_EPOCH]),
+            exit_epoch=int(v[VALIDATOR_EXIT_EPOCH]),
+            withdrawable_epoch=int(v[VALIDATOR_WITHDRAWABLE_EPOCH]),
+        )
+
+    validator_indices = set(pubkey_to_index.values())
+    pending_deposits = extract_pending_deposits(raw.raw_state, pubkeys)
+    consolidation_targets = extract_consolidation_targets(raw.raw_state, validator_indices)
+
+    return BeaconStateData(
+        slot=raw.slot,
+        timestamp=raw.timestamp,
+        parent_beacon_block_root=raw.parent_beacon_block_root,
+        state_root=raw.state_root,
+        header=raw.header,
+        state_field_roots=raw.state_field_roots,
         pubkey_to_index=pubkey_to_index,
         pending_deposits=pending_deposits,
         consolidation_targets=consolidation_targets,
-        validators_roots=validators_roots,
+        validators_roots=raw.validators_roots,
         validators_fields=validators_fields,
+        all_pubkey_to_index=raw.all_pubkey_to_index,
+        raw_state=raw.raw_state,
     )
 
 

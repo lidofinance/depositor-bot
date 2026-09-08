@@ -11,11 +11,12 @@ import time
 from typing import cast
 
 import pytest
+from web3 import HTTPProvider, Web3
+
 import variables
 from blockchain.consolidation.indexer import ConsolidationIndexer
 from blockchain.consolidation.store import InMemoryPendingStore
 from blockchain.contracts.consolidation_bus import ConsolidationBusContract
-from web3 import HTTPProvider, Web3
 
 _ZERO_ADDRESS = '0x0000000000000000000000000000000000000000'
 
@@ -51,8 +52,11 @@ def test_cold_start_against_live_consolidation_bus(consolidation_indexer_live):
 
     # 2. Correctness cross-check: every batch we hold as pending is actually open on-chain.
     #    getBatchInfo(batchHash).publisher == 0x0 would mean it is NOT pending.
+    # Check at the block the base was synced to (finalized), NOT latest: the store reflects state as
+    # of finalized, and a batch can legitimately be closed in the finalized→latest window.
+    finalized = store.get_cursor(default=indexer.deploy_block - 1)
     for batch_hash in list(store._batches.keys()):
-        publisher, _added_at = contract.get_batch_info(bytes.fromhex(batch_hash))
+        publisher, _added_at = contract.get_batch_info(bytes.fromhex(batch_hash), block_identifier=finalized)
         assert publisher != _ZERO_ADDRESS, f'batch {batch_hash} is not pending on-chain'
 
     # 3. Every pending pubkey decoded to a valid 48-byte BLS pubkey.

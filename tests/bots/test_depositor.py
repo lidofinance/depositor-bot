@@ -8,7 +8,7 @@ from web3.types import Wei
 
 import variables
 from blockchain.contracts.staking_router import MODULE_TYPE_CMV2, MODULE_TYPE_CSM, StakingModuleInfo
-from bots.depositor import DepositorBot, PhaseOutcome, QuorumState
+from bots.depositor import DepositorBot, PhaseOutcome, QuorumState, TopUpPath
 from tests.conftest import COUNCIL_ADDRESS_1, COUNCIL_ADDRESS_2, COUNCIL_PK_1, COUNCIL_PK_2
 from tests.utils.protocol_utils import get_deposit_message
 
@@ -23,11 +23,16 @@ def _make_digest(module_id, address, wc_type, status=0) -> StakingModuleInfo:
 def _make_bot():
     """Build a DepositorBot with all-MagicMock deps. No transports → MessageStorage stays empty."""
     variables.MESSAGE_TRANSPORTS = ''
+    w3 = MagicMock()
+    # w3.lido is a MagicMock, so `delegation` would auto-create a truthy child and silently turn on
+    # delegated top-up execution. Default to the direct-call configuration; tests that exercise
+    # delegation set it explicitly.
+    w3.lido.delegation = None
     # Skip the real ConsolidationBus backfill (needs RPC) — inject a mock indexer so top-up paths
     # are still exercised. ENABLE_TOP_UP is left untouched; tests set it as needed.
     with mock.patch.object(DepositorBot, '_build_consolidation_indexer', return_value=MagicMock()):
         bot = DepositorBot(
-            w3=MagicMock(),
+            w3=w3,
             sender=MagicMock(),
             base_deposit_strategy=MagicMock(),
             csm_strategy=MagicMock(),
@@ -135,6 +140,34 @@ class TestRefreshModulesState(unittest.TestCase):
 
         self.bot._get_quorum.assert_not_called()
         self.bot._select_strategy.assert_not_called()
+
+    def test_skips_module_without_contract(self):
+        self.bot.w3.lido.staking_module = Mock(side_effect=lambda module_id: None if module_id == 2 else MagicMock())
+        self.bot._get_quorum = Mock(return_value=None)
+        self.bot._select_strategy = Mock(return_value=Mock())
+
+        self.bot._refresh_modules_state()
+
+        called_ids = sorted(c.args[0] for c in self.bot._get_quorum.call_args_list)
+        self.assertEqual([1, 3], called_ids)
+
+    def test_missing_contract_metric_set_per_module(self):
+        self.bot.w3.lido.staking_module = Mock(side_effect=lambda module_id: None if module_id == 2 else MagicMock())
+        self.bot._get_quorum = Mock(return_value=None)
+        self.bot._select_strategy = Mock(return_value=Mock())
+
+        recorded = {}
+
+        def _labels(module_id):
+            child = Mock()
+            child.set = Mock(side_effect=lambda value: recorded.update({module_id: value}))
+            return child
+
+        with mock.patch('bots.depositor.MODULE_CONTRACT_MISSING') as gauge:
+            gauge.labels.side_effect = _labels
+            self.bot._refresh_modules_state()
+
+        self.assertEqual({1: 0, 2: 1, 3: 0}, recorded)
 
     def test_quorum_called_only_for_whitelisted(self):
         # Regression: previous implementation accidentally iterated all SR modules.
@@ -286,6 +319,12 @@ class TestCollectCandidates(unittest.TestCase):
         # status: 0=Active (kept), 1=DepositsPaused, 2=Stopped (both skipped)
         digests = [_make_digest(1, '0xA1', 1, status=1), _make_digest(2, '0xA2', 1, status=0), _make_digest(3, '0xA3', 1, status=2)]
         cands = self.bot._collect_candidates(digests, 1, [50, 50, 50], [100, 100, 100])
+        self.assertEqual([2], [c.module_id for c in cands])
+
+    def test_filters_module_without_contract(self):
+        self.bot.w3.lido.staking_module = Mock(side_effect=lambda module_id: None if module_id == 1 else MagicMock())
+        digests = [_make_digest(1, '0xA1', 1), _make_digest(2, '0xA2', 1)]
+        cands = self.bot._collect_candidates(digests, 1, [50, 50], [100, 100])
         self.assertEqual([2], [c.module_id for c in cands])
 
     def test_builds_fields_and_stake(self):
@@ -619,7 +658,7 @@ class TestPhaseFullAndTopup(unittest.TestCase):
         self.bot._phase_full_and_topup(Wei(100), [50, 999, 999, 999], [70, 1002, 1050, 1050], digests, top_up_enabled=True)
 
         # m1 (0x02) goes first
-        self.bot._top_up_to_module.assert_called_once_with(1, '0xA1', 70)
+        self.bot._top_up_to_module.assert_called_once_with(1, '0xA1', 70, mock.ANY)
         self.bot._deposit_to_module.assert_not_called()
 
     def test_sorts_by_per_type_stake_asc(self):
@@ -659,7 +698,7 @@ class TestPhaseFullAndTopup(unittest.TestCase):
         outcome = self.bot._phase_full_and_topup(Wei(100), [0], [0], digests, top_up_enabled=True)
 
         self.assertEqual(PhaseOutcome.SENT, outcome)
-        self.bot._top_up_to_module.assert_called_once_with(1, '0xA1', 42)
+        self.bot._top_up_to_module.assert_called_once_with(1, '0xA1', 42, mock.ANY)
 
     # ─── 0x01 branch ───────────────────────────────────────────
 
@@ -713,7 +752,7 @@ class TestPhaseFullAndTopup(unittest.TestCase):
         outcome = self.bot._phase_full_and_topup(Wei(100), [50, 999], [60, 999], digests, top_up_enabled=True)
 
         self.assertEqual(PhaseOutcome.SENT, outcome)
-        self.bot._top_up_to_module.assert_called_once_with(2, '0xA2', 50)
+        self.bot._top_up_to_module.assert_called_once_with(2, '0xA2', 50, mock.ANY)
         self.bot._deposit_to_module.assert_not_called()
 
     # ─── distance cooldown ─────────────────────────────────────
@@ -729,7 +768,7 @@ class TestPhaseFullAndTopup(unittest.TestCase):
         outcome = self.bot._phase_full_and_topup(Wei(100), [50, 999], [60, 999], digests, deposits_paused=True, top_up_enabled=True)
 
         self.assertEqual(PhaseOutcome.SENT, outcome)
-        self.bot._top_up_to_module.assert_called_once_with(2, '0xA2', 50)
+        self.bot._top_up_to_module.assert_called_once_with(2, '0xA2', 50, mock.ANY)
         self.bot._deposit_to_module.assert_not_called()
 
     def test_deposits_paused_and_topup_disabled_skips_all(self):
@@ -776,6 +815,10 @@ def depositor_bot(
         variables.MESSAGE_TRANSPORTS = ''
         variables.DEPOSIT_MODULES_WHITELIST = [1, 2]
         web3_lido_unit.eth.get_block = Mock(return_value=block_data)
+        # w3.lido is a Mock, so `delegation` would auto-create a truthy child and silently turn on
+        # delegated execution. Default to the direct-call configuration; tests that need delegation
+        # set it explicitly. Must be set before construction — startup validation reads it.
+        web3_lido_unit.lido.delegation = None
         # Skip the real ConsolidationBus backfill (needs RPC) — inject a mock indexer.
         with mock.patch.object(DepositorBot, '_build_consolidation_indexer', return_value=MagicMock()):
             bot = DepositorBot(
@@ -783,6 +826,9 @@ def depositor_bot(
             )
         bot.w3.lido.deposit_security_module.is_deposits_paused = Mock(return_value=False)
         bot.w3.lido.topup_gateway.is_paused = Mock(return_value=False)
+        # Huge SR per-block top-up cap so _top_up_to_module never caps in these tests; the cap itself
+        # is covered by TestTopUpToModuleCap.
+        bot.w3.lido.staking_router.get_max_top_up_per_block_gwei = Mock(return_value=10**18)
         yield bot
 
 
@@ -814,6 +860,43 @@ def test_execute_actual_reports_depositable_ether_even_when_zero(depositor_bot):
         depositor_bot._execute_actual()
 
     gauge.set.assert_called_once_with(0)
+
+
+@pytest.mark.unit
+def test_execute_actual_refreshes_topup_path_on_empty_buffer(depositor_bot):
+    """The empty buffer is the common idle state, so resolving the path after that early return
+    would pin `topup_execution_path` at its last value while a delegate rotation, revocation or
+    termination goes unnoticed — the exact failure the metric exists to surface."""
+    variables.ENABLE_TOP_UP = True
+    depositor_bot._refresh_modules_state = Mock()
+    depositor_bot.w3.lido.staking_router.get_all_staking_module_digests = Mock(return_value=[])
+    depositor_bot.w3.lido.lido.get_depositable_ether = Mock(return_value=0)
+    depositor_bot._resolve_topup_path = Mock(return_value=TopUpPath.NOT_DELEGATE)
+
+    with mock.patch('bots.depositor.TOPUP_EXECUTION_PATH') as metric:
+        assert depositor_bot._execute_actual() is False
+
+    depositor_bot._resolve_topup_path.assert_called_once()
+    metric.state.assert_called_once_with(TopUpPath.NOT_DELEGATE)
+    assert depositor_bot._topup_path is TopUpPath.NOT_DELEGATE
+
+
+@pytest.mark.unit
+def test_execute_actual_refreshes_topup_path_when_phase_a_short_circuits(depositor_bot):
+    """Same reason, for the other early return: a Phase A deposit ends the iteration before Phase B."""
+    variables.ENABLE_TOP_UP = True
+    depositor_bot._refresh_modules_state = Mock()
+    depositor_bot.w3.lido.lido.get_depositable_ether = Mock(return_value=100)
+    depositor_bot.w3.lido.staking_router.get_deposit_allocations = Mock(return_value=(0, [], []))
+    depositor_bot.w3.lido.staking_router.get_all_staking_module_digests = Mock(return_value=[])
+    depositor_bot._phase_seed = Mock(return_value=PhaseOutcome.SENT)
+    depositor_bot._phase_full_and_topup = Mock()
+    depositor_bot._resolve_topup_path = Mock(return_value=TopUpPath.TERMINATED)
+
+    assert depositor_bot._execute_actual() is True
+    depositor_bot._phase_full_and_topup.assert_not_called()
+    depositor_bot._resolve_topup_path.assert_called_once()
+    assert depositor_bot._topup_path is TopUpPath.TERMINATED
 
 
 @pytest.mark.unit
@@ -949,6 +1032,44 @@ def test_execute_actual_both_phases_return_false(depositor_bot):
     depositor_bot._phase_seed = Mock(return_value=PhaseOutcome.SKIPPED)
 
     assert depositor_bot._execute_actual() is False
+
+
+@pytest.mark.unit
+class TestTopUpToModuleCap(unittest.TestCase):
+    """_top_up_to_module caps the allocation at the SR per-block top-up limit before the strategy,
+    so both CMv2 and CSM plan within what SR.topUp will actually fund in one call."""
+
+    def setUp(self):
+        self.bot = _make_bot()
+        module = MagicMock()
+        module.get_type.return_value = MODULE_TYPE_CMV2
+        self.bot.w3.lido.staking_module = Mock(return_value=module)
+        self.bot.w3.lido.topup_gateway.get_max_validators_per_top_up.return_value = 32
+        # Strategy returns None so we assert on what it received, without proof/tx machinery.
+        self.strategy = MagicMock()
+        self.strategy.is_gas_price_ok.return_value = True
+        self.strategy.get_topup_candidates.return_value = None
+        self.bot._select_topup_strategy = Mock(return_value=self.strategy)
+
+    def _allocation_passed_to_strategy(self):
+        return self.strategy.get_topup_candidates.call_args.args[4]
+
+    def test_allocation_above_cap_is_capped(self):
+        # cap 3200 ETH < raw 9696 ETH → strategy gets 3200 ETH.
+        self.bot.w3.lido.staking_router.get_max_top_up_per_block_gwei.return_value = 3200 * 10**9
+
+        outcome = self.bot._top_up_to_module(1, '0xA1', Wei(9696 * 10**18), Mock())
+
+        self.assertEqual(PhaseOutcome.SKIPPED, outcome)
+        self.assertEqual(Wei(3200 * 10**18), self._allocation_passed_to_strategy())
+
+    def test_allocation_below_cap_passes_through(self):
+        # cap 3200 ETH > raw 100 ETH → strategy gets the raw 100 ETH unchanged.
+        self.bot.w3.lido.staking_router.get_max_top_up_per_block_gwei.return_value = 3200 * 10**9
+
+        self.bot._top_up_to_module(1, '0xA1', Wei(100 * 10**18), Mock())
+
+        self.assertEqual(Wei(100 * 10**18), self._allocation_passed_to_strategy())
 
 
 @pytest.mark.unit
@@ -1136,6 +1257,18 @@ def test_deposit_to_module_general_strategy_for_non_csm_module_type(depositor_bo
     depositor_bot._csm_strategy.is_gas_price_ok.assert_not_called()
 
 
+@pytest.mark.unit
+def test_deposit_to_module_general_strategy_when_module_unknown(depositor_bot):
+    depositor_bot.w3.lido.staking_module = Mock(return_value=None)
+    depositor_bot._csm_strategy.is_gas_price_ok = Mock(return_value=False)
+    depositor_bot._general_strategy.is_gas_price_ok = Mock(return_value=False)
+
+    depositor_bot._deposit_to_module(6)
+
+    depositor_bot._general_strategy.is_gas_price_ok.assert_called_once_with(6)
+    depositor_bot._csm_strategy.is_gas_price_ok.assert_not_called()
+
+
 # ─── _top_up_to_module ─────────────────────────────────────────────
 
 
@@ -1147,7 +1280,14 @@ def test_top_up_to_module_unknown_type_returns_false(depositor_bot):
     depositor_bot.w3.lido.staking_module = Mock(return_value=mock_module)
     depositor_bot._select_topup_strategy = Mock(return_value=None)
 
-    assert depositor_bot._top_up_to_module(1, '0xAddr', 50) is PhaseOutcome.SKIPPED
+    assert depositor_bot._top_up_to_module(1, '0xAddr', 50, Mock()) is PhaseOutcome.SKIPPED
+
+
+@pytest.mark.unit
+def test_top_up_to_module_without_contract_skips(depositor_bot):
+    depositor_bot.w3.lido.staking_module = Mock(return_value=None)
+
+    assert depositor_bot._top_up_to_module(6, '0xAddr', 50, Mock()) is PhaseOutcome.SKIPPED
 
 
 @pytest.mark.unit
@@ -1160,7 +1300,7 @@ def test_top_up_to_module_gas_too_high_returns_false(depositor_bot):
     strategy.get_topup_candidates = Mock()
     depositor_bot._select_topup_strategy = Mock(return_value=strategy)
 
-    assert depositor_bot._top_up_to_module(1, '0xAddr', 50) is PhaseOutcome.SKIPPED
+    assert depositor_bot._top_up_to_module(1, '0xAddr', 50, Mock()) is PhaseOutcome.SKIPPED
     strategy.get_topup_candidates.assert_not_called()
 
 
@@ -1176,7 +1316,7 @@ def test_top_up_to_module_no_proof_data_returns_false(depositor_bot):
     depositor_bot.w3.lido.topup_gateway.get_max_validators_per_top_up = Mock(return_value=10)
     depositor_bot.w3.lido.topup_gateway.top_up = Mock()
 
-    assert depositor_bot._top_up_to_module(1, '0xAddr', 50) is PhaseOutcome.SKIPPED
+    assert depositor_bot._top_up_to_module(1, '0xAddr', 50, Mock()) is PhaseOutcome.SKIPPED
     depositor_bot.w3.lido.topup_gateway.top_up.assert_not_called()
 
 
@@ -1204,7 +1344,7 @@ def test_top_up_to_module_max_validators_uses_min(depositor_bot, config_limit, g
         depositor_bot.w3.transaction.check = Mock(return_value=True)
         depositor_bot.w3.transaction.send = Mock(return_value=True)
 
-        depositor_bot._top_up_to_module(1, '0xAddr', 50)
+        depositor_bot._top_up_to_module(1, '0xAddr', 50, Mock())
 
         # max_validators is positional arg index 5
         assert strategy.get_topup_candidates.call_args.args[5] == expected
@@ -1231,7 +1371,7 @@ def test_top_up_to_module_happy_path_calls_top_up_check_send(depositor_bot):
     depositor_bot.w3.transaction.check = check
     depositor_bot.w3.transaction.send = Mock(return_value=True)
 
-    assert depositor_bot._top_up_to_module(1, '0xAddr', 50) is PhaseOutcome.SENT
+    assert depositor_bot._top_up_to_module(1, '0xAddr', 50, Mock()) is PhaseOutcome.SENT
 
     top_up.assert_called_once_with(1, proof_data)
     check.assert_called_once_with(tx)
@@ -1254,7 +1394,7 @@ def test_top_up_to_module_passes_module_allocation_through_to_strategy(depositor
     depositor_bot.w3.transaction.send = Mock(return_value=True)
     depositor_bot.w3.lido.staking_router.get_deposit_allocations = Mock()
 
-    depositor_bot._top_up_to_module(7, '0xModule7', 1234)
+    depositor_bot._top_up_to_module(7, '0xModule7', 1234, Mock())
 
     # allocation 1234 forwarded; getDepositAllocations NOT re-queried
     assert strategy.get_topup_candidates.call_args.args[4] == 1234
@@ -1278,6 +1418,196 @@ def test_build_consolidation_indexer_raises_when_top_up_enabled_but_bus_unconfig
     bot = _make_bot()
     with mock.patch.object(variables, 'get_consolidation_bus_config', return_value=(None, None)), pytest.raises(ValueError):
         bot._build_consolidation_indexer()
+
+
+# ─── top-up execution path (direct vs delegated) ───────────────────
+
+
+def _delegation_mock(bot, *, delegate, terminated=False, delegation_has_role=True, account_has_role=True):
+    """Attach a delegation contract mock plus a role table for (delegation, bot account)."""
+    delegation = Mock()
+    delegation.address = '0xDe1e9a710000000000000000000000000000BEEF'
+    delegation.is_terminated = Mock(return_value=terminated)
+    delegation.get_delegate = Mock(return_value=delegate)
+    delegation.wrap = Mock(side_effect=lambda call: ('wrapped', call))
+    bot.w3.lido.delegation = delegation
+    _role_table(bot, {delegation.address: delegation_has_role}, account_has_role)
+    return delegation
+
+
+def _role_table(bot, holders: dict, account_has_role=True):
+    """Stub TOP_UP_ROLE lookups: holders maps address → hasRole, bot account handled separately."""
+    role = b'\x01' * 32
+    bot.w3.lido.topup_gateway.top_up_role = Mock(return_value=role)
+
+    def has_role(_role, address):
+        if variables.ACCOUNT is not None and address == variables.ACCOUNT.address:
+            return account_has_role
+        return holders.get(address, False)
+
+    bot.w3.lido.topup_gateway.has_role = Mock(side_effect=has_role)
+
+
+@pytest.fixture
+def account(monkeypatch):
+    acc = Mock()
+    acc.address = '0xB07B07B07B07B07B07B07B07B07B07B07B07B07B'
+    monkeypatch.setattr(variables, 'ACCOUNT', acc)
+    return acc
+
+
+@pytest.mark.unit
+def test_path_direct_when_no_delegation_configured(depositor_bot, account):
+    _role_table(depositor_bot, {}, account_has_role=True)
+    assert depositor_bot._resolve_topup_path() is TopUpPath.DIRECT
+
+
+@pytest.mark.unit
+def test_path_no_role_when_nobody_holds_the_role(depositor_bot, account):
+    """Pre-existing misconfiguration that used to be invisible: role never granted to the key."""
+    _role_table(depositor_bot, {}, account_has_role=False)
+    assert depositor_bot._resolve_topup_path() is TopUpPath.NO_ROLE
+
+
+@pytest.mark.unit
+def test_path_delegated_when_delegation_holds_role_and_bot_is_delegate(depositor_bot, account):
+    _delegation_mock(depositor_bot, delegate=account.address)
+    assert depositor_bot._resolve_topup_path() is TopUpPath.DELEGATED
+
+
+@pytest.mark.unit
+def test_path_prefers_delegation_over_direct_when_both_hold_the_role(depositor_bot, account):
+    """The overlap state mid-migration: both identities hold the role. Delegation wins, so the
+    cutover is complete as soon as the grant lands — revoking from the key changes nothing."""
+    _delegation_mock(depositor_bot, delegate=account.address, account_has_role=True)
+    assert depositor_bot._resolve_topup_path() is TopUpPath.DELEGATED
+
+
+@pytest.mark.unit
+def test_path_direct_when_delegation_has_no_role_yet(depositor_bot, account):
+    """Before the grant lands: delegation is configured but the key still carries the role."""
+    _delegation_mock(depositor_bot, delegate=account.address, delegation_has_role=False)
+    assert depositor_bot._resolve_topup_path() is TopUpPath.DIRECT
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    'kwargs,expected',
+    [
+        ({'delegate': '0x0000000000000000000000000000000000000001'}, TopUpPath.NOT_DELEGATE),
+        ({'delegate': None, 'terminated': True}, TopUpPath.TERMINATED),
+    ],
+)
+def test_path_reports_delegation_fault_when_direct_is_not_available(depositor_bot, account, kwargs, expected):
+    kwargs['delegate'] = kwargs['delegate'] or account.address
+    _delegation_mock(depositor_bot, account_has_role=False, **kwargs)
+    assert depositor_bot._resolve_topup_path() is expected
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    'kwargs',
+    [
+        {'delegate': '0x0000000000000000000000000000000000000001'},  # delegate rotated away
+        {'delegate': None, 'terminated': True},
+    ],
+)
+def test_path_falls_back_to_direct_when_delegation_is_broken(depositor_bot, account, kwargs):
+    """A revoked delegate or a terminated contract must not strand the bot while its own key still
+    holds the role — this is what removes the need for a restart timed to the role transactions."""
+    kwargs['delegate'] = kwargs['delegate'] or account.address
+    _delegation_mock(depositor_bot, account_has_role=True, **kwargs)
+    assert depositor_bot._resolve_topup_path() is TopUpPath.DIRECT
+
+
+@pytest.mark.unit
+def test_path_direct_in_dry_mode_without_account(depositor_bot, monkeypatch):
+    """No key to compare against and nothing gets sent — don't block on identity checks."""
+    monkeypatch.setattr(variables, 'ACCOUNT', None)
+    _role_table(depositor_bot, {}, account_has_role=False)
+    assert depositor_bot._resolve_topup_path() is TopUpPath.DIRECT
+
+
+@pytest.mark.unit
+def test_validate_refuses_to_start_when_delegation_configured_but_no_path_works(depositor_bot, account):
+    _delegation_mock(depositor_bot, delegate='0x0000000000000000000000000000000000000001', account_has_role=False)
+    with (
+        mock.patch.object(variables, 'ENABLE_TOP_UP', True),
+        mock.patch.object(variables, 'DELEGATION_CONTRACT_ADDRESS', '0xDe1e9a710000000000000000000000000000BEEF'),
+        pytest.raises(ValueError, match='No usable path'),
+    ):
+        depositor_bot._validate_topup_delegation()
+
+
+@pytest.mark.unit
+def test_validate_only_warns_when_no_role_and_no_delegation_configured(depositor_bot, account):
+    """Pre-existing deployments must not turn an upgrade into a boot failure."""
+    _role_table(depositor_bot, {}, account_has_role=False)
+    with (
+        mock.patch.object(variables, 'ENABLE_TOP_UP', True),
+        mock.patch.object(variables, 'DELEGATION_CONTRACT_ADDRESS', None),
+    ):
+        depositor_bot._validate_topup_delegation()  # does not raise
+    assert depositor_bot._topup_path is TopUpPath.NO_ROLE
+
+
+@pytest.mark.unit
+def test_validate_passes_and_records_path_when_executable(depositor_bot, account):
+    _delegation_mock(depositor_bot, delegate=account.address)
+    with mock.patch.object(variables, 'ENABLE_TOP_UP', True):
+        depositor_bot._validate_topup_delegation()
+    assert depositor_bot._topup_path is TopUpPath.DELEGATED
+
+
+@pytest.mark.unit
+def test_validate_skipped_when_top_up_disabled(depositor_bot, account):
+    """A broken delegation is irrelevant while top-up is off — don't block the deposit-only bot."""
+    delegation = _delegation_mock(depositor_bot, delegate=account.address, terminated=True)
+    with mock.patch.object(variables, 'ENABLE_TOP_UP', False):
+        depositor_bot._validate_topup_delegation()
+    delegation.is_terminated.assert_not_called()
+
+
+@pytest.mark.unit
+def test_top_up_to_module_sends_direct_call_on_the_direct_path(depositor_bot):
+    tx = Mock(name='tx')
+    _stub_topup_happy_path(depositor_bot, tx)
+    depositor_bot._topup_path = TopUpPath.DIRECT
+
+    assert depositor_bot._top_up_to_module(1, '0xAddr', 50, Mock()) is PhaseOutcome.SENT
+    depositor_bot.w3.transaction.check.assert_called_once_with(tx)
+    depositor_bot.w3.transaction.send.assert_called_once_with(tx, False, 6)
+
+
+@pytest.mark.unit
+def test_top_up_to_module_wraps_call_before_dry_run_on_the_delegated_path(depositor_bot, account):
+    """The wrapped tx — not the bare topUp — must reach check() and send(): the direct call would
+    revert with AccessControlUnauthorizedAccount, since the role is held by the delegation contract."""
+    tx = Mock(name='tx')
+    _stub_topup_happy_path(depositor_bot, tx)
+    delegation = _delegation_mock(depositor_bot, delegate=account.address)
+    depositor_bot._topup_path = TopUpPath.DELEGATED
+
+    assert depositor_bot._top_up_to_module(1, '0xAddr', 50, Mock()) is PhaseOutcome.SENT
+
+    delegation.wrap.assert_called_once_with(tx)
+    depositor_bot.w3.transaction.check.assert_called_once_with(('wrapped', tx))
+    depositor_bot.w3.transaction.send.assert_called_once_with(('wrapped', tx), False, 6)
+
+
+def _stub_topup_happy_path(bot, tx):
+    """Stub everything _top_up_to_module needs up to building the tx."""
+    mock_module = Mock()
+    mock_module.get_type.return_value = MODULE_TYPE_CMV2
+    bot.w3.lido.staking_module = Mock(return_value=mock_module)
+    strategy = Mock()
+    strategy.is_gas_price_ok = Mock(return_value=True)
+    strategy.get_topup_candidates = Mock(return_value=['proof'])
+    bot._select_topup_strategy = Mock(return_value=strategy)
+    bot.w3.lido.topup_gateway.get_max_validators_per_top_up = Mock(return_value=10)
+    bot.w3.lido.topup_gateway.top_up = Mock(return_value=tx)
+    bot.w3.transaction.check = Mock(return_value=True)
+    bot.w3.transaction.send = Mock(return_value=True)
 
 
 # ─── _select_topup_strategy ────────────────────────────────────────
@@ -1328,6 +1658,10 @@ def setup_deposit_message(depositor_bot, block_data):
     )
     depositor_bot.w3.lido.staking_router.get_staking_module_nonce = Mock(return_value=12)
     depositor_bot.w3.lido.deposit_security_module.get_guardians = Mock(return_value=['0x43464Fe06c18848a2E2e913194D64c1970f4326a'])
+    # {delegate_EOA: guardian_contract}: delegate 0x7099… is the active delegate of guardian 0x4346….
+    depositor_bot.w3.lido.get_guardian_delegates = Mock(
+        return_value={'0x70997970C51812dc3A010C7d01b50e0d17dc79C8': '0x43464Fe06c18848a2E2e913194D64c1970f4326a'}
+    )
 
 
 @pytest.mark.unit
@@ -1338,7 +1672,35 @@ def test_depositor_message_actualizer(setup_deposit_message, depositor_bot, depo
 
 @pytest.mark.unit
 def test_depositor_message_actualizer_not_guardian(setup_deposit_message, depositor_bot, deposit_message, block_data):
-    depositor_bot.w3.lido.deposit_security_module.get_guardians = Mock(return_value=['0x13464Fe06c18848a2E2e913194D64c1970f4326a'])
+    # Legacy (no delegate on the message): guardian must still be registered — here it is not.
+    depositor_bot.w3.lido.get_guardian_delegates = Mock(
+        return_value={'0x70997970C51812dc3A010C7d01b50e0d17dc79C8': '0x13464Fe06c18848a2E2e913194D64c1970f4326a'}
+    )
+    message_filter = depositor_bot._get_message_actualize_filter()
+    assert not list(filter(message_filter, [deposit_message]))
+
+
+@pytest.mark.unit
+def test_depositor_message_actualizer_delegate_fresh(setup_deposit_message, depositor_bot, deposit_message, block_data):
+    # Data Bus message carrying its delegate; the delegate still maps to the claimed guardian → kept.
+    deposit_message['guardianDelegate'] = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8'
+    message_filter = depositor_bot._get_message_actualize_filter()
+    assert list(filter(message_filter, [deposit_message]))
+
+
+@pytest.mark.unit
+def test_depositor_message_actualizer_delegate_rotated(setup_deposit_message, depositor_bot, deposit_message, block_data):
+    # Signer delegate is no longer the guardian's active delegate (rotated/revoked/terminated) → dropped.
+    deposit_message['guardianDelegate'] = '0x000000000000000000000000000000000000dEaD'
+    message_filter = depositor_bot._get_message_actualize_filter()
+    assert not list(filter(message_filter, [deposit_message]))
+
+
+@pytest.mark.unit
+def test_depositor_message_actualizer_delegate_wrong_guardian(setup_deposit_message, depositor_bot, deposit_message, block_data):
+    # Delegate is active but now bound to a different guardian than the message claims → dropped.
+    deposit_message['guardianDelegate'] = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8'
+    deposit_message['guardianAddress'] = '0x33464Fe06c18848a2E2e913194D64c1970f4326a'
     message_filter = depositor_bot._get_message_actualize_filter()
     assert not list(filter(message_filter, [deposit_message]))
 

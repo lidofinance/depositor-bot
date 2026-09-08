@@ -124,9 +124,29 @@ TOPUP_GATEWAY_PAUSED = Gauge(
     namespace=PROMETHEUS_PREFIX,
 )
 
+# States must stay in sync with bots.depositor.TopUpPath's values (see note on PHASE_OUTCOME).
+# `direct` and `delegated` are both healthy — which one is live tells you whether TOP_UP_ROLE
+# currently sits on the bot's key or on the delegation contract, i.e. whether a migration has taken
+# effect. The rest each block every top-up, and they are distinguished here because a bare "tx
+# failed" counter cannot tell a role/delegate problem from a revert inside topUp() itself.
+TOPUP_EXECUTION_PATH = Enum(
+    'topup_execution_path',
+    'How TopUpGateway.topUp is executed, resolved from on-chain TOP_UP_ROLE assignment.',
+    states=['direct', 'delegated', 'not_delegate', 'terminated', 'no_role'],
+    namespace=PROMETHEUS_PREFIX,
+)
+
 MODULE_STATUS = Gauge(
     'module_status',
     'Staking module status from StakingRouter digest. 0=active 1=deposits_paused 2=stopped',
+    ['module_id'],
+    namespace=PROMETHEUS_PREFIX,
+)
+
+MODULE_CONTRACT_MISSING = Gauge(
+    'module_contract_missing',
+    '1 when a whitelisted module has no contract known to the bot — not deployed at startup, or '
+    'deployed after it. The module is skipped every cycle until the bot is restarted.',
     ['module_id'],
     namespace=PROMETHEUS_PREFIX,
 )
@@ -336,6 +356,9 @@ for _module_id in DEPOSIT_MODULES_WHITELIST:
     for _kind in ('seed', 'topup'):
         MODULE_ALLOCATION.labels(_module_id, _kind).set(0)
         MODULE_STAKE.labels(_module_id, _kind).set(0)
+    POSSIBLE_DEPOSITS_AMOUNT.labels(_module_id).set(0)
+    DEPOSIT_AMOUNT_OK.labels(_module_id).set(0)
+    MODULE_CONTRACT_MISSING.labels(_module_id).set(0)
 
 # Absent Gauges are indistinguishable from "feature disabled"; 0 is more honest.
 DEPOSITS_PAUSED.set(0)
@@ -349,6 +372,7 @@ KEYS_API_BLOCK_NUMBER.set(0)
 KEYS_API_BLOCK_AGE_SECONDS.set(0)
 EL_HEAD_BLOCK_NUMBER.set(0)
 EL_HEAD_BLOCK_AGE_SECONDS.set(0)
+BOT_LAST_CYCLE_TIMESTAMP.set(0)
 
 INFO = Info(name='build', documentation='Info metric', namespace=PROMETHEUS_PREFIX)
 CONVERTED_PUBLIC_ENV = {k: str(v) for k, v in PUBLIC_ENV_VARS.items()}
