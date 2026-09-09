@@ -15,6 +15,17 @@ TX_SEND = Counter('transactions_send', 'Amount of send transaction from bot.', [
 TX_SEND.labels('success').inc(0)
 TX_SEND.labels('failure').inc(0)
 
+TX_SEND_FAILURE = Counter(
+    'transaction_send_failures',
+    'Failed transaction sends by reason.',
+    ['reason'],
+    namespace=PROMETHEUS_PREFIX,
+)
+
+TX_SEND_FAILURE.labels('not_broadcast').inc(0)
+TX_SEND_FAILURE.labels('not_included').inc(0)
+TX_SEND_FAILURE.labels('relay_error').inc(0)
+
 MODULE_TX_SEND = Counter(
     'transactions',
     'Amount of send transactions from depositor bot.',
