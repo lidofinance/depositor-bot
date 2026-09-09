@@ -2,11 +2,12 @@ import logging
 from unittest.mock import Mock
 
 import pytest
+from hexbytes import HexBytes
+from web3.exceptions import ContractLogicError, TimeExhausted
+
 import variables
 from blockchain.web3_extentions.transaction import TransactionUtils
-from hexbytes import HexBytes
 from metrics.metrics import TX_SEND_FAILURE
-from web3.exceptions import ContractLogicError, TimeExhausted
 
 
 @pytest.mark.unit
