@@ -3,6 +3,7 @@ from collections.abc import Callable
 from typing import Any, cast
 
 from eth_account.account import VRS
+from eth_typing import ChecksumAddress
 
 from cryptography.verify_signature import recover_vs, verify_message_with_signature
 from metrics.metrics import UNEXPECTED_EXCEPTIONS
@@ -16,6 +17,31 @@ from utils.bytes import from_hex_string_to_bytes
 logger = logging.getLogger(__name__)
 
 BotMessage = DepositMessage | PauseMessage | UnvetMessage | PingMessage
+
+
+def get_guardian_filter(delegate_map: dict[ChecksumAddress, ChecksumAddress]) -> Callable[[BotMessage], bool]:
+    """Returns a filter that checks a message still comes from a currently registered guardian.
+
+    ``delegate_map`` is ``{delegate_EOA: guardian_contract}`` at the current block. A Data Bus message
+    under delegation carries ``guardianDelegate``, which must still be that guardian's active delegate
+    — the off-chain mirror of the on-chain ERC-1271 check, so a rotated, revoked or terminated
+    delegate is dropped instead of being retried until its nonce goes stale. A message without a
+    delegate (e.g. RabbitMQ) is only checked for guardian registration.
+    """
+    guardians = set(delegate_map.values())
+
+    def guardian_filter(message: BotMessage) -> bool:
+        delegate = cast(dict, message).get('guardianDelegate')
+        if delegate is not None:
+            if delegate_map.get(delegate) == message['guardianAddress']:
+                return True
+        elif message['guardianAddress'] in guardians:
+            return True
+
+        UNEXPECTED_EXCEPTIONS.labels('unexpected_guardian_address').inc()
+        return False
+
+    return guardian_filter
 
 
 def get_messages_sign_filter(prefix: bytes, delegated: bool = False) -> Callable:
