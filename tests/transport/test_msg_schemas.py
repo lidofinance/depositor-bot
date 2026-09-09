@@ -1,6 +1,7 @@
 import pytest
 from transport.msg_types.deposit import DepositMessageSchema
 from transport.msg_types.ping import to_check_sum_address
+from transport.msg_types.unvet import UnvetMessageSchema
 
 
 @pytest.mark.unit
@@ -56,3 +57,29 @@ def test_check_depositor_schema_negative():
         'stakingModuleId': 2,
     }
     assert not DepositMessageSchema.is_valid(msg)
+
+
+UNVET_MSG = {
+    'type': 'unvet',
+    'blockNumber': 5737984,
+    'blockHash': '0x432e218931e9b94f0702ecb1b0d084c467a86b384767ce38c4fe164463070532',
+    'guardianAddress': '0x43464Fe06c18848a2E2e913194D64c1970f4326a',
+    'stakingModuleId': 1,
+    'nonce': 16,
+    'operatorIds': '0x0000000000000001',
+    'vettedKeysByOperator': '0x00000002',
+    'signature': {
+        'r': '0xc2235eb6983f80d19158f807d5d90d93abec52034ea7184bbf164ba211f00116',
+        '_vs': '0x75354ffc9fb6e7a4b4c01c622661a1d0382ace8c4ff8024626e39ac1a6a613d0',
+    },
+}
+
+
+@pytest.mark.unit
+def test_check_unvet_schema_positive():
+    assert UnvetMessageSchema.is_valid(UNVET_MSG)
+
+
+@pytest.mark.unit
+def test_check_unvet_schema_requires_nonce():
+    assert not UnvetMessageSchema.is_valid({k: v for k, v in UNVET_MSG.items() if k != 'nonce'})
