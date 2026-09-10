@@ -149,8 +149,6 @@ CONSOLIDATION_BUS_BY_CHAIN_ID: dict[int, dict] = {
 CONSOLIDATION_BUS_ADDRESS = os.getenv('CONSOLIDATION_BUS_ADDRESS')
 CONSOLIDATION_BUS_DEPLOY_BLOCK = os.getenv('CONSOLIDATION_BUS_DEPLOY_BLOCK')
 CONSOLIDATION_GETLOGS_CHUNK = int(os.getenv('CONSOLIDATION_GETLOGS_CHUNK', 10_000))
-# Widest span a single Data Bus `eth_getLogs` may ask for. Keep it under the endpoint's limit:
-# past it every poll fails identically and the transport stops advancing.
 ONCHAIN_TRANSPORT_GETLOGS_CHUNK = int(os.getenv('ONCHAIN_TRANSPORT_GETLOGS_CHUNK', 10_000))
 
 

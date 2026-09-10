@@ -532,10 +532,6 @@ def _scanned_ranges(w3) -> list[tuple[int, int]]:
 
 @pytest.mark.unit
 def test_cursor_advances_on_empty_scan(web3_lido_unit):
-    """An empty scan is progress. Advancing only on a non-empty result pinned fromBlock through every
-    quiet stretch, growing the request until it exceeded the provider's eth_getLogs limit — after
-    which every poll failed identically and no message was ever read again.
-    """
     web3_lido_unit.eth.get_logs = Mock(return_value=[])
     web3_lido_unit.eth.get_block_number = Mock(side_effect=[1_000, 1_100])
     provider = _cursor_provider(web3_lido_unit)

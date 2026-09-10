@@ -413,9 +413,7 @@ class OnchainTransportProvider(BaseMessageProvider):
             ONCHAIN_TRANSPORT_CURSOR_LAG.set(0)
             return []
 
-        # Cap the span so a quiet stretch or a provider outage cannot grow it past the endpoint's
-        # eth_getLogs limit: past that every poll fails on the same oversized request, and since a
-        # failed poll cannot advance the cursor, the transport never reads another message.
+        # Past the endpoint's eth_getLogs limit every poll fails identically and the cursor never moves again.
         to_block = min(latest_block_number, from_block + variables.ONCHAIN_TRANSPORT_GETLOGS_CHUNK)
 
         event_ids = list(self._parsers_by_event_id)
@@ -440,9 +438,7 @@ class OnchainTransportProvider(BaseMessageProvider):
             logger.error({'msg': 'Failed to fetch logs', 'err': repr(e), 'from_block': from_block, 'to_block': to_block})
             return []
 
-        # A scanned range is progress whether or not it held a message. Advancing only on a non-empty
-        # result left the cursor pinned through every quiet stretch, growing the next request without
-        # bound until it exceeded the provider limit.
+        # A scanned range is progress whether or not it held a message.
         self._latest_block = to_block
         ONCHAIN_TRANSPORT_CURSOR_LAG.set(latest_block_number - to_block)
         return logs
