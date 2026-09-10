@@ -518,3 +518,54 @@ def mock_receipts(w3: Web3) -> list[dict]:
         _deposit_v2_log(w3, block_number=3, nonce=41, signature=bytes(65)),
         _ping_log(w3, block_number=4),
     ]
+
+
+def _cursor_provider(w3) -> OnchainTransportProvider:
+    with mock.patch('web3.eth.Eth.chain_id', new_callable=mock.PropertyMock) as chain_id:
+        chain_id.return_value = 1
+        return _stubbed_provider(w3, [PingParser])
+
+
+def _scanned_ranges(w3) -> list[tuple[int, int]]:
+    return [(call.args[0]['fromBlock'], call.args[0]['toBlock']) for call in w3.eth.get_logs.call_args_list]
+
+
+@pytest.mark.unit
+def test_cursor_advances_on_empty_scan(web3_lido_unit):
+    """An empty scan is progress. Advancing only on a non-empty result pinned fromBlock through every
+    quiet stretch, growing the request until it exceeded the provider's eth_getLogs limit — after
+    which every poll failed identically and no message was ever read again.
+    """
+    web3_lido_unit.eth.get_logs = Mock(return_value=[])
+    web3_lido_unit.eth.get_block_number = Mock(side_effect=[1_000, 1_100])
+    provider = _cursor_provider(web3_lido_unit)
+
+    provider.get_messages()
+    provider.get_messages()
+
+    assert _scanned_ranges(web3_lido_unit) == [(744, 1_000), (1_000, 1_100)]
+
+
+@pytest.mark.unit
+def test_scanned_range_is_capped(web3_lido_unit, monkeypatch):
+    monkeypatch.setattr(variables, 'ONCHAIN_TRANSPORT_GETLOGS_CHUNK', 50)
+    web3_lido_unit.eth.get_logs = Mock(return_value=[])
+    web3_lido_unit.eth.get_block_number = Mock(return_value=9_000)
+    provider = _cursor_provider(web3_lido_unit)
+    provider._latest_block = 1_000
+
+    provider.get_messages()
+    provider.get_messages()
+
+    assert _scanned_ranges(web3_lido_unit) == [(1_000, 1_050), (1_050, 1_100)]
+
+
+@pytest.mark.unit
+def test_failed_scan_does_not_advance_cursor(web3_lido_unit):
+    web3_lido_unit.eth.get_logs = Mock(side_effect=ValueError('query returned more than 10000 results'))
+    web3_lido_unit.eth.get_block_number = Mock(return_value=1_010)
+    provider = _cursor_provider(web3_lido_unit)
+    provider._latest_block = 1_000
+
+    assert provider.get_messages() == []
+    assert provider._latest_block == 1_000

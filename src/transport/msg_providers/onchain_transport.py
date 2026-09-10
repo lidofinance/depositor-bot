@@ -14,6 +14,7 @@ from web3_multi_provider import FallbackProvider
 
 import variables
 from cryptography.verify_signature import compact_signature
+from metrics.metrics import ONCHAIN_TRANSPORT_CURSOR_LAG, UNEXPECTED_EXCEPTIONS
 from transport.msg_providers.common import BaseMessageProvider
 from transport.msg_providers.rabbit import MessageType
 from transport.msg_types.deposit import DepositMessage
@@ -409,7 +410,14 @@ class OnchainTransportProvider(BaseMessageProvider):
         from_block = max(0, latest_block_number - self.STANDARD_OFFSET) if self._latest_block == -1 else self._latest_block
         # If block distance is 0, then skip fetching to avoid looping on a single block
         if from_block == latest_block_number:
+            ONCHAIN_TRANSPORT_CURSOR_LAG.set(0)
             return []
+
+        # Cap the span so a quiet stretch or a provider outage cannot grow it past the endpoint's
+        # eth_getLogs limit: past that every poll fails on the same oversized request, and since a
+        # failed poll cannot advance the cursor, the transport never reads another message.
+        to_block = min(latest_block_number, from_block + variables.ONCHAIN_TRANSPORT_GETLOGS_CHUNK)
+
         event_ids = list(self._parsers_by_event_id)
         # Snapshot the delegate map for this fetch so _process_msg reverse-maps against the same set
         # of delegates the topic filter was built from.
@@ -417,31 +425,27 @@ class OnchainTransportProvider(BaseMessageProvider):
         addresses_with_padding = [_32padding_address(address) for address in self._delegate_map]
         filter_params = FilterParams(
             fromBlock=from_block,
-            toBlock=latest_block_number,
+            toBlock=to_block,
             address=self._onchain_address,
             topics=[event_ids, addresses_with_padding],
         )
         try:
             logs = self._w3.eth.get_logs(filter_params)
-            if logs:
-                self._latest_block = latest_block_number
-            return logs
         except BlockNotFound as e:
-            logger.error(
-                {
-                    'msg': 'Block not found',
-                    'err': repr(e),
-                }
-            )
+            UNEXPECTED_EXCEPTIONS.labels('onchain_transport_get_logs').inc()
+            logger.error({'msg': 'Block not found', 'err': repr(e)})
             return []
         except Exception as e:
-            logger.error(
-                {
-                    'msg': 'Failed to fetch logs',
-                    'err': repr(e),
-                }
-            )
+            UNEXPECTED_EXCEPTIONS.labels('onchain_transport_get_logs').inc()
+            logger.error({'msg': 'Failed to fetch logs', 'err': repr(e), 'from_block': from_block, 'to_block': to_block})
             return []
+
+        # A scanned range is progress whether or not it held a message. Advancing only on a non-empty
+        # result left the cursor pinned through every quiet stretch, growing the next request without
+        # bound until it exceeded the provider limit.
+        self._latest_block = to_block
+        ONCHAIN_TRANSPORT_CURSOR_LAG.set(latest_block_number - to_block)
+        return logs
 
     def _process_msg(self, log: LogReceipt) -> dict | None:
         parsed = self._parse_log(log)

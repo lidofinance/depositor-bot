@@ -15,6 +15,12 @@ TX_SEND = Counter('transactions_send', 'Amount of send transaction from bot.', [
 TX_SEND.labels('success').inc(0)
 TX_SEND.labels('failure').inc(0)
 
+ONCHAIN_TRANSPORT_CURSOR_LAG = Gauge(
+    'onchain_transport_cursor_lag_blocks',
+    'Blocks between the Data Bus chain head and the last scanned block.',
+    namespace=PROMETHEUS_PREFIX,
+)
+
 MODULE_TX_SEND = Counter(
     'transactions',
     'Amount of send transactions from depositor bot.',
