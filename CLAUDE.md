@@ -19,11 +19,16 @@ poetry run pytest tests/bots/test_depositor.py::TestDepositorBot::test_name -m u
 # Run integration tests (requires Hoodi RPC in TESTNET_WEB3_RPC_ENDPOINTS and anvil installed)
 poetry run pytest tests -m integration
 
-# Lint and format
-poetry run ruff check --fix
-poetry run ruff format
+# Lint and format — use the pre-commit hooks, NOT `poetry run ruff`.
+# The hooks pin ruff v0.15.9; the dev dependency resolves to 0.4.10, whose isort classifies
+# `schema`/`web3` as first-party and rewrites the import block of nearly every file in the repo.
+# Running `poetry run ruff check --fix` therefore produces a large unrelated diff that the pinned
+# version then leaves untouched.
+poetry run pre-commit run ruff --files <changed files>
+poetry run pre-commit run ruff-format --files <changed files>
+poetry run pre-commit run --all-files
 
-# Type check
+# Type check (48 errors are pre-existing — compare against the base commit, don't chase the total)
 poetry run pyright src/
 
 # Run a bot locally (dry mode, no transactions sent unless CREATE_TRANSACTIONS=true)
@@ -115,7 +120,12 @@ Both parser sets are registered in each bot (`parsers_providers=[...]`). **Clean
 
 Logs are dispatched to the parser that declared their event id (`topic0`), never by trying parsers until one does not raise — the V1 layout decodes a V2 payload *without* raising (the ABI offset word reads as `blockNumber`), so a fallback chain would silently turn every v5 message into garbage that only fails later, at signature verification.
 
-`MessageStorage` (`src/transport/msg_storage.py`) aggregates messages from all active transports, applies static filters (signature validity, checksum address normalization), and on each cycle calls `get_messages_and_actualize()` with a dynamic filter that discards messages older than 200 blocks or with a stale deposit root.
+`MessageStorage` (`src/transport/msg_storage.py`) aggregates messages from all active transports, applies static filters, and on each cycle calls `get_messages_and_actualize()` with a dynamic filter.
+
+The split between the two filter lists is load-bearing, not cosmetic: **static filters run once per message, on arrival; the actualize filter re-runs over the entire retained list on every call** — and `_fetch_actual_messages()` is called once per whitelisted module per cycle (`_refresh_modules_state`), plus once more per deposit attempt. So anything whose answer cannot change belongs in the static list, or it gets paid for N times per cycle per retained message.
+
+- **Static** (`DepositorBot.__init__`): metrics/type filter, checksum normalization, then **guardian signature verification** — a property of the message alone (the digest covers every signed field; the attest prefix and delegation mode are fixed for the process, both changing only on a DSM upgrade, which already requires a restart). Order matters: the sign filter must follow `to_check_sum_address`, since it compares against the recovered (checksummed) address.
+- **Actualize** (`_get_message_actualize_filter`): only checks against mutable chain state — guardian/delegate still registered, deposit root still current, and `blockNumber` within `MESSAGE_BLOCK_WINDOW` (200) of the node's head **in either direction**. The upper bound matters: `blockNumber` is inside the signed digest, so without it a guardian could sign unlimited messages for blocks the chain will never reach, each retained forever under "cannot verify yet" — unbounded storage growth that eventually pushes a cycle past `MAX_CYCLE_LIFETIME_IN_SECONDS` and kills the daemon, taking down the quorum-free top-up path with it.
 
 Quorum is formed by grouping valid messages by `blockHash`, then checking if any group has `>= guardian_quorum` unique guardian addresses.
 
