@@ -22,11 +22,8 @@ BotMessage = DepositMessage | PauseMessage | UnvetMessage | PingMessage
 def get_guardian_filter(delegate_map: dict[ChecksumAddress, ChecksumAddress]) -> Callable[[BotMessage], bool]:
     """Returns a filter that checks a message still comes from a currently registered guardian.
 
-    ``delegate_map`` is ``{delegate_EOA: guardian_contract}`` at the current block. A Data Bus message
-    under delegation carries ``guardianDelegate``, which must still be that guardian's active delegate
-    — the off-chain mirror of the on-chain ERC-1271 check, so a rotated, revoked or terminated
-    delegate is dropped instead of being retried until its nonce goes stale. A message without a
-    delegate (e.g. RabbitMQ) is only checked for guardian registration.
+    ``delegate_map`` is ``{delegate_EOA: guardian_contract}``. Under delegation the signer must still
+    be the guardian's active delegate — the off-chain mirror of the on-chain ERC-1271 check.
     """
     guardians = set(delegate_map.values())
 

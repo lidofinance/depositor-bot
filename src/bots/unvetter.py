@@ -157,11 +157,10 @@ class UnvetterBot:
         return result
 
     def _clear_outdated_messages(self, module_ids: set[int]) -> None:
-        """Evict messages this cycle's unvets left behind: a sent unvet advances its module nonce, so
-        every retained message below it can only revert.
+        """Evict messages left behind by this cycle's unvets: a sent unvet advances its module nonce.
 
-        Once per cycle, and without the signature filter — `receive_unvet_messages` already applied it
-        to the whole retained set, and re-applying it per message made the cycle quadratic.
+        Signatures are not re-checked — `receive_unvet_messages` already did, and doing it per message
+        made the cycle quadratic in the retained backlog.
         """
         if not module_ids or self.message_storage is None:
             return

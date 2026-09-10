@@ -117,8 +117,6 @@ def _unvet_message(nonce: int = 5, module_id: int = 1) -> dict:
 
 @pytest.mark.unit
 def test_storage_is_actualized_once_per_cycle(web3_lido_unit):
-    """One actualization for the whole cycle, not one per message — the latter re-verified every
-    retained signature on every message, making the cycle quadratic."""
     bot = UnvetterBot(web3_lido_unit)
     bot.prepare_transport_bus = Mock()
     bot.message_storage = Mock()
