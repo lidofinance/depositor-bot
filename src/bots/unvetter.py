@@ -1,6 +1,6 @@
 import logging
 from collections.abc import Callable
-from typing import TypedDict, cast
+from typing import cast
 
 from schema import Or, Schema
 from web3.types import BlockData
@@ -9,12 +9,11 @@ import variables
 from blockchain.executor import Executor
 from blockchain.typings import Web3
 from cryptography.verify_signature import to_guardian_signature
-from metrics.metrics import UNEXPECTED_EXCEPTIONS
 from metrics.transport_message_metrics import message_metrics_filter
 from transport.msg_providers.onchain_transport import OnchainTransportProvider, PingParser, UnvetV1Parser, UnvetV2Parser
 from transport.msg_providers.rabbit import MessageType, RabbitProvider
 from transport.msg_storage import MessageStorage
-from transport.msg_types.common import get_messages_sign_filter
+from transport.msg_types.common import get_guardian_filter, get_messages_sign_filter
 from transport.msg_types.ping import PingMessageSchema, to_check_sum_address
 from transport.msg_types.unvet import UnvetMessage, UnvetMessageSchema
 from transport.types import TransportType
@@ -85,6 +84,7 @@ class UnvetterBot:
         for message in messages:
             self._send_unvet_message(message)
 
+        self._clear_outdated_messages({message['stakingModuleId'] for message in messages})
         return True
 
     def receive_unvet_messages(self) -> list[UnvetMessage]:
@@ -103,11 +103,10 @@ class UnvetterBot:
         for module_id in modules:
             nonces[module_id] = self.w3.lido.staking_router.get_staking_module_nonce(module_id)
 
-        guardians_list = self.w3.lido.deposit_security_module.get_guardians()
+        guardian_filter = get_guardian_filter(self.w3.lido.get_guardian_delegates())
 
         def message_filter(message: UnvetMessage) -> bool:
-            if message['guardianAddress'] not in guardians_list:
-                UNEXPECTED_EXCEPTIONS.labels('unexpected_guardian_address').inc()
+            if not guardian_filter(message):
                 return False
 
             # If message nonce is lower than in module, message is invalid
@@ -120,10 +119,6 @@ class UnvetterBot:
         module_id = message['stakingModuleId']
 
         logger.warning({'msg': f'Handle unvet message for module: {module_id}', 'value': message})
-
-        actual_nonce = self.w3.lido.staking_router.get_staking_module_nonce(module_id)
-
-        self._clear_outdated_messages_for_module(module_id, actual_nonce)
 
         operator_ids = from_hex_string_to_bytes(message['operatorIds'])
         max_operators_per_unvetting = self.w3.lido.deposit_security_module.get_max_operators_per_unvetting()
@@ -161,12 +156,19 @@ class UnvetterBot:
         logger.info({'msg': f'Transaction send. Result is {result}.', 'value': result})
         return result
 
-    def _clear_outdated_messages_for_module(self, module_id: int, nonce: int):
-        prefix = self.w3.lido.deposit_security_module.get_unvet_message_prefix()
-        is_message_signed_filter = get_messages_sign_filter(prefix, delegated=self.w3.lido.guardian_delegation_active())
+    def _clear_outdated_messages(self, module_ids: set[int]) -> None:
+        """Evict messages left behind by this cycle's unvets: a sent unvet advances its module nonce.
 
-        def is_unvet_message_relevant(msg: TypedDict) -> bool:
-            is_message_relevant = msg['stakingModuleId'] != module_id or int(msg['nonce']) >= nonce
-            return is_message_relevant and is_message_signed_filter(msg)
+        Signatures are not re-checked — `receive_unvet_messages` already did, and doing it per message
+        made the cycle quadratic in the retained backlog.
+        """
+        if not module_ids or self.message_storage is None:
+            return
 
-        self.message_storage.get_messages_and_actualize(is_unvet_message_relevant)
+        nonces = {module_id: self.w3.lido.staking_router.get_staking_module_nonce(module_id) for module_id in module_ids}
+
+        def is_relevant(message: UnvetMessage) -> bool:
+            nonce = nonces.get(message['stakingModuleId'])
+            return nonce is None or int(message['nonce']) >= nonce
+
+        self.message_storage.get_messages_and_actualize(is_relevant)

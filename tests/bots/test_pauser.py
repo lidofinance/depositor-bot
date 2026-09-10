@@ -20,7 +20,7 @@ def pause_bot(web3_lido_unit, block_data):
     web3_lido_unit.eth.get_block = Mock(return_value=block_data)
     variables.MESSAGE_TRANSPORTS = ''
     web3_lido_unit.lido.deposit_security_module.get_pause_intent_validity_period_blocks = Mock(return_value=10)
-    web3_lido_unit.lido.deposit_security_module.get_guardians = Mock(return_value=[COUNCIL_ADDRESS])
+    web3_lido_unit.lido.get_guardian_delegates = Mock(return_value={COUNCIL_ADDRESS: COUNCIL_ADDRESS})
     yield PauserBot(web3_lido_unit)
 
 
@@ -156,7 +156,7 @@ def test_pauser_bot(web3_lido_integration, web3_provider_integration, add_accoun
     # Create PauserBot
     pb = PauserBot(web3_lido_integration)
     pb._get_message_actualize_filter = Mock(return_value=lambda x: True)
-    web3_lido_integration.lido.deposit_security_module.get_guardians = Mock(return_value=[COUNCIL_ADDRESS])
+    web3_lido_integration.lido.get_guardian_delegates = Mock(return_value={COUNCIL_ADDRESS: COUNCIL_ADDRESS})
 
     # Execute without messages - verify module is active
     pb.execute(latest)
@@ -185,3 +185,22 @@ def test_pauser_bot(web3_lido_integration, web3_provider_integration, add_accoun
     pb.message_storage.messages = [pause_message]
     pb.execute(latest)
     assert not pb.message_storage.messages, 'Messages should be cleared after module is paused'
+
+
+GUARDIAN = '0x3dc4cF780F2599B528F37dedB34449Fb65Ef7d4A'
+DELEGATE = '0x5fd0dDbC3351d009eb3f88DE7Cd081a614C519F1'
+REVOKED_DELEGATE = '0x43464Fe06c18848a2E2e913194D64c1970f4326a'
+
+
+@pytest.mark.unit
+def test_actualize_filter_drops_revoked_delegate(web3_lido_unit):
+    bot = PauserBot(web3_lido_unit)
+    web3_lido_unit.eth.get_block = Mock(return_value={'number': 100})
+    web3_lido_unit.lido.deposit_security_module.get_pause_intent_validity_period_blocks = Mock(return_value=10)
+    web3_lido_unit.lido.get_guardian_delegates = Mock(return_value={DELEGATE: GUARDIAN})
+
+    message_filter = bot._get_message_actualize_filter()
+    message = {'guardianAddress': GUARDIAN, 'guardianDelegate': DELEGATE, 'blockNumber': 95}
+
+    assert message_filter(message) is True
+    assert message_filter({**message, 'guardianDelegate': REVOKED_DELEGATE}) is False
