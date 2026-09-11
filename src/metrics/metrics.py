@@ -25,6 +25,7 @@ TX_SEND_FAILURE = Counter(
 TX_SEND_FAILURE.labels('not_broadcast').inc(0)
 TX_SEND_FAILURE.labels('not_included').inc(0)
 TX_SEND_FAILURE.labels('relay_error').inc(0)
+TX_SEND_FAILURE.labels('reverted').inc(0)
 
 MODULE_TX_SEND = Counter(
     'transactions',

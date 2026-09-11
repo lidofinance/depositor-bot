@@ -86,3 +86,23 @@ def test_classic_send_not_included(web3_lido_unit, caplog):
     assert TX_SEND_FAILURE.labels('not_included')._value.get() == before + 1
     assert 'Transaction not included in time, still pending.' in caplog.messages[-1]
     assert '2a' in caplog.messages[-1]
+
+
+@pytest.mark.unit
+def test_classic_send_reverted_receipt(web3_lido_unit, caplog):
+    caplog.set_level(logging.INFO)
+    web3_lido_unit.eth.send_raw_transaction = Mock(return_value=HexBytes('0x2a'))
+    web3_lido_unit.eth.wait_for_transaction_receipt = Mock(return_value={'status': 0, 'transactionHash': HexBytes('0x2a')})
+    before = TX_SEND_FAILURE.labels('reverted')._value.get()
+
+    assert web3_lido_unit.transaction.classic_send(Mock(), 6) is False
+    assert TX_SEND_FAILURE.labels('reverted')._value.get() == before + 1
+    assert 'Transaction reverted on chain.' in caplog.messages[-1]
+
+
+@pytest.mark.unit
+def test_classic_send_successful_receipt(web3_lido_unit):
+    web3_lido_unit.eth.send_raw_transaction = Mock(return_value=HexBytes('0x2a'))
+    web3_lido_unit.eth.wait_for_transaction_receipt = Mock(return_value={'status': 1, 'transactionHash': HexBytes('0x2a')})
+
+    assert web3_lido_unit.transaction.classic_send(Mock(), 6) is True

@@ -2,17 +2,18 @@
 
 import logging
 
-import variables
-from blockchain.constants import SLOT_TIME
-from blockchain.web3_extentions.private_relay import PrivateRelayClient, PrivateRelayException
 from eth_account.datastructures import SignedTransaction
 from eth_typing import ChecksumAddress
-from metrics.metrics import TX_SEND, TX_SEND_FAILURE
 from web3 import Web3
 from web3.contract.contract import ContractFunction
 from web3.exceptions import ContractLogicError, TimeExhausted
 from web3.module import Module
-from web3.types import TxParams, Wei
+from web3.types import TxParams, TxReceipt, Wei
+
+import variables
+from blockchain.constants import SLOT_TIME
+from blockchain.web3_extentions.private_relay import PrivateRelayClient, PrivateRelayException
+from metrics.metrics import TX_SEND, TX_SEND_FAILURE
 
 logger = logging.getLogger(__name__)
 
@@ -117,8 +118,7 @@ class TransactionUtils(Module):
             logger.warning({'msg': 'Transaction not included in time, still pending.', 'tx_hash': tx_hash})
             return False
 
-        logger.info({'msg': 'Sent transaction included in blockchain.', 'value': repr(tx_receipt)})
-        return True
+        return self._receipt_succeeded(tx_receipt)
 
     def classic_send(self, signed_tx: SignedTransaction, timeout_in_blocks: int) -> bool:
         try:
@@ -136,8 +136,18 @@ class TransactionUtils(Module):
             logger.warning({'msg': 'Transaction not included in time, still pending.', 'tx_hash': tx_hash.hex()})
             return False
 
-        logger.info({'msg': 'Sent transaction included in blockchain.', 'value': tx_receipt['transactionHash'].hex()})
-        return True
+        return self._receipt_succeeded(tx_receipt)
+
+    @staticmethod
+    def _receipt_succeeded(tx_receipt: TxReceipt) -> bool:
+        tx_hash = tx_receipt['transactionHash'].hex()
+        if tx_receipt['status'] == 1:
+            logger.info({'msg': 'Sent transaction included in blockchain.', 'tx_hash': tx_hash})
+            return True
+
+        TX_SEND_FAILURE.labels('reverted').inc()
+        logger.error({'msg': 'Transaction reverted on chain.', 'tx_hash': tx_hash})
+        return False
 
     def _get_priority_fee(self, percentile: int, min_priority_fee: Wei, max_priority_fee: Wei) -> Wei:
         return min(
