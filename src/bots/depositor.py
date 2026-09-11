@@ -762,30 +762,32 @@ class DepositorBot:
 
         logger.info({'msg': 'Check guardians balances.'})
 
-        delegate_map = self.w3.lido.get_guardian_delegates()
+        guardian_contract_by_delegate_eoa = self.w3.lido.get_guardian_delegates()
         providers = [self.w3]
 
         if self._onchain_transport_w3 is not None:
             providers.append(self._onchain_transport_w3)
 
         new_values = {}
-        for delegate, guardian in delegate_map.items():
+        for delegate_eoa, guardian_contract in guardian_contract_by_delegate_eoa.items():
             for provider in providers:
-                balance = provider.eth.get_balance(delegate)
-                new_values[(delegate, guardian, provider.eth.chain_id)] = balance
+                balance = provider.eth.get_balance(delegate_eoa)
+                new_values[(delegate_eoa, guardian_contract, provider.eth.chain_id)] = balance
 
         GUARDIAN_BALANCE.clear()
-        for (delegate, guardian, chain_id), balance in new_values.items():
-            GUARDIAN_BALANCE.labels(address=delegate, guardian=guardian, chain_id=chain_id).set(balance)
+        for (delegate_eoa, guardian_contract, chain_id), balance in new_values.items():
+            GUARDIAN_BALANCE.labels(address=delegate_eoa, guardian=guardian_contract, chain_id=chain_id).set(balance)
 
     def _check_guardian_delegates(self):
-        guardians = [self.w3.to_checksum_address(g) for g in self.w3.lido.deposit_security_module.get_guardians()]
-        delegate_by_guardian = {guardian: delegate for delegate, guardian in self.w3.lido.get_guardian_delegates().items()}
+        guardian_contracts = [self.w3.to_checksum_address(g) for g in self.w3.lido.deposit_security_module.get_guardians()]
+        delegate_eoa_by_guardian_contract = {
+            guardian_contract: delegate_eoa for delegate_eoa, guardian_contract in self.w3.lido.get_guardian_delegates().items()
+        }
 
         GUARDIAN_DELEGATE.clear()
-        for guardian in guardians:
-            delegate = delegate_by_guardian.get(guardian)
-            GUARDIAN_DELEGATE.labels(guardian=guardian, delegate=delegate or ZERO_ADDRESS).set(int(delegate is not None))
+        for guardian_contract in guardian_contracts:
+            delegate_eoa = delegate_eoa_by_guardian_contract.get(guardian_contract)
+            GUARDIAN_DELEGATE.labels(guardian=guardian_contract, delegate=delegate_eoa or ZERO_ADDRESS).set(int(delegate_eoa is not None))
 
     def _select_strategy(self, module_id: int) -> DepositStrategy:
         module = self.w3.lido.staking_module(module_id)

@@ -22,8 +22,8 @@ def message_metrics_filter(msg: TypedDict) -> bool:
     msg_type = msg.get('type')
     logger.info({'msg': 'Guardian message received.', 'value': msg, 'type': msg_type})
 
-    guardian = msg.get('guardianAddress')
-    address = msg.get('guardianDelegate') or guardian
+    guardian_contract = msg.get('guardianAddress')
+    sender_eoa = msg.get('guardianDelegate') or guardian_contract
     version = msg.get('app', {}).get('version')
     transport = msg.get('transport', '')
     chain_id = msg.get('chain_id', '')
@@ -37,8 +37,8 @@ def message_metrics_filter(msg: TypedDict) -> bool:
 
     if msg_type in metrics_map:
         metrics_map[msg_type].labels(
-            address=address,
-            guardian=guardian,
+            address=sender_eoa,
+            guardian=guardian_contract,
             module_id=staking_module_id,
             version=version,
             transport=transport,
@@ -47,7 +47,7 @@ def message_metrics_filter(msg: TypedDict) -> bool:
         return True
 
     if msg_type == MessageType.PING:
-        PING_MESSAGES.labels(address=address, guardian=guardian, version=version, transport=transport, chain_id=chain_id).inc()
+        PING_MESSAGES.labels(address=sender_eoa, guardian=guardian_contract, version=version, transport=transport, chain_id=chain_id).inc()
         return False
 
     logger.warning({'msg': 'Received unexpected msg type.', 'value': msg, 'type': msg_type})
