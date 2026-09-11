@@ -35,6 +35,7 @@ from blockchain.topup.cmv2_strategy import CMv2TopUpStrategy
 from blockchain.topup.csm02_strategy import CSM02TopUpStrategy
 from blockchain.topup.strategy import TopUpStrategy
 from blockchain.typings import Web3
+from blockchain.web3_extentions.lido_contracts import ZERO_ADDRESS
 from metrics.metrics import (
     ACCOUNT_BALANCE,
     BOT_LAST_CYCLE_TIMESTAMP,
@@ -43,6 +44,7 @@ from metrics.metrics import (
     DEPOSITABLE_ETHER,
     DEPOSITS_PAUSED,
     GUARDIAN_BALANCE,
+    GUARDIAN_DELEGATE,
     MODULE_ALLOCATION,
     MODULE_CONTRACT_MISSING,
     MODULE_QUORUM_LAST_SEEN_TIMESTAMP,
@@ -240,6 +242,7 @@ class DepositorBot:
     def execute(self, block: BlockData) -> bool:
         logger.info({'msg': 'Depositor iteration start.', 'block_number': block.get('number')})
         self._check_balance()
+        self._check_guardian_delegates()
 
         result = self._execute_actual()
         BOT_LAST_CYCLE_TIMESTAMP.set(time.time())
@@ -759,21 +762,30 @@ class DepositorBot:
 
         logger.info({'msg': 'Check guardians balances.'})
 
-        guardians = self.w3.lido.deposit_security_module.get_guardians()
+        delegate_map = self.w3.lido.get_guardian_delegates()
         providers = [self.w3]
 
         if self._onchain_transport_w3 is not None:
             providers.append(self._onchain_transport_w3)
 
         new_values = {}
-        for address in guardians:
+        for delegate, guardian in delegate_map.items():
             for provider in providers:
-                balance = provider.eth.get_balance(address)
-                new_values[(address, provider.eth.chain_id)] = balance
+                balance = provider.eth.get_balance(delegate)
+                new_values[(delegate, guardian, provider.eth.chain_id)] = balance
 
         GUARDIAN_BALANCE.clear()
-        for (address, chain_id), balance in new_values.items():
-            GUARDIAN_BALANCE.labels(address=address, chain_id=chain_id).set(balance)
+        for (delegate, guardian, chain_id), balance in new_values.items():
+            GUARDIAN_BALANCE.labels(address=delegate, guardian=guardian, chain_id=chain_id).set(balance)
+
+    def _check_guardian_delegates(self):
+        guardians = [self.w3.to_checksum_address(g) for g in self.w3.lido.deposit_security_module.get_guardians()]
+        delegate_by_guardian = {guardian: delegate for delegate, guardian in self.w3.lido.get_guardian_delegates().items()}
+
+        GUARDIAN_DELEGATE.clear()
+        for guardian in guardians:
+            delegate = delegate_by_guardian.get(guardian)
+            GUARDIAN_DELEGATE.labels(guardian=guardian, delegate=delegate or ZERO_ADDRESS).set(int(delegate is not None))
 
     def _select_strategy(self, module_id: int) -> DepositStrategy:
         module = self.w3.lido.staking_module(module_id)
