@@ -17,5 +17,17 @@
     ],
     "stateMutability": "view",
     "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getTopUpQueue",
+    "outputs": [
+      { "internalType": "bool", "name": "enabled", "type": "bool" },
+      { "internalType": "uint256", "name": "limit", "type": "uint256" },
+      { "internalType": "uint256", "name": "length", "type": "uint256" },
+      { "internalType": "uint256", "name": "head", "type": "uint256" }
+    ],
+    "stateMutability": "view",
+    "type": "function"
   }
 ]
