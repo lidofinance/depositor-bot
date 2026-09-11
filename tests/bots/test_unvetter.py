@@ -93,3 +93,47 @@ def test_unvetter(web3_provider_integration, web3_lido_integration, caplog):
     web3_lido_integration.lido.staking_router.get_staking_module_nonce = Mock(return_value=ub.message_storage.messages[0]['nonce'] + 1)
     ub.execute(latest)
     assert not ub.message_storage.messages
+
+
+GUARDIAN = '0x3dc4cF780F2599B528F37dedB34449Fb65Ef7d4A'
+
+
+def _stubbed_bot(web3_lido_unit, sends: list[bool]) -> UnvetterBot:
+    bot = UnvetterBot(web3_lido_unit)
+    bot.prepare_transport_bus = Mock()
+    bot.receive_unvet_messages = Mock(return_value=[{'stakingModuleId': 1}] * len(sends))
+    bot._send_unvet_message = Mock(side_effect=sends)
+    return bot
+
+
+@pytest.mark.unit
+def test_execute_reports_failure_when_a_send_fails(web3_lido_unit):
+    bot = _stubbed_bot(web3_lido_unit, [True, False, True])
+
+    assert bot.execute(Mock()) is False
+    assert bot._send_unvet_message.call_count == 3
+
+
+@pytest.mark.unit
+def test_execute_reports_success_when_all_sends_succeed(web3_lido_unit):
+    assert _stubbed_bot(web3_lido_unit, [True, True]).execute(Mock()) is True
+
+
+@pytest.mark.unit
+def test_execute_reports_success_when_there_is_nothing_to_send(web3_lido_unit):
+    assert _stubbed_bot(web3_lido_unit, []).execute(Mock()) is True
+
+
+@pytest.mark.unit
+def test_actualize_filter_drops_messages_past_the_blockhash_window(web3_lido_unit):
+    bot = UnvetterBot(web3_lido_unit)
+    web3_lido_unit.eth.get_block = Mock(return_value={'number': 1_000})
+    web3_lido_unit.lido.staking_router.get_staking_module_ids = Mock(return_value=[1])
+    web3_lido_unit.lido.staking_router.get_staking_module_nonce = Mock(return_value=5)
+    web3_lido_unit.lido.deposit_security_module.get_guardians = Mock(return_value=[GUARDIAN])
+
+    message_filter = bot._get_message_actualize_filter()
+    message = {'guardianAddress': GUARDIAN, 'stakingModuleId': 1, 'nonce': 5, 'blockNumber': 900}
+
+    assert message_filter(message) is True
+    assert message_filter({**message, 'blockNumber': 700}) is False
