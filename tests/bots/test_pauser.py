@@ -204,3 +204,14 @@ def test_actualize_filter_drops_revoked_delegate(web3_lido_unit):
 
     assert message_filter(message) is True
     assert message_filter({**message, 'guardianDelegate': REVOKED_DELEGATE}) is False
+
+
+@pytest.mark.unit
+def test_pause_is_not_broadcast_when_simulation_reverts(pause_bot, pause_message, web3_lido_unit):
+    web3_lido_unit.lido.deposit_security_module.is_deposits_paused = Mock(return_value=False)
+    web3_lido_unit.lido.guardian_delegation_active = Mock(return_value=False)
+    web3_lido_unit.transaction = Mock()
+    web3_lido_unit.transaction.check = Mock(return_value=False)
+
+    assert pause_bot._send_pause_message(pause_message) is False
+    web3_lido_unit.transaction.send.assert_not_called()

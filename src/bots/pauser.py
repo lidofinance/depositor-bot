@@ -118,6 +118,9 @@ class PauserBot:
         )
         pause_tx = self.w3.lido.deposit_security_module.pause_deposits(message['blockNumber'], signature)
 
+        if not self.w3.transaction.check(pause_tx):
+            return False
+
         result = self.w3.transaction.send(pause_tx, False, 6)
         logger.info({'msg': f'Transaction send. Result is {result}.', 'value': result})
         return result
