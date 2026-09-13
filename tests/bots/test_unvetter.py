@@ -3,7 +3,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from bots.unvetter import UnvetterBot
+from bots.unvetter import UnvetterBot, _message_key
 from cryptography.verify_signature import compute_vs
 from transport.msg_providers.onchain_transport import build_unvet_message
 from transport.msg_types.common import get_messages_sign_filter
@@ -138,7 +138,7 @@ def test_outdated_messages_are_evicted_by_nonce(web3_lido_unit):
     bot.message_storage = Mock()
     web3_lido_unit.lido.staking_router.get_staking_module_nonce = Mock(return_value=6)
 
-    bot._clear_outdated_messages({1})
+    bot._clear_outdated_messages({1}, set())
     (is_relevant,) = bot.message_storage.get_messages_and_actualize.call_args.args
 
     assert is_relevant(_unvet_message(nonce=6)) is True
@@ -157,3 +157,19 @@ def test_actualize_filter_drops_revoked_delegate(web3_lido_unit):
 
     assert message_filter(_unvet_message()) is True
     assert message_filter({**_unvet_message(), 'guardianDelegate': REVOKED_DELEGATE}) is False
+
+
+@pytest.mark.unit
+def test_delivered_message_is_evicted_without_a_nonce_change(web3_lido_unit):
+    """A module that treats the payload as a no-op accepts it without advancing its nonce, so nonce
+    alone would replay the same transaction until the message ages out."""
+    bot = UnvetterBot(web3_lido_unit)
+    bot.message_storage = Mock()
+    web3_lido_unit.lido.staking_router.get_staking_module_nonce = Mock(return_value=5)
+    delivered = _unvet_message(nonce=5)
+
+    bot._clear_outdated_messages({1}, {_message_key(delivered)})
+    (is_relevant,) = bot.message_storage.get_messages_and_actualize.call_args.args
+
+    assert is_relevant(delivered) is False
+    assert is_relevant({**delivered, 'signature': {'r': '0x' + '99' * 32, '_vs': '0x' + '88' * 32}}) is True

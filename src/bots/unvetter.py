@@ -22,6 +22,10 @@ from utils.bytes import from_hex_string_to_bytes
 logger = logging.getLogger(__name__)
 
 
+def _message_key(message: UnvetMessage) -> tuple[str, str, str]:
+    return message['guardianAddress'], cast(str, message['signature']['r']), message['signature']['_vs']
+
+
 def run_unvetter(w3: Web3):
     unvetter = UnvetterBot(w3)
     e = Executor(
@@ -81,10 +85,12 @@ class UnvetterBot:
         messages = self.receive_unvet_messages()
         logger.info({'msg': f'Received {len(messages)} unvet messages.'})
 
+        sent = set()
         for message in messages:
-            self._send_unvet_message(message)
+            if self._send_unvet_message(message):
+                sent.add(_message_key(message))
 
-        self._clear_outdated_messages({message['stakingModuleId'] for message in messages})
+        self._clear_outdated_messages({message['stakingModuleId'] for message in messages}, sent)
         return True
 
     def receive_unvet_messages(self) -> list[UnvetMessage]:
@@ -156,8 +162,11 @@ class UnvetterBot:
         logger.info({'msg': f'Transaction send. Result is {result}.', 'value': result})
         return result
 
-    def _clear_outdated_messages(self, module_ids: set[int]) -> None:
-        """Evict messages left behind by this cycle's unvets: a sent unvet advances its module nonce.
+    def _clear_outdated_messages(self, module_ids: set[int], sent: set[tuple[str, str, str]]) -> None:
+        """Evict what this cycle consumed: anything delivered, plus anything the module nonce moved past.
+
+        A delivered payload is dropped on its own — a module that treats it as a no-op accepts it
+        without advancing its nonce, so nonce alone would replay it until the message ages out.
 
         Signatures are not re-checked — `receive_unvet_messages` already did, and doing it per message
         made the cycle quadratic in the retained backlog.
@@ -168,6 +177,8 @@ class UnvetterBot:
         nonces = {module_id: self.w3.lido.staking_router.get_staking_module_nonce(module_id) for module_id in module_ids}
 
         def is_relevant(message: UnvetMessage) -> bool:
+            if _message_key(message) in sent:
+                return False
             nonce = nonces.get(message['stakingModuleId'])
             return nonce is None or int(message['nonce']) >= nonce
 
