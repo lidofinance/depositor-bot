@@ -1,3 +1,5 @@
+# pyright: reportTypedDictNotRequiredAccess=false
+
 import logging
 from collections.abc import Callable
 from typing import TypedDict, cast
@@ -21,6 +23,9 @@ from transport.types import TransportType
 from utils.bytes import from_hex_string_to_bytes
 
 logger = logging.getLogger(__name__)
+
+# DSM checks blockhash(blockNumber) == blockHash, and the EVM keeps only the last 256 blocks.
+MESSAGE_VALIDITY_BLOCKS = 200
 
 
 def run_unvetter(w3: Web3):
@@ -82,10 +87,8 @@ class UnvetterBot:
         messages = self.receive_unvet_messages()
         logger.info({'msg': f'Received {len(messages)} unvet messages.'})
 
-        for message in messages:
-            self._send_unvet_message(message)
-
-        return True
+        results = [self._send_unvet_message(message) for message in messages]
+        return all(results)
 
     def receive_unvet_messages(self) -> list[UnvetMessage]:
         if self.message_storage is None:
@@ -97,6 +100,7 @@ class UnvetterBot:
         return self.message_storage.get_messages_and_actualize(lambda x: sign_filter(x) and actualize_filter(x))
 
     def _get_message_actualize_filter(self) -> Callable[[UnvetMessage], bool]:
+        latest = self.w3.eth.get_block('latest')
         modules = self.w3.lido.staking_router.get_staking_module_ids()
 
         nonces = {}
@@ -108,6 +112,9 @@ class UnvetterBot:
         def message_filter(message: UnvetMessage) -> bool:
             if message['guardianAddress'] not in guardians_list:
                 UNEXPECTED_EXCEPTIONS.labels('unexpected_guardian_address').inc()
+                return False
+
+            if message['blockNumber'] < latest['number'] - MESSAGE_VALIDITY_BLOCKS:
                 return False
 
             # If message nonce is lower than in module, message is invalid

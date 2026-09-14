@@ -14,6 +14,7 @@ UnvetMessageSchema = Schema(
         'guardianAddress': And(str, ADDRESS_REGREX.validate),
         'signature': SignatureSchema,
         'stakingModuleId': int,
+        'nonce': int,
         'operatorIds': And(str, HEX_BYTES_REGREX.validate),
         'vettedKeysByOperator': And(str, HEX_BYTES_REGREX.validate),
     },

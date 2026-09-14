@@ -251,7 +251,7 @@ Unit tests (`-m unit`) are fully offline and run on every commit via pre-commit 
 
 `tests/conftest.py` provides shared fixtures including a mock `BlockData`, test council addresses, and a DSM owner account. Tests for each bot are in `tests/bots/`. Transport message schema tests are in `tests/transport/`.
 
-`MessageStorage.messages` is a class-level list shared across instances — tests that don't call `storage.clear()` will leak messages into subsequent tests.
+`MessageStorage.messages` is declared at class level but each instance rebinds it on first `get_messages_and_actualize()`, so messages don't leak across instances; a reused instance still accumulates until `storage.clear()`.
 
 Pre-commit runs the full unit test suite on every commit (`poetry run pytest -m unit`). Never use `--no-verify` to skip it.
 
