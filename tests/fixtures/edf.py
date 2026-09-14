@@ -1,26 +1,18 @@
-"""Fixtures for a chain with core's EDF / DSM v5 upgrade applied.
+"""Fixtures for a chain with core's EDF / DSM v5 upgrade, forked from Hoodi.
 
-The chain is produced once, out of band, by running core's own upgrade against a forked testnet
-(`lidofinance/core@feat/edf`, `MODE=forking NETWORK=hoodi UPGRADE=true
-STEPS_FILE=upgrade/steps-edf-mock.json`) and captured as a genesis file, committed as
-`edf/upgrade-state.json.gz` and replayed with `anvil --load-state`, so tests get DSM v5 and contract
-guardians without re-running an eight-minute upgrade.
+Hoodi carries the EDF deployment, so the chain is a plain fork — everything is resolved through the
+locator at fork time rather than from a committed snapshot.
 
-Why an RPC endpoint is still needed: an anvil dump contains only state the node *modified*, so the
-upgrade's own deployments are in it but the untouched protocol underneath is not — the fork supplies
-that. A fully offline variant is possible (`anvil --init` from a merged genesis, see
-`tests/fork_snapshot.py` and edf/README.md) but needs a capture run that accumulates the base state;
-it is not committed yet.
+What the fork does not supply is a *signing* delegate: the guardians' delegates on Hoodi are real
+council keys. `edf_manifest` therefore rotates every guardian onto an anvil dev account whose key is
+known, which is what makes signing a council message possible at all. Rotation is a nomination plus
+`getCooldown()` seconds, so the session jumps the clock once.
 
 The node is session-scoped and each test is wrapped in evm_snapshot/evm_revert, so tests can deploy
 and grant roles freely without leaking into each other.
 """
 
-import gzip
-import json
 import os
-import shutil
-from pathlib import Path
 
 import pytest
 from web3 import HTTPProvider
@@ -31,18 +23,22 @@ from blockchain.web3_extentions.lido_contracts import LidoContracts
 from blockchain.web3_extentions.transaction import TransactionUtils
 from tests.fork import anvil_fork
 
-EDF_DIR = Path(__file__).parent / 'edf'
 EDF_PORT = '8555'
 
-# anvil dev accounts 1..7 are the guardians' delegates in the snapshot, so the bot uses account 0 and
-# the tests own 8 and 9. A delegation contract rejects owner == delegate (OwnerCannotBeDelegate).
+# Hoodi's EDF locator. The default in variables.py is mainnet's and has no code here.
+HOODI_EDF_LOCATOR = '0xe2EF9536DAAAEBFf5b1c130957AB3E80056b06D8'
+# Predates core's source (its contracts expose `assignDelegate`, not `nominateDelegate`), which is why
+# _nominate_delegate picks the name out of the bytecode. Still the only DelegationFactory on Hoodi.
+HOODI_DELEGATION_FACTORY = '0x76Af23C7e71004038BeE4a1ceba8c441f4cA239b'
+DSM_VERSION = 5
+
+# Accounts 1..7 become the guardians' delegates, so the bot uses account 0 and the tests own 8 and 9.
+# A delegation contract rejects owner == delegate (OwnerCannotBeDelegate).
 BOT_ACCOUNT_PK = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80'  # account 0
 DELEGATION_OWNER = '0x23618e81E3f5cdF7f54C3d65f7FBc0aBf5B21E8f'  # account 8
 SPARE_DELEGATE = '0xa0Ee7A142d267C1f36714E4a8F75612F20a79720'  # account 9
 
-# anvil's deterministic dev keys, by address. The snapshot's guardian delegates are drawn from these,
-# which is what makes signing as a council delegate possible at all — the addresses come out of the
-# upgrade's parameters, so the map is needed to get from a guardian's delegate back to its key.
+# anvil's deterministic dev keys, by address — the pool guardians are rotated onto.
 ANVIL_KEYS = {
     '0x70997970C51812dc3A010C7d01b50e0d17dc79C8': '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d',
     '0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC': '0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a',
@@ -53,53 +49,77 @@ ANVIL_KEYS = {
     '0x14dC79964da2C08b23698B3D3cc7Ca32193d9955': '0x4bbbf85ce3377467afe5d46f804f221813b2bb87f24d81f60f1fcdbf7cbf4356',
 }
 
+GUARDIAN_ABI = [
+    {'name': 'getDelegate', 'type': 'function', 'stateMutability': 'view', 'inputs': [], 'outputs': [{'type': 'address'}]},
+    {'name': 'getCooldown', 'type': 'function', 'stateMutability': 'view', 'inputs': [], 'outputs': [{'type': 'uint256'}]},
+    {'name': 'owner', 'type': 'function', 'stateMutability': 'view', 'inputs': [], 'outputs': [{'type': 'address'}]},
+    {
+        'name': 'nominateDelegate',
+        'type': 'function',
+        'stateMutability': 'nonpayable',
+        'inputs': [{'name': 'delegate', 'type': 'address'}],
+        'outputs': [],
+    },
+]
 
-def _clear_delegate_code(w3, manifest: dict) -> None:
-    """Make the guardians' delegates plain EOAs, as real delegates are.
 
-    The upgrade's parameters point the delegates at anvil's dev accounts, and on a public testnet those
-    keys are public — someone has set EIP-7702 delegations on all of them, so each carries a 23-byte
-    `ef0100…` designator. That breaks DSM v5 signature verification for a reason worth knowing:
-    OpenZeppelin's SignatureChecker treats any address with code as a contract, so instead of
-    recovering the signature it calls ERC-1271 `isValidSignature` on the 7702 target, which does not
-    implement it — and a correctly signed council message is rejected as InvalidSignature.
+def _guardian(w3, address: str):
+    return w3.eth.contract(address=Web3.to_checksum_address(address), abi=GUARDIAN_ABI)
 
-    Clearing the code models a delegate whose key is not public. It also documents a live constraint:
-    a guardian delegate must not carry a 7702 delegation unless its target implements ERC-1271.
+
+def _make_plain_eoa(w3, address: str) -> None:
+    """Strip any EIP-7702 designator from a delegate-to-be.
+
+    anvil's dev keys are public, so on a public testnet someone has set 7702 delegations on all of
+    them. That breaks DSM v5 verification: OpenZeppelin's SignatureChecker treats any address with
+    code as a contract and calls ERC-1271 on the 7702 target instead of recovering the signature, so
+    a correctly signed council message is rejected as InvalidSignature. It also documents a live
+    constraint — a guardian delegate must not carry a 7702 delegation unless its target implements
+    ERC-1271.
     """
-    for delegate in {Web3.to_checksum_address(address) for address in manifest['guardianDelegates'].values()}:
-        if w3.eth.get_code(delegate):
-            w3.provider.make_request('anvil_setCode', [delegate, '0x'])
+    if w3.eth.get_code(Web3.to_checksum_address(address)):
+        w3.provider.make_request('anvil_setCode', [Web3.to_checksum_address(address), '0x'])
+
+
+def _rotate_delegates(w3, guardians: list[str]) -> dict[str, str]:
+    """Point every guardian at an anvil dev account and return {guardian: delegate}."""
+    pool = list(ANVIL_KEYS)
+    assert len(guardians) <= len(pool), f'{len(guardians)} guardians but only {len(pool)} known keys'
+
+    assigned = {}
+    cooldown = 0
+    for guardian, delegate in zip(guardians, pool, strict=False):
+        contract = _guardian(w3, guardian)
+        owner = contract.functions.owner().call()
+        w3.provider.make_request('anvil_impersonateAccount', [owner])
+        w3.provider.make_request('anvil_setBalance', [owner, '0x56BC75E2D63100000'])
+        _make_plain_eoa(w3, delegate)
+        w3.eth.wait_for_transaction_receipt(
+            contract.functions.nominateDelegate(Web3.to_checksum_address(delegate)).transact({'from': owner})
+        )
+        cooldown = max(cooldown, contract.functions.getCooldown().call())
+        assigned[Web3.to_checksum_address(guardian)] = Web3.to_checksum_address(delegate)
+
+    # A nomination only becomes the delegate after the contract's cooldown.
+    w3.provider.make_request('evm_increaseTime', [cooldown + 1])
+    w3.provider.make_request('evm_mine', [])
+
+    for guardian, delegate in assigned.items():
+        active = _guardian(w3, guardian).functions.getDelegate().call()
+        assert active == delegate, f'{guardian} delegate is {active}, expected {delegate}'
+    return assigned
 
 
 @pytest.fixture(scope='session')
-def edf_manifest() -> dict:
-    """Addresses and the pinned fork block for the snapshot, recorded when it was generated."""
-    return json.loads((EDF_DIR / 'manifest.json').read_text())
-
-
-@pytest.fixture(scope='session')
-def edf_state_file(tmp_path_factory) -> str:
-    """Decompress the committed snapshot; anvil's --load-state wants plain JSON."""
-    destination = tmp_path_factory.mktemp('edf') / 'upgrade-state.json'
-    with gzip.open(EDF_DIR / 'upgrade-state.json.gz', 'rb') as source, open(destination, 'wb') as target:
-        shutil.copyfileobj(source, target)
-    return str(destination)
-
-
-@pytest.fixture(scope='session')
-def web3_edf_session(edf_manifest, edf_state_file):
-    """One upgraded node for the whole session."""
+def web3_edf_session():
+    """One forked node for the whole session, with every guardian rotated onto a known key."""
     previous_locator = variables.LIDO_LOCATOR
-    # LidoContracts resolves everything from the locator, so it has to match the snapshot's chain.
-    variables.LIDO_LOCATOR = Web3.to_checksum_address(edf_manifest['lidoLocator'])
+    variables.LIDO_LOCATOR = Web3.to_checksum_address(HOODI_EDF_LOCATOR)
 
     fork = anvil_fork(
         os.getenv('ANVIL_PATH', ''),
         fork_url=variables.WEB3_RPC_ENDPOINTS[0] if variables.WEB3_RPC_ENDPOINTS else None,
-        block_number=edf_manifest['forkBlock'],
         port=EDF_PORT,
-        load_state=edf_state_file,
         # Mine on demand: these tests only send transactions and read them back, and a fixed block
         # interval would make every send wait for the next block.
         block_time=None,
@@ -110,16 +130,25 @@ def web3_edf_session(edf_manifest, edf_state_file):
         assert w3.is_connected(), 'Failed to connect to the EDF fork.'
         w3.attach_modules({'transaction': TransactionUtils, 'lido': LidoContracts})
 
-        expected = edf_manifest['dsmVersion']
-        assert w3.lido.dsm_version == expected, (
-            f'EDF chain did not load: DSM version is {w3.lido.dsm_version}, expected {expected}. '
-            'Regenerate tests/fixtures/edf/upgrade-state.json.gz.'
-        )
-        _clear_delegate_code(w3, edf_manifest)
+        assert w3.lido.dsm_version == DSM_VERSION, f'Forked chain is not EDF: DSM version is {w3.lido.dsm_version}, expected {DSM_VERSION}.'
+        w3.edf_guardian_delegates = _rotate_delegates(w3, w3.lido.deposit_security_module.get_guardians())
         yield w3
     finally:
         fork.__exit__(None, None, None)
         variables.LIDO_LOCATOR = previous_locator
+
+
+@pytest.fixture(scope='session')
+def edf_manifest(web3_edf_session) -> dict:
+    """Chain facts the tests need, resolved from the fork instead of a committed snapshot."""
+    return {
+        'lidoLocator': HOODI_EDF_LOCATOR,
+        'depositSecurityModule': web3_edf_session.lido.deposit_security_module.address,
+        'dsmVersion': DSM_VERSION,
+        'delegationFactory': HOODI_DELEGATION_FACTORY,
+        'guardians': list(web3_edf_session.edf_guardian_delegates),
+        'guardianDelegates': dict(web3_edf_session.edf_guardian_delegates),
+    }
 
 
 @pytest.fixture

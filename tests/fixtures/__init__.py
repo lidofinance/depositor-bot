@@ -10,7 +10,6 @@ from .contracts import (
 )
 from .edf import (
     edf_manifest,
-    edf_state_file,
     web3_edf,
     web3_edf_session,
 )
@@ -34,7 +33,6 @@ from .top_up_proof_fixtures import top_up_proof_fixtures
 
 __all__ = [
     'edf_manifest',
-    'edf_state_file',
     'web3_edf',
     'web3_edf_session',
     'lido_locator',

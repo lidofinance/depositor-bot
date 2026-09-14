@@ -128,6 +128,9 @@ def test_delegate_signed_quorum_lands_a_deposit(deposit_bot, web3_edf, edf_manif
     assert w3.lido.guardian_delegation_active(), 'snapshot is not on the delegation model'
 
     module_id = _module_with_depositable_keys(w3)
+    # Which module the bot reaches first depends on live stake ordering; narrow the whitelist so the
+    # test is about the signatures rather than about who sorted ahead today.
+    variables.DEPOSIT_MODULES_WHITELIST = [module_id]
     _fill_buffer(w3)
     _raise_share_limit(w3, module_id)
     _pass_min_deposit_distance(w3, module_id)
@@ -155,6 +158,9 @@ def test_quorum_is_rejected_when_a_delegate_is_revoked(deposit_bot, web3_edf, ed
     quorum below threshold — the bot must not submit a deposit the DSM would reject."""
     w3 = web3_edf
     module_id = _module_with_depositable_keys(w3)
+    # Which module the bot reaches first depends on live stake ordering; narrow the whitelist so the
+    # test is about the signatures rather than about who sorted ahead today.
+    variables.DEPOSIT_MODULES_WHITELIST = [module_id]
     _fill_buffer(w3)
     _raise_share_limit(w3, module_id)
     _pass_min_deposit_distance(w3, module_id)
