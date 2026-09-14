@@ -256,9 +256,6 @@ class DepositorBot:
         if not self.w3.lido.lido.can_deposit():
             logger.info({'msg': 'Lido.canDeposit() is false.'})
             return False
-        if self.w3.lido.deposit_security_module.get_guardian_quorum() == 0:
-            logger.info({'msg': 'Guardian quorum is not set in DSM contract (quorum == 0).'})
-            return False
         return True
 
     def _execute_actual(self) -> bool:
@@ -811,6 +808,12 @@ class DepositorBot:
         # Get the required quorum size
         min_signs_to_deposit = self.w3.lido.deposit_security_module.get_guardian_quorum()
         CURRENT_QUORUM_SIZE.labels('required').set(min_signs_to_deposit)
+
+        # Every group clears a zero threshold, so a single signature would pass as a quorum.
+        if min_signs_to_deposit == 0:
+            logger.warning({'msg': 'Guardian quorum is 0 in DSM contract — refusing to deposit.', 'module_id': module_id})
+            QUORUM.labels(module_id).set(0)
+            return None
 
         # Group messages by block hash and guardian address
         messages_by_block_hash = defaultdict(dict)
