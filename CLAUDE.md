@@ -145,6 +145,8 @@ Delegation is preferred and the key is the fallback, so migrating the role in ei
 
 Startup refuses to boot only when a delegation contract *is* configured and no path can execute. `no_role` with no delegation configured is the pre-existing "role was never granted to the key" mistake — now visible on the metric, but kept a warning so upgrading a running deployment can't turn into a boot failure.
 
+An unusable path (`no_role` / `not_delegate` / `terminated`) **gates top-ups off for the iteration** — deposits, which need no role, still run. Building the tx to let it fail on the dry-run instead would cost a Keys API page, a full CL BeaconState download and the Merkle proofs every cycle, to reach a revert the three `eth_call`s in `_resolve_topup_path()` already predicted. The reason lives on `topup_execution_path` and is logged (WARN) on every transition, not per cycle.
+
 Wrapping happens **before** `transaction.check()`/gas estimation, so the dry-run simulates what actually gets mined; simulating the unwrapped call would revert with `AccessControlUnauthorizedAccount`.
 
 Deposits, pause and unvet are deliberately **not** wrapped. DSM v5 authorises `depositBufferedEther` purely from the guardian signatures in calldata — it never reads `msg.sender` — so wrapping would only add gas and couple deposits to delegate state. `pauseDeposits`/`unvetSigningKeys` do have a `msg.sender`-is-guardian branch, but the bot always holds a signed council message, so the signature path is always open to it and making its hot key a guardian delegate would let that key pause deposits with no quorum.
@@ -184,7 +186,9 @@ Module-level gates (Prometheus, defined in `src/metrics/metrics.py`, set in `src
 1. `topup_gateway_paused == 0` (and `variables.ENABLE_TOP_UP` is true — checked at startup, not a metric).
 2. `topup_execution_path` is `direct` or `delegated` — both healthy, and which one is live tells you
    where `TOP_UP_ROLE` currently sits. `not_delegate` / `terminated` / `no_role` each make *every*
-   top-up revert. Seeing one at runtime means the role assignment changed under a running bot
+   top-up revert, so each one skips the whole top-up branch (no candidate collection, no CL state
+   download) — a silent stop, visible only here and in the transition WARN, while `0x01` deposits
+   keep running. Seeing one at runtime means the role assignment changed under a running bot
    (delegate rotated or revoked, contract terminated, role removed from both identities). Resolved
    before every early return in `_execute_actual()` (alongside `topup_gateway_paused`), so it stays
    trustworthy on idle iterations — an empty buffer would otherwise freeze it at its last value.
