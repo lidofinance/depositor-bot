@@ -7,7 +7,7 @@ from typing import cast
 from eth_typing import HexStr
 from web3.types import Wei
 
-from blockchain.beacon_state.ssz_types import (
+from blockchain.beacon_state.constants import (
     FAR_FUTURE_EPOCH,
     SLOTS_PER_EPOCH,
 )

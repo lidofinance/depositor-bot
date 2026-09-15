@@ -4,42 +4,50 @@ Build Merkle proofs and assemble witness data for TopUpGateway.topUp().
 
 import logging
 
-from blockchain.beacon_state.ssz_types import BeaconBlockHeader
-from blockchain.beacon_state.state import (
-    BeaconStateData,
-    extract_header_proof,
-    extract_validator_proof,
+from blockchain.beacon_state.proofs import (
+    build_beacon_block_header,
+    build_header_proof,
+    build_validator_proofs,
+    full_validator_gindex,
+    validator_leaf,
+    verify_proof,
 )
+from blockchain.beacon_state.specs import get_spec
 from blockchain.topup.types import TopUpCandidate, TopUpProofData, ValidatorWitness
 
 logger = logging.getLogger(__name__)
 
 
 def build_topup_proofs(
-    beacon_data: BeaconStateData,
+    beacon_data,
     candidates: list[TopUpCandidate],
 ) -> TopUpProofData:
-    """Build proofs for selected candidates using beacon state."""
-    # Header for proof: state_root → beacon_block_root
+    """Build proofs for selected candidates from the decoded beacon state.
 
+    Each witness proof is validators[i] -> state_root -> beacon_block_root (EIP-4788 anchor).
+    """
+    spec = get_spec(beacon_data.slot)
+    state = beacon_data.raw_state
     header = beacon_data.header
 
-    # Verify anchor
-    beacon_block_root = BeaconBlockHeader.get_hash_tree_root(header)
+    # Verify anchor: the built block root must match the EIP-4788 parent root.
+    block_header = build_beacon_block_header(spec, header)
+    beacon_block_root = bytes(block_header.hash_tree_root())
     if beacon_block_root != beacon_data.parent_beacon_block_root:
         raise ValueError(
-            f'beacon_block_root mismatch: '
-            f'computed=0x{beacon_block_root.hex()}, '
-            f'expected=0x{beacon_data.parent_beacon_block_root.hex()}'
+            f'beacon_block_root mismatch: computed=0x{beacon_block_root.hex()}, expected=0x{beacon_data.parent_beacon_block_root.hex()}'
         )
 
-    header_proof = extract_header_proof(header)
     state_root = header[3]
     if state_root != beacon_data.state_root:
         raise ValueError(f'header/state root mismatch: header=0x{state_root.hex()}, beacon_data=0x{beacon_data.state_root.hex()}')
 
-    # if not verify_header_proof(state_root, beacon_block_root, header_proof):
-    #     raise ValueError(f'Invalid header proof for slot={beacon_data.slot}')
+    header_proof = build_header_proof(spec, block_header)
+
+    # Build every validator branch in one pass with a shared node cache: the big upper siblings
+    # (large spans of the validators list) repeat across candidates and are computed once, not once
+    # per candidate. Byte-for-byte identical to per-candidate build_validator_proof.
+    validator_proofs = build_validator_proofs(spec, state, [c.validator_index for c in candidates])
 
     witnesses = []
     validator_indices = []
@@ -47,23 +55,15 @@ def build_topup_proofs(
     operator_ids = []
     pending_balances = []
 
-    validators_roots = beacon_data.validators_roots
-    nodes_cache: dict = {}
-
     for c in candidates:
         fields = beacon_data.validators_fields[c.validator_index]
 
-        validator_proof = extract_validator_proof(beacon_data.state_field_roots, c.validator_index, validators_roots, nodes_cache)
-        # if not verify_validator_proof(
-        #     beacon_data.state_field_roots,
-        #     c.validator_index,
-        #     validator_proof,
-        #     validators_roots,
-        #     validators_data_root,
-        # ):
-        #     raise ValueError(f'Invalid validator proof for validator_index={c.validator_index}')
+        full_proof = validator_proofs[c.validator_index] + header_proof
 
-        full_proof = validator_proof + header_proof
+        leaf = validator_leaf(state, c.validator_index)
+        full_gi = full_validator_gindex(spec, c.validator_index)
+        if not verify_proof(leaf, full_proof, full_gi, beacon_block_root):
+            raise ValueError(f'Invalid validator proof for validator_index={c.validator_index}')
 
         witnesses.append(
             ValidatorWitness(

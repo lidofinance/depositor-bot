@@ -1,3 +1,6 @@
+# Generated consensus-specs types are vendored, not hand-edited — keep all hooks off them.
+exclude: ^consensus-spec/
+
 repos:
 - repo: https://github.com/pre-commit/pre-commit-hooks
   rev: v4.5.0  # Use the latest stable version
