@@ -102,6 +102,7 @@ Next cases requires bot restart:
 | CONSOLIDATION_BUS_ADDRESS         | -             | ConsolidationBus address override. Defaults to the hardcoded per-chain value; top-up is skipped if the chain is unknown  |
 | CONSOLIDATION_BUS_DEPLOY_BLOCK    | -             | ConsolidationBus deploy block override (must be exact-or-earlier). Used together with CONSOLIDATION_BUS_ADDRESS          |
 | CONSOLIDATION_GETLOGS_CHUNK       | 10000         | Block-range size per getLogs call when indexing ConsolidationBus events                                                  |
+| HTTP_REQUEST_TIMEOUT_EXECUTION    | 120           | Timeout in seconds for EL HTTP requests. Without it a hung endpoint blocks the cycle indefinitely                         |
 | HTTP_REQUEST_TIMEOUT_CONSENSUS    | 300           | Timeout in seconds for CL HTTP requests                                                                                  |
 | HTTP_REQUEST_RETRY_COUNT_CONSENSUS | 5            | Number of retries for CL HTTP requests                                                                                   |
 | HTTP_REQUEST_SLEEP_BEFORE_RETRY_IN_SECONDS_CONSENSUS | 5 | Backoff factor in seconds between CL request retries                                                              |
