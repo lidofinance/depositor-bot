@@ -241,9 +241,9 @@ class TestCommonPreconditions(unittest.TestCase):
         self.bot.w3.lido.lido.can_deposit = Mock(return_value=False)
         self.assertFalse(self.bot._common_preconditions())
 
-    def test_fails_when_quorum_zero(self):
+    def test_passes_when_quorum_zero_so_top_ups_are_not_blocked(self):
         self.bot.w3.lido.deposit_security_module.get_guardian_quorum = Mock(return_value=0)
-        self.assertFalse(self.bot._common_preconditions())
+        self.assertTrue(self.bot._common_preconditions())
 
 
 # ─── _publish_allocation_metrics ─────────────────────────────────────
@@ -341,6 +341,34 @@ class TestCollectCandidates(unittest.TestCase):
         cands = self.bot._collect_candidates(digests, 1, [10, 20, 30], [110, 70, 80])
         self.assertEqual([0, 1, 2], [c.digest_index for c in cands])
         self.assertEqual([1, 2, 3], [c.module_id for c in cands])
+
+    def test_zero_allocation_csm_kept_with_flush_flag(self):
+        # A CSM 0x02 module at zero allocation is kept when allow_csm_flush=True, so its queue can be flushed.
+        module = MagicMock()
+        module.get_type.return_value = MODULE_TYPE_CSM
+        self.bot.w3.lido.staking_module = Mock(return_value=module)
+        digests = [_make_digest(1, '0xA1', 2)]
+        cands = self.bot._collect_candidates(digests, 2, [0], [100], allow_csm_flush=True)
+        self.assertEqual([1], [c.module_id for c in cands])
+        self.assertEqual(0, cands[0].allocation)
+
+    def test_zero_allocation_csm_dropped_without_flush_flag(self):
+        # Without the flag the default zero-allocation filter still drops it.
+        module = MagicMock()
+        module.get_type.return_value = MODULE_TYPE_CSM
+        self.bot.w3.lido.staking_module = Mock(return_value=module)
+        digests = [_make_digest(1, '0xA1', 2)]
+        cands = self.bot._collect_candidates(digests, 2, [0], [100])
+        self.assertEqual([], [c.module_id for c in cands])
+
+    def test_zero_allocation_non_csm_dropped_even_with_flush_flag(self):
+        # A non-CSM 0x02 module (e.g. CMv2) at zero allocation is dropped even with the flag.
+        module = MagicMock()
+        module.get_type.return_value = MODULE_TYPE_CMV2
+        self.bot.w3.lido.staking_module = Mock(return_value=module)
+        digests = [_make_digest(1, '0xA1', 2)]
+        cands = self.bot._collect_candidates(digests, 2, [0], [100], allow_csm_flush=True)
+        self.assertEqual([], [c.module_id for c in cands])
 
 
 # ─── _phase_seed ───────────────────────────────────────────────────
@@ -699,6 +727,33 @@ class TestPhaseFullAndTopup(unittest.TestCase):
 
         self.assertEqual(PhaseOutcome.SENT, outcome)
         self.bot._top_up_to_module.assert_called_once_with(1, '0xA1', 42, mock.ANY)
+
+    def test_csm_zero_topup_allocation_still_reaches_top_up_for_flush(self):
+        # A CSM 0x02 module with zero top-up allocation must still reach _top_up_to_module so its queue
+        # can be flushed — verifies _phase_full_and_topup wires allow_csm_flush through.
+        module = MagicMock()
+        module.get_type.return_value = MODULE_TYPE_CSM
+        self.bot.w3.lido.staking_module = Mock(return_value=module)
+        self.bot._top_up_to_module = Mock(return_value=PhaseOutcome.SENT)
+        digests = [_make_digest(1, '0xA1', 2)]
+        self._set_topup_allocation([0], [100])  # zero top-up allocation
+
+        outcome = self.bot._phase_full_and_topup(Wei(100), [0], [0], digests, top_up_enabled=True)
+
+        self.assertEqual(PhaseOutcome.SENT, outcome)
+        self.bot._top_up_to_module.assert_called_once_with(1, '0xA1', 0, mock.ANY)
+
+    def test_moves_to_next_module_when_top_up_skips(self):
+        # If a module's top-up is SKIPPED (e.g. a fundable queue head but no budget), move on to the
+        # next module. m1 stake 50 < m2 stake 150 → m1 first, skips, then m2 sends.
+        digests = [_make_digest(1, '0xA1', 2), _make_digest(2, '0xA2', 2)]
+        self.bot._top_up_to_module = Mock(side_effect=lambda module_id, *a: PhaseOutcome.SKIPPED if module_id == 1 else PhaseOutcome.SENT)
+        self._set_topup_allocation([50, 50], [100, 200])
+
+        outcome = self.bot._phase_full_and_topup(Wei(100), [0, 0], [0, 0], digests, top_up_enabled=True)
+
+        self.assertEqual(PhaseOutcome.SENT, outcome)
+        self.assertEqual([1, 2], [c.args[0] for c in self.bot._top_up_to_module.call_args_list])
 
     # ─── 0x01 branch ───────────────────────────────────────────
 
@@ -1875,3 +1930,13 @@ def test_depositor_bot(
     db.message_storage.messages = deposit_messages
     assert db.execute(latest)
     assert web3_lido_integration.lido.staking_router.get_staking_module_nonce(module_id) == old_module_nonce + 1
+
+
+@pytest.mark.unit
+def test_zero_quorum_still_refuses_to_deposit(depositor_bot):
+    message = {'blockHash': '0x' + '43' * 32, 'guardianAddress': '0x43464Fe06c18848a2E2e913194D64c1970f4326a'}
+    depositor_bot._fetch_actual_messages = Mock(return_value=[message])
+    depositor_bot._get_module_messages_filter = Mock(return_value=lambda _: True)
+    depositor_bot.w3.lido.deposit_security_module.get_guardian_quorum = Mock(return_value=0)
+
+    assert depositor_bot._get_quorum(1) is None

@@ -164,3 +164,9 @@ deposit transaction.
       batch to flush it from the queue, but spends nothing from the allocation;
     - otherwise it spends the module allocation, stopping once the leftover can't fund the next key;
   - sort the batch by validator index and build the SSZ proofs.
+
+  > **Note — flush transactions.** A flush (a key the gateway tops up by 0) is not meant to actually
+  > top up the validator. Its only purpose is to remove that key from the head of the on-chain queue
+  > so the queue can advance to the keys behind it. This matters because a full queue caps the
+  > module's seed capacity to zero, so at zero allocation we flush only when the queue is full — the
+  > single case where dropping the head unblocks new deposits.

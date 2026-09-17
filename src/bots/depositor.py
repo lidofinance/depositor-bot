@@ -35,6 +35,7 @@ from blockchain.topup.cmv2_strategy import CMv2TopUpStrategy
 from blockchain.topup.csm02_strategy import CSM02TopUpStrategy
 from blockchain.topup.strategy import TopUpStrategy
 from blockchain.typings import Web3
+from blockchain.web3_extentions.lido_contracts import ZERO_ADDRESS
 from metrics.metrics import (
     ACCOUNT_BALANCE,
     BOT_LAST_CYCLE_TIMESTAMP,
@@ -43,6 +44,7 @@ from metrics.metrics import (
     DEPOSITABLE_ETHER,
     DEPOSITS_PAUSED,
     GUARDIAN_BALANCE,
+    GUARDIAN_DELEGATE,
     MODULE_ALLOCATION,
     MODULE_CONTRACT_MISSING,
     MODULE_QUORUM_LAST_SEEN_TIMESTAMP,
@@ -240,6 +242,7 @@ class DepositorBot:
     def execute(self, block: BlockData) -> bool:
         logger.info({'msg': 'Depositor iteration start.', 'block_number': block.get('number')})
         self._check_balance()
+        self._check_guardian_delegates()
 
         result = self._execute_actual()
         BOT_LAST_CYCLE_TIMESTAMP.set(time.time())
@@ -255,9 +258,6 @@ class DepositorBot:
         """
         if not self.w3.lido.lido.can_deposit():
             logger.info({'msg': 'Lido.canDeposit() is false.'})
-            return False
-        if self.w3.lido.deposit_security_module.get_guardian_quorum() == 0:
-            logger.info({'msg': 'Guardian quorum is not set in DSM contract (quorum == 0).'})
             return False
         return True
 
@@ -432,13 +432,20 @@ class DepositorBot:
             MODULE_STAKE.labels(module_id, kind).set(new[i] - allocated[i])
 
     def _collect_candidates(
-        self, digests: list[StakingModuleInfo], wc_type: int, allocated: list[int], new: list[int]
+        self,
+        digests: list[StakingModuleInfo],
+        wc_type: int,
+        allocated: list[int],
+        new: list[int],
+        allow_csm_flush: bool = False,
     ) -> list[ModuleCandidate]:
         """Select whitelisted modules of one wc_type that have a non-zero allocation, and build their
         candidate entries (stake = new - allocated, used for ordering).
 
         Single type per call — the mixed (full + top-up) phase calls it once per type and merges.
         Sorting and logging stay in the caller.
+
+        allow_csm_flush lets a CSM 0x02 module through even at zero allocation, so its queue can be flushed.
         """
         candidates: list[ModuleCandidate] = []
         for i, digest in enumerate(digests):
@@ -448,7 +455,7 @@ class DepositorBot:
                 continue
             if digest['status'] != 0:  # only Active modules (replaces SR.canDeposit activity check)
                 continue
-            if allocated[i] == 0:
+            if allocated[i] == 0 and not (allow_csm_flush and self._is_csm_module(digest['module_id'])):
                 continue
             if not self._module_is_known(digest['module_id']):
                 continue
@@ -507,7 +514,9 @@ class DepositorBot:
             sr_v4 = cast(StakingRouterContractV4, self.w3.lido.staking_router)
             _total, topup_allocated, topup_new = sr_v4.get_deposit_allocations(depositable_ether, is_top_up=True)
             self._publish_allocation_metrics(digests, topup_allocated, topup_new, 'topup')
-            candidates += self._collect_candidates(digests, wc_type=WC_TYPE_0X02, allocated=topup_allocated, new=topup_new)
+            candidates += self._collect_candidates(
+                digests, wc_type=WC_TYPE_0X02, allocated=topup_allocated, new=topup_new, allow_csm_flush=True
+            )
 
         candidates.sort(key=lambda c: (c.stake, c.digest_index))
         logger.info(
@@ -622,10 +631,6 @@ class DepositorBot:
             return PhaseOutcome.SKIPPED
 
         tx = self.w3.lido.topup_gateway.top_up(module_id, proof_data)
-        try:
-            logger.info({'msg': 'DEBUG topUp calldata (inner, pre-wrap).', 'module_id': module_id, 'data': tx._encode_transaction_data()})
-        except Exception as _e:
-            logger.info({'msg': 'DEBUG topUp calldata encode failed.', 'err': repr(_e)})
         # When TOP_UP_ROLE sits on the delegation contract rather than on the bot's key, wrapping must
         # happen before check()/send() so the dry-run and the gas estimate cover the delegated call —
         # the unwrapped one would revert with AccessControlUnauthorizedAccount.
@@ -754,27 +759,42 @@ class DepositorBot:
 
         logger.info({'msg': 'Check guardians balances.'})
 
-        guardians = self.w3.lido.deposit_security_module.get_guardians()
+        guardian_contract_by_delegate_eoa = self.w3.lido.get_guardian_delegates()
         providers = [self.w3]
 
         if self._onchain_transport_w3 is not None:
             providers.append(self._onchain_transport_w3)
 
         new_values = {}
-        for address in guardians:
+        for delegate_eoa, guardian_contract in guardian_contract_by_delegate_eoa.items():
             for provider in providers:
-                balance = provider.eth.get_balance(address)
-                new_values[(address, provider.eth.chain_id)] = balance
+                balance = provider.eth.get_balance(delegate_eoa)
+                new_values[(delegate_eoa, guardian_contract, provider.eth.chain_id)] = balance
 
         GUARDIAN_BALANCE.clear()
-        for (address, chain_id), balance in new_values.items():
-            GUARDIAN_BALANCE.labels(address=address, chain_id=chain_id).set(balance)
+        for (delegate_eoa, guardian_contract, chain_id), balance in new_values.items():
+            GUARDIAN_BALANCE.labels(address=delegate_eoa, guardian=guardian_contract, chain_id=chain_id).set(balance)
+
+    def _check_guardian_delegates(self):
+        guardian_contracts = [self.w3.to_checksum_address(g) for g in self.w3.lido.deposit_security_module.get_guardians()]
+        delegate_eoa_by_guardian_contract = {
+            guardian_contract: delegate_eoa for delegate_eoa, guardian_contract in self.w3.lido.get_guardian_delegates().items()
+        }
+
+        GUARDIAN_DELEGATE.clear()
+        for guardian_contract in guardian_contracts:
+            delegate_eoa = delegate_eoa_by_guardian_contract.get(guardian_contract)
+            GUARDIAN_DELEGATE.labels(guardian=guardian_contract, delegate=delegate_eoa or ZERO_ADDRESS).set(int(delegate_eoa is not None))
 
     def _select_strategy(self, module_id: int) -> DepositStrategy:
         module = self.w3.lido.staking_module(module_id)
         if module is not None and module.get_type() == MODULE_TYPE_CSM:
             return self._csm_strategy
         return self._general_strategy
+
+    def _is_csm_module(self, module_id: int) -> bool:
+        module = self.w3.lido.staking_module(module_id)
+        return module is not None and module.get_type() == MODULE_TYPE_CSM
 
     def _module_is_known(self, module_id: int) -> bool:
         known = self.w3.lido.staking_module(module_id) is not None
@@ -802,6 +822,12 @@ class DepositorBot:
         # Get the required quorum size
         min_signs_to_deposit = self.w3.lido.deposit_security_module.get_guardian_quorum()
         CURRENT_QUORUM_SIZE.labels('required').set(min_signs_to_deposit)
+
+        # Every group clears a zero threshold, so a single signature would pass as a quorum.
+        if min_signs_to_deposit == 0:
+            logger.warning({'msg': 'Guardian quorum is 0 in DSM contract — refusing to deposit.', 'module_id': module_id})
+            QUORUM.labels(module_id).set(0)
+            return None
 
         # Group messages by block hash and guardian address
         messages_by_block_hash = defaultdict(dict)

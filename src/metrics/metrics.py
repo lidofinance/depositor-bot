@@ -25,25 +25,25 @@ MODULE_TX_SEND = Counter(
 DEPOSIT_MESSAGES = Gauge(
     'deposit_messages',
     'Guardians deposit messages',
-    ['address', 'module_id', 'version', 'transport', 'chain_id'],
+    ['address', 'guardian', 'module_id', 'version', 'transport', 'chain_id'],
     namespace=PROMETHEUS_PREFIX,
 )
 PAUSE_MESSAGES = Gauge(
     'pause_messages',
     'Guardians pause messages',
-    ['address', 'module_id', 'version', 'transport', 'chain_id'],
+    ['address', 'guardian', 'module_id', 'version', 'transport', 'chain_id'],
     namespace=PROMETHEUS_PREFIX,
 )
 PING_MESSAGES = Gauge(
     'ping_messages',
     'Guardians ping messages',
-    ['address', 'version', 'transport', 'chain_id'],
+    ['address', 'guardian', 'version', 'transport', 'chain_id'],
     namespace=PROMETHEUS_PREFIX,
 )
 UNVET_MESSAGES = Gauge(
     'unvet_messages',
     'Guardian unvet messages',
-    ['address', 'module_id', 'version', 'transport', 'chain_id'],
+    ['address', 'guardian', 'module_id', 'version', 'transport', 'chain_id'],
     namespace=PROMETHEUS_PREFIX,
 )
 
@@ -92,8 +92,15 @@ ACCOUNT_BALANCE = Gauge(
 
 GUARDIAN_BALANCE = Gauge(
     'guardian_balance',
-    'Balance of the guardian',
-    ['address', 'chain_id'],
+    'Balance of the guardian delegate',
+    ['address', 'guardian', 'chain_id'],
+    namespace=PROMETHEUS_PREFIX,
+)
+
+GUARDIAN_DELEGATE = Gauge(
+    'guardian_delegate',
+    'Whether a registered guardian has an active delegate.',
+    ['guardian', 'delegate'],
     namespace=PROMETHEUS_PREFIX,
 )
 

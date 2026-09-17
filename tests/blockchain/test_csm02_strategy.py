@@ -8,7 +8,8 @@ from blockchain.beacon_state.state import BeaconStateData, ValidatorFields
 from blockchain.topup.csm02_strategy import CSM02TopUpStrategy
 from providers.keys_api import LidoKey
 
-# Small, clear stand-in for the on-chain TopUpGateway minimum (mocked, not the real ~2 ETH).
+# Small, clear stand-ins for the on-chain TopUpGateway limits (mocked, not the real ~2046 / ~2 ETH).
+TARGET_BALANCE_GWEI = 100
 MIN_TOP_UP_GWEI = 10
 
 PK_A = b'\xaa' * 48
@@ -30,19 +31,26 @@ def _beacon_data(
     pubkey_to_index: dict[bytes, int],
     pending: dict[bytes, int] | None = None,
     not_active: set[bytes] | None = None,
+    slashed: set[bytes] | None = None,
+    exiting: set[bytes] | None = None,
+    balances: dict[bytes, int] | None = None,
 ) -> BeaconStateData:
-    """The strategy reads pubkey_to_index, the head's activation_epoch and pending_deposits; the rest
-    is used by the (mocked) build_topup_proofs. A pubkey absent from pubkey_to_index models a key
-    still pending on the CL. slot 0 → current_epoch 0, so activation_epoch 1 makes a key not active."""
+    """The strategy reads pubkey_to_index, the head's fields (activation/slashed/exit/balance) and
+    pending_deposits; the rest is used by the (mocked) build_topup_proofs. A pubkey absent from
+    pubkey_to_index models a key still pending on the CL. slot 0 → current_epoch 0, so activation_epoch
+    1 makes a key not active. effective_balance defaults to 0, i.e. a fundable head."""
     not_active = not_active or set()
+    slashed = slashed or set()
+    exiting = exiting or set()
+    balances = balances or {}
     validators_fields = {
         index: ValidatorFields(
             pubkey=pk,
-            effective_balance=0,
-            slashed=False,
+            effective_balance=balances.get(pk, 0),
+            slashed=pk in slashed,
             activation_eligibility_epoch=0,
             activation_epoch=1 if pk in not_active else 0,
-            exit_epoch=FAR_FUTURE_EPOCH,
+            exit_epoch=1 if pk in exiting else FAR_FUTURE_EPOCH,
             withdrawable_epoch=FAR_FUTURE_EPOCH,
         )
         for pk, index in pubkey_to_index.items()
@@ -64,9 +72,11 @@ def _beacon_data(
 def _make_strategy(queue_pubkeys: list[bytes]):
     w3 = MagicMock()
     w3.to_checksum_address.side_effect = lambda address: address
+    w3.lido.topup_gateway.get_target_balance_gwei.return_value = TARGET_BALANCE_GWEI
     w3.lido.topup_gateway.get_min_top_up_gwei.return_value = MIN_TOP_UP_GWEI
     csm_contract = Mock()
     csm_contract.get_keys_for_top_up.return_value = queue_pubkeys
+    csm_contract.get_top_up_queue_capacity.return_value = 0  # full queue by default (so 0-budget flush proceeds)
     w3.eth.contract.return_value = csm_contract
     strategy = CSM02TopUpStrategy(w3=w3, gas_price_calculator=Mock())
     return strategy, csm_contract
@@ -129,16 +139,58 @@ def test_empty_queue_returns_none():
 
 
 @pytest.mark.unit
-def test_allocation_below_min_returns_none_without_loading_beacon():
-    # Budget below the minimum top-up → skip before the heavy beacon read and before Keys API.
+@pytest.mark.parametrize('allocation', [Wei(0), Wei(5 * 10**9)])  # zero and below-min: same skip branch
+def test_fundable_head_without_enough_allocation_skips(allocation):
+    # A fundable head (positive gateway limit) with allocation below a minimal top-up (0 included) →
+    # nothing to fund and nothing to flush → skip, so the bot moves on to the next module.
     strategy, _ = _make_strategy([PK_A])
     keys_api = Mock()
-    ensure = Mock()
-    result, build_proofs = _call(strategy, keys_api, _beacon_data({PK_A: 100}), module_allocation=Wei(5 * 10**9), ensure=ensure)
+    keys_api.get_module_used_keys.return_value = [_lido_key(PK_A, 7, 11)]
+    result, build_proofs = _call(strategy, keys_api, _beacon_data({PK_A: 5}), module_allocation=allocation)
     assert result is None
     build_proofs.assert_not_called()
-    ensure.assert_not_called()
-    keys_api.get_module_used_keys.assert_not_called()
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    'beacon_kwargs',
+    [
+        {'slashed': {PK_A}},
+        {'exiting': {PK_A}},
+        {'balances': {PK_A: TARGET_BALANCE_GWEI}},  # at target: headroom 0
+        {'balances': {PK_A: TARGET_BALANCE_GWEI - 1}},  # headroom 1 < min 10
+    ],
+)
+def test_flushes_zero_limit_head_at_zero_allocation_when_queue_full(beacon_kwargs):
+    # A zero-limit head (slashed / exiting / at target / headroom < min) is submitted even at zero
+    # allocation to flush it — but only because the queue is full (default), which is what blocks seed.
+    strategy, csm = _make_strategy([PK_A])
+    csm.get_top_up_queue_capacity.return_value = 0  # full queue → flush unblocks seed
+    keys_api = Mock()
+    keys_api.get_module_used_keys.return_value = [_lido_key(PK_A, 7, 11)]
+    beacon_data = _beacon_data({PK_A: 5}, **beacon_kwargs)
+
+    result, build_proofs = _call(strategy, keys_api, beacon_data, module_allocation=Wei(0))
+
+    assert result is build_proofs.return_value
+    _, candidates = build_proofs.call_args.args
+    assert [c.pubkey for c in candidates] == [PK_A]
+
+
+@pytest.mark.unit
+def test_zero_limit_head_at_zero_allocation_skips_when_queue_not_full():
+    # A zero-limit head at zero budget, but the queue has free seats → seed is not queue-blocked, so a
+    # 0-budget flush would just burn gas → skip.
+    strategy, csm = _make_strategy([PK_A])
+    csm.get_top_up_queue_capacity.return_value = 3  # free seats left
+    keys_api = Mock()
+    keys_api.get_module_used_keys.return_value = [_lido_key(PK_A, 7, 11)]
+    beacon_data = _beacon_data({PK_A: 5}, slashed={PK_A})
+
+    result, build_proofs = _call(strategy, keys_api, beacon_data, module_allocation=Wei(0))
+
+    assert result is None
+    build_proofs.assert_not_called()
 
 
 @pytest.mark.unit
