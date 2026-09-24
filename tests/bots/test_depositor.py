@@ -21,8 +21,7 @@ def _make_digest(module_id, address, wc_type, status=0) -> StakingModuleInfo:
 
 
 def _make_bot():
-    """Build a DepositorBot with all-MagicMock deps. No transports → MessageStorage stays empty."""
-    variables.MESSAGE_TRANSPORTS = ''
+    """Build a DepositorBot with all-MagicMock deps. Data Bus is stubbed → MessageStorage stays empty."""
     w3 = MagicMock()
     # w3.lido is a MagicMock, so `delegation` would auto-create a truthy child and silently turn on
     # delegated top-up execution. Default to the direct-call configuration; tests that exercise
@@ -867,7 +866,6 @@ def depositor_bot(
     gas_price_calculator,
 ):
     with mock.patch('web3.eth.Eth.chain_id', new_callable=mock.PropertyMock) as _:
-        variables.MESSAGE_TRANSPORTS = ''
         variables.DEPOSIT_MODULES_WHITELIST = [1, 2]
         web3_lido_unit.eth.get_block = Mock(return_value=block_data)
         # w3.lido is a Mock, so `delegation` would auto-create a truthy child and silently turn on

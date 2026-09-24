@@ -55,6 +55,11 @@ def main(bot_name: str):
         logger.error({'msg': msg})
         raise ValueError(msg)
 
+    if not variables.ONCHAIN_TRANSPORT_ADDRESS or not variables.ONCHAIN_TRANSPORT_RPC_ENDPOINTS:
+        msg = 'ONCHAIN_TRANSPORT_ADDRESS and ONCHAIN_TRANSPORT_RPC_ENDPOINTS are required: the Data Bus is the only message transport.'
+        logger.error({'msg': msg})
+        raise ValueError(msg)
+
     logger.info({'msg': f'Start up healthcheck service on port: {variables.HEALTHCHECK_SERVER_PORT}.'})
     start_pulse_server()
 
