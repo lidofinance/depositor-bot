@@ -12,12 +12,10 @@ from cryptography.verify_signature import to_guardian_signature
 from metrics.metrics import UNEXPECTED_EXCEPTIONS
 from metrics.transport_message_metrics import message_metrics_filter
 from transport.msg_providers.onchain_transport import OnchainTransportProvider, PingParser, UnvetV1Parser, UnvetV2Parser
-from transport.msg_providers.rabbit import MessageType, RabbitProvider
 from transport.msg_storage import MessageStorage
 from transport.msg_types.common import get_messages_sign_filter
 from transport.msg_types.ping import PingMessageSchema, to_check_sum_address
 from transport.msg_types.unvet import UnvetMessage, UnvetMessageSchema
-from transport.types import TransportType
 from utils.bytes import from_hex_string_to_bytes
 
 logger = logging.getLogger(__name__)
@@ -45,32 +43,16 @@ class UnvetterBot:
         if self.message_storage is not None:
             return
 
-        transports = []
-
-        if TransportType.RABBIT in variables.MESSAGE_TRANSPORTS:
-            transports.append(
-                RabbitProvider(
-                    routing_keys=[MessageType.UNVET, MessageType.PING],
-                    message_schema=Schema(Or(UnvetMessageSchema, PingMessageSchema)),
-                )
-            )
-
-        if TransportType.ONCHAIN_TRANSPORT in variables.MESSAGE_TRANSPORTS:
-            transports.append(
-                OnchainTransportProvider(
-                    w3=OnchainTransportProvider.create_onchain_transport_w3(),
-                    onchain_address=variables.ONCHAIN_TRANSPORT_ADDRESS,
-                    message_schema=Schema(Or(UnvetMessageSchema, PingMessageSchema)),
-                    parsers_providers=[UnvetV1Parser, UnvetV2Parser, PingParser],
-                    delegates_provider=self.w3.lido.get_guardian_delegates,
-                )
-            )
-
-        if not transports:
-            logger.warning({'msg': 'No transports found', 'value': variables.MESSAGE_TRANSPORTS})
+        transport = OnchainTransportProvider(
+            w3=OnchainTransportProvider.create_onchain_transport_w3(),
+            onchain_address=variables.ONCHAIN_TRANSPORT_ADDRESS,
+            message_schema=Schema(Or(UnvetMessageSchema, PingMessageSchema)),
+            parsers_providers=[UnvetV1Parser, UnvetV2Parser, PingParser],
+            delegates_provider=self.w3.lido.get_guardian_delegates,
+        )
 
         self.message_storage = MessageStorage(
-            transports,
+            [transport],
             filters=[
                 message_metrics_filter,
                 to_check_sum_address,

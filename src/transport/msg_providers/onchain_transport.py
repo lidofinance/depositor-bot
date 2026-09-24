@@ -15,11 +15,11 @@ from web3_multi_provider import FallbackProvider
 import variables
 from cryptography.verify_signature import compact_signature
 from transport.msg_providers.common import BaseMessageProvider
-from transport.msg_providers.rabbit import MessageType
 from transport.msg_types.deposit import DepositMessage
 from transport.msg_types.pause import PauseMessage
 from transport.msg_types.ping import PingMessage
 from transport.msg_types.unvet import UnvetMessage
+from transport.types import MessageType
 from utils.bytes import bytes_to_hex_string
 
 logger = logging.getLogger(__name__)

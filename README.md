@@ -39,8 +39,7 @@ Unvetting is the proces of decreasing approved depositable signing keys.
     - Set WEB3_RPC_ENDPOINTS
     - Set WALLET_PRIVATE_KEY
     - Set CREATE_TRANSACTIONS to true
-    - Set MESSAGE_TRANSPORTS to rabbit
-    - Set RABBIT_MQ_URL, RABBIT_MQ_USERNAME and RABBIT_MQ_PASSWORD
+    - Set ONCHAIN_TRANSPORT_RPC_ENDPOINTS and ONCHAIN_TRANSPORT_ADDRESS (Data Bus is the only message transport)
 3. ```docker-compose up```
 4. Send metrics and logs to grafana
 5. Setup alerts
@@ -69,11 +68,7 @@ Next cases requires bot restart:
 | CL_API_URLS               | -                                          | Comma-separated list of Consensus Layer client URIs                                                                      |
 | ENABLE_TOP_UP             | false                                      | Enable top-up functionality. Must be disabled until Node Operators submit consolidation requests                         |
 | ---                       | ---	                                       | ---                                                                                                                      |
-| MESSAGE_TRANSPORTS        | -                                          | Transports used in bot. One of/or both: rabbit/onchain_transport. `rabbit` is DSMv4-only — its messages carry no guardian delegate, so they are dropped under DSMv5 delegation |
 | GUARDIAN_DELEGATES_CACHE_TTL | 60                                      | Seconds to cache the resolved delegate→guardian map (DSMv5). Bounds EL-provider load; on-chain checks remain the freshness backstop. 0 disables |
-| RABBIT_MQ_URL             | -                                          | RabbitMQ url                                                                                                             |
-| RABBIT_MQ_USERNAME        | -                                          | RabbitMQ username for virtualhost                                                                                        |
-| RABBIT_MQ_PASSWORD        | -                                          | RabbitMQ password for virtualhost                                                                                        |
 
 ### Additional variables
 

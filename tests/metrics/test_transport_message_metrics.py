@@ -2,7 +2,7 @@ import pytest
 
 from metrics.metrics import PAUSE_MESSAGES, PING_MESSAGES
 from metrics.transport_message_metrics import message_metrics_filter
-from transport.msg_providers.rabbit import MessageType
+from transport.types import MessageType
 
 GUARDIAN = '0x89e1bEBAf6857312bCDc313B93F29aB9cA98000f'
 DELEGATE = '0x43464Fe06c18848a2E2e913194D64c1970f4326a'

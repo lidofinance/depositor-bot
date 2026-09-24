@@ -1,3 +1,5 @@
-class TransportType:
-    RABBIT = 'rabbit'
-    ONCHAIN_TRANSPORT = 'onchain_transport'
+class MessageType:
+    PAUSE = 'pause'
+    PING = 'ping'
+    DEPOSIT = 'deposit'
+    UNVET = 'unvet'
