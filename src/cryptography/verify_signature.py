@@ -90,7 +90,7 @@ def compact_signature(signature: bytes) -> tuple[bytes, bytes]:
 
     Council v5 publishes Data Bus messages with the signature as a single ``bytes`` blob — the shape
     DSMv5 verifies through ERC-1271. The bot keeps signatures in the compact ``(r, _vs)`` form
-    everywhere else (RabbitMQ transport, sign filter, DSMv4 submission), so blobs are normalised on
+    everywhere else (v4 Data Bus events, sign filter, DSMv4 submission), so blobs are normalised on
     parse and a single representation travels downstream. The conversion is lossless: ``_vs`` is ``s``
     with the parity of ``v`` folded into its top bit, and blobs that could not survive the fold are
     rejected by ``compute_vs`` rather than transformed. Raising is the intended way to drop them —

@@ -14,12 +14,10 @@ from cryptography.verify_signature import to_guardian_signature
 from metrics.metrics import UNEXPECTED_EXCEPTIONS
 from metrics.transport_message_metrics import message_metrics_filter
 from transport.msg_providers.onchain_transport import OnchainTransportProvider, PauseV3Parser, PauseV4Parser, PingParser
-from transport.msg_providers.rabbit import MessageType, RabbitProvider
 from transport.msg_storage import MessageStorage
 from transport.msg_types.common import get_messages_sign_filter
 from transport.msg_types.pause import PauseMessage, PauseMessageSchema
 from transport.msg_types.ping import PingMessageSchema, to_check_sum_address
-from transport.types import TransportType
 
 logger = logging.getLogger(__name__)
 
@@ -41,32 +39,16 @@ class PauserBot:
     def __init__(self, w3: Web3):
         self.w3 = w3
 
-        transports = []
-
-        if TransportType.RABBIT in variables.MESSAGE_TRANSPORTS:
-            transports.append(
-                RabbitProvider(
-                    routing_keys=[MessageType.PING, MessageType.PAUSE],
-                    message_schema=Schema(Or(PauseMessageSchema, PingMessageSchema)),
-                )
-            )
-
-        if TransportType.ONCHAIN_TRANSPORT in variables.MESSAGE_TRANSPORTS:
-            transports.append(
-                OnchainTransportProvider(
-                    w3=OnchainTransportProvider.create_onchain_transport_w3(),
-                    onchain_address=variables.ONCHAIN_TRANSPORT_ADDRESS,
-                    message_schema=Schema(Or(PauseMessageSchema, PingMessageSchema)),
-                    parsers_providers=[PauseV3Parser, PauseV4Parser, PingParser],
-                    delegates_provider=self.w3.lido.get_guardian_delegates,
-                )
-            )
-
-        if not transports:
-            logger.warning({'msg': 'No transports found', 'value': variables.MESSAGE_TRANSPORTS})
+        transport = OnchainTransportProvider(
+            w3=OnchainTransportProvider.create_onchain_transport_w3(),
+            onchain_address=variables.ONCHAIN_TRANSPORT_ADDRESS,
+            message_schema=Schema(Or(PauseMessageSchema, PingMessageSchema)),
+            parsers_providers=[PauseV3Parser, PauseV4Parser, PingParser],
+            delegates_provider=self.w3.lido.get_guardian_delegates,
+        )
 
         self.message_storage = MessageStorage(
-            transports,
+            [transport],
             filters=[
                 message_metrics_filter,
                 to_check_sum_address,
