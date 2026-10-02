@@ -413,8 +413,6 @@ class OnchainTransportProvider(BaseMessageProvider):
             ONCHAIN_TRANSPORT_CURSOR_LAG.set(0)
             return []
 
-        # Past the endpoint's eth_getLogs limit every poll fails identically and the cursor never moves again.
-        # Both bounds are inclusive, so the range holds exactly CHUNK blocks.
         to_block = min(latest_block_number, from_block + variables.ONCHAIN_TRANSPORT_GETLOGS_CHUNK - 1)
 
         event_ids = list(self._parsers_by_event_id)
