@@ -67,6 +67,8 @@ Next cases requires bot restart:
 | KEYS_API_URL              | -                                          | URL of the Keys API                                                                                                      |
 | CL_API_URLS               | -                                          | Comma-separated list of Consensus Layer client URIs                                                                      |
 | ENABLE_TOP_UP             | false                                      | Enable top-up functionality. Must be disabled until Node Operators submit consolidation requests                         |
+| ONCHAIN_TRANSPORT_ADDRESS | -                                          | Data Bus contract address (Gnosis). The only message transport; startup fails if unset                                   |
+| ONCHAIN_TRANSPORT_RPC_ENDPOINTS | -                                    | Comma-separated RPC endpoints of the Data Bus chain (Gnosis). Startup fails if unset                                     |
 | ---                       | ---	                                       | ---                                                                                                                      |
 | GUARDIAN_DELEGATES_CACHE_TTL | 60                                      | Seconds to cache the resolved delegate→guardian map (DSMv5). Bounds EL-provider load; on-chain checks remain the freshness backstop. 0 disables |
 
@@ -90,7 +92,6 @@ Next cases requires bot restart:
 | PROMETHEUS_PREFIX                 | depositor_bot | Prefix for the metrics                                                                                                   |
 | HEALTHCHECK_SERVER_PORT           | 9010          | Port with bot`s status server                                                                                            |
 | MAX_CYCLE_LIFETIME_IN_SECONDS     | 1200          | Max lifetime of usual cycle. If cycle will not end in this time, bot will crush                                          |
-| ONCHAIN_TRANSPORT_RPC_ENDPOINTS   | -             | RPC endpoint for the databus RPC, Gnosis at the moment                                                                   |
 | QUORUM_RETENTION_MINUTES          | 5             | TTL of quorum collection for marking module as healthy                                                                   |
 | MAX_VALIDATORS_PER_TOP_UP         | 32            | Maximum number of validators per top-up transaction                                                                      |
 | DELEGATION_CONTRACT_ADDRESS        | -             | EDF delegation contract (LIP-37) holding TOP_UP_ROLE, with this bot's account as its delegate. Used for top-ups when it holds the role; the bot falls back to a direct call when its own account holds it |
