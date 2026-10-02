@@ -414,7 +414,8 @@ class OnchainTransportProvider(BaseMessageProvider):
             return []
 
         # Past the endpoint's eth_getLogs limit every poll fails identically and the cursor never moves again.
-        to_block = min(latest_block_number, from_block + variables.ONCHAIN_TRANSPORT_GETLOGS_CHUNK)
+        # Both bounds are inclusive, so the range holds exactly CHUNK blocks.
+        to_block = min(latest_block_number, from_block + variables.ONCHAIN_TRANSPORT_GETLOGS_CHUNK - 1)
 
         event_ids = list(self._parsers_by_event_id)
         # Snapshot the delegate map for this fetch so _process_msg reverse-maps against the same set

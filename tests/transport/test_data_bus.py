@@ -553,7 +553,9 @@ def test_scanned_range_is_capped(web3_lido_unit, monkeypatch):
     provider.get_messages()
     provider.get_messages()
 
-    assert _scanned_ranges(web3_lido_unit) == [(1_000, 1_050), (1_050, 1_100)]
+    ranges = _scanned_ranges(web3_lido_unit)
+    assert ranges == [(1_000, 1_049), (1_049, 1_098)]
+    assert all(to - frm + 1 == 50 for frm, to in ranges)
 
 
 @pytest.mark.unit
