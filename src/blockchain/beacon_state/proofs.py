@@ -1,6 +1,6 @@
 """Merkle proofs for a validator's existence in the beacon state.
 
-Built with eth-ssz-specs' generalized-index + proof primitives over the vendored fork
+Built with eth-ssz-specs' generalized-index + proof primitives over the eth-consensus-specs fork
 containers, so the proof shape follows the fork automatically: a balanced List on Fulu,
 a ProgressiveList (variable depth per index) on Gloas. Nothing here hardcodes a depth.
 

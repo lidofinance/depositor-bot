@@ -25,8 +25,8 @@ _REF = json.loads((Path(__file__).resolve().parents[1] / 'fixtures' / 'data' / '
 @pytest.mark.unit
 def test_validators_generalized_indices():
     # BeaconState is a balanced Container on Fulu (validators at field 11 -> gindex 75) and a
-    # ProgressiveContainer on Gloas (validators -> gindex 358). Pinning these guards the vendored
-    # types: if a regeneration changed the layout, the on-chain GI_VALIDATORS would no longer match.
+    # ProgressiveContainer on Gloas (validators -> gindex 358). Pinning these guards the
+    # eth-consensus-specs bump: if a new version changed the layout, the on-chain GI_VALIDATORS would no longer match.
     assert ssz.get_generalized_index(fulu.BeaconState, 'validators') == 75
     assert ssz.get_generalized_index(gloas.BeaconState, 'validators') == 358
 

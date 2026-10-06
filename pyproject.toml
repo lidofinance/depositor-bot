@@ -11,7 +11,7 @@ include = [
 package-mode = false
 
 [tool.poetry.dependencies]
-python = ">=3.12,<4.0"
+python = ">=3.12,<3.15"
 numpy = "1.26.4"
 prometheus-client = "0.21.1"
 web3-multi-provider = { version = "^2.2.7", extras = ["metrics"] }
@@ -20,16 +20,11 @@ websocket-client = "^1.4.1"
 confluent-kafka = "^2.2.0"
 web3 = "^7.8.0"
 json-stream = "^2.3.2"
-# SSZ + generated fork containers (in consensus-spec/eth_consensus_specs).
-# Replaces py-ssz: eth-ssz-specs provides merkleization, generalized indices and proofs
-# (ProgressiveContainer/ProgressiveList for Gloas). The other pins are import-time deps
-# of the vendored consensus-specs types. Versions match consensus-specs pyproject.
+# Generated fork containers; the SSZ backend (eth-ssz-specs) is imported directly too.
+eth-consensus-specs = "1.7.0b2"
 eth-ssz-specs = "0.1.0"
+# Imported by eth_consensus_specs.utils.kzg at import time, but only in the package's test extra.
 ckzg = "2.1.8"
-py_arkworks_bls12381 = "0.5.0"
-blake3 = "1.0.9"
-frozendict = "2.4.7"
-lru-dict = "1.4.1"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.15.9"
@@ -42,7 +37,6 @@ pre-commit = "^3.8.0"
 pythonpath = [
     "src",
     "tests",
-    "consensus-spec",
 ]
 markers = [
     "unit", # offline
@@ -51,8 +45,6 @@ markers = [
 
 [tool.ruff]
 line-length = 140
-# Generated consensus-specs types — not our code, never hand-styled. Excluded from lint/format.
-extend-exclude = ["consensus-spec"]
 
 [tool.ruff.lint]
 ignore = ["B019"]
@@ -78,6 +70,3 @@ docstring-code-format = true
 
 [tool.pyright]
 include = ["src"]
-# Resolve `import eth_consensus_specs` (the generated types live here, put on sys.path at runtime
-# by blockchain.beacon_state.__init__). Not type-checked itself — it is generated code.
-extraPaths = ["consensus-spec"]

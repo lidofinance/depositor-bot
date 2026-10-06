@@ -1,5 +1,5 @@
 """
-Beacon state loading and data extraction on the vendored consensus-specs fork types.
+Beacon state loading and data extraction on the eth-consensus-specs fork types.
 
 The fork is chosen from the slot (see beacon_state.specs.get_spec): Fulu, or Gloas once
 GLOAS_PIVOT_SLOT is set. Field access is by name; the eth-ssz-specs value types are strict,

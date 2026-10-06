@@ -1,9 +1,4 @@
-"""Fork selection for beacon-state types.
-
-The generated consensus-specs containers (Fulu, Gloas, and the phase0..fulu chain they import)
-live under ``consensus-spec/eth_consensus_specs`` and are put on sys.path by this package's
-__init__. They are generated from the official spec — never hand-edited (see PROVENANCE.md there).
-"""
+"""Fork selection for beacon-state types (eth-consensus-specs: Fulu and Gloas)."""
 
 from eth_consensus_specs.fulu import mainnet as fulu
 from eth_consensus_specs.gloas import mainnet as gloas
