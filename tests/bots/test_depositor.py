@@ -21,8 +21,7 @@ def _make_digest(module_id, address, wc_type, status=0) -> StakingModuleInfo:
 
 
 def _make_bot():
-    """Build a DepositorBot with all-MagicMock deps. No transports → MessageStorage stays empty."""
-    variables.MESSAGE_TRANSPORTS = ''
+    """Build a DepositorBot with all-MagicMock deps. Data Bus is stubbed → MessageStorage stays empty."""
     w3 = MagicMock()
     # w3.lido is a MagicMock, so `delegation` would auto-create a truthy child and silently turn on
     # delegated top-up execution. Default to the direct-call configuration; tests that exercise
@@ -241,9 +240,9 @@ class TestCommonPreconditions(unittest.TestCase):
         self.bot.w3.lido.lido.can_deposit = Mock(return_value=False)
         self.assertFalse(self.bot._common_preconditions())
 
-    def test_fails_when_quorum_zero(self):
+    def test_passes_when_quorum_zero_so_top_ups_are_not_blocked(self):
         self.bot.w3.lido.deposit_security_module.get_guardian_quorum = Mock(return_value=0)
-        self.assertFalse(self.bot._common_preconditions())
+        self.assertTrue(self.bot._common_preconditions())
 
 
 # ─── _publish_allocation_metrics ─────────────────────────────────────
@@ -867,7 +866,6 @@ def depositor_bot(
     gas_price_calculator,
 ):
     with mock.patch('web3.eth.Eth.chain_id', new_callable=mock.PropertyMock) as _:
-        variables.MESSAGE_TRANSPORTS = ''
         variables.DEPOSIT_MODULES_WHITELIST = [1, 2]
         web3_lido_unit.eth.get_block = Mock(return_value=block_data)
         # w3.lido is a Mock, so `delegation` would auto-create a truthy child and silently turn on
@@ -1930,3 +1928,13 @@ def test_depositor_bot(
     db.message_storage.messages = deposit_messages
     assert db.execute(latest)
     assert web3_lido_integration.lido.staking_router.get_staking_module_nonce(module_id) == old_module_nonce + 1
+
+
+@pytest.mark.unit
+def test_zero_quorum_still_refuses_to_deposit(depositor_bot):
+    message = {'blockHash': '0x' + '43' * 32, 'guardianAddress': '0x43464Fe06c18848a2E2e913194D64c1970f4326a'}
+    depositor_bot._fetch_actual_messages = Mock(return_value=[message])
+    depositor_bot._get_module_messages_filter = Mock(return_value=lambda _: True)
+    depositor_bot.w3.lido.deposit_security_module.get_guardian_quorum = Mock(return_value=0)
+
+    assert depositor_bot._get_quorum(1) is None

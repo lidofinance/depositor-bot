@@ -35,6 +35,7 @@ from blockchain.topup.cmv2_strategy import CMv2TopUpStrategy
 from blockchain.topup.csm02_strategy import CSM02TopUpStrategy
 from blockchain.topup.strategy import TopUpStrategy
 from blockchain.typings import Web3
+from blockchain.web3_extentions.lido_contracts import ZERO_ADDRESS
 from metrics.metrics import (
     ACCOUNT_BALANCE,
     BOT_LAST_CYCLE_TIMESTAMP,
@@ -43,6 +44,7 @@ from metrics.metrics import (
     DEPOSITABLE_ETHER,
     DEPOSITS_PAUSED,
     GUARDIAN_BALANCE,
+    GUARDIAN_DELEGATE,
     MODULE_ALLOCATION,
     MODULE_CONTRACT_MISSING,
     MODULE_QUORUM_LAST_SEEN_TIMESTAMP,
@@ -70,12 +72,10 @@ from transport.msg_providers.onchain_transport import (
     OnchainTransportProvider,
     PingParser,
 )
-from transport.msg_providers.rabbit import MessageType, RabbitProvider
 from transport.msg_storage import MessageStorage
 from transport.msg_types.common import BotMessage, get_messages_sign_filter
 from transport.msg_types.deposit import DepositMessage, DepositMessageSchema
 from transport.msg_types.ping import PingMessageSchema, to_check_sum_address
-from transport.types import TransportType
 
 logger = logging.getLogger(__name__)
 
@@ -198,39 +198,17 @@ class DepositorBot:
         for module_id in variables.DEPOSIT_MODULES_WHITELIST:
             MODULE_QUORUM_LAST_SEEN_TIMESTAMP.labels(module_id).set(now.timestamp())
 
-        transports = []
-
-        if TransportType.RABBIT in variables.MESSAGE_TRANSPORTS:
-            transports.append(
-                RabbitProvider(
-                    routing_keys=[MessageType.PING, MessageType.DEPOSIT],
-                    message_schema=Schema(Or(DepositMessageSchema, PingMessageSchema)),
-                )
-            )
-
-        self._onchain_transport_w3 = None
-        if TransportType.ONCHAIN_TRANSPORT in variables.MESSAGE_TRANSPORTS:
-            self._onchain_transport_w3 = OnchainTransportProvider.create_onchain_transport_w3()
-            transports.append(
-                OnchainTransportProvider(
-                    w3=self._onchain_transport_w3,
-                    onchain_address=variables.ONCHAIN_TRANSPORT_ADDRESS,
-                    message_schema=Schema(Or(DepositMessageSchema, PingMessageSchema)),
-                    parsers_providers=[DepositV1Parser, DepositV2Parser, PingParser],
-                    delegates_provider=self.w3.lido.get_guardian_delegates,
-                )
-            )
-
-        if not transports:
-            logger.warning(
-                {
-                    'msg': 'No transports found. Dry mode activated.',
-                    'value': variables.MESSAGE_TRANSPORTS,
-                }
-            )
+        self._onchain_transport_w3 = OnchainTransportProvider.create_onchain_transport_w3()
+        transport = OnchainTransportProvider(
+            w3=self._onchain_transport_w3,
+            onchain_address=variables.ONCHAIN_TRANSPORT_ADDRESS,
+            message_schema=Schema(Or(DepositMessageSchema, PingMessageSchema)),
+            parsers_providers=[DepositV1Parser, DepositV2Parser, PingParser],
+            delegates_provider=self.w3.lido.get_guardian_delegates,
+        )
 
         self.message_storage = MessageStorage(
-            transports,
+            [transport],
             filters=[
                 message_metrics_filter,
                 to_check_sum_address,
@@ -240,6 +218,7 @@ class DepositorBot:
     def execute(self, block: BlockData) -> bool:
         logger.info({'msg': 'Depositor iteration start.', 'block_number': block.get('number')})
         self._check_balance()
+        self._check_guardian_delegates()
 
         result = self._execute_actual()
         BOT_LAST_CYCLE_TIMESTAMP.set(time.time())
@@ -255,9 +234,6 @@ class DepositorBot:
         """
         if not self.w3.lido.lido.can_deposit():
             logger.info({'msg': 'Lido.canDeposit() is false.'})
-            return False
-        if self.w3.lido.deposit_security_module.get_guardian_quorum() == 0:
-            logger.info({'msg': 'Guardian quorum is not set in DSM contract (quorum == 0).'})
             return False
         return True
 
@@ -759,21 +735,29 @@ class DepositorBot:
 
         logger.info({'msg': 'Check guardians balances.'})
 
-        guardians = self.w3.lido.deposit_security_module.get_guardians()
-        providers = [self.w3]
-
-        if self._onchain_transport_w3 is not None:
-            providers.append(self._onchain_transport_w3)
+        guardian_contract_by_delegate_eoa = self.w3.lido.get_guardian_delegates()
+        providers = [self.w3, self._onchain_transport_w3]
 
         new_values = {}
-        for address in guardians:
+        for delegate_eoa, guardian_contract in guardian_contract_by_delegate_eoa.items():
             for provider in providers:
-                balance = provider.eth.get_balance(address)
-                new_values[(address, provider.eth.chain_id)] = balance
+                balance = provider.eth.get_balance(delegate_eoa)
+                new_values[(delegate_eoa, guardian_contract, provider.eth.chain_id)] = balance
 
         GUARDIAN_BALANCE.clear()
-        for (address, chain_id), balance in new_values.items():
-            GUARDIAN_BALANCE.labels(address=address, chain_id=chain_id).set(balance)
+        for (delegate_eoa, guardian_contract, chain_id), balance in new_values.items():
+            GUARDIAN_BALANCE.labels(address=delegate_eoa, guardian=guardian_contract, chain_id=chain_id).set(balance)
+
+    def _check_guardian_delegates(self):
+        guardian_contracts = [self.w3.to_checksum_address(g) for g in self.w3.lido.deposit_security_module.get_guardians()]
+        delegate_eoa_by_guardian_contract = {
+            guardian_contract: delegate_eoa for delegate_eoa, guardian_contract in self.w3.lido.get_guardian_delegates().items()
+        }
+
+        GUARDIAN_DELEGATE.clear()
+        for guardian_contract in guardian_contracts:
+            delegate_eoa = delegate_eoa_by_guardian_contract.get(guardian_contract)
+            GUARDIAN_DELEGATE.labels(guardian=guardian_contract, delegate=delegate_eoa or ZERO_ADDRESS).set(int(delegate_eoa is not None))
 
     def _select_strategy(self, module_id: int) -> DepositStrategy:
         module = self.w3.lido.staking_module(module_id)
@@ -811,6 +795,12 @@ class DepositorBot:
         # Get the required quorum size
         min_signs_to_deposit = self.w3.lido.deposit_security_module.get_guardian_quorum()
         CURRENT_QUORUM_SIZE.labels('required').set(min_signs_to_deposit)
+
+        # Every group clears a zero threshold, so a single signature would pass as a quorum.
+        if min_signs_to_deposit == 0:
+            logger.warning({'msg': 'Guardian quorum is 0 in DSM contract — refusing to deposit.', 'module_id': module_id})
+            QUORUM.labels(module_id).set(0)
+            return None
 
         # Group messages by block hash and guardian address
         messages_by_block_hash = defaultdict(dict)
@@ -855,8 +845,8 @@ class DepositorBot:
                     UNEXPECTED_EXCEPTIONS.labels('unexpected_guardian_address').inc()
                     return False
             elif message['guardianAddress'] not in guardians_list:
-                # Legacy path (e.g. RabbitMQ) that carries no delegate: the guardian must still be
-                # registered.
+                # Data Bus always sets the delegate; kept as a fail-closed guard for messages injected
+                # without one.
                 UNEXPECTED_EXCEPTIONS.labels('unexpected_guardian_address').inc()
                 return False
 
