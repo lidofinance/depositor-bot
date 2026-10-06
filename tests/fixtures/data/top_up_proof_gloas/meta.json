@@ -1,0 +1,8 @@
+{
+  "captured_at": "2026-10-06T08:45:02+00:00",
+  "chain_id": 32382,
+  "el_client": "Geth/v1.17.6-stable-3d84c6b2/linux-amd64/go1.27.1",
+  "gloas_fork_epoch": 113,
+  "gloas_pivot_slot": 3616,
+  "locator": "0x2694cfcc47aAbC5C042dea104b6ac37e9924a4B1"
+}

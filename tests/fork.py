@@ -15,36 +15,37 @@ class anvil_fork:
     --state
     """
 
-    def __init__(self, path_to_anvil, fork_url, block_number=None, port='8545'):
+    def __init__(self, path_to_anvil, fork_url, block_number=None, port='8545', local_args=()):
+        """fork_url=None starts a fresh local chain (no fork, no auto-mining) configured by local_args."""
         self.path_to_anvil = path_to_anvil
         self.fork_url = fork_url
         self.port = port
         self.block_number = block_number
+        self.local_args = local_args
 
     def __enter__(self):
-        # Validate fork URL
-        if not self.fork_url or not self.fork_url.startswith(('http://', 'https://', 'ws://', 'wss://')):
-            error_msg = (
-                'Invalid fork URL. '
-                'Please set WEB3_RPC_ENDPOINTS environment variable with a valid RPC endpoint. '
-                'Example: export WEB3_RPC_ENDPOINTS=https://eth.llamarpc.com'
-            )
-            logger.error({'msg': error_msg})
-            raise ValueError(error_msg)
+        if self.fork_url is None:
+            chain_command = tuple(self.local_args)
+        else:
+            if not self.fork_url.startswith(('http://', 'https://', 'ws://', 'wss://')):
+                error_msg = (
+                    'Invalid fork URL. '
+                    'Please set WEB3_RPC_ENDPOINTS environment variable with a valid RPC endpoint. '
+                    'Example: export WEB3_RPC_ENDPOINTS=https://eth.llamarpc.com'
+                )
+                logger.error({'msg': error_msg})
+                raise ValueError(error_msg)
 
-        block_command = tuple()
-        if self.block_number is not None:
-            block_command = ('--fork-block-number', str(self.block_number))
+            block_command = tuple()
+            if self.block_number is not None:
+                block_command = ('--fork-block-number', str(self.block_number))
+            chain_command = ('-f', self.fork_url, *block_command, '--block-time', '12')
 
         anvil_command = [
             f'{self.path_to_anvil}anvil',
-            '-f',
-            self.fork_url,
             '-p',
             self.port,
-            *block_command,
-            '--block-time',
-            '12',
+            *chain_command,
             '--auto-impersonate',
         ]
 
