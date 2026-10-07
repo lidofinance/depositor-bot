@@ -284,11 +284,10 @@ class DepositorBot:
 
         # Compute seed allocation once; both phases use it for module ordering.
         sr_v4 = cast(StakingRouterContractV4, self.w3.lido.staking_router)
-        _total, seed_allocated, seed_new = sr_v4.get_deposit_allocations(depositable_ether, is_top_up=False)
+        _total, seed_allocated, seed_new = sr_v4.get_deposit_allocations(depositable_ether)
         logger.info(
             {
                 'msg': 'Seed allocations computed.',
-                'is_top_up': False,
                 'allocated': list(seed_allocated),
                 'new': list(seed_new),
             }
@@ -297,9 +296,9 @@ class DepositorBot:
         for digest in digests:
             if digest['module_id'] in variables.DEPOSIT_MODULES_WHITELIST:
                 MODULE_STATUS.labels(digest['module_id']).set(digest['status'])
-        self._publish_allocation_metrics(digests, seed_allocated, seed_new, 'seed')
+        self._publish_allocation_metrics(digests, seed_allocated, self._module_stakes(seed_allocated, seed_new), 'seed')
 
-        # Per-module deposit metrics from the seed (is_top_up=False) allocation — 32 ETH per validator.
+        # Per-module deposit metrics from the seed allocation — 32 ETH per validator.
         # Top-up allocations are intentionally excluded here (top-ups aren't 32-ETH deposits).
         for i, digest in enumerate(digests):
             if digest['module_id'] in variables.DEPOSIT_MODULES_WHITELIST:
@@ -394,8 +393,13 @@ class DepositorBot:
         PHASE_LAST_RUN_TIMESTAMP.labels(phase, module_id).set(now)
         return outcome
 
+    @staticmethod
+    def _module_stakes(allocated: list[int], new: list[int]) -> list[Wei]:
+        """Ordering key per module: its allocation level before this round (new - allocated); lower goes first."""
+        return [Wei(n - a) for n, a in zip(new, allocated, strict=True)]
+
     def _publish_allocation_metrics(
-        self, digests: list[StakingModuleInfo], allocated: list[int], new: list[int], kind: Literal['seed', 'topup']
+        self, digests: list[StakingModuleInfo], allocated: list[int], stakes: list[Wei], kind: Literal['seed', 'topup']
     ) -> None:
         """Expose allocation/stake for every whitelisted module, not just ones that make it into
         candidates — a module excluded by zero allocation would otherwise keep showing whatever
@@ -405,18 +409,18 @@ class DepositorBot:
             if module_id not in variables.DEPOSIT_MODULES_WHITELIST:
                 continue
             MODULE_ALLOCATION.labels(module_id, kind).set(allocated[i])
-            MODULE_STAKE.labels(module_id, kind).set(new[i] - allocated[i])
+            MODULE_STAKE.labels(module_id, kind).set(stakes[i])
 
     def _collect_candidates(
         self,
         digests: list[StakingModuleInfo],
         wc_type: int,
         allocated: list[int],
-        new: list[int],
+        stakes: list[Wei],
         allow_csm_flush: bool = False,
     ) -> list[ModuleCandidate]:
         """Select whitelisted modules of one wc_type that have a non-zero allocation, and build their
-        candidate entries (stake = new - allocated, used for ordering).
+        candidate entries (stake is used for ordering).
 
         Single type per call — the mixed (full + top-up) phase calls it once per type and merges.
         Sorting and logging stay in the caller.
@@ -440,7 +444,7 @@ class DepositorBot:
                     digest_index=i,
                     module_id=digest['module_id'],
                     wc_type=wc_type,
-                    stake=Wei(new[i] - allocated[i]),
+                    stake=stakes[i],
                     address=digest['address'],
                     allocation=Wei(allocated[i]),
                 )
@@ -448,11 +452,13 @@ class DepositorBot:
         return candidates
 
     def _phase_seed(self, seed_allocated: list[int], seed_new: list[int], digests: list[StakingModuleInfo]) -> PhaseOutcome:
-        """Seed deposits into 0x02 modules using is_top_up=False allocations.
+        """Seed deposits into 0x02 modules using the seed allocations.
 
         SKIPPED -> nothing actionable here, caller continues to the next phase.
         """
-        candidates = self._collect_candidates(digests, wc_type=WC_TYPE_0X02, allocated=seed_allocated, new=seed_new)
+        candidates = self._collect_candidates(
+            digests, wc_type=WC_TYPE_0X02, allocated=seed_allocated, stakes=self._module_stakes(seed_allocated, seed_new)
+        )
         candidates.sort(key=lambda c: (c.stake, c.digest_index))
         logger.info(
             {
@@ -478,20 +484,27 @@ class DepositorBot:
     ) -> PhaseOutcome:
         """
         Full deposits to 0x01 + top-ups to 0x02, each gated independently:
-        - 0x01 (full)   candidates: from is_top_up=False (seed) allocations, only while deposits are not paused.
-        - 0x02 (top-up) candidates: from is_top_up=True allocations, only while top-up is enabled/unpaused.
+        - 0x01 (full)   candidates: from the seed allocations, only while deposits are not paused.
+        - 0x02 (top-up) candidates: from the per-module top-up allocations, only while top-up is enabled/unpaused.
         """
         candidates: list[ModuleCandidate] = []
+        # Both types are ordered by the module's current level, taken from the seed allocation.
+        stakes = self._module_stakes(seed_allocated, seed_new)
 
         if not deposits_paused:
-            candidates += self._collect_candidates(digests, wc_type=WC_TYPE_0X01, allocated=seed_allocated, new=seed_new)
+            candidates += self._collect_candidates(digests, wc_type=WC_TYPE_0X01, allocated=seed_allocated, stakes=stakes)
 
         if top_up_enabled:
             sr_v4 = cast(StakingRouterContractV4, self.w3.lido.staking_router)
-            _total, topup_allocated, topup_new = sr_v4.get_deposit_allocations(depositable_ether, is_top_up=True)
-            self._publish_allocation_metrics(digests, topup_allocated, topup_new, 'topup')
+            # The top-up allocation is per module: what SR.topUp gives a 0x02 module when it is the one topped up.
+            # Only 0x02 modules can be topped up; the others get 0 without a call.
+            topup_allocation = sr_v4.get_top_up_allocations(
+                depositable_ether, [d['module_id'] for d in digests if d['wc_type'] == WC_TYPE_0X02]
+            )
+            topup_allocated = [topup_allocation.get(d['module_id'], 0) for d in digests]
+            self._publish_allocation_metrics(digests, topup_allocated, stakes, 'topup')
             candidates += self._collect_candidates(
-                digests, wc_type=WC_TYPE_0X02, allocated=topup_allocated, new=topup_new, allow_csm_flush=True
+                digests, wc_type=WC_TYPE_0X02, allocated=topup_allocated, stakes=stakes, allow_csm_flush=True
             )
 
         candidates.sort(key=lambda c: (c.stake, c.digest_index))
@@ -574,7 +587,7 @@ class DepositorBot:
         )
 
         # SR.topUp funds a module at most min(allocation, maxTopUpPerBlockGwei) per call, and
-        # getDepositAllocations does NOT apply this cap. Without capping here, a module can be handed
+        # getStakingModuleTopUpAllocation does NOT apply this cap. Without capping here, a module can be handed
         # more full-fund keys than the cap covers: CSM's FIFO queue then reverts UnexpectedExtraKey
         # (a non-last key ends up partial), while CMv2 silently under-fills. Cap so both strategies
         # plan within what actually gets funded this block.
