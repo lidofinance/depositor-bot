@@ -1089,8 +1089,8 @@ def test_execute_actual_both_phases_return_false(depositor_bot):
 
 @pytest.mark.unit
 class TestTopUpToModuleCap(unittest.TestCase):
-    """_top_up_to_module caps the allocation at the SR per-block top-up limit before the strategy,
-    so both CMv2 and CSM plan within what SR.topUp will actually fund in one call."""
+    """_top_up_to_module hands the strategy the module's full allocation and the SR per-block cap
+    separately — CMv2 must pick operators from the full allocation, CSM caps it itself."""
 
     def setUp(self):
         self.bot = _make_bot()
@@ -1104,25 +1104,25 @@ class TestTopUpToModuleCap(unittest.TestCase):
         self.strategy.get_topup_candidates.return_value = None
         self.bot._select_topup_strategy = Mock(return_value=self.strategy)
 
-    def _allocation_passed_to_strategy(self):
-        return self.strategy.get_topup_candidates.call_args.args[4]
+    def _strategy_args(self):
+        args = self.strategy.get_topup_candidates.call_args.args
+        return args[4], args[5]  # (module_allocation, max_top_up_per_block)
 
-    def test_allocation_above_cap_is_capped(self):
-        # cap 3200 ETH < raw 9696 ETH → strategy gets 3200 ETH.
+    def test_allocation_above_cap_is_passed_uncapped_with_cap(self):
+        # raw 9696 ETH > cap 3200 ETH → strategy still gets 9696 ETH, plus the 3200 ETH cap.
         self.bot.w3.lido.staking_router.get_max_top_up_per_block_gwei.return_value = 3200 * 10**9
 
         outcome = self.bot._top_up_to_module(1, '0xA1', Wei(9696 * 10**18), Mock())
 
         self.assertEqual(PhaseOutcome.SKIPPED, outcome)
-        self.assertEqual(Wei(3200 * 10**18), self._allocation_passed_to_strategy())
+        self.assertEqual((Wei(9696 * 10**18), Wei(3200 * 10**18)), self._strategy_args())
 
     def test_allocation_below_cap_passes_through(self):
-        # cap 3200 ETH > raw 100 ETH → strategy gets the raw 100 ETH unchanged.
         self.bot.w3.lido.staking_router.get_max_top_up_per_block_gwei.return_value = 3200 * 10**9
 
         self.bot._top_up_to_module(1, '0xA1', Wei(100 * 10**18), Mock())
 
-        self.assertEqual(Wei(100 * 10**18), self._allocation_passed_to_strategy())
+        self.assertEqual((Wei(100 * 10**18), Wei(3200 * 10**18)), self._strategy_args())
 
 
 @pytest.mark.unit
@@ -1399,8 +1399,8 @@ def test_top_up_to_module_max_validators_uses_min(depositor_bot, config_limit, g
 
         depositor_bot._top_up_to_module(1, '0xAddr', 50, Mock())
 
-        # max_validators is positional arg index 5
-        assert strategy.get_topup_candidates.call_args.args[5] == expected
+        # max_validators is positional arg index 6
+        assert strategy.get_topup_candidates.call_args.args[6] == expected
     finally:
         variables.MAX_VALIDATORS_PER_TOP_UP = original
 
