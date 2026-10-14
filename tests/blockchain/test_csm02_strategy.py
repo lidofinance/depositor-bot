@@ -82,7 +82,9 @@ def _make_strategy(queue_pubkeys: list[bytes]):
     return strategy, csm_contract
 
 
-def _call(strategy, keys_api, beacon_data, max_validators=50, module_allocation=_BIG_ALLOCATION, ensure=None):
+def _call(
+    strategy, keys_api, beacon_data, max_validators=50, module_allocation=_BIG_ALLOCATION, max_top_up_per_block=_BIG_ALLOCATION, ensure=None
+):
     ensure = ensure or Mock(return_value=beacon_data)
     with (
         patch('blockchain.topup.csm02_strategy.extract_state_data', return_value=beacon_data),
@@ -94,6 +96,7 @@ def _call(strategy, keys_api, beacon_data, max_validators=50, module_allocation=
             module_id=3,
             module_address='0x0000000000000000000000000000000000000003',
             module_allocation=module_allocation,
+            max_top_up_per_block=max_top_up_per_block,
             max_validators=max_validators,
             consolidation_indexer=Mock(),
         )
@@ -147,6 +150,20 @@ def test_fundable_head_without_enough_allocation_skips(allocation):
     keys_api = Mock()
     keys_api.get_module_used_keys.return_value = [_lido_key(PK_A, 7, 11)]
     result, build_proofs = _call(strategy, keys_api, _beacon_data({PK_A: 5}), module_allocation=allocation)
+    assert result is None
+    build_proofs.assert_not_called()
+
+
+@pytest.mark.unit
+def test_allocation_is_capped_at_max_top_up_per_block():
+    # Allocation is ample, but SR.topUp hands the module at most the per-block cap — below a minimal
+    # top-up here — so the fundable head can't be funded this call → skip.
+    strategy, _ = _make_strategy([PK_A])
+    keys_api = Mock()
+    keys_api.get_module_used_keys.return_value = [_lido_key(PK_A, 7, 11)]
+    result, build_proofs = _call(
+        strategy, keys_api, _beacon_data({PK_A: 5}), module_allocation=_BIG_ALLOCATION, max_top_up_per_block=Wei(5 * 10**9)
+    )
     assert result is None
     build_proofs.assert_not_called()
 

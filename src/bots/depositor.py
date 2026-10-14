@@ -574,21 +574,16 @@ class DepositorBot:
         )
 
         # SR.topUp funds a module at most min(allocation, maxTopUpPerBlockGwei) per call, and
-        # getDepositAllocations does NOT apply this cap. Without capping here, a module can be handed
-        # more full-fund keys than the cap covers: CSM's FIFO queue then reverts UnexpectedExtraKey
-        # (a non-last key ends up partial), while CMv2 silently under-fills. Cap so both strategies
-        # plan within what actually gets funded this block.
-        cap_wei = Wei(cast(StakingRouterContractV4, self.w3.lido.staking_router).get_max_top_up_per_block_gwei() * 10**9)
-        raw_allocation = module_allocation
-        module_allocation = Wei(min(module_allocation, cap_wei))
+        # getDepositAllocations does NOT apply this cap. Both values go to the strategy uncombined:
+        # how the cap applies is module-specific (see each strategy).
+        max_top_up_per_block = Wei(cast(StakingRouterContractV4, self.w3.lido.staking_router).get_max_top_up_per_block_gwei() * 10**9)
 
         logger.info(
             {
                 'msg': 'Top-up: collecting candidates.',
                 'module_id': module_id,
                 'module_allocation': int(module_allocation),
-                'raw_allocation': int(raw_allocation),
-                'max_top_up_per_block_wei': int(cap_wei),
+                'max_top_up_per_block_wei': int(max_top_up_per_block),
                 'max_validators': max_validators,
             }
         )
@@ -599,6 +594,7 @@ class DepositorBot:
             module_id,
             module_address,
             module_allocation,
+            max_top_up_per_block,
             max_validators,
             cast(ConsolidationIndexer, self._consolidation_indexer),
         )

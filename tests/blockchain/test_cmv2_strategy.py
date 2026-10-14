@@ -21,6 +21,7 @@ from blockchain.beacon_state.state import BeaconStateData, ValidatorFields
 from blockchain.topup.cmv2_strategy import (
     TOP_UPPED_MAXIMUM,
     CMv2TopUpStrategy,
+    TopUpExclusionReason,
     _build_candidate_if_eligible,
     _collect_pubkeys,
     _distribute,
@@ -132,6 +133,7 @@ def test_get_cmv2_topup_candidates_builds_proofs_from_fixture_data(top_up_proof_
             module_id=1,
             module_address='0x0000000000000000000000000000000000000002',
             module_allocation=Wei(32 * 10**18),
+            max_top_up_per_block=Wei(3200 * 10**18),
             max_validators=50,
             consolidation_indexer=consolidation_indexer,
         )
@@ -180,6 +182,7 @@ def _call_topup(strategy, keys_api, beacon_data, consolidation_indexer):
             module_id=1,
             module_address='0x0000000000000000000000000000000000000002',
             module_allocation=Wei(32 * 10**18),
+            max_top_up_per_block=Wei(3200 * 10**18),
             max_validators=50,
             consolidation_indexer=consolidation_indexer,
         )
@@ -203,6 +206,62 @@ def test_get_topup_candidates_excludes_pending_consolidation_key(top_up_proof_fi
     assert result.key_indices == [8]
     assert result.operator_ids == [12]
     assert result.validator_indices == [int(witnesses[1]['validatorIndex'])]
+
+
+@pytest.mark.unit
+def test_get_topup_candidates_asks_operators_for_the_full_uncapped_allocation(top_up_proof_fixtures):
+    """Operators come from the module's full allocation, not the per-block cap: asked with the cap, the
+    module can hand all of it to an operator with no eligible keys and the module never gets a top-up."""
+    strategy, keys_api, beacon_data = _make_topup_setup(top_up_proof_fixtures)
+    indexer = Mock()
+    indexer.sync_base_to_finalized.return_value = 100
+    indexer.get_filter_set.return_value = set()
+
+    with patch('blockchain.topup.cmv2_strategy.extract_state_data', return_value=beacon_data):
+        strategy.get_topup_candidates(
+            keys_api=keys_api,
+            ensure_beacon_state=Mock(),
+            module_id=1,
+            module_address='0x0000000000000000000000000000000000000002',
+            module_allocation=Wei(41984 * 10**18),
+            max_top_up_per_block=Wei(3200 * 10**18),
+            max_validators=50,
+            consolidation_indexer=indexer,
+        )
+
+    strategy.w3.eth.contract.return_value.get_deposits_allocation.assert_called_once_with(Wei(41984 * 10**18))
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize('operator_ids', [[11, 12], [12, 11]])
+def test_get_topup_candidates_trims_selection_to_the_per_block_cap(top_up_proof_fixtures, operator_ids):
+    """Both operators have a fundable key, but the 3 ETH cap covers only one: the cap is shared out in
+    the module's operator order, so the first operator's key is kept and the other is dropped as
+    top_up_cap_exhausted."""
+    strategy, keys_api, beacon_data = _make_topup_setup(top_up_proof_fixtures)
+    strategy.w3.eth.contract.return_value.get_deposits_allocation.return_value = (32 * 10**18, operator_ids, [16 * 10**18, 16 * 10**18])
+    indexer = Mock()
+    indexer.sync_base_to_finalized.return_value = 100
+    indexer.get_filter_set.return_value = set()
+
+    with (
+        patch('blockchain.topup.cmv2_strategy.extract_state_data', return_value=beacon_data),
+        patch('blockchain.topup.cmv2_strategy._log_excluded_key') as log_excluded,
+    ):
+        result = strategy.get_topup_candidates(
+            keys_api=keys_api,
+            ensure_beacon_state=Mock(),
+            module_id=1,
+            module_address='0x0000000000000000000000000000000000000002',
+            module_allocation=Wei(32 * 10**18),
+            max_top_up_per_block=Wei(3 * 10**18),
+            max_validators=50,
+            consolidation_indexer=indexer,
+        )
+
+    assert result is not None
+    assert result.operator_ids == [operator_ids[0]]
+    assert [c.args[3] for c in log_excluded.call_args_list] == [TopUpExclusionReason.TOP_UP_CAP_EXHAUSTED]
 
 
 @pytest.mark.unit
@@ -254,6 +313,7 @@ def test_get_topup_candidates_syncs_base_before_ssz_then_tail(top_up_proof_fixtu
             module_id=1,
             module_address='0x0000000000000000000000000000000000000002',
             module_allocation=Wei(32 * 10**18),
+            max_top_up_per_block=Wei(3200 * 10**18),
             max_validators=50,
             consolidation_indexer=indexer,
         )
@@ -361,7 +421,7 @@ def test_select_operator_candidates_sorts_by_key_index():
         ),
         patch(
             'blockchain.topup.cmv2_strategy._take_up_to_allocation',
-            side_effect=lambda candidates, allocation, beacon, target, min_top_up, module_id: candidates,
+            side_effect=lambda candidates, *_args: candidates,
         ) as take,
     ):
         cmv2 = Mock()

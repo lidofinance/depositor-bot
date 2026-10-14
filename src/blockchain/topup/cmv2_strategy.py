@@ -56,6 +56,7 @@ class TopUpExclusionReason(StrEnum):
     PENDING_CONSOLIDATION_BUS = 'pending_consolidation_bus'
     OPERATOR_BUDGET_EXHAUSTED = 'operator_budget_exhausted'
     TRUNCATED_BY_MAX_VALIDATORS = 'truncated_by_max_validators'
+    TOP_UP_CAP_EXHAUSTED = 'top_up_cap_exhausted'
 
 
 def _pubkey_hex(pubkey: bytes) -> str:
@@ -87,11 +88,17 @@ class CMv2TopUpStrategy(TopUpStrategy):
         module_id: int,
         module_address: str,
         module_allocation: Wei,
+        max_top_up_per_block: Wei,
         max_validators: int,
         consolidation_indexer: ConsolidationIndexer,
     ) -> TopUpProofData | None:
         """Select validators for top-up in a CMv2 module."""
-        # Step 1: operator allocation
+        # Step 1: operator allocation, from the module's full (uncapped) allocation.
+        # Asking with the per-block cap instead hands the whole cap to whichever operators the module
+        # fills first, even when none of their keys can be topped up (e.g. an operator whose validators
+        # have all exited but are not yet reported withdrawn) — the module then never gets a top-up.
+        # The full allocation surfaces every operator owed stake; operators without eligible keys drop
+        # out below, and the cap is shared out across operators in Step 6.
         cmv2 = cast(
             CMV2Contract,
             self.w3.eth.contract(
@@ -174,24 +181,31 @@ class CMv2TopUpStrategy(TopUpStrategy):
             }
         )
 
-        # Step 6: select candidates per operator (excluding keys in pending ConsolidationBus requests)
+        # Step 6: select candidates per operator (excluding keys in pending ConsolidationBus requests).
+        # SR.topUp hands the module at most min(allocation, maxTopUpPerBlock) per call, so that budget is
+        # shared out across operators in the module's order: each gets min(its allocation, what is
+        # left) and gives back what its keys can't take — an operator with no eligible keys uses none.
 
         candidates_by_operator: dict[int, list[TopUpCandidate]] = {}
         total_consolidation_filtered = 0
+        remaining_budget = min(module_allocation, max_top_up_per_block)
 
         for op_id, op_allocation in allocation_by_operator.items():
+            op_budget = min(op_allocation, remaining_budget)
             op_candidates, filtered = _select_operator_candidates(
                 cmv2,
                 keys_by_operator[op_id],
-                op_allocation,
+                op_budget,
                 beacon_data,
                 pending_consolidation,
                 target_balance_gwei,
                 min_top_up_gwei,
                 module_id,
+                TopUpExclusionReason.TOP_UP_CAP_EXHAUSTED if op_budget < op_allocation else TopUpExclusionReason.OPERATOR_BUDGET_EXHAUSTED,
             )
             if op_candidates:
                 candidates_by_operator[op_id] = op_candidates
+                remaining_budget -= min(op_budget, _planned_top_up_wei(op_candidates, beacon_data, target_balance_gwei))
 
             total_consolidation_filtered += filtered
 
@@ -288,6 +302,7 @@ def _select_operator_candidates(
     target_balance_gwei: int,
     min_top_up_gwei: int,
     module_id: int,
+    exhausted_reason: TopUpExclusionReason = TopUpExclusionReason.OPERATOR_BUDGET_EXHAUSTED,
 ) -> tuple[list[TopUpCandidate], int]:
     """Returns (selected_candidates, consolidation_filtered_count).
 
@@ -312,7 +327,7 @@ def _select_operator_candidates(
     eligible = _drop_module_full_keys(cmv2, eligible, module_id)
 
     eligible.sort(key=lambda c: c.validator_index)
-    selected = _take_up_to_allocation(eligible, allocation, beacon_data, target_balance_gwei, min_top_up_gwei, module_id)
+    selected = _take_up_to_allocation(eligible, allocation, beacon_data, target_balance_gwei, min_top_up_gwei, module_id, exhausted_reason)
     return selected, consolidation_filtered
 
 
@@ -378,6 +393,7 @@ def _take_up_to_allocation(
     target_balance_gwei: int,
     min_top_up_gwei: int,
     module_id: int,
+    exhausted_reason: TopUpExclusionReason = TopUpExclusionReason.OPERATOR_BUDGET_EXHAUSTED,
 ) -> list[TopUpCandidate]:
     result = []
     remaining = allocation_wei // 10**9
@@ -387,9 +403,7 @@ def _take_up_to_allocation(
         # remains — if that is < min it reverts. Checked before append so a sub-min tail is never selected.
         if remaining < min_top_up_gwei:
             for excluded in candidates[i:]:
-                _log_excluded_key(
-                    module_id, excluded.operator_id, _pubkey_hex(excluded.pubkey), TopUpExclusionReason.OPERATOR_BUDGET_EXHAUSTED
-                )
+                _log_excluded_key(module_id, excluded.operator_id, _pubkey_hex(excluded.pubkey), exhausted_reason)
             break
         balance = beacon_data.validators_fields[c.validator_index].effective_balance
         topup_amount = target_balance_gwei - (balance + c.pending_balance)
@@ -401,3 +415,11 @@ def _take_up_to_allocation(
         # May go negative: the last selected validator absorbs the remaining budget as a partial top-up.
         remaining -= topup_amount
     return result
+
+
+def _planned_top_up_wei(candidates: list[TopUpCandidate], beacon_data: BeaconStateData, target_balance_gwei: int) -> int:
+    """What the candidates can take up to the target balance — the most an operator's budget can spend on them."""
+    total_gwei = sum(
+        target_balance_gwei - (beacon_data.validators_fields[c.validator_index].effective_balance + c.pending_balance) for c in candidates
+    )
+    return total_gwei * 10**9
