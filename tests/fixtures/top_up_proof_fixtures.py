@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+from blockchain.beacon_state.constants import FAR_FUTURE_EPOCH
 from blockchain.beacon_state.specs import get_spec
 
 _FIXTURE_DIR = Path(__file__).resolve().parent / 'data' / 'top_up_proof'
@@ -19,7 +20,7 @@ def _decoded_top_up_state():
         beacon_state_ssz = (_FIXTURE_DIR / 'beacon_state.ssz').read_bytes()
         beacon_block_header_json = json.loads((_FIXTURE_DIR / 'beacon_block_header.json').read_text())
         slot = int(beacon_block_header_json['slot'])
-        spec = get_spec(slot)
+        spec = get_spec(slot, FAR_FUTURE_EPOCH)  # the fixture is a Fulu state
         state = spec.BeaconState.decode_bytes(beacon_state_ssz)
         _DECODED_CACHE = (spec, state, beacon_state_ssz)
     return _DECODED_CACHE

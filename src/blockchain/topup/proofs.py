@@ -26,7 +26,7 @@ def build_topup_proofs(
 
     Each witness proof is validators[i] -> state_root -> beacon_block_root (EIP-4788 anchor).
     """
-    spec = get_spec(beacon_data.slot)
+    spec = get_spec(beacon_data.slot, beacon_data.gloas_fork_epoch)
     state = beacon_data.raw_state
     header = beacon_data.header
 

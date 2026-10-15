@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 import ssz
 
-from blockchain.beacon_state.constants import FAR_FUTURE_SLOT, GLOAS_PIVOT_SLOT
+from blockchain.beacon_state.constants import FAR_FUTURE_EPOCH, FAR_FUTURE_SLOT, SLOTS_PER_EPOCH
 from blockchain.beacon_state.proofs import (
     build_beacon_block_header,
     build_header_proof,
@@ -33,11 +33,13 @@ def test_validators_generalized_indices():
 
 @pytest.mark.unit
 def test_fork_selector():
-    assert get_spec(GLOAS_PIVOT_SLOT - 1) is fulu
-    assert get_spec(GLOAS_PIVOT_SLOT) is gloas  # boundary is inclusive
-    # With the default pivot (env GLOAS_PIVOT_SLOT unset) it is "never", so any real slot stays on Fulu.
-    if GLOAS_PIVOT_SLOT == FAR_FUTURE_SLOT:
-        assert get_spec(15_000_000) is fulu
+    fork_epoch = 1536
+    fork_slot = fork_epoch * SLOTS_PER_EPOCH
+    assert get_spec(fork_slot - 1, fork_epoch) is fulu
+    assert get_spec(fork_slot, fork_epoch) is gloas  # boundary is inclusive
+    assert get_spec(fork_slot + SLOTS_PER_EPOCH, fork_epoch) is gloas
+    # Fork not scheduled on the CL: any real slot stays on Fulu.
+    assert get_spec(15_000_000, FAR_FUTURE_EPOCH) is fulu
 
 
 @pytest.mark.unit

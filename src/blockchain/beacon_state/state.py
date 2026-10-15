@@ -1,18 +1,21 @@
 """
 Beacon state loading and data extraction on the eth-consensus-specs fork types.
 
-The fork is chosen from the slot (see beacon_state.specs.get_spec): Fulu, or Gloas once
-GLOAS_PIVOT_SLOT is set. Field access is by name; the eth-ssz-specs value types are strict,
-so primitives handed to the rest of the service are unwrapped (bytes(...)/int(...)/bool(...)).
+The fork is chosen from the slot (see beacon_state.specs.get_spec): Fulu, or Gloas from the
+GLOAS_FORK_EPOCH the consensus client reports in its config. Field access is by name; the
+eth-ssz-specs value types are strict, so primitives handed to the rest of the service are
+unwrapped (bytes(...)/int(...)/bool(...)).
 Proof building lives in beacon_state.proofs.
 """
 
+# pyright: reportTypedDictNotRequiredAccess=false
 import logging
 from dataclasses import dataclass, field
 from typing import Any, NamedTuple
 
 from web3.types import BlockData
 
+from blockchain.beacon_state.constants import FAR_FUTURE_EPOCH
 from blockchain.beacon_state.specs import get_spec
 from blockchain.typings import Web3
 from providers.consensus import ConsensusClient
@@ -48,6 +51,8 @@ class BeaconStateData:
     # reference into the slices extract_state_data returns. Empty on instances built the old way.
     all_pubkey_to_index: dict[bytes, int] = field(default_factory=dict, repr=False)
     raw_state: Any = field(default=None, repr=False)  # decoded BeaconState, retained for proofs/extract
+    # GLOAS_FORK_EPOCH the state was decoded with; proofs must pick the same fork spec.
+    gloas_fork_epoch: int = FAR_FUTURE_EPOCH
 
 
 def _validator_fields(pubkey: bytes, v) -> ValidatorFields:
@@ -89,7 +94,10 @@ def load_raw_beacon_state(w3: Web3, cl: ConsensusClient) -> BeaconStateData:
     slot = header[0]
     state_root = header[3]
 
-    spec = get_spec(slot)
+    # Read from the CL every time rather than configured, so the bot follows the fork schedule of the
+    # network it is pointed at without a redeploy.
+    gloas_fork_epoch = cl.get_gloas_fork_epoch()
+    spec = get_spec(slot, gloas_fork_epoch)
 
     # State SSZ
     ssz_bytes = cl.get_beacon_state_ssz(slot)
@@ -101,7 +109,7 @@ def load_raw_beacon_state(w3: Web3, cl: ConsensusClient) -> BeaconStateData:
     if computed_state_root != state_root:
         raise ValueError(f'state_root mismatch: computed=0x{computed_state_root.hex()}, expected=0x{state_root.hex()}')
 
-    logger.info({'msg': 'Beacon state loaded.', 'slot': slot})
+    logger.info({'msg': 'Beacon state loaded.', 'slot': slot, 'gloas_fork_epoch': gloas_fork_epoch})
 
     # Single pubkey-independent pass: record each validator's index. Shared across all modules.
     all_pubkey_to_index: dict[bytes, int] = {}
@@ -120,6 +128,7 @@ def load_raw_beacon_state(w3: Web3, cl: ConsensusClient) -> BeaconStateData:
         validators_fields={},
         all_pubkey_to_index=all_pubkey_to_index,
         raw_state=state,
+        gloas_fork_epoch=gloas_fork_epoch,
     )
 
 
@@ -156,6 +165,7 @@ def extract_state_data(raw: BeaconStateData, pubkeys: set[bytes]) -> BeaconState
         validators_fields=validators_fields,
         all_pubkey_to_index=raw.all_pubkey_to_index,
         raw_state=state,
+        gloas_fork_epoch=raw.gloas_fork_epoch,
     )
 
 
