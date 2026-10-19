@@ -3,8 +3,10 @@ from unittest.mock import MagicMock, Mock
 import pytest
 from requests import Response
 
+import variables
 from providers.consensus import CL_REQUESTS_DURATION
 from providers.http_provider import HTTPProvider, NoHostsProvided, NotOkResponse, data_is_any, data_is_dict
+from utils.timeout import TimeoutManager, TimeoutManagerError
 
 
 @pytest.mark.unit
@@ -129,3 +131,39 @@ def test_custom_error_provided():
 
     with pytest.raises(CustomError):
         provider.call()
+
+
+@pytest.mark.unit
+def test_cycle_deadline_is_not_turned_into_a_host_failure():
+    """A deadline raised inside the request must leave _get as itself. If the duration histogram is left
+    without labels, its exit raises ValueError over the deadline and _get treats that as a failed host."""
+    provider = HTTPProvider(['http://localhost:1', 'http://localhost:2'], 5 * 60, 1, 1)
+    provider.PROMETHEUS_HISTOGRAM = CL_REQUESTS_DURATION
+    provider.session.get = Mock(side_effect=TimeoutManagerError)
+
+    with pytest.raises(TimeoutManagerError):
+        provider._get('test')
+    provider.session.get.assert_called_once()
+
+
+@pytest.mark.unit
+def test_cycle_deadline_on_a_hung_host_ends_the_request(hung_host, healthy_host):
+    """End to end over real sockets: the cycle watchdog fires while the first host hangs. The request must
+    stop there with the deadline, not fail over and leave the cycle running with the alarm spent."""
+    hung_url, _ = hung_host
+    healthy_url, hits = healthy_host
+    provider = HTTPProvider([hung_url, healthy_url], 5 * 60, 0, 0)
+    provider.PROMETHEUS_HISTOGRAM = CL_REQUESTS_DURATION
+
+    with pytest.raises(TimeoutManagerError), TimeoutManager(0.5):
+        provider._get('test')
+    assert hits == []
+
+
+@pytest.mark.unit
+def test_default_cl_budget_lets_a_second_host_be_tried_within_the_cycle():
+    attempts = variables.HTTP_REQUEST_RETRY_COUNT_CONSENSUS + 1
+    # urllib3 sleeps backoff_factor * 2 ** (n - 1) before the n-th consecutive retry, none before the first.
+    backoff = sum(variables.HTTP_REQUEST_SLEEP_BEFORE_RETRY_IN_SECONDS_CONSENSUS * 2 ** (n - 1) for n in range(2, attempts))
+    per_host = attempts * variables.HTTP_REQUEST_TIMEOUT_CONSENSUS + backoff
+    assert 2 * per_host < variables.MAX_CYCLE_LIFETIME_IN_SECONDS

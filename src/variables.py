@@ -161,8 +161,12 @@ def get_consolidation_bus_config(chain_id: int) -> tuple[ChecksumAddress | None,
 # Providers
 KEYS_API_URL = os.getenv('KEYS_API_URL', '')
 CL_API_URLS = _env_list('CL_API_URLS')
-HTTP_REQUEST_TIMEOUT_CONSENSUS: Final = int(os.getenv('HTTP_REQUEST_TIMEOUT_CONSENSUS', 5 * 60))
-HTTP_REQUEST_RETRY_COUNT_CONSENSUS: Final = int(os.getenv('HTTP_REQUEST_RETRY_COUNT_CONSENSUS', 5))
+# A hung CL host holds a request for (retries + 1) × timeout plus backoff before the next host is tried.
+# Keep that well under MAX_CYCLE_LIFETIME_IN_SECONDS for every configured host, or the cycle deadline ends
+# the process before failover. The timeout bounds a stalled read, not the whole download, so the beacon
+# state streams fine within it.
+HTTP_REQUEST_TIMEOUT_CONSENSUS: Final = int(os.getenv('HTTP_REQUEST_TIMEOUT_CONSENSUS', 60))
+HTTP_REQUEST_RETRY_COUNT_CONSENSUS: Final = int(os.getenv('HTTP_REQUEST_RETRY_COUNT_CONSENSUS', 2))
 HTTP_REQUEST_SLEEP_BEFORE_RETRY_IN_SECONDS_CONSENSUS: Final = int(os.getenv('HTTP_REQUEST_SLEEP_BEFORE_RETRY_IN_SECONDS_CONSENSUS', 5))
 
 # All non-private env variables to the logs in main

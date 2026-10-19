@@ -2,8 +2,10 @@ import sys
 from enum import StrEnum
 from typing import cast
 
-import variables
 import web3_multi_provider
+from prometheus_client import start_http_server
+
+import variables
 from blockchain.typings import Web3
 from blockchain.web3_extentions.lido_contracts import LidoContracts
 from blockchain.web3_extentions.transaction import TransactionUtils
@@ -12,9 +14,8 @@ from bots.pauser import run_pauser
 from bots.unvetter import run_unvetter
 from metrics.healthcheck_pulse import start_pulse_server
 from metrics.logging import logging
-from prometheus_client import start_http_server
 from providers.consensus import ConsensusClient
-from providers.fallback_provider import FallbackProviderModule
+from providers.fallback_provider import EL_EXCEPTION_RETRY_CONFIGURATION, FallbackProviderModule
 from providers.keys_api import KeysAPIClient
 
 logger = logging.getLogger(__name__)
@@ -67,7 +68,13 @@ def main(bot_name: str):
     start_http_server(variables.PROMETHEUS_PORT)
 
     logger.info({'msg': 'Connect MultiHTTPProviders.', 'rpc_count': len(variables.WEB3_RPC_ENDPOINTS)})
-    w3 = Web3(FallbackProviderModule(variables.WEB3_RPC_ENDPOINTS, cache_allowed_requests=True))
+    w3 = Web3(
+        FallbackProviderModule(
+            variables.WEB3_RPC_ENDPOINTS,
+            exception_retry_configuration=EL_EXCEPTION_RETRY_CONFIGURATION,
+            cache_allowed_requests=True,
+        )
+    )
     logger.info({'msg': 'Current chain_id', 'chain_id': w3.eth.chain_id})
 
     logger.info({'msg': 'Initialize Lido contracts.'})
