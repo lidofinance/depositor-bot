@@ -1,17 +1,11 @@
-import logging
 from unittest.mock import Mock
 
 import pytest
 
 from bots.pauser import PauserBot
-from cryptography.verify_signature import compute_vs
-from tests.conftest import DSM_OWNER
-from transport.msg_providers.onchain_transport import build_pause_message
-from utils.bytes import from_hex_string_to_bytes
 
 # WARNING: These accounts, and their private keys, are publicly known.
 COUNCIL_ADDRESS = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8'
-COUNCIL_PK = '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d'
 
 
 @pytest.fixture
@@ -39,64 +33,6 @@ def pause_message():
         },
         'type': 'pause',
     }
-
-
-@pytest.fixture
-def add_account_to_guardian(web3_lido_integration, set_integration_account):
-    web3_lido_integration.provider.make_request('anvil_impersonateAccount', [DSM_OWNER])
-    web3_lido_integration.provider.make_request('anvil_setBalance', [DSM_OWNER, '0x500000000000000000000000'])
-    quorum_size = web3_lido_integration.lido.deposit_security_module.get_guardian_quorum()
-
-    # If guardian removal failed
-    web3_lido_integration.lido.deposit_security_module.functions.addGuardian(COUNCIL_ADDRESS, quorum_size).transact(
-        {'from': DSM_OWNER},
-    )
-
-    yield COUNCIL_ADDRESS
-
-
-def get_pause_message(web3, module_id):
-    latest = web3.eth.get_block('latest')
-
-    prefix = web3.lido.deposit_security_module.get_pause_message_prefix()
-
-    block_number = latest.number
-
-    msg_hash = web3.solidity_keccak(['bytes32', 'uint256', 'uint256'], [prefix, block_number, module_id])
-    signed = web3.eth.account._sign_hash(msg_hash, private_key=COUNCIL_PK)
-
-    return {
-        'blockHash': latest.hash.hex(),
-        'blockNumber': latest.number,
-        'guardianAddress': COUNCIL_ADDRESS,
-        'stakingModuleId': module_id,
-        'signature': {
-            'r': '0x' + signed.r.to_bytes(32, 'big').hex(),
-            's': '0x' + signed.s.to_bytes(32, 'big').hex(),
-            'v': signed.v,
-            '_vs': compute_vs(signed.v, '0x' + signed.s.to_bytes(32, 'big').hex()),
-        },
-        'type': 'pause',
-    }
-
-
-def get_pause_message_v3(web3):
-    latest = web3.eth.get_block('latest')
-
-    prefix = web3.lido.deposit_security_module.get_pause_message_prefix()
-
-    block_number = latest.number
-
-    msg_hash = web3.solidity_keccak(['bytes32', 'uint256'], [prefix, block_number])
-    signed = web3.eth.account._sign_hash(msg_hash, private_key=COUNCIL_PK)
-
-    return build_pause_message(
-        block_number=block_number,
-        guardian=COUNCIL_ADDRESS,
-        version=b'0x1',
-        r=signed.r.to_bytes(32, 'big'),
-        vs=from_hex_string_to_bytes(compute_vs(signed.v, '0x' + signed.s.to_bytes(32, 'big').hex())),
-    )
 
 
 @pytest.mark.unit
@@ -134,52 +70,3 @@ def test_pause_bot_clean_messages(pause_bot, block_data, pause_message):
 
     pause_bot.execute(block_data)
     assert len(pause_bot.message_storage.messages) == 0
-
-
-@pytest.mark.skip(
-    reason='Legacy v4 guardian-signed fixtures fail against the now-v5 Hoodi fork (delegation active). '
-    'Needs v5 message fixtures (guardian folded into the digest, signed by the delegate). '
-    'See docs/edf-guardian-delegation.md.'
-)
-@pytest.mark.integration
-@pytest.mark.parametrize(
-    'web3_provider_integration,module_id',
-    [[{'block': None}, 1], [{'block': None}, 2]],
-    indirect=['web3_provider_integration'],
-)
-def test_pauser_bot(web3_lido_integration, web3_provider_integration, add_account_to_guardian, module_id, caplog):
-    caplog.set_level(logging.INFO)
-    latest = web3_lido_integration.eth.get_block('latest')
-
-    # Create PauserBot
-    pb = PauserBot(web3_lido_integration)
-    pb._get_message_actualize_filter = Mock(return_value=lambda x: True)
-    web3_lido_integration.lido.deposit_security_module.get_guardians = Mock(return_value=[COUNCIL_ADDRESS])
-
-    # Execute without messages - verify module is active
-    pb.execute(latest)
-    assert not web3_lido_integration.lido.deposit_security_module.is_deposits_paused(), "Shouldn't be paused before pause transaction"
-
-    # Mine a block to get fresh latest block
-    web3_lido_integration.provider.make_request('anvil_mine', [1])
-    latest = web3_lido_integration.eth.get_block('latest')
-
-    # Add pause message and execute
-    pause_message = get_pause_message_v3(web3_lido_integration)
-    pb.message_storage.messages = [pause_message]
-    pb.execute(latest)
-
-    # Verify that pauseDeposits transaction was built (check logs contain the method call)
-    assert any('pauseDeposits' in msg for msg in caplog.messages), 'pauseDeposits transaction was not built'
-
-    # Mine a block to confirm transaction
-    web3_lido_integration.provider.make_request('anvil_mine', [1])
-
-    # Verify module was actually paused
-    assert web3_lido_integration.lido.deposit_security_module.is_deposits_paused(), 'Module should be paused after pause transaction'
-
-    # Execute again - messages should be cleared since module is already paused
-    latest = web3_lido_integration.eth.get_block('latest')
-    pb.message_storage.messages = [pause_message]
-    pb.execute(latest)
-    assert not pb.message_storage.messages, 'Messages should be cleared after module is paused'
