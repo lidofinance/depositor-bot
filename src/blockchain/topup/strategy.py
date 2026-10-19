@@ -53,6 +53,7 @@ class TopUpStrategy(abc.ABC):
         module_id: int,
         module_address: str,
         module_allocation: Wei,
+        max_top_up_per_block: Wei,
         max_validators: int,
         consolidation_indexer: ConsolidationIndexer,
     ) -> TopUpProofData | None:

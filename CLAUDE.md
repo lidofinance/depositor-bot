@@ -214,6 +214,9 @@ Key-level gates — module_id is now known, question narrows to pubkey X. Instru
   problem, not an eligibility problem — X is a strong candidate for the next cycle.
 - `truncated_by_max_validators` — eligible, funded, and within its operator's budget, but cut by the
   cross-operator `max_validators` cap on the final sorted list.
+- `top_up_cap_exhausted` — selected, but the per-call budget `min(module allocation, maxTopUpPerBlock)`
+  ran out before X. Operators are chosen from the module's full allocation and the cap is shared out
+  across them in the module's order, so X is a candidate for the next top-up.
 
 **`topup_key_excluded_total{module_id, reason}` (Counter) only tells you a reason is trending up —
 it is deliberately not labeled by pubkey** (would explode cardinality across thousands of keys).

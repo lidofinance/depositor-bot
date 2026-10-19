@@ -47,9 +47,14 @@ class CSM02TopUpStrategy(TopUpStrategy):
         module_id: int,
         module_address: str,
         module_allocation: Wei,
+        max_top_up_per_block: Wei,
         max_validators: int,  # unused: CSM brings one key at a time (see class docstring)
         consolidation_indexer: ConsolidationIndexer,  # unused: no CL eligibility checks for CSM
     ) -> TopUpProofData | None:
+        # The FIFO queue funds keys in order and reverts UnexpectedExtraKey when a non-last key ends up
+        # partial, so plan only within what SR.topUp actually hands the module in this call.
+        module_allocation = Wei(min(module_allocation, max_top_up_per_block))
+
         csm = cast(
             CSM02Contract,
             self.w3.eth.contract(
