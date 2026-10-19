@@ -6,11 +6,11 @@ from eth_account.account import VRS
 
 from cryptography.verify_signature import recover_vs, verify_message_with_signature
 from metrics.metrics import UNEXPECTED_EXCEPTIONS
-from transport.msg_providers.rabbit import MessageType
 from transport.msg_types.deposit import DepositMessage
 from transport.msg_types.pause import PauseMessage
 from transport.msg_types.ping import PingMessage
 from transport.msg_types.unvet import UnvetMessage
+from transport.types import MessageType
 from utils.bytes import from_hex_string_to_bytes
 
 logger = logging.getLogger(__name__)
@@ -30,18 +30,16 @@ def get_messages_sign_filter(prefix: bytes, delegated: bool = False) -> Callable
       (``guardianDelegate``) — the off-chain equivalent of the on-chain ERC-1271 check against
       ``getDelegate()``.
 
-    Only the Data Bus transport carries ``guardianDelegate`` (the onchain transport reverse-maps the
-    event sender through the guardian delegate map). RabbitMQ messages do not, so under DSMv5 they
-    fall back to ``guardianAddress`` — the guardian *contract* address, which no EOA signature can
-    ever recover to — and are dropped here. RabbitMQ is therefore effectively unsupported once
-    delegation is active; it is kept for DSMv4 and must be migrated before the v5 cutover.
+    The Data Bus transport sets ``guardianDelegate`` by reverse-mapping the event sender through the
+    guardian delegate map. A message without it falls back to ``guardianAddress`` — under DSMv5 the
+    guardian *contract* address, which no EOA signature can ever recover to — so it is dropped here.
     """
 
     def check_messages(msg: DepositMessage | PauseMessage | UnvetMessage) -> bool:
         v, r, s = _vrs(msg)
         data, abi = _verification_data(prefix, msg, delegated)
         # Under delegation the signer is the guardian's delegate EOA (carried on the message by the
-        # onchain transport); fall back to guardianAddress if it is absent (e.g. legacy transports).
+        # onchain transport); fall back to guardianAddress if it is absent, which fails closed.
         expected_signer = cast(dict, msg).get('guardianDelegate', msg['guardianAddress']) if delegated else msg['guardianAddress']
 
         is_valid = verify_message_with_signature(
