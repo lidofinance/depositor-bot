@@ -10,6 +10,7 @@ from web3.types import Wei
 import variables
 from blockchain.contracts.staking_router import MODULE_TYPE_CMV2, MODULE_TYPE_CSM, StakingModuleInfo
 from bots.depositor import DepositorBot, PhaseOutcome, QuorumState, TopUpPath
+from metrics.metrics import CURRENT_QUORUM_SIZE
 from tests.conftest import COUNCIL_ADDRESS_1, COUNCIL_ADDRESS_2, COUNCIL_PK_1, COUNCIL_PK_2
 from tests.utils.protocol_utils import get_deposit_message
 
@@ -1878,6 +1879,17 @@ def test_quorum_over_head_or_unseen_block_is_not_selected(quorum_of_two, setup_d
     group = [_quorum_message(GUARDIAN_A, block_number, CANONICAL_HASH), _quorum_message(GUARDIAN_B, block_number, CANONICAL_HASH)]
 
     assert not _with_messages(quorum_of_two, group)
+
+
+@pytest.mark.unit
+def test_rejected_quorum_is_not_reported_as_current_size(quorum_of_two, setup_deposit_message):
+    """`current >= required` must mean a quorum was selected, not that some group reached the threshold."""
+    _chain(quorum_of_two, head=10, canonical={9: CANONICAL_HASH})
+    at_head = [_quorum_message(GUARDIAN_A, 10, NEXT_HASH), _quorum_message(GUARDIAN_B, 10, NEXT_HASH)]
+    partial = [_quorum_message(GUARDIAN_A, 9, CANONICAL_HASH)]
+
+    assert not _with_messages(quorum_of_two, at_head + partial)
+    assert CURRENT_QUORUM_SIZE.labels('current')._value.get() == 1
 
 
 # ─── Integration ───────────────────────────────────────────────────

@@ -836,7 +836,9 @@ class DepositorBot:
                 QUORUM.labels(module_id).set(1)
                 return list(groups[payload].values())
 
-        CURRENT_QUORUM_SIZE.labels('current').set(max((len(g) for g in groups.values()), default=0))
+        # Groups that reached the threshold but were rejected (orphaned, or not selectable yet) are left
+        # out, so `current >= required` holds exactly when QUORUM is 1.
+        CURRENT_QUORUM_SIZE.labels('current').set(max((len(g) for g in groups.values() if len(g) < min_signs_to_deposit), default=0))
         QUORUM.labels(module_id).set(0)
         return None
 
