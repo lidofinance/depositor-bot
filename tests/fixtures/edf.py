@@ -1,7 +1,7 @@
 """Fixtures for a chain with core's EDF / DSM v5 upgrade, forked from Hoodi.
 
 Hoodi carries the EDF deployment, so the chain is a plain fork — everything is resolved through the
-locator at fork time rather than from a committed snapshot.
+locator at fork time.
 
 What the fork does not supply is a *signing* delegate: the guardians' delegates on Hoodi are real
 council keys. `edf_manifest` therefore rotates every guardian onto an anvil dev account whose key is
@@ -27,9 +27,9 @@ EDF_PORT = '8555'
 
 # Hoodi's EDF locator. The default in variables.py is mainnet's and has no code here.
 HOODI_EDF_LOCATOR = '0xe2EF9536DAAAEBFf5b1c130957AB3E80056b06D8'
-# Predates core's source (its contracts expose `assignDelegate`, not `nominateDelegate`), which is why
-# _nominate_delegate picks the name out of the bytecode. Still the only DelegationFactory on Hoodi.
-HOODI_DELEGATION_FACTORY = '0x76Af23C7e71004038BeE4a1ceba8c441f4cA239b'
+# The documented Hoodi DelegationFactory (docs.lido.fi/deployed-contracts/hoodi), the one every guardian
+# contract was deployed from.
+HOODI_DELEGATION_FACTORY = '0xEb49f72DB1546B0E63e1114E2e403edbcE722AE6'
 DSM_VERSION = 5
 
 # Accounts 1..7 become the guardians' delegates, so the bot uses account 0 and the tests own 8 and 9.
@@ -140,7 +140,7 @@ def web3_edf_session():
 
 @pytest.fixture(scope='session')
 def edf_manifest(web3_edf_session) -> dict:
-    """Chain facts the tests need, resolved from the fork instead of a committed snapshot."""
+    """Chain facts the tests need, resolved from the fork."""
     return {
         'lidoLocator': HOODI_EDF_LOCATOR,
         'depositSecurityModule': web3_edf_session.lido.deposit_security_module.address,
@@ -152,8 +152,11 @@ def edf_manifest(web3_edf_session) -> dict:
 
 
 @pytest.fixture
-def web3_edf(web3_edf_session):
+def web3_edf(web3_edf_session, monkeypatch):
     """Per-test isolation on the shared node: everything a test writes is rolled back."""
+    # The delegate map is cached on the session-wide `w3.lido` by wall-clock TTL, so a delegate a test
+    # rotates or revokes — or one restored by evm_revert — would otherwise still be served from the cache.
+    monkeypatch.setattr(variables, 'GUARDIAN_DELEGATES_CACHE_TTL', 0)
     snapshot = web3_edf_session.provider.make_request('evm_snapshot', [])['result']
     yield web3_edf_session
     web3_edf_session.provider.make_request('evm_revert', [snapshot])
