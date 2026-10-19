@@ -67,7 +67,7 @@ def _raise_share_limit(w3, module_id: int) -> None:
 
 
 def _pass_min_deposit_distance(w3, module_id: int) -> None:
-    """The upgrade deploys a fresh DSM, so lastDepositBlock starts at the deploy block."""
+    """The module may have been deposited to just before the fork block, so wait out its distance."""
     distance = w3.lido.staking_router.functions.getStakingModuleMinDepositBlockDistance(module_id).call()
     w3.provider.make_request('anvil_mine', [hex(distance + 1)])
     assert w3.lido.deposit_security_module.is_min_deposit_distance_passed(module_id), 'min deposit distance still not passed'
@@ -78,7 +78,7 @@ def _module_with_depositable_keys(w3) -> int:
         summary = w3.lido.staking_router.functions.getStakingModuleSummary(module_id).call()
         if summary[2] > 0:  # depositableValidatorsCount
             return module_id
-    pytest.skip('No staking module on this snapshot has depositable keys.')
+    pytest.skip('No staking module on the Hoodi fork has depositable keys.')
 
 
 def _quorum_messages(w3, guardians: list[str], delegates: dict, module_id: int, count: int) -> list:
@@ -95,7 +95,7 @@ def _quorum_messages(w3, guardians: list[str], delegates: dict, module_id: int, 
             # so the signed block has to be in the past before the deposit can be simulated or sent.
             w3.provider.make_request('anvil_mine', [1])
             return messages
-    pytest.skip(f'Snapshot has fewer than {count} guardians whose delegate keys are known.')
+    pytest.skip(f'Fewer than {count} guardians have a delegate whose key is known.')
 
 
 @pytest.fixture
@@ -125,7 +125,7 @@ def deposit_bot(web3_edf, set_integration_account):
 @pytest.mark.integration
 def test_delegate_signed_quorum_lands_a_deposit(deposit_bot, web3_edf, edf_manifest):
     w3 = web3_edf
-    assert w3.lido.guardian_delegation_active(), 'snapshot is not on the delegation model'
+    assert w3.lido.guardian_delegation_active(), 'forked DSM is not on the delegation model'
 
     module_id = _module_with_depositable_keys(w3)
     # Which module the bot reaches first depends on live stake ordering; narrow the whitelist so the
@@ -169,11 +169,16 @@ def test_quorum_is_rejected_when_a_delegate_is_revoked(deposit_bot, web3_edf, ed
     messages = _quorum_messages(w3, edf_manifest['guardians'], edf_manifest['guardianDelegates'], module_id, quorum_size)
     nonce_before = w3.lido.staking_router.get_staking_module_nonce(module_id)
 
+    deposit_bot.message_storage.messages = messages
+    # The same messages form a quorum before the revoke, so losing it below is the revoke's doing.
+    assert deposit_bot._get_quorum(module_id) is not None
+
     revoked = w3.to_checksum_address(messages[0]['guardianAddress'])
     owner = _impersonate(w3, w3.eth.contract(address=revoked, abi=_OWNER_ABI).functions.owner().call())
     w3.eth.contract(address=revoked, abi=_OWNER_ABI).functions.revokeDelegate().transact({'from': owner})
 
-    deposit_bot.message_storage.messages = messages
+    # Dropped by the off-chain sign filter, not merely refused later by the DSM in transaction.check().
+    assert deposit_bot._get_quorum(module_id) is None
     deposit_bot.execute(w3.eth.get_block('latest'))
 
     assert w3.lido.staking_router.get_staking_module_nonce(module_id) == nonce_before

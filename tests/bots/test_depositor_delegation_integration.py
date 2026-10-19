@@ -1,14 +1,11 @@
-"""End-to-end delegated top-up execution against core's EDF chain.
+"""End-to-end delegated top-up execution against a Hoodi fork.
 
 Drives the bot's own code — `LidoContracts._load_delegation`, `DepositorBot._resolve_topup_path`,
 `_validate_topup_delegation`, `DelegationContract.wrap` and `TransactionUtils.check` — against
-delegation contracts deployed by **core's** `DelegationFactory`, with `TOP_UP_ROLE` really granted on
-the real `TopUpGateway` by its real admin.
+delegation contracts deployed by Hoodi's `DelegationFactory` (the one the guardians were deployed
+from), with `TOP_UP_ROLE` really granted on the real `TopUpGateway` by its real admin.
 
-Runs on the chain produced by core's own EDF upgrade (see `tests/fixtures/edf.py`): DSM v5, guardians
-that are delegation contracts. Deliberately not the revision already deployed on the testnet — that
-one predates core's source (it exposes `assignDelegate` rather than `nominateDelegate`) and sits on a
-chain still running DSM v4, where the delegation paths in the bot are no-ops.
+The fork is the one set up in `tests/fixtures/edf.py`: DSM v5, guardians that are delegation contracts.
 """
 
 from unittest import mock
@@ -55,20 +52,7 @@ FACTORY_ABI = [
 
 # Owner-side operations the bot itself must never call, so they are kept out of the production ABI
 # (interfaces/DelegationContract.json declares only what the bot may reach).
-#
-# Both spellings of the rotation entry point are declared. Core's revision has `nominateDelegate`; the
-# one already deployed on the testnet (deploy-hoodi.json, git-ref accf2253) still has the older
-# `assignDelegate`. `_nominate_delegate` picks whichever the bytecode actually exposes, so refreshing
-# the snapshot across that rename fails no test — calling the absent name reverts with empty data,
-# which is undecodable and would be a confusing failure.
 OWNER_ABI = [
-    {
-        'type': 'function',
-        'name': 'assignDelegate',
-        'stateMutability': 'nonpayable',
-        'inputs': [{'name': 'delegate', 'type': 'address'}],
-        'outputs': [],
-    },
     {
         'type': 'function',
         'name': 'nominateDelegate',
@@ -105,7 +89,7 @@ def _fund_and_impersonate(w3, address: str) -> str:
 
 
 def _deploy_delegation(w3, factory_address: str, delegate: str, cooldown: int = 0) -> str:
-    """Deploy a delegation contract through the factory core's upgrade deployed."""
+    """Deploy a delegation contract through Hoodi's DelegationFactory."""
     factory = w3.eth.contract(address=w3.to_checksum_address(factory_address), abi=FACTORY_ABI)
     owner = _fund_and_impersonate(w3, DELEGATION_OWNER)
     tx = factory.functions.deploy(owner, w3.to_checksum_address(delegate), cooldown).transact({'from': owner})
@@ -132,16 +116,6 @@ def _grant_top_up_role(w3, holder: str) -> None:
 
 def _owner_contract(w3, address: str):
     return w3.eth.contract(address=w3.to_checksum_address(address), abi=OWNER_ABI)
-
-
-def _nominate_delegate(w3, address: str, owner: str, new_delegate: str):
-    """Start a delegate rotation, using whichever name the deployed revision exposes."""
-    code = w3.eth.get_code(w3.to_checksum_address(address)).hex()
-    selector = Web3.keccak(text='nominateDelegate(address)')[:4].hex()
-    name = 'nominateDelegate' if selector in code else 'assignDelegate'
-    contract = _owner_contract(w3, address)
-    tx = contract.functions[name](w3.to_checksum_address(new_delegate)).transact({'from': owner})
-    return w3.eth.wait_for_transaction_receipt(tx)
 
 
 def _use_delegation(w3, address: str | None) -> None:
@@ -258,7 +232,8 @@ def test_current_delegate_stays_effective_during_rotation_cooldown(bot, web3_edf
     assert bot._resolve_topup_path() is TopUpPath.DELEGATED
 
     owner = _fund_and_impersonate(w3, DELEGATION_OWNER)
-    _nominate_delegate(w3, address, owner, OTHER_DELEGATE)
+    tx = _owner_contract(w3, address).functions.nominateDelegate(OTHER_DELEGATE).transact({'from': owner})
+    w3.eth.wait_for_transaction_receipt(tx)
 
     assert w3.to_checksum_address(_owner_contract(w3, address).functions.getDelegate().call()) == variables.ACCOUNT.address
     assert bot._resolve_topup_path() is TopUpPath.DELEGATED
