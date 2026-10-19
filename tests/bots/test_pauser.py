@@ -3,12 +3,9 @@ from unittest.mock import Mock
 import pytest
 
 from bots.pauser import PauserBot
-from cryptography.verify_signature import compute_vs
-from tests.conftest import DSM_OWNER
 
 # WARNING: These accounts, and their private keys, are publicly known.
 COUNCIL_ADDRESS = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8'
-COUNCIL_PK = '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d'
 
 
 @pytest.fixture
@@ -33,45 +30,6 @@ def pause_message():
             'recoveryParam': 1,
             's': '0x54933925f5f97a9632b4b1bc621a1c2771d58eaf6eee27dcf915eac8af010537',
             'v': 28,
-        },
-        'type': 'pause',
-    }
-
-
-@pytest.fixture
-def add_account_to_guardian(web3_lido_integration, set_integration_account):
-    web3_lido_integration.provider.make_request('anvil_impersonateAccount', [DSM_OWNER])
-    web3_lido_integration.provider.make_request('anvil_setBalance', [DSM_OWNER, '0x500000000000000000000000'])
-    quorum_size = web3_lido_integration.lido.deposit_security_module.get_guardian_quorum()
-
-    # If guardian removal failed
-    web3_lido_integration.lido.deposit_security_module.functions.addGuardian(COUNCIL_ADDRESS, quorum_size).transact(
-        {'from': DSM_OWNER},
-    )
-
-    yield COUNCIL_ADDRESS
-
-
-def get_pause_message(web3, module_id):
-    latest = web3.eth.get_block('latest')
-
-    prefix = web3.lido.deposit_security_module.get_pause_message_prefix()
-
-    block_number = latest.number
-
-    msg_hash = web3.solidity_keccak(['bytes32', 'uint256', 'uint256'], [prefix, block_number, module_id])
-    signed = web3.eth.account._sign_hash(msg_hash, private_key=COUNCIL_PK)
-
-    return {
-        'blockHash': latest.hash.hex(),
-        'blockNumber': latest.number,
-        'guardianAddress': COUNCIL_ADDRESS,
-        'stakingModuleId': module_id,
-        'signature': {
-            'r': '0x' + signed.r.to_bytes(32, 'big').hex(),
-            's': '0x' + signed.s.to_bytes(32, 'big').hex(),
-            'v': signed.v,
-            '_vs': compute_vs(signed.v, '0x' + signed.s.to_bytes(32, 'big').hex()),
         },
         'type': 'pause',
     }
