@@ -1802,6 +1802,7 @@ def test_depositor_message_actualizer_root(setup_deposit_message, depositor_bot,
 
 CANONICAL_HASH = '0x432e218931e9b94f0702ecb1b0d084c467a86b384767ce38c4fe164463070532'
 ORPHANED_HASH = '0x232e218931e9b94f0702ecb1b0d084c467a86b384767ce38c4fe164463070532'
+NEXT_HASH = '0x532e218931e9b94f0702ecb1b0d084c467a86b384767ce38c4fe164463070532'
 GUARDIAN_A = '0x43464Fe06c18848a2E2e913194D64c1970f4326a'
 GUARDIAN_B = '0x33464Fe06c18848a2E2e913194D64c1970f4326a'
 
@@ -1840,7 +1841,7 @@ def _with_messages(depositor_bot, messages: list[dict]):
 
 @pytest.mark.unit
 def test_get_quorum(quorum_of_two, setup_deposit_message):
-    _chain(quorum_of_two, head=10, canonical={10: CANONICAL_HASH})
+    _chain(quorum_of_two, head=11, canonical={10: CANONICAL_HASH})
     one_guardian_twice = [_quorum_message(GUARDIAN_A, 10, CANONICAL_HASH)] * 2
 
     assert not _with_messages(quorum_of_two, one_guardian_twice)
@@ -1861,20 +1862,24 @@ def test_orphaned_quorum_does_not_shadow_the_canonical_one(quorum_of_two, setup_
 
 @pytest.mark.unit
 def test_freshest_canonical_quorum_wins(quorum_of_two, setup_deposit_message):
-    _chain(quorum_of_two, head=11, canonical={10: CANONICAL_HASH, 11: ORPHANED_HASH})
+    _chain(quorum_of_two, head=12, canonical={10: CANONICAL_HASH, 11: NEXT_HASH})
     older = [_quorum_message(GUARDIAN_A, 10, CANONICAL_HASH), _quorum_message(GUARDIAN_B, 10, CANONICAL_HASH)]
-    newer = [_quorum_message(GUARDIAN_A, 11, ORPHANED_HASH), _quorum_message(GUARDIAN_B, 11, ORPHANED_HASH)]
+    newer = [_quorum_message(GUARDIAN_A, 11, NEXT_HASH), _quorum_message(GUARDIAN_B, 11, NEXT_HASH)]
 
     assert _with_messages(quorum_of_two, older + newer) == newer
+    # Newest first: the older group is never looked up once a newer canonical one is found.
+    assert 10 not in [c.args[0] for c in quorum_of_two.w3.eth.get_block.call_args_list]
 
 
 @pytest.mark.unit
-def test_quorum_over_an_unseen_block_is_not_selected(quorum_of_two, setup_deposit_message):
-    """A council a block ahead of us cannot be checked yet — skipped, not treated as orphaned."""
+@pytest.mark.parametrize('block_number', [10, 11], ids=['head', 'ahead'])
+def test_quorum_over_head_or_unseen_block_is_not_selected(quorum_of_two, setup_deposit_message, block_number):
+    """The dry run executes at `latest`, where blockhash(head) is zero, and a block ahead of us cannot be
+    checked yet — both are skipped, not treated as orphaned."""
     _chain(quorum_of_two, head=10, canonical={10: CANONICAL_HASH})
-    ahead = [_quorum_message(GUARDIAN_A, 11, CANONICAL_HASH), _quorum_message(GUARDIAN_B, 11, CANONICAL_HASH)]
+    group = [_quorum_message(GUARDIAN_A, block_number, CANONICAL_HASH), _quorum_message(GUARDIAN_B, block_number, CANONICAL_HASH)]
 
-    assert not _with_messages(quorum_of_two, ahead)
+    assert not _with_messages(quorum_of_two, group)
 
 
 # ─── Integration ───────────────────────────────────────────────────

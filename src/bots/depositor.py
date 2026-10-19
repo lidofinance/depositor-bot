@@ -830,34 +830,40 @@ class DepositorBot:
         for message in filtered_messages:
             groups[_signed_payload(message)][message['guardianAddress']] = message
 
-        latest = self.w3.eth.get_block('latest')
-        ready = [
-            list(guardian_messages.values())
-            for payload, guardian_messages in groups.items()
-            if len(guardian_messages) >= min_signs_to_deposit and self._is_canonical(payload, latest)
-        ]
-
-        if not ready:
-            CURRENT_QUORUM_SIZE.labels('current').set(max((len(g) for g in groups.values()), default=0))
-            QUORUM.labels(module_id).set(0)
-            return None
-
         # Freshest wins, not first seen. Arrival order is not a selection criterion: a group retained
         # from before a reorg keeps its place at the front and would be retried every block until it
-        # ages out, while the replacement quorum behind it is never tried.
-        quorum = max(ready, key=lambda group: group[0]['blockNumber'])
-        CURRENT_QUORUM_SIZE.labels('current').set(len(quorum))
-        QUORUM.labels(module_id).set(1)
-        return quorum
+        # ages out, while the replacement quorum behind it is never tried. Newest first, so only the
+        # groups down to the first canonical one cost a block lookup.
+        candidates = sorted(
+            (
+                (payload, guardian_messages)
+                for payload, guardian_messages in groups.items()
+                if len(guardian_messages) >= min_signs_to_deposit
+            ),
+            key=lambda item: item[0][0],
+            reverse=True,
+        )
+        latest = self.w3.eth.get_block('latest')
+        for payload, guardian_messages in candidates:
+            if self._is_canonical(payload, latest):
+                CURRENT_QUORUM_SIZE.labels('current').set(len(guardian_messages))
+                QUORUM.labels(module_id).set(1)
+                return list(guardian_messages.values())
+
+        CURRENT_QUORUM_SIZE.labels('current').set(max((len(g) for g in groups.values()), default=0))
+        QUORUM.labels(module_id).set(0)
+        return None
 
     def _is_canonical(self, payload: tuple, latest: BlockData) -> bool:
         """Whether the block a group signed over is the one the chain has at that height.
 
-        A group ahead of our own view is not selectable yet but is not wrong either — it becomes
-        checkable once we catch up, so it is skipped rather than treated as orphaned.
+        The head block is not selectable yet: the dry run executes at `latest`, where
+        `blockhash(head)` is zero, so the DSM would revert with DepositUnexpectedBlockHash.
+        A group at or ahead of our head is skipped rather than treated as orphaned — it
+        becomes checkable once the chain moves on.
         """
         block_number, block_hash = payload[0], payload[1]
-        if block_number > latest['number']:
+        if block_number >= latest['number']:
             return False
 
         canonical = '0x' + self.w3.eth.get_block(block_number)['hash'].hex()
