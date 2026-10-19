@@ -115,7 +115,7 @@ Logs are dispatched to the parser that declared their event id (`topic0`), never
 
 `MessageStorage` (`src/transport/msg_storage.py`) aggregates messages from the transport, applies static filters (signature validity, checksum address normalization), and on each cycle calls `get_messages_and_actualize()` with a dynamic filter that discards messages older than 200 blocks or with a stale deposit root.
 
-Quorum is formed by grouping valid messages by `blockHash`, then checking if any group has `>= guardian_quorum` unique guardian addresses.
+Quorum is formed by grouping valid messages by the whole signed payload (the DSM checks every signature against one digest rebuilt from `quorum[0]`), keeping groups with `>= guardian_quorum` unique guardian addresses, and picking the freshest one whose block is still canonical — never the first seen, which after a reorg would retry an orphaned group until it ages out. A group signed over the head block or beyond is skipped until the chain moves on: the dry run executes at `latest`, where `blockhash(head)` is zero.
 
 ### Deposit strategy and module ordering
 
