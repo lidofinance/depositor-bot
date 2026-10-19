@@ -39,8 +39,7 @@ Unvetting is the proces of decreasing approved depositable signing keys.
     - Set WEB3_RPC_ENDPOINTS
     - Set WALLET_PRIVATE_KEY
     - Set CREATE_TRANSACTIONS to true
-    - Set MESSAGE_TRANSPORTS to rabbit
-    - Set RABBIT_MQ_URL, RABBIT_MQ_USERNAME and RABBIT_MQ_PASSWORD
+    - Set ONCHAIN_TRANSPORT_RPC_ENDPOINTS and ONCHAIN_TRANSPORT_ADDRESS (Data Bus is the only message transport)
 3. ```docker-compose up```
 4. Send metrics and logs to grafana
 5. Setup alerts
@@ -68,12 +67,10 @@ Next cases requires bot restart:
 | KEYS_API_URL              | -                                          | URL of the Keys API                                                                                                      |
 | CL_API_URLS               | -                                          | Comma-separated list of Consensus Layer client URIs                                                                      |
 | ENABLE_TOP_UP             | false                                      | Enable top-up functionality. Must be disabled until Node Operators submit consolidation requests                         |
+| ONCHAIN_TRANSPORT_ADDRESS | -                                          | Data Bus contract address (Gnosis). The only message transport; startup fails if unset                                   |
+| ONCHAIN_TRANSPORT_RPC_ENDPOINTS | -                                    | Comma-separated RPC endpoints of the Data Bus chain (Gnosis). Startup fails if unset                                     |
 | ---                       | ---	                                       | ---                                                                                                                      |
-| MESSAGE_TRANSPORTS        | -                                          | Transports used in bot. One of/or both: rabbit/onchain_transport. `rabbit` is DSMv4-only — its messages carry no guardian delegate, so they are dropped under DSMv5 delegation |
 | GUARDIAN_DELEGATES_CACHE_TTL | 60                                      | Seconds to cache the resolved delegate→guardian map (DSMv5). Bounds EL-provider load; on-chain checks remain the freshness backstop. 0 disables |
-| RABBIT_MQ_URL             | -                                          | RabbitMQ url                                                                                                             |
-| RABBIT_MQ_USERNAME        | -                                          | RabbitMQ username for virtualhost                                                                                        |
-| RABBIT_MQ_PASSWORD        | -                                          | RabbitMQ password for virtualhost                                                                                        |
 
 ### Additional variables
 
@@ -95,13 +92,13 @@ Next cases requires bot restart:
 | PROMETHEUS_PREFIX                 | depositor_bot | Prefix for the metrics                                                                                                   |
 | HEALTHCHECK_SERVER_PORT           | 9010          | Port with bot`s status server                                                                                            |
 | MAX_CYCLE_LIFETIME_IN_SECONDS     | 1200          | Max lifetime of usual cycle. If cycle will not end in this time, bot will crush                                          |
-| ONCHAIN_TRANSPORT_RPC_ENDPOINTS   | -             | RPC endpoint for the databus RPC, Gnosis at the moment                                                                   |
 | QUORUM_RETENTION_MINUTES          | 5             | TTL of quorum collection for marking module as healthy                                                                   |
 | MAX_VALIDATORS_PER_TOP_UP         | 32            | Maximum number of validators per top-up transaction                                                                      |
 | DELEGATION_CONTRACT_ADDRESS        | -             | EDF delegation contract (LIP-37) holding TOP_UP_ROLE, with this bot's account as its delegate. Used for top-ups when it holds the role; the bot falls back to a direct call when its own account holds it |
 | CONSOLIDATION_BUS_ADDRESS         | -             | ConsolidationBus address override. Defaults to the hardcoded per-chain value; top-up is skipped if the chain is unknown  |
 | CONSOLIDATION_BUS_DEPLOY_BLOCK    | -             | ConsolidationBus deploy block override (must be exact-or-earlier). Used together with CONSOLIDATION_BUS_ADDRESS          |
 | CONSOLIDATION_GETLOGS_CHUNK       | 10000         | Block-range size per getLogs call when indexing ConsolidationBus events                                                  |
+| ONCHAIN_TRANSPORT_GETLOGS_CHUNK   | 10000         | Widest block range per Data Bus getLogs call. Must stay under the endpoint's eth_getLogs limit                           |
 | HTTP_REQUEST_TIMEOUT_CONSENSUS    | 300           | Timeout in seconds for CL HTTP requests                                                                                  |
 | HTTP_REQUEST_RETRY_COUNT_CONSENSUS | 5            | Number of retries for CL HTTP requests                                                                                   |
 | HTTP_REQUEST_SLEEP_BEFORE_RETRY_IN_SECONDS_CONSENSUS | 5 | Backoff factor in seconds between CL request retries                                                              |
