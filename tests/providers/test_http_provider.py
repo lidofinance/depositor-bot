@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, Mock
 import pytest
 from requests import Response
 
+import variables
 from providers.consensus import CL_REQUESTS_DURATION
 from providers.http_provider import HTTPProvider, NoHostsProvided, NotOkResponse, data_is_any, data_is_dict
 from utils.timeout import TimeoutManager, TimeoutManagerError
@@ -158,3 +159,11 @@ def test_cycle_deadline_on_a_hung_host_ends_the_request(hung_host, healthy_host)
         provider._get('test')
     assert hits == []
 
+
+@pytest.mark.unit
+def test_default_cl_budget_lets_a_second_host_be_tried_within_the_cycle():
+    attempts = variables.HTTP_REQUEST_RETRY_COUNT_CONSENSUS + 1
+    # urllib3 sleeps backoff_factor * 2 ** (n - 1) before the n-th consecutive retry, none before the first.
+    backoff = sum(variables.HTTP_REQUEST_SLEEP_BEFORE_RETRY_IN_SECONDS_CONSENSUS * 2 ** (n - 1) for n in range(2, attempts))
+    per_host = attempts * variables.HTTP_REQUEST_TIMEOUT_CONSENSUS + backoff
+    assert 2 * per_host < variables.MAX_CYCLE_LIFETIME_IN_SECONDS

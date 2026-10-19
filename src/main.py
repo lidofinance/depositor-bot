@@ -15,7 +15,7 @@ from bots.unvetter import run_unvetter
 from metrics.healthcheck_pulse import start_pulse_server
 from metrics.logging import logging
 from providers.consensus import ConsensusClient
-from providers.fallback_provider import FallbackProviderModule
+from providers.fallback_provider import EL_EXCEPTION_RETRY_CONFIGURATION, FallbackProviderModule
 from providers.keys_api import KeysAPIClient
 
 logger = logging.getLogger(__name__)
@@ -71,7 +71,7 @@ def main(bot_name: str):
     w3 = Web3(
         FallbackProviderModule(
             variables.WEB3_RPC_ENDPOINTS,
-            request_kwargs={'timeout': variables.HTTP_REQUEST_TIMEOUT_EXECUTION},
+            exception_retry_configuration=EL_EXCEPTION_RETRY_CONFIGURATION,
             cache_allowed_requests=True,
         )
     )
