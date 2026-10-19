@@ -155,6 +155,9 @@ class HTTPProvider(ProviderConsistencyModule, ABC):
         complete_endpoint = endpoint.format(*path_params) if path_params else endpoint
 
         with self.PROMETHEUS_HISTOGRAM.time() as t:
+            # Labelled on every exit, the cycle deadline (a BaseException) included: an unlabelled timer
+            # raises ValueError on exit, which would replace the deadline with an ordinary host failure.
+            code = 0
             try:
                 response = self.session.get(
                     self._urljoin(host, complete_endpoint if path_params else endpoint),
@@ -162,20 +165,16 @@ class HTTPProvider(ProviderConsistencyModule, ABC):
                     timeout=self.request_timeout,
                     stream=stream,
                 )
+                code = response.status_code
             except Exception as error:
                 logger.error({'msg': str(error)})
+                raise self.PROVIDER_EXCEPTION(status=0, text='Response error.') from error
+            finally:
                 t.labels(
                     endpoint=endpoint,
-                    code=0,
+                    code=code,
                     domain=urlparse(host).netloc,
                 )
-                raise self.PROVIDER_EXCEPTION(status=0, text='Response error.') from error
-
-            t.labels(
-                endpoint=endpoint,
-                code=response.status_code,
-                domain=urlparse(host).netloc,
-            )
 
             if response.status_code != HTTPStatus.OK:
                 response_fail_msg = (
