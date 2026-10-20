@@ -1353,11 +1353,6 @@
         "internalType": "uint256",
         "name": "_depositAmount",
         "type": "uint256"
-      },
-      {
-        "internalType": "bool",
-        "name": "_isTopUp",
-        "type": "bool"
       }
     ],
     "name": "getDepositAllocations",
@@ -2374,6 +2369,30 @@
         "internalType": "uint256",
         "name": "_stakingModuleId",
         "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_depositAmount",
+        "type": "uint256"
+      }
+    ],
+    "name": "getStakingModuleTopUpAllocation",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_stakingModuleId",
+        "type": "uint256"
       }
     ],
     "name": "getStakingModuleWithdrawalCredentials",
@@ -2634,6 +2653,11 @@
         "internalType": "bytes32",
         "name": "_withdrawalCredentials",
         "type": "bytes32"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_maxTopUpPerBlockGwei",
+        "type": "uint256"
       }
     ],
     "name": "initialize",
