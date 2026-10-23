@@ -1,4 +1,5 @@
 import json
+from unittest.mock import MagicMock
 
 import pytest
 from eth_account import Account
@@ -45,3 +46,28 @@ def test_flashbots_signature_format():
     assert signing_address == signer.address
     assert relay_sig == correct_sig
     assert relay_sig != wrong_sig
+
+
+@pytest.mark.unit
+def test_private_tx_is_0x_prefixed_raw_transaction():
+    w3 = MagicMock()
+    w3.eth.get_block.return_value = {'number': 100}
+    sender = Account.from_key('0x' + 'bb' * 32)
+    signed = sender.sign_transaction(
+        {
+            'chainId': 1,
+            'nonce': 0,
+            'to': sender.address,
+            'value': 0,
+            'gas': 21000,
+            'maxFeePerGas': 10**9,
+            'maxPriorityFeePerGas': 10**8,
+            'type': 2,
+        }
+    )
+
+    params = PrivateRelayClient(w3, 'http://relay', SIGNER_PRIVATE_KEY)._build_mev_send_bundle_params(signed, 5)
+
+    assert params[0]['tx'].startswith('0x')
+    assert bytes.fromhex(params[0]['tx'][2:]) == bytes(signed.raw_transaction)
+    assert params[0]['maxBlockNumber'] == hex(105)
