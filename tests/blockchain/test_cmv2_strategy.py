@@ -1,22 +1,9 @@
-from typing import Any
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 from web3.types import Wei
 
-from blockchain.beacon_state.ssz_types import (
-    FAR_FUTURE_EPOCH,
-    STATE_BALANCES,
-    STATE_VALIDATORS,
-    VALIDATOR_ACTIVATION_ELIGIBILITY_EPOCH,
-    VALIDATOR_ACTIVATION_EPOCH,
-    VALIDATOR_EFFECTIVE_BALANCE,
-    VALIDATOR_EXIT_EPOCH,
-    VALIDATOR_PUBKEY,
-    VALIDATOR_SLASHED,
-    VALIDATOR_WITHDRAWABLE_EPOCH,
-    Validator,
-)
+from blockchain.beacon_state.constants import FAR_FUTURE_EPOCH
 from blockchain.beacon_state.state import BeaconStateData, ValidatorFields
 from blockchain.topup.cmv2_strategy import (
     TOP_UPPED_MAXIMUM,
@@ -41,29 +28,24 @@ MAX_ELIGIBLE_BALANCE_GWEI = TARGET_BALANCE_GWEI - MIN_TOP_UP_GWEI  # 2044.75 ETH
 def _build_beacon_state_data(top_up_proof_fixtures) -> BeaconStateData:
     beacon_block_header = top_up_proof_fixtures['beacon_block_header']
     execution_block = top_up_proof_fixtures['execution_block']
-    decoded_beacon_state = top_up_proof_fixtures['decoded_beacon_state']
-    state: list[Any] = list(decoded_beacon_state)
-    state[STATE_VALIDATORS] = list(decoded_beacon_state[STATE_VALIDATORS])
-    state[STATE_BALANCES] = list(decoded_beacon_state[STATE_BALANCES])
-    pubkeys = {bytes.fromhex(w['pubkey'][2:]) for w in top_up_proof_fixtures['validator_witnesses']}
+    state = top_up_proof_fixtures['decoded_beacon_state']
 
     pubkey_to_index: dict[bytes, int] = {}
-    validators_roots: list[bytes] = []
     validators_fields: dict[int, ValidatorFields] = {}
-    for index, validator in enumerate(state[STATE_VALIDATORS]):
-        validators_roots.append(Validator.get_hash_tree_root(validator))
-        pubkey = bytes(validator[VALIDATOR_PUBKEY])
-        if pubkey in pubkeys:
-            pubkey_to_index[pubkey] = index
-            validators_fields[index] = ValidatorFields(
-                pubkey=pubkey,
-                effective_balance=int(validator[VALIDATOR_EFFECTIVE_BALANCE]),
-                slashed=bool(validator[VALIDATOR_SLASHED]),
-                activation_eligibility_epoch=int(validator[VALIDATOR_ACTIVATION_ELIGIBILITY_EPOCH]),
-                activation_epoch=int(validator[VALIDATOR_ACTIVATION_EPOCH]),
-                exit_epoch=int(validator[VALIDATOR_EXIT_EPOCH]),
-                withdrawable_epoch=int(validator[VALIDATOR_WITHDRAWABLE_EPOCH]),
-            )
+    for w in top_up_proof_fixtures['validator_witnesses']:
+        pubkey = bytes.fromhex(w['pubkey'][2:])
+        index = int(w['validatorIndex'])
+        v = state.validators[index]
+        pubkey_to_index[pubkey] = index
+        validators_fields[index] = ValidatorFields(
+            pubkey=pubkey,
+            effective_balance=int(v.effective_balance),
+            slashed=bool(v.slashed),
+            activation_eligibility_epoch=int(v.activation_eligibility_epoch),
+            activation_epoch=int(v.activation_epoch),
+            exit_epoch=int(v.exit_epoch),
+            withdrawable_epoch=int(v.withdrawable_epoch),
+        )
 
     return BeaconStateData(
         slot=beacon_block_header[0],
@@ -71,12 +53,11 @@ def _build_beacon_state_data(top_up_proof_fixtures) -> BeaconStateData:
         parent_beacon_block_root=bytes.fromhex(execution_block['parentBeaconBlockRoot'][2:]),
         state_root=beacon_block_header[3],
         header=beacon_block_header,
-        state_field_roots=top_up_proof_fixtures['beacon_state_field_roots'],
         pubkey_to_index=pubkey_to_index,
         pending_deposits={},
         consolidation_targets=set(),
-        validators_roots=validators_roots,
         validators_fields=validators_fields,
+        raw_state=state,
     )
 
 
@@ -203,6 +184,29 @@ def test_get_topup_candidates_excludes_pending_consolidation_key(top_up_proof_fi
     assert result.key_indices == [8]
     assert result.operator_ids == [12]
     assert result.validator_indices == [int(witnesses[1]['validatorIndex'])]
+
+
+@pytest.mark.unit
+def test_get_topup_candidates_resets_selected_metric_when_no_eligible_keys(top_up_proof_fixtures):
+    """Allocation exists but every key is excluded: the selected gauge must drop to 0, not keep the last count."""
+    strategy, keys_api, beacon_data = _make_topup_setup(top_up_proof_fixtures)
+    witnesses = top_up_proof_fixtures['validator_witnesses']
+
+    indexer = Mock()
+    indexer.sync_base_to_finalized.return_value = 100
+    indexer.get_filter_set.return_value = {bytes.fromhex(w['pubkey'][2:]) for w in witnesses[:2]}
+
+    with (
+        patch('blockchain.topup.cmv2_strategy.TOPUP_CANDIDATES_SELECTED') as selected,
+        patch('blockchain.topup.cmv2_strategy.TOPUP_CANDIDATES_LAST_RUN_TIMESTAMP') as last_run,
+    ):
+        result = _call_topup(strategy, keys_api, beacon_data, indexer)
+
+    assert result is None
+    selected.labels.assert_called_once_with(1)
+    selected.labels.return_value.set.assert_called_once_with(0)
+    last_run.labels.assert_called_once_with(1)
+    last_run.labels.return_value.set.assert_called_once()
 
 
 @pytest.mark.unit

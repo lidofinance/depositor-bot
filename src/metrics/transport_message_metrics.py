@@ -2,7 +2,7 @@ import logging
 from typing import TypedDict
 
 from metrics.metrics import DEPOSIT_MESSAGES, PAUSE_MESSAGES, PING_MESSAGES, UNVET_MESSAGES
-from transport.msg_providers.rabbit import MessageType
+from transport.types import MessageType
 
 logger = logging.getLogger(__name__)
 

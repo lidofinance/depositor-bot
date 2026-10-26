@@ -72,12 +72,10 @@ from transport.msg_providers.onchain_transport import (
     OnchainTransportProvider,
     PingParser,
 )
-from transport.msg_providers.rabbit import MessageType, RabbitProvider
 from transport.msg_storage import MessageStorage
 from transport.msg_types.common import BotMessage, get_messages_sign_filter
 from transport.msg_types.deposit import DepositMessage, DepositMessageSchema
 from transport.msg_types.ping import PingMessageSchema, to_check_sum_address
-from transport.types import TransportType
 
 logger = logging.getLogger(__name__)
 
@@ -200,39 +198,17 @@ class DepositorBot:
         for module_id in variables.DEPOSIT_MODULES_WHITELIST:
             MODULE_QUORUM_LAST_SEEN_TIMESTAMP.labels(module_id).set(now.timestamp())
 
-        transports = []
-
-        if TransportType.RABBIT in variables.MESSAGE_TRANSPORTS:
-            transports.append(
-                RabbitProvider(
-                    routing_keys=[MessageType.PING, MessageType.DEPOSIT],
-                    message_schema=Schema(Or(DepositMessageSchema, PingMessageSchema)),
-                )
-            )
-
-        self._onchain_transport_w3 = None
-        if TransportType.ONCHAIN_TRANSPORT in variables.MESSAGE_TRANSPORTS:
-            self._onchain_transport_w3 = OnchainTransportProvider.create_onchain_transport_w3()
-            transports.append(
-                OnchainTransportProvider(
-                    w3=self._onchain_transport_w3,
-                    onchain_address=variables.ONCHAIN_TRANSPORT_ADDRESS,
-                    message_schema=Schema(Or(DepositMessageSchema, PingMessageSchema)),
-                    parsers_providers=[DepositV1Parser, DepositV2Parser, PingParser],
-                    delegates_provider=self.w3.lido.get_guardian_delegates,
-                )
-            )
-
-        if not transports:
-            logger.warning(
-                {
-                    'msg': 'No transports found. Dry mode activated.',
-                    'value': variables.MESSAGE_TRANSPORTS,
-                }
-            )
+        self._onchain_transport_w3 = OnchainTransportProvider.create_onchain_transport_w3()
+        transport = OnchainTransportProvider(
+            w3=self._onchain_transport_w3,
+            onchain_address=variables.ONCHAIN_TRANSPORT_ADDRESS,
+            message_schema=Schema(Or(DepositMessageSchema, PingMessageSchema)),
+            parsers_providers=[DepositV1Parser, DepositV2Parser, PingParser],
+            delegates_provider=self.w3.lido.get_guardian_delegates,
+        )
 
         self.message_storage = MessageStorage(
-            transports,
+            [transport],
             filters=[
                 message_metrics_filter,
                 to_check_sum_address,
@@ -760,10 +736,7 @@ class DepositorBot:
         logger.info({'msg': 'Check guardians balances.'})
 
         guardian_contract_by_delegate_eoa = self.w3.lido.get_guardian_delegates()
-        providers = [self.w3]
-
-        if self._onchain_transport_w3 is not None:
-            providers.append(self._onchain_transport_w3)
+        providers = [self.w3, self._onchain_transport_w3]
 
         new_values = {}
         for delegate_eoa, guardian_contract in guardian_contract_by_delegate_eoa.items():
@@ -872,8 +845,8 @@ class DepositorBot:
                     UNEXPECTED_EXCEPTIONS.labels('unexpected_guardian_address').inc()
                     return False
             elif message['guardianAddress'] not in guardians_list:
-                # Legacy path (e.g. RabbitMQ) that carries no delegate: the guardian must still be
-                # registered.
+                # Data Bus always sets the delegate; kept as a fail-closed guard for messages injected
+                # without one.
                 UNEXPECTED_EXCEPTIONS.labels('unexpected_guardian_address').inc()
                 return False
 
