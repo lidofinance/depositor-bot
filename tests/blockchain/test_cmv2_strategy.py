@@ -187,6 +187,29 @@ def test_get_topup_candidates_excludes_pending_consolidation_key(top_up_proof_fi
 
 
 @pytest.mark.unit
+def test_get_topup_candidates_resets_selected_metric_when_no_eligible_keys(top_up_proof_fixtures):
+    """Allocation exists but every key is excluded: the selected gauge must drop to 0, not keep the last count."""
+    strategy, keys_api, beacon_data = _make_topup_setup(top_up_proof_fixtures)
+    witnesses = top_up_proof_fixtures['validator_witnesses']
+
+    indexer = Mock()
+    indexer.sync_base_to_finalized.return_value = 100
+    indexer.get_filter_set.return_value = {bytes.fromhex(w['pubkey'][2:]) for w in witnesses[:2]}
+
+    with (
+        patch('blockchain.topup.cmv2_strategy.TOPUP_CANDIDATES_SELECTED') as selected,
+        patch('blockchain.topup.cmv2_strategy.TOPUP_CANDIDATES_LAST_RUN_TIMESTAMP') as last_run,
+    ):
+        result = _call_topup(strategy, keys_api, beacon_data, indexer)
+
+    assert result is None
+    selected.labels.assert_called_once_with(1)
+    selected.labels.return_value.set.assert_called_once_with(0)
+    last_run.labels.assert_called_once_with(1)
+    last_run.labels.return_value.set.assert_called_once()
+
+
+@pytest.mark.unit
 def test_get_topup_candidates_skips_when_base_sync_fails(top_up_proof_fixtures):
     """If the base sync raises, top-up is skipped (returns None) rather than risking a bad top-up."""
     strategy, keys_api, beacon_data = _make_topup_setup(top_up_proof_fixtures)
