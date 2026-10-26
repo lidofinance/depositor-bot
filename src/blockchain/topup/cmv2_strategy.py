@@ -199,10 +199,9 @@ class CMv2TopUpStrategy(TopUpStrategy):
         del keys_by_operator
         TOPUP_CONSOLIDATION_FILTERED.labels(module_id).set(total_consolidation_filtered)
 
-        # Set before the early return so metrics are always fresh after a selection run,
-        # including the 0 case — avoids stale values from a previous cycle.
-
         if not candidates_by_operator:
+            TOPUP_CANDIDATES_SELECTED.labels(module_id).set(0)
+            TOPUP_CANDIDATES_LAST_RUN_TIMESTAMP.labels(module_id).set(time.time())
             logger.info({'msg': 'No eligible candidates.', 'module_id': module_id})
             return None
 
