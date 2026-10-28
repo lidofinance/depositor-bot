@@ -10,7 +10,7 @@ from web3.exceptions import ContractLogicError
 @pytest.mark.unit
 def test_get_priority_fee(web3_lido_unit):
     tu = TransactionUtils(web3_lido_unit)
-    tu.web3.eth.fee_history = Mock(return_value={'reward': [[50]]})
+    tu.w3.eth.fee_history = Mock(return_value={'reward': [[50]]})
 
     assert tu._get_priority_fee(0, 10, 30) == 30
     assert tu._get_priority_fee(0, 10, 70) == 50
