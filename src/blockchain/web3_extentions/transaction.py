@@ -12,7 +12,7 @@ from web3 import Web3
 from web3.contract.contract import ContractFunction
 from web3.exceptions import ContractLogicError, TimeExhausted
 from web3.module import Module
-from web3.types import TxParams, Wei
+from web3.types import TxParams, TxReceipt, Wei
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +84,7 @@ class TransactionUtils(Module):
             logger.info({'msg': 'Transaction found in blockchain.'})
         else:
             TX_SEND.labels('failure').inc()
-            logger.warning({'msg': 'Transaction not found in blockchain.'})
+            logger.warning({'msg': 'Transaction failed.'})
 
         return status
 
@@ -112,10 +112,11 @@ class TransactionUtils(Module):
         try:
             tx_receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, (timeout_in_blocks + 1) * SLOT_TIME)
         except TimeExhausted:
+            logger.warning({'msg': 'Sent transaction not included in blockchain before timeout.', 'tx_hash': tx_hash})
             return False
 
         logger.info({'msg': 'Sent transaction included in blockchain.', 'value': repr(tx_receipt)})
-        return True
+        return self._succeeded(tx_receipt)
 
     def classic_send(self, signed_tx: SignedTransaction, timeout_in_blocks: int) -> bool:
         try:
@@ -128,10 +129,20 @@ class TransactionUtils(Module):
         try:
             tx_receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, (timeout_in_blocks + 1) * SLOT_TIME)
         except TimeExhausted:
+            logger.warning({'msg': 'Sent transaction not included in blockchain before timeout.', 'value': tx_hash.hex()})
             return False
 
         logger.info({'msg': 'Sent transaction included in blockchain.', 'value': tx_receipt['transactionHash'].hex()})
-        return True
+        return self._succeeded(tx_receipt)
+
+    @staticmethod
+    def _succeeded(tx_receipt: TxReceipt) -> bool:
+        # A mined transaction can still have reverted; inclusion alone is not success.
+        if tx_receipt['status'] == 1:
+            return True
+
+        logger.error({'msg': 'Sent transaction reverted on-chain.', 'value': tx_receipt['transactionHash'].hex()})
+        return False
 
     def _get_priority_fee(self, percentile: int, min_priority_fee: Wei, max_priority_fee: Wei) -> Wei:
         return min(

@@ -173,3 +173,24 @@ def test_delivered_message_is_evicted_without_a_nonce_change(web3_lido_unit):
 
     assert is_relevant(delivered) is False
     assert is_relevant({**delivered, 'signature': {'r': '0x' + '99' * 32, '_vs': '0x' + '88' * 32}}) is True
+
+
+@pytest.mark.unit
+def test_message_is_kept_when_transaction_fails(web3_lido_unit):
+    """Only a transaction that succeeded on-chain counts as delivered; otherwise the message is retried."""
+    bot = UnvetterBot(web3_lido_unit)
+    bot.prepare_transport_bus = Mock()
+    bot.message_storage = Mock()
+    message = _unvet_message(nonce=5)
+    bot.receive_unvet_messages = Mock(return_value=[message])
+    web3_lido_unit.lido.deposit_security_module.get_max_operators_per_unvetting = Mock(return_value=100)
+    web3_lido_unit.lido.guardian_delegation_active = Mock(return_value=False)
+    web3_lido_unit.lido.staking_router.get_staking_module_nonce = Mock(return_value=5)
+    web3_lido_unit.transaction = Mock()
+    web3_lido_unit.transaction.check = Mock(return_value=True)
+    web3_lido_unit.transaction.send = Mock(return_value=False)
+
+    bot.execute(Mock())
+    (is_relevant,) = bot.message_storage.get_messages_and_actualize.call_args.args
+
+    assert is_relevant(message) is True
