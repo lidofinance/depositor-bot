@@ -139,7 +139,7 @@ def test_outdated_messages_are_evicted_by_nonce(web3_lido_unit):
     bot.message_storage = Mock()
     web3_lido_unit.lido.staking_router.get_staking_module_nonce = Mock(return_value=6)
 
-    bot._clear_outdated_messages({1}, set())
+    bot._clear_outdated_messages({1})
     (is_relevant,) = bot.message_storage.get_messages_and_actualize.call_args.args
 
     assert is_relevant(_unvet_message(nonce=6)) is True
@@ -169,7 +169,9 @@ def test_delivered_message_is_evicted_without_a_nonce_change(web3_lido_unit):
     web3_lido_unit.lido.staking_router.get_staking_module_nonce = Mock(return_value=5)
     delivered = _unvet_message(nonce=5)
 
-    bot._clear_outdated_messages({1}, {_payload_key(delivered)})
+    bot._delivered = {_payload_key(delivered)}
+
+    bot._clear_outdated_messages({1})
     (is_relevant,) = bot.message_storage.get_messages_and_actualize.call_args.args
 
     assert is_relevant(delivered) is False
@@ -196,6 +198,7 @@ def test_payload_is_sent_once_per_cycle(web3_lido_unit):
     web3_lido_unit.transaction = Mock()
     web3_lido_unit.transaction.check = Mock(return_value=True)
     web3_lido_unit.transaction.send = Mock(return_value=True)
+    web3_lido_unit.transaction.broadcasting_enabled = Mock(return_value=True)
 
     bot.execute(Mock())
 
@@ -221,3 +224,73 @@ def test_message_is_kept_when_transaction_fails(web3_lido_unit):
     (is_relevant,) = bot.message_storage.get_messages_and_actualize.call_args.args
 
     assert is_relevant(message) is True
+
+
+def _sending_bot(web3_lido_unit, messages: list, nonce: int = 5) -> UnvetterBot:
+    bot = UnvetterBot(web3_lido_unit)
+    bot.prepare_transport_bus = Mock()
+    bot.message_storage = Mock()
+    bot.receive_unvet_messages = Mock(return_value=messages)
+    web3_lido_unit.lido.deposit_security_module.get_max_operators_per_unvetting = Mock(return_value=100)
+    web3_lido_unit.lido.guardian_delegation_active = Mock(return_value=False)
+    web3_lido_unit.lido.staking_router.get_staking_module_nonce = Mock(return_value=nonce)
+    web3_lido_unit.transaction = Mock()
+    web3_lido_unit.transaction.check = Mock(return_value=True)
+    web3_lido_unit.transaction.send = Mock(return_value=True)
+    web3_lido_unit.transaction.broadcasting_enabled = Mock(return_value=True)
+    return bot
+
+
+@pytest.mark.unit
+def test_late_copy_of_delivered_payload_is_not_resent(web3_lido_unit):
+    """A copy arriving after the cycle that delivered its payload must be dropped, not sent again."""
+    delivered = _unvet_message(nonce=5)
+    bot = _sending_bot(web3_lido_unit, [delivered])
+    bot.execute(Mock())
+
+    web3_lido_unit.lido.staking_router.get_staking_module_ids = Mock(return_value=[1])
+    web3_lido_unit.lido.get_guardian_delegates = Mock(return_value={DELEGATE: GUARDIAN})
+    late_copy = {**delivered, 'signature': {'r': '0x' + '99' * 32, '_vs': '0x' + '88' * 32}}
+
+    assert bot._get_message_actualize_filter()(late_copy) is False
+
+
+@pytest.mark.unit
+def test_delivered_payloads_are_pruned_once_nonce_moves(web3_lido_unit):
+    bot = _sending_bot(web3_lido_unit, [_unvet_message(nonce=5)])
+    bot.execute(Mock())
+    assert bot._delivered
+
+    web3_lido_unit.lido.staking_router.get_staking_module_ids = Mock(return_value=[1])
+    web3_lido_unit.lido.staking_router.get_staking_module_nonce = Mock(return_value=6)
+    web3_lido_unit.lido.get_guardian_delegates = Mock(return_value={DELEGATE: GUARDIAN})
+    bot._get_message_actualize_filter()
+
+    assert not bot._delivered
+
+
+@pytest.mark.unit
+def test_message_is_kept_when_nothing_is_broadcast(web3_lido_unit):
+    """Dry run or no account: send() reports success without reaching the chain."""
+    message = _unvet_message(nonce=5)
+    bot = _sending_bot(web3_lido_unit, [message])
+    web3_lido_unit.transaction.broadcasting_enabled = Mock(return_value=False)
+
+    bot.execute(Mock())
+    (is_relevant,) = bot.message_storage.get_messages_and_actualize.call_args.args
+
+    assert is_relevant(message) is True
+    assert not bot._delivered
+
+
+@pytest.mark.unit
+def test_delivered_payload_survives_a_failure_later_in_the_cycle(web3_lido_unit):
+    first = _unvet_message(nonce=5)
+    second = {**_unvet_message(nonce=5), 'vettedKeysByOperator': '0x00000001'}
+    bot = _sending_bot(web3_lido_unit, [first, second])
+    web3_lido_unit.transaction.send = Mock(side_effect=[True, RuntimeError('rpc down')])
+
+    with pytest.raises(RuntimeError):
+        bot.execute(Mock())
+
+    assert bot._delivered == {_payload_key(first)}

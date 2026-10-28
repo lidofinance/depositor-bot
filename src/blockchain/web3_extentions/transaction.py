@@ -32,6 +32,10 @@ class TransactionUtils(Module):
         logger.info({'msg': 'Tx local call succeed.'})
         return True
 
+    @staticmethod
+    def broadcasting_enabled() -> bool:
+        return bool(variables.ACCOUNT) and variables.CREATE_TRANSACTIONS
+
     def send(
         self,
         transaction: ContractFunction,

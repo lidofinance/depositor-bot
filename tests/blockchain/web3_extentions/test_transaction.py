@@ -87,3 +87,15 @@ def test_relay_send_reports_receipt_status(web3_lido_unit, status, expected):
     with patch('blockchain.web3_extentions.transaction.PrivateRelayClient') as relay:
         relay.return_value.send_private_tx = Mock(return_value=HexBytes('0x' + 'ab' * 32))
         assert web3_lido_unit.transaction.relay_send(_signed_tx(), 6) is expected
+
+
+@pytest.mark.unit
+def test_broadcasting_enabled(set_integration_account):
+    assert TransactionUtils.broadcasting_enabled() is True
+
+    variables.CREATE_TRANSACTIONS = False
+    assert TransactionUtils.broadcasting_enabled() is False
+
+    variables.CREATE_TRANSACTIONS = True
+    variables.ACCOUNT = None
+    assert TransactionUtils.broadcasting_enabled() is False
