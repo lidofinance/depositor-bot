@@ -3,7 +3,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from bots.unvetter import UnvetterBot, _message_key
+from bots.unvetter import UnvetterBot, _payload_key
 from cryptography.verify_signature import compute_vs
 from transport.msg_providers.onchain_transport import build_unvet_message
 from transport.msg_types.common import get_messages_sign_filter
@@ -98,6 +98,7 @@ def test_unvetter(web3_provider_integration, web3_lido_integration, caplog):
 GUARDIAN = '0x3dc4cF780F2599B528F37dedB34449Fb65Ef7d4A'
 DELEGATE = '0x5fd0dDbC3351d009eb3f88DE7Cd081a614C519F1'
 REVOKED_DELEGATE = '0x43464Fe06c18848a2E2e913194D64c1970f4326a'
+OTHER_GUARDIAN = '0x1111111111111111111111111111111111111111'
 
 
 def _unvet_message(nonce: int = 5, module_id: int = 1) -> dict:
@@ -168,11 +169,37 @@ def test_delivered_message_is_evicted_without_a_nonce_change(web3_lido_unit):
     web3_lido_unit.lido.staking_router.get_staking_module_nonce = Mock(return_value=5)
     delivered = _unvet_message(nonce=5)
 
-    bot._clear_outdated_messages({1}, {_message_key(delivered)})
+    bot._clear_outdated_messages({1}, {_payload_key(delivered)})
     (is_relevant,) = bot.message_storage.get_messages_and_actualize.call_args.args
 
     assert is_relevant(delivered) is False
-    assert is_relevant({**delivered, 'signature': {'r': '0x' + '99' * 32, '_vs': '0x' + '88' * 32}}) is True
+    # Another guardian's copy of the same payload is consumed too.
+    assert (
+        is_relevant({**delivered, 'guardianAddress': OTHER_GUARDIAN, 'signature': {'r': '0x' + '99' * 32, '_vs': '0x' + '88' * 32}})
+        is False
+    )
+    assert is_relevant({**delivered, 'vettedKeysByOperator': '0x00000001'}) is True
+
+
+@pytest.mark.unit
+def test_payload_is_sent_once_per_cycle(web3_lido_unit):
+    """Copies of one payload signed by different guardians must not each become a transaction."""
+    bot = UnvetterBot(web3_lido_unit)
+    bot.prepare_transport_bus = Mock()
+    bot.message_storage = Mock()
+    message = _unvet_message(nonce=5)
+    copy = {**message, 'guardianAddress': OTHER_GUARDIAN, 'signature': {'r': '0x' + '99' * 32, '_vs': '0x' + '88' * 32}}
+    bot.receive_unvet_messages = Mock(return_value=[message, copy])
+    web3_lido_unit.lido.deposit_security_module.get_max_operators_per_unvetting = Mock(return_value=100)
+    web3_lido_unit.lido.guardian_delegation_active = Mock(return_value=False)
+    web3_lido_unit.lido.staking_router.get_staking_module_nonce = Mock(return_value=5)
+    web3_lido_unit.transaction = Mock()
+    web3_lido_unit.transaction.check = Mock(return_value=True)
+    web3_lido_unit.transaction.send = Mock(return_value=True)
+
+    bot.execute(Mock())
+
+    assert web3_lido_unit.transaction.send.call_count == 1
 
 
 @pytest.mark.unit

@@ -20,8 +20,14 @@ from utils.bytes import from_hex_string_to_bytes
 logger = logging.getLogger(__name__)
 
 
-def _message_key(message: UnvetMessage) -> tuple[str, str, str]:
-    return message['guardianAddress'], cast(str, message['signature']['r']), message['signature']['_vs']
+def _payload_key(message: UnvetMessage) -> tuple[int, int, bytes, bytes]:
+    # Guardians sign the same payload independently; on-chain every copy does the same thing.
+    return (
+        message['stakingModuleId'],
+        message['nonce'],
+        from_hex_string_to_bytes(message['operatorIds']),
+        from_hex_string_to_bytes(message['vettedKeysByOperator']),
+    )
 
 
 def run_unvetter(w3: Web3):
@@ -69,8 +75,11 @@ class UnvetterBot:
 
         sent = set()
         for message in messages:
+            key = _payload_key(message)
+            if key in sent:
+                continue
             if self._send_unvet_message(message):
-                sent.add(_message_key(message))
+                sent.add(key)
 
         self._clear_outdated_messages({message['stakingModuleId'] for message in messages}, sent)
         return True
@@ -144,14 +153,16 @@ class UnvetterBot:
         logger.info({'msg': f'Transaction send. Result is {result}.', 'value': result})
         return result
 
-    def _clear_outdated_messages(self, module_ids: set[int], sent: set[tuple[str, str, str]]) -> None:
-        """Evict what this cycle consumed: anything delivered, plus anything the module nonce moved past.
+    def _clear_outdated_messages(self, module_ids: set[int], sent: set[tuple[int, int, bytes, bytes]]) -> None:
+        """Evict what this cycle consumed: every copy of a delivered payload, plus anything the module nonce moved past.
 
         A delivered payload is dropped on its own — a module that treats it as a no-op accepts it
-        without advancing its nonce, so nonce alone would replay it until the message ages out.
+        without advancing its nonce, and unvet messages have no age limit, so nonce alone would replay
+        it every cycle until the nonce moves for another reason.
 
-        Signatures are not re-checked — `receive_unvet_messages` already did, and doing it per message
-        made the cycle quadratic in the retained backlog.
+        Signatures are not checked here: retained messages were verified by `receive_unvet_messages`,
+        and messages this call fetches are verified there next cycle, before anything is sent.
+        Checking per message made the cycle quadratic in the retained backlog.
         """
         if not module_ids or self.message_storage is None:
             return
@@ -159,7 +170,7 @@ class UnvetterBot:
         nonces = {module_id: self.w3.lido.staking_router.get_staking_module_nonce(module_id) for module_id in module_ids}
 
         def is_relevant(message: UnvetMessage) -> bool:
-            if _message_key(message) in sent:
+            if _payload_key(message) in sent:
                 return False
             nonce = nonces.get(message['stakingModuleId'])
             return nonce is None or int(message['nonce']) >= nonce
