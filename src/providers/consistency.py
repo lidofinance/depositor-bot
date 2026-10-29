@@ -26,7 +26,6 @@ class ProviderConsistencyModule(ABC):
             try:
                 curr_chain_id = self._get_chain_id_with_provider(provider_index)
             except Exception as error:
-                # Only the error type: the message can carry the host URL, which may embed an API key.
                 logger.warning(
                     {
                         'msg': f'Provider [{provider_index}] is not responding, skipping it in the chain id check.',
