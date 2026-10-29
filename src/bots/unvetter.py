@@ -1,6 +1,6 @@
 import logging
 from collections.abc import Callable
-from typing import TypedDict, cast
+from typing import cast
 
 from schema import Or, Schema
 from web3.types import BlockData
@@ -9,16 +9,28 @@ import variables
 from blockchain.executor import Executor
 from blockchain.typings import Web3
 from cryptography.verify_signature import to_guardian_signature
-from metrics.metrics import UNEXPECTED_EXCEPTIONS
 from metrics.transport_message_metrics import message_metrics_filter
 from transport.msg_providers.onchain_transport import OnchainTransportProvider, PingParser, UnvetV1Parser, UnvetV2Parser
 from transport.msg_storage import MessageStorage
-from transport.msg_types.common import get_messages_sign_filter
+from transport.msg_types.common import get_guardian_filter, get_messages_sign_filter
 from transport.msg_types.ping import PingMessageSchema, to_check_sum_address
 from transport.msg_types.unvet import UnvetMessage, UnvetMessageSchema
 from utils.bytes import from_hex_string_to_bytes
 
 logger = logging.getLogger(__name__)
+
+
+PayloadKey = tuple[int, int, bytes, bytes]
+
+
+def _payload_key(message: UnvetMessage) -> PayloadKey:
+    # Guardians sign the same payload independently; on-chain every copy does the same thing.
+    return (
+        message['stakingModuleId'],
+        message['nonce'],
+        from_hex_string_to_bytes(message['operatorIds']),
+        from_hex_string_to_bytes(message['vettedKeysByOperator']),
+    )
 
 
 def run_unvetter(w3: Web3):
@@ -38,6 +50,9 @@ class UnvetterBot:
 
     def __init__(self, w3: Web3):
         self.w3 = w3
+        # Outlives the cycle: copies of a delivered payload can arrive later, and a no-op unvet leaves
+        # the nonce where it was. Pruned once the module nonce moves past the payload.
+        self._delivered: set[PayloadKey] = set()
 
     def prepare_transport_bus(self):
         if self.message_storage is not None:
@@ -64,9 +79,19 @@ class UnvetterBot:
         messages = self.receive_unvet_messages()
         logger.info({'msg': f'Received {len(messages)} unvet messages.'})
 
-        for message in messages:
-            self._send_unvet_message(message)
+        if not messages:
+            return True
 
+        max_operators_per_unvetting = self.w3.lido.deposit_security_module.get_max_operators_per_unvetting()
+        for message in messages:
+            key = _payload_key(message)
+            if key in self._delivered:
+                continue
+            # Without broadcasting nothing reached the chain, so the message must stay.
+            if self._send_unvet_message(message, max_operators_per_unvetting) and self.w3.transaction.broadcasting_enabled():
+                self._delivered.add(key)
+
+        self._clear_outdated_messages({message['stakingModuleId'] for message in messages})
         return True
 
     def receive_unvet_messages(self) -> list[UnvetMessage]:
@@ -85,11 +110,14 @@ class UnvetterBot:
         for module_id in modules:
             nonces[module_id] = self.w3.lido.staking_router.get_staking_module_nonce(module_id)
 
-        guardians_list = self.w3.lido.deposit_security_module.get_guardians()
+        guardian_filter = get_guardian_filter(self.w3.lido.get_guardian_delegates())
+        self._prune_delivered(nonces)
 
         def message_filter(message: UnvetMessage) -> bool:
-            if message['guardianAddress'] not in guardians_list:
-                UNEXPECTED_EXCEPTIONS.labels('unexpected_guardian_address').inc()
+            if not guardian_filter(message):
+                return False
+
+            if _payload_key(message) in self._delivered:
                 return False
 
             # If message nonce is lower than in module, message is invalid
@@ -98,17 +126,12 @@ class UnvetterBot:
 
         return message_filter
 
-    def _send_unvet_message(self, message: UnvetMessage) -> bool:
+    def _send_unvet_message(self, message: UnvetMessage, max_operators_per_unvetting: int) -> bool:
         module_id = message['stakingModuleId']
 
         logger.warning({'msg': f'Handle unvet message for module: {module_id}', 'value': message})
 
-        actual_nonce = self.w3.lido.staking_router.get_staking_module_nonce(module_id)
-
-        self._clear_outdated_messages_for_module(module_id, actual_nonce)
-
         operator_ids = from_hex_string_to_bytes(message['operatorIds'])
-        max_operators_per_unvetting = self.w3.lido.deposit_security_module.get_max_operators_per_unvetting()
         node_operators_count = len(operator_ids) / 8
         if node_operators_count > max_operators_per_unvetting:
             logger.error(
@@ -143,12 +166,29 @@ class UnvetterBot:
         logger.info({'msg': f'Transaction send. Result is {result}.', 'value': result})
         return result
 
-    def _clear_outdated_messages_for_module(self, module_id: int, nonce: int):
-        prefix = self.w3.lido.deposit_security_module.get_unvet_message_prefix()
-        is_message_signed_filter = get_messages_sign_filter(prefix, delegated=self.w3.lido.guardian_delegation_active())
+    def _clear_outdated_messages(self, module_ids: set[int]) -> None:
+        """Evict every copy of a delivered payload, plus anything the module nonce moved past.
 
-        def is_unvet_message_relevant(msg: TypedDict) -> bool:
-            is_message_relevant = msg['stakingModuleId'] != module_id or int(msg['nonce']) >= nonce
-            return is_message_relevant and is_message_signed_filter(msg)
+        A delivered payload is dropped on its own — a module that treats it as a no-op accepts it
+        without advancing its nonce, and unvet messages have no age limit, so nonce alone would replay
+        it every cycle until the nonce moves for another reason.
 
-        self.message_storage.get_messages_and_actualize(is_unvet_message_relevant)
+        Signatures are not checked here: retained messages were verified by `receive_unvet_messages`,
+        and messages this call fetches are verified there next cycle, before anything is sent.
+        Checking per message made the cycle quadratic in the retained backlog.
+        """
+        if not module_ids or self.message_storage is None:
+            return
+
+        nonces = {module_id: self.w3.lido.staking_router.get_staking_module_nonce(module_id) for module_id in module_ids}
+
+        def is_relevant(message: UnvetMessage) -> bool:
+            if _payload_key(message) in self._delivered:
+                return False
+            nonce = nonces.get(message['stakingModuleId'])
+            return nonce is None or int(message['nonce']) >= nonce
+
+        self.message_storage.get_messages_and_actualize(is_relevant)
+
+    def _prune_delivered(self, nonces: dict[int, int]) -> None:
+        self._delivered = {key for key in self._delivered if key[0] in nonces and key[1] >= nonces[key[0]]}

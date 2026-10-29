@@ -24,6 +24,7 @@ eth-consensus-specs = "1.7.0b2"
 eth-ssz-specs = "0.1.0"
 # Imported by eth_consensus_specs.utils.kzg at import time, but only in the package's test extra.
 ckzg = "2.1.8"
+coincurve = "^21.0.0"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.15.9"

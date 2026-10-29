@@ -1,16 +1,17 @@
 import logging
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import pytest
 import variables
 from blockchain.web3_extentions.transaction import TransactionUtils
+from hexbytes import HexBytes
 from web3.exceptions import ContractLogicError
 
 
 @pytest.mark.unit
 def test_get_priority_fee(web3_lido_unit):
     tu = TransactionUtils(web3_lido_unit)
-    tu.web3.eth.fee_history = Mock(return_value={'reward': [[50]]})
+    tu.w3.eth.fee_history = Mock(return_value={'reward': [[50]]})
 
     assert tu._get_priority_fee(0, 10, 30) == 30
     assert tu._get_priority_fee(0, 10, 70) == 50
@@ -59,3 +60,42 @@ def test_estimate_gas(web3_lido_unit, set_account):
     tx.estimate_gas = Mock(side_effect=ContractLogicError())
     gas_amount = web3_lido_unit.transaction._estimate_gas(tx, variables.ACCOUNT.address)
     assert gas_amount == variables.CONTRACT_GAS_LIMIT
+
+
+def _receipt(status: int) -> dict:
+    return {'status': status, 'transactionHash': HexBytes('0x' + 'ab' * 32)}
+
+
+def _signed_tx() -> Mock:
+    return Mock(raw_transaction=b'raw')
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(('status', 'expected'), [(1, True), (0, False)])
+def test_classic_send_reports_receipt_status(web3_lido_unit, status, expected):
+    web3_lido_unit.eth.send_raw_transaction = Mock(return_value=HexBytes('0x' + 'ab' * 32))
+    web3_lido_unit.eth.wait_for_transaction_receipt = Mock(return_value=_receipt(status))
+
+    assert web3_lido_unit.transaction.classic_send(_signed_tx(), 6) is expected
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(('status', 'expected'), [(1, True), (0, False)])
+def test_relay_send_reports_receipt_status(web3_lido_unit, status, expected):
+    web3_lido_unit.eth.wait_for_transaction_receipt = Mock(return_value=_receipt(status))
+
+    with patch('blockchain.web3_extentions.transaction.PrivateRelayClient') as relay:
+        relay.return_value.send_private_tx = Mock(return_value=HexBytes('0x' + 'ab' * 32))
+        assert web3_lido_unit.transaction.relay_send(_signed_tx(), 6) is expected
+
+
+@pytest.mark.unit
+def test_broadcasting_enabled(set_integration_account):
+    assert TransactionUtils.broadcasting_enabled() is True
+
+    variables.CREATE_TRANSACTIONS = False
+    assert TransactionUtils.broadcasting_enabled() is False
+
+    variables.CREATE_TRANSACTIONS = True
+    variables.ACCOUNT = None
+    assert TransactionUtils.broadcasting_enabled() is False
