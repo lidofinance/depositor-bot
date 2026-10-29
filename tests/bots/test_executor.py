@@ -1,4 +1,6 @@
+import gc
 import time
+import weakref
 from unittest.mock import Mock, patch
 
 import pytest
@@ -147,3 +149,48 @@ def test_exception_handler_counts_and_swallows_generic_exception():
     assert result is None
     counter.labels.assert_called_once_with('ValueError')
     counter.labels.return_value.inc.assert_called_once()
+
+
+class _Heavy:
+    """Stand-in for the decoded beacon state; weakref-able so the test can see it die."""
+
+
+@pytest.fixture
+def no_automatic_gc():
+    gc.disable()
+    yield
+    gc.enable()
+
+
+def _hold_in_failover_cycle(heavy: _Heavy) -> None:
+    """Mirrors web3_multi_provider's failover: a caught exception kept in a local list forms a
+    cycle through its traceback, which pins this frame and with it `heavy`."""
+    exceptions = []
+    try:
+        raise ConnectionError('first provider down')
+    except ConnectionError as error:
+        exceptions.append(error)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize('raises', [False, True], ids=['returns', 'raises'])
+def test_cycle_collects_garbage_pinned_by_failover_cycle(remove_metrics, no_automatic_gc, raises):
+    ref = None
+
+    def function_to_execute(block):
+        nonlocal ref
+        heavy = _Heavy()
+        ref = weakref.ref(heavy)
+        _hold_in_failover_cycle(heavy)
+        if raises:
+            raise ValueError('unexpected')
+        return True
+
+    w3 = Mock()
+    w3.eth.get_block = Mock(return_value={'number': 100, 'timestamp': 1000})
+    e = Executor(w3, function_to_execute, 1, 4)
+
+    with patch('blockchain.executor.UNEXPECTED_EXCEPTIONS'):
+        e._wait_for_new_block_and_execute()
+
+    assert ref is not None and ref() is None
