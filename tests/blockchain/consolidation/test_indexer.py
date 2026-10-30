@@ -5,13 +5,20 @@ No RPC: a fake ConsolidationBus contract returns canned logs; w3.keccak is the r
 InMemoryPendingStore, so these also exercise the indexer↔store integration.
 """
 
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import pytest
-from blockchain.consolidation.indexer import ConsolidationIndexer
-from blockchain.consolidation.store import InMemoryPendingStore
 from eth_abi.abi import encode
 from web3 import Web3
+
+from blockchain.consolidation.indexer import ConsolidationIndexer
+from blockchain.consolidation.store import InMemoryPendingStore
+
+
+@pytest.fixture(autouse=True)
+def pulse():
+    with patch('blockchain.consolidation.indexer.healthcheck_pulse.pulse') as pulse:
+        yield pulse
 
 
 # ---- helpers ----
@@ -337,3 +344,24 @@ def test_sequence_collapses_to_pending_set():
 
     assert store.pending_pubkeys() == {_pk(3), _pk(4)}  # only B remains
     assert store.pending_batch_count() == 1
+
+
+# ---- healthcheck: a long sync keeps the bot alive while it makes progress ----
+@pytest.mark.unit
+def test_sync_pulses_after_each_applied_chunk(pulse):
+    indexer, _bus, _store = _make_indexer(finalized=5, chunk=2)  # ranges: [0,1],[2,3],[4,5]
+
+    indexer.sync_base_to_finalized()
+
+    assert pulse.call_count == 3
+
+
+@pytest.mark.unit
+def test_sync_does_not_pulse_for_a_failed_chunk(pulse):
+    indexer, bus, _store = _make_indexer(finalized=5, chunk=2)
+    bus.get_batches_removed_logs = Mock(side_effect=[[], RuntimeError('rpc down')])
+
+    with pytest.raises(RuntimeError):
+        indexer.sync_base_to_finalized()
+
+    assert pulse.call_count == 1
