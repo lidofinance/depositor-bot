@@ -15,12 +15,14 @@ ready and the base reached the current finalized; any failure -> caller skips th
 
 import logging
 
+from eth_abi.abi import decode as abi_decode
+from web3.types import EventData
+
 from blockchain.consolidation.store import InMemoryPendingStore
 from blockchain.contracts.consolidation_bus import ConsolidationBusContract
 from blockchain.typings import Web3
-from eth_abi.abi import decode as abi_decode
+from metrics import healthcheck_pulse
 from metrics.metrics import CONSOLIDATION_CURSOR_LAG, CONSOLIDATION_PENDING_BATCHES, CONSOLIDATION_PENDING_PUBKEYS
-from web3.types import EventData
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +87,9 @@ class ConsolidationIndexer:
             to = min(frm + self.chunk - 1, to_block)
             self._apply_chunk(frm, to)
             self.store.set_cursor(to)  # advance only after a fully read & applied chunk
+            # A cold start runs before the first cycle pulse and can outlast the healthcheck window;
+            # a restart would discard the in-memory base and begin it again from deploy_block.
+            healthcheck_pulse.pulse()
             frm = to + 1
 
     def _apply_chunk(self, from_block: int, to_block: int) -> None:
