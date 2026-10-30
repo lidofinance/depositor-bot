@@ -4,11 +4,12 @@ import weakref
 from unittest.mock import Mock, patch
 
 import pytest
+from web3.types import BlockData
+from web3_multi_provider import ChainIdMismatchError, NoActiveProviderError
+
 from blockchain.executor import Executor
 from metrics import healthcheck_pulse
 from utils.timeout import TimeoutManagerError
-from web3.types import BlockData
-from web3_multi_provider import NoActiveProviderError
 
 
 def pure_func(block: BlockData):
@@ -133,6 +134,23 @@ def test_exception_handler_counts_no_active_provider():
 
     counter.labels.assert_called_once_with('no_active_provider')
     counter.labels.return_value.inc.assert_called_once()
+
+
+@pytest.mark.unit
+def test_exception_handler__chain_id_mismatch__raises_without_endpoint_urls(caplog):
+    def raiser():
+        raise ChainIdMismatchError('Providers have different chain IDs:\nChain ID 1: https://rpc.example/?apikey=SECRET')
+
+    with (
+        patch('blockchain.executor.UNEXPECTED_EXCEPTIONS') as counter,
+        pytest.raises(ChainIdMismatchError) as raised,
+    ):
+        Executor._exception_handler(raiser)
+
+    counter.labels.assert_called_once_with('chain_id_mismatch')
+    assert 'SECRET' not in str(raised.value)
+    assert raised.value.__cause__ is None and raised.value.__suppress_context__
+    assert 'SECRET' not in caplog.text
 
 
 @pytest.mark.unit

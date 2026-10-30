@@ -3,16 +3,18 @@
 import gc
 import logging
 import traceback
+from collections.abc import Callable
 from time import sleep, time
-from typing import Any, Callable, Optional
+from typing import Any
+
+from web3.types import BlockData
+from web3_multi_provider import ChainIdMismatchError, NoActiveProviderError
 
 from blockchain.constants import SLOT_TIME
 from blockchain.typings import Web3
 from metrics import healthcheck_pulse
 from metrics.metrics import EL_HEAD_BLOCK_AGE_SECONDS, EL_HEAD_BLOCK_NUMBER, UNEXPECTED_EXCEPTIONS
 from utils.timeout import TimeoutManager, TimeoutManagerError
-from web3.types import BlockData
-from web3_multi_provider import NoActiveProviderError
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +103,7 @@ class Executor:
             return self.function_to_execute(block)
 
     @staticmethod
-    def _exception_handler(function: Callable, *args, **kwargs) -> Optional[Any]:
+    def _exception_handler(function: Callable, *args, **kwargs) -> Any | None:
         try:
             return function(*args, **kwargs)
         except TimeoutManagerError as exception:
@@ -114,6 +116,11 @@ class Executor:
             # NoActiveProviderError is a BaseExceptionGroup subclass and needs (msg, exceptions) to
             # construct — re-raising the caught instance is simpler and preserves its sub-exceptions.
             raise
+        except ChainIdMismatchError:
+            UNEXPECTED_EXCEPTIONS.labels('chain_id_mismatch').inc()
+            logger.error({'msg': 'RPC endpoints are on different chains. Fix WEB3_RPC_ENDPOINTS. Shut down.'})
+            # The original message lists every endpoint URL, API keys included.
+            raise ChainIdMismatchError('RPC endpoints are on different chains.') from None
         except Exception as error:
             # Swallowed on purpose (no re-raise) so a single bad cycle doesn't kill the daemon —
             # which is exactly why this needs a counter: nothing else surfaces it happening.
