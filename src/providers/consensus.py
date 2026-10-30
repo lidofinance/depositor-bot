@@ -1,6 +1,8 @@
 import logging
 
 from prometheus_client import Histogram
+
+from blockchain.beacon_state.constants import FAR_FUTURE_EPOCH
 from providers.http_provider import HTTPProvider, NotOkResponse, data_is_dict
 
 logger = logging.getLogger(__name__)
@@ -25,6 +27,7 @@ class ConsensusClient(HTTPProvider):
     API_GET_BLOCK_DETAILS = 'eth/v2/beacon/blocks/{}'
     API_GET_BLOCK_HEADER = 'eth/v1/beacon/headers/{}'
     API_GET_STATE = 'eth/v2/debug/beacon/states/{}'
+    API_GET_SPEC = 'eth/v1/config/spec'
 
     def get_block_details(self, block_id: str) -> dict:
         """
@@ -49,6 +52,17 @@ class ConsensusClient(HTTPProvider):
             retval_validator=data_is_dict,
         )
         return data['header']['message']
+
+    def get_gloas_fork_epoch(self) -> int:
+        """
+        GET /eth/v1/config/spec
+        Returns GLOAS_FORK_EPOCH, or FAR_FUTURE_EPOCH if the client does not know the fork yet.
+        """
+        data, _ = self._get(
+            self.API_GET_SPEC,
+            retval_validator=data_is_dict,
+        )
+        return int(data.get('GLOAS_FORK_EPOCH', FAR_FUTURE_EPOCH))
 
     def get_beacon_state_ssz(self, state_id: str | int) -> bytes:
         """
@@ -88,7 +102,7 @@ class ConsensusClient(HTTPProvider):
     def _get_chain_id_with_provider(self, provider_index: int) -> int:
         data, _ = self._get_without_fallbacks(
             self.hosts[provider_index],
-            'eth/v1/config/spec',
+            self.API_GET_SPEC,
             retval_validator=data_is_dict,
         )
         return int(data['DEPOSIT_CHAIN_ID'])

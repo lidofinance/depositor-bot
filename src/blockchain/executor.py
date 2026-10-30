@@ -1,5 +1,6 @@
 # pyright: reportTypedDictNotRequiredAccess=false
 
+import gc
 import logging
 import traceback
 from time import sleep, time
@@ -55,6 +56,10 @@ class Executor:
 
         latest_block = self._exception_handler(self._wait_until_next_block)
         result = self._exception_handler(self._execute_function, latest_block)
+        # An RPC failover keeps caught exceptions in a list; the traceback cycle pins the caller frames
+        # and their locals (the decoded beacon state, ~3.5 GiB). Once in the oldest generation it is
+        # never auto-collected, since the state itself inflates the full-collection threshold.
+        gc.collect()
 
         if result:
             self._next_expected_block += self.blocks_between_execution

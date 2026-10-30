@@ -53,6 +53,8 @@ Council Daemons monitor for validator key theft. When they detect it, they broad
 - **DSMv1**: pause is per-module — `pauseDeposits(blockNumber, moduleId, signature)`. Message must contain `stakingModuleId`.
 - **DSMv2**: pause is global — `pauseDepositsV2(blockNumber, signature)`. Message must *not* contain `stakingModuleId`.
 - The version-routing logic is in `PauserBot._send_pause_message()`.
+- The pause is simulated (`transaction.check()`) before broadcast: an intent that reverts now only ages further past its validity window by inclusion.
+- Pauser and unvetter use the depositor's delegate-freshness check (`get_guardian_filter`): a retained message from a revoked or rotated delegate is dropped.
 
 ### Unvetting
 
@@ -63,6 +65,7 @@ Node operators pre-submit validator signing keys to StakingRouter to get them ap
 - `vettedKeysByOperator` is similarly packed — the new (lower) approved count per operator.
 - A single tx is capped at `getMaxOperatorsPerUnvetting()` operators.
 - Nonce filter: messages with `nonce < current_module_nonce` are discarded (the state has already advanced past them).
+- A delivered payload `(stakingModuleId, nonce, operatorIds, vettedKeysByOperator)` is remembered on the bot until the module nonce moves past it, and every copy of it is dropped — from any guardian, arriving in any later cycle. A module may accept an all-no-op unvet without advancing its nonce, and unvet messages have no age limit, so the nonce filter alone would replay it. "Delivered" means broadcast with a receipt `status == 1`; dry run and a missing account deliver nothing, so messages stay.
 
 ### Guardian delegation (EDF / LIP-37, DSM v5)
 
