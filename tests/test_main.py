@@ -5,12 +5,14 @@ from unittest.mock import Mock, patch
 
 import pytest
 from web3 import Web3
-from web3_multi_provider import FallbackProvider
 
 import variables
 from main import check_providers_chain_ids, main
+from providers.consistency import InconsistentProviders
+from providers.fallback_provider import FallbackProviderModule
 
 HOODI_CHAIN_ID = 560048
+MAINNET_CHAIN_ID = 1
 
 
 @pytest.mark.unit
@@ -39,7 +41,8 @@ class _JsonRpcHandler(BaseHTTPRequestHandler):
             self.send_response(429)
             self.end_headers()
             return
-        body = json.dumps({'jsonrpc': '2.0', 'id': request['id'], 'result': hex(HOODI_CHAIN_ID)}).encode()
+        chain_id = MAINNET_CHAIN_ID if self.path == '/mainnet' else HOODI_CHAIN_ID
+        body = json.dumps({'jsonrpc': '2.0', 'id': request['id'], 'result': hex(chain_id)}).encode()
         self.send_response(200)
         self.send_header('Content-Type', 'application/json')
         self.send_header('Content-Length', str(len(body)))
@@ -68,14 +71,22 @@ def _client(chain_id: int) -> Mock:
 
 @pytest.mark.unit
 def test_check_providers_chain_ids__first_el_provider_rate_limited__falls_back(rpc_url):
-    w3 = Web3(FallbackProvider([f'{rpc_url}/rate-limited', f'{rpc_url}/healthy']))
+    w3 = Web3(FallbackProviderModule([f'{rpc_url}/rate-limited', f'{rpc_url}/healthy']))
 
     check_providers_chain_ids(w3, _client(HOODI_CHAIN_ID), _client(HOODI_CHAIN_ID))
 
 
 @pytest.mark.unit
 def test_check_providers_chain_ids__layers_on_different_chains__raises(rpc_url):
-    w3 = Web3(FallbackProvider([f'{rpc_url}/healthy']))
+    w3 = Web3(FallbackProviderModule([f'{rpc_url}/healthy']))
 
     with pytest.raises(ValueError, match='Different chain ids detected'):
         check_providers_chain_ids(w3, _client(1), _client(HOODI_CHAIN_ID))
+
+
+@pytest.mark.unit
+def test_check_providers_chain_ids__fallback_el_provider_on_another_chain__raises(rpc_url):
+    w3 = Web3(FallbackProviderModule([f'{rpc_url}/healthy', f'{rpc_url}/mainnet']))
+
+    with pytest.raises(InconsistentProviders):
+        check_providers_chain_ids(w3, _client(HOODI_CHAIN_ID), _client(HOODI_CHAIN_ID))
