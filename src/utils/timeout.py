@@ -1,8 +1,11 @@
 import signal
 
 
-class TimeoutManagerError(Exception):
-    pass
+class TimeoutManagerError(BaseException):
+    """Not an Exception: the cycle deadline must survive every `except Exception` between the
+    signal handler and the Executor — provider failover loops treat a caught one as an endpoint
+    failure, retry elsewhere and leave the cycle running with the one-shot alarm already spent.
+    """
 
 
 class TimeoutManager:
@@ -12,7 +15,7 @@ class TimeoutManager:
     def handler(signum, frame):
         raise TimeoutManagerError
 
-    def __init__(self, seconds: int):
+    def __init__(self, seconds: float):
         self.old = -1
         self.seconds = seconds
 
