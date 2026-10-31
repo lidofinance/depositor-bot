@@ -166,6 +166,17 @@ def run_depositor(w3, keys_api: KeysAPIClient, cl: ConsensusClient):
     e.execute_as_daemon()
 
 
+def _signed_payload(message: DepositMessage) -> tuple:
+    """The fields a guardian signature covers, which is what a quorum has to agree on."""
+    return (
+        message['blockNumber'],
+        message['blockHash'],
+        message['depositRoot'],
+        message['stakingModuleId'],
+        message['nonce'],
+    )
+
+
 class DepositorBot:
     _flashbots_works = True
 
@@ -782,7 +793,7 @@ class DepositorBot:
 
     def _get_quorum(self, module_id: int) -> list[DepositMessage] | None:
         """
-        Returns quorum messages or None if the quorum is not ready.
+        Returns the freshest canonical quorum for the module, or None if none is ready.
         """
         # Fetch messages and apply filters
         messages = self._fetch_actual_messages()
@@ -801,30 +812,52 @@ class DepositorBot:
             QUORUM.labels(module_id).set(0)
             return None
 
-        # Group messages by block hash and guardian address
-        messages_by_block_hash = defaultdict(dict)
+        # Group by the whole signed payload rather than by block hash alone: the DSM rebuilds one
+        # digest from quorum[0] and checks every supplied signature against it, so a group has to
+        # agree on every field, not just the block.
+        groups: dict[tuple, dict[str, DepositMessage]] = defaultdict(dict)
         for message in filtered_messages:
-            messages_by_block_hash[message['blockHash']][message['guardianAddress']] = message
+            groups[_signed_payload(message)][message['guardianAddress']] = message
 
-        # Evaluate quorum for each block hash
-        max_quorum_size = 0
-        for guardian_messages in messages_by_block_hash.values():
-            unified_messages = list(guardian_messages.values())
-            quorum_size = len(unified_messages)
-
-            if quorum_size >= min_signs_to_deposit:
-                # Cache and return the quorum
-                CURRENT_QUORUM_SIZE.labels('current').set(quorum_size)
+        # Freshest wins, not first seen. Arrival order is not a selection criterion: a group retained
+        # from before a reorg keeps its place at the front and would be retried every block until it
+        # ages out, while the replacement quorum behind it is never tried. Newest first, so only the
+        # groups down to the first canonical one cost a block lookup.
+        candidates = sorted(
+            (payload for payload, guardian_messages in groups.items() if len(guardian_messages) >= min_signs_to_deposit),
+            key=lambda payload: payload[0],
+            reverse=True,
+        )
+        latest = self.w3.eth.get_block('latest')
+        for payload in candidates:
+            if self._is_canonical(payload, latest):
+                CURRENT_QUORUM_SIZE.labels('current').set(len(groups[payload]))
                 QUORUM.labels(module_id).set(1)
-                return unified_messages
+                return list(groups[payload].values())
 
-            # Track the largest quorum size seen
-            max_quorum_size = max(quorum_size, max_quorum_size)
-
-        # Update metrics and indicate no quorum
-        CURRENT_QUORUM_SIZE.labels('current').set(max_quorum_size)
+        # Groups that reached the threshold but were rejected (orphaned, or not selectable yet) are left
+        # out, so `current >= required` holds exactly when QUORUM is 1.
+        CURRENT_QUORUM_SIZE.labels('current').set(max((len(g) for g in groups.values() if len(g) < min_signs_to_deposit), default=0))
         QUORUM.labels(module_id).set(0)
         return None
+
+    def _is_canonical(self, payload: tuple, latest: BlockData) -> bool:
+        """Whether the block a group signed over is the one the chain has at that height.
+
+        The head block is not selectable yet: the dry run executes at `latest`, where
+        `blockhash(head)` is zero, so the DSM would revert with DepositUnexpectedBlockHash.
+        A group at or ahead of our head is skipped rather than treated as orphaned — it
+        becomes checkable once the chain moves on.
+        """
+        block_number, block_hash = payload[0], payload[1]
+        if block_number >= latest['number']:
+            return False
+
+        canonical = '0x' + self.w3.eth.get_block(block_number)['hash'].hex()
+        if canonical.lower() != block_hash.lower():
+            logger.info({'msg': 'Quorum signed over a block that is no longer canonical.', 'block_number': block_number})
+            return False
+        return True
 
     def _get_message_actualize_filter(self) -> Callable[[DepositMessage], bool]:
         latest = self.w3.eth.get_block('latest')
