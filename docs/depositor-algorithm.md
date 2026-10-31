@@ -65,10 +65,10 @@ reuse later, and finally hands off to the two phases.
 
 4. **Read the allocation once.** We ask the StakingRouter how the buffered ETH
    would spread across modules — the seed allocation, via
-   `getDepositAllocations(eth, is_top_up=False)`. We compute it a single time
+   `getDepositAllocations(eth)`. We compute it a single time
    here and reuse it in both phases to pick and order candidates: phase A for
    seed deposits to `0x02` modules, phase B for full deposits to `0x01` modules.
-   (Phase B additionally computes a top-up variant when top-up is enabled.)
+   (Phase B additionally reads the per-module top-up allocation when top-up is enabled.)
 
 5. **Phase A — seed deposits to `0x02` modules** (`_phase_seed`)
      Only `0x02` candidates, only while the DSM is not paused.
@@ -87,9 +87,12 @@ reuse later, and finally hands off to the two phases.
      (`ENABLE_TOP_UP` and the TopUpGateway not paused). Top-ups off → `0x01` only;
      top-ups off and deposits paused → nothing to do.
      - collect candidates: `0x01` from seed allocation (skipped while deposits
-       paused), `0x02` from top-up allocation; each whitelisted, active, non-zero
+       paused), `0x02` from the per-module top-up allocation —
+       `getStakingModuleTopUpAllocation(module_id, eth)`, what `topUp` would give
+       that module if it is the one topped up; each whitelisted, active, non-zero
        allocation;
-     - merge both types, sort ascending by stake;
+     - merge both types, sort ascending by stake (the module's current level from
+       the seed allocation, for both types);
      - go through candidates; the first one that isn't "stale" decides the outcome
        and stops the phase:
        - `0x01` → same as phase A (distance → quorum: deposit / cooldown wait / stale → next);
