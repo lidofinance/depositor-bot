@@ -8,6 +8,11 @@ from .contracts import (
     topup_gateway,
     weth,
 )
+from .edf import (
+    edf_manifest,
+    web3_edf,
+    web3_edf_session,
+)
 from .provider import (
     web3_lido_integration,
     web3_lido_unit,
@@ -27,6 +32,9 @@ from .strategy import (
 from .top_up_proof_fixtures import top_up_proof_fixtures
 
 __all__ = [
+    'edf_manifest',
+    'web3_edf',
+    'web3_edf_session',
     'lido_locator',
     'cmv2_contract',
     'deposit_contract',
