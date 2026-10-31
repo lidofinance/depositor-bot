@@ -84,7 +84,8 @@ reuse later, and finally hands off to the two phases.
 
 6. **Phase B — full `0x01` deposits, plus top-ups to `0x02`** (`_phase_full` / `_phase_full_and_topup`)
      Full `0x01` deposits, plus `0x02` top-ups when top-ups are on
-     (`ENABLE_TOP_UP` and the TopUpGateway not paused). Top-ups off → `0x01` only;
+     (`ENABLE_TOP_UP`, the TopUpGateway not paused, and an execution path that can
+     actually send `topUp` — see `topup_execution_path`). Top-ups off → `0x01` only;
      top-ups off and deposits paused → nothing to do.
      - collect candidates: `0x01` from seed allocation (skipped while deposits
        paused), `0x02` from top-up allocation; each whitelisted, active, non-zero
