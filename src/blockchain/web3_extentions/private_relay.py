@@ -79,11 +79,12 @@ class PrivateRelayClient:
 
     def _build_mev_send_bundle_params(self, tx: SignedTransaction, timeout_in_blocks: int) -> list[dict]:
         """
-        https://docs.flashbots.net/flashbots-auction/advanced/rpc-endpoint#mev_sendbundle
+        https://docs.flashbots.net/flashbots-auction/advanced/rpc-endpoint#eth_sendprivatetransaction
         """
         return [
             {
-                'tx': tx.raw_transaction.hex(),
+                # HexBytes.hex() drops the 0x prefix; the relay rejects unprefixed data as 'incorrect request'.
+                'tx': tx.raw_transaction.to_0x_hex(),
                 'maxBlockNumber': hex(self.w3.eth.get_block('pending')['number'] + timeout_in_blocks),
                 'preferences': {
                     'builders': [
@@ -93,7 +94,6 @@ class PrivateRelayClient:
                         'rpc.beaverbuild.org',
                         'builder0x69.io',
                         'rpc.titanbuilder.xyz',
-                        'builder.eigenphi.io',
                         'builder.eigenphi.io',
                         'https://builder.gmbit.co/rpc',
                         'rpc.payload.de',
