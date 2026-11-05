@@ -40,6 +40,7 @@ Unvetting is the proces of decreasing approved depositable signing keys.
     - Set WALLET_PRIVATE_KEY
     - Set CREATE_TRANSACTIONS to true
     - Set ONCHAIN_TRANSPORT_RPC_ENDPOINTS and ONCHAIN_TRANSPORT_ADDRESS (Data Bus is the only message transport)
+    - Set KEYS_API_URL and CL_API_URLS (required by the depositor)
 3. ```docker-compose up```
 4. Send metrics and logs to grafana
 5. Setup alerts
