@@ -294,8 +294,8 @@ POSSIBLE_DEPOSITS_AMOUNT = Gauge(
 )
 
 # --- Module priority / allocation ---
-# kind: 'seed' (is_top_up=False allocation, used by Phase A 0x02 and Phase B 0x01) or
-# 'topup' (is_top_up=True allocation, used by Phase B 0x02). Published for every whitelisted
+# kind: 'seed' (getDepositAllocations, used by Phase A 0x02 and Phase B 0x01) or
+# 'topup' (getStakingModuleTopUpAllocation per module, used by Phase B 0x02). Published for every whitelisted
 # module each cycle, including ones excluded from candidates (allocation == 0) — otherwise a
 # module with no allocation this cycle keeps showing its last successful outcome forever.
 
