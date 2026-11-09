@@ -109,6 +109,10 @@ Next cases requires bot restart:
 Metrics list could be found in [source code](src/metrics/metrics.py).
 Prometheus server hosted on `http://localhost:${{PROMETHEUS_PORT}}/`.
 
+Logs are JSON lines on stderr, uncaught exceptions included. Endpoint URLs (EL, Data Bus, CL, Keys API, relay) and private
+keys from the environment are replaced with `****` in every log line — including the URL path and query alone, since HTTP
+client errors quote only that part and providers put API keys there.
+
 ## Development
 
 ### Install
