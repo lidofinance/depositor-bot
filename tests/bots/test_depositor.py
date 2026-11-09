@@ -1582,43 +1582,72 @@ def test_path_direct_in_dry_mode_without_account(depositor_bot, monkeypatch):
 
 
 @pytest.mark.unit
-def test_validate_refuses_to_start_when_delegation_configured_but_no_path_works(depositor_bot, account):
-    _delegation_mock(depositor_bot, delegate='0x0000000000000000000000000000000000000001', account_has_role=False)
+@pytest.mark.parametrize('path', [TopUpPath.NOT_DELEGATE, TopUpPath.TERMINATED, TopUpPath.NO_ROLE])
+def test_bot_starts_when_no_topup_path_can_execute(
+    web3_lido_unit, deposit_transaction_sender, base_deposit_strategy, csm_strategy, gas_price_calculator, path
+):
+    """Deposits don't depend on the top-up path, e.g. during the EDF nomination cooldown after a revocation."""
+    web3_lido_unit.lido.delegation = None
     with (
+        mock.patch('web3.eth.Eth.chain_id', new_callable=mock.PropertyMock),
         mock.patch.object(variables, 'ENABLE_TOP_UP', True),
         mock.patch.object(variables, 'DELEGATION_CONTRACT_ADDRESS', '0xDe1e9a710000000000000000000000000000BEEF'),
-        pytest.raises(ValueError, match='No usable path'),
+        mock.patch.object(DepositorBot, '_build_consolidation_indexer', return_value=MagicMock()),
+        mock.patch.object(DepositorBot, '_resolve_topup_path', return_value=path),
+        mock.patch('bots.depositor.TOPUP_EXECUTION_PATH') as metric,
     ):
-        depositor_bot._validate_topup_delegation()
+        bot = DepositorBot(
+            web3_lido_unit, deposit_transaction_sender, base_deposit_strategy, csm_strategy, gas_price_calculator, Mock(), Mock()
+        )
+
+    assert bot._topup_path is path
+    metric.state.assert_called_once_with(path)
 
 
 @pytest.mark.unit
-def test_validate_only_warns_when_no_role_and_no_delegation_configured(depositor_bot, account):
-    """Pre-existing deployments must not turn an upgrade into a boot failure."""
-    _role_table(depositor_bot, {}, account_has_role=False)
-    with (
-        mock.patch.object(variables, 'ENABLE_TOP_UP', True),
-        mock.patch.object(variables, 'DELEGATION_CONTRACT_ADDRESS', None),
-    ):
-        depositor_bot._validate_topup_delegation()  # does not raise
-    assert depositor_bot._topup_path is TopUpPath.NO_ROLE
-
-
-@pytest.mark.unit
-def test_validate_passes_and_records_path_when_executable(depositor_bot, account):
+def test_report_topup_path_records_executable_path(depositor_bot, account):
     _delegation_mock(depositor_bot, delegate=account.address)
     with mock.patch.object(variables, 'ENABLE_TOP_UP', True):
-        depositor_bot._validate_topup_delegation()
+        depositor_bot._report_topup_path()
     assert depositor_bot._topup_path is TopUpPath.DELEGATED
 
 
 @pytest.mark.unit
-def test_validate_skipped_when_top_up_disabled(depositor_bot, account):
-    """A broken delegation is irrelevant while top-up is off — don't block the deposit-only bot."""
+def test_report_topup_path_skipped_when_top_up_disabled(depositor_bot, account):
+    """A broken delegation is irrelevant while top-up is off."""
     delegation = _delegation_mock(depositor_bot, delegate=account.address, terminated=True)
     with mock.patch.object(variables, 'ENABLE_TOP_UP', False):
-        depositor_bot._validate_topup_delegation()
+        depositor_bot._report_topup_path()
     delegation.is_terminated.assert_not_called()
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    'path, top_up_enabled',
+    [
+        (TopUpPath.DIRECT, True),
+        (TopUpPath.DELEGATED, True),
+        (TopUpPath.NOT_DELEGATE, False),
+        (TopUpPath.TERMINATED, False),
+        (TopUpPath.NO_ROLE, False),
+    ],
+)
+def test_execute_actual_gates_top_ups_on_executable_path(depositor_bot, path, top_up_enabled):
+    """A top-up that can only fail its dry-run ends Phase B with TX_FAILED, before any 0x01 deposit."""
+    depositor_bot._refresh_modules_state = Mock()
+    depositor_bot.w3.lido.lido.get_depositable_ether = Mock(return_value=100)
+    depositor_bot.w3.lido.staking_router.get_deposit_allocations = Mock(return_value=(0, [], []))
+    depositor_bot.w3.lido.staking_router.get_all_staking_module_digests = Mock(return_value=[])
+    depositor_bot._phase_seed = Mock(return_value=PhaseOutcome.SKIPPED)
+    depositor_bot._phase_full_and_topup = Mock(return_value=PhaseOutcome.SENT)
+    depositor_bot._resolve_topup_path = Mock(return_value=path)
+
+    with mock.patch.object(variables, 'ENABLE_TOP_UP', True):
+        depositor_bot._execute_actual()
+
+    deposits_paused, passed_top_up_enabled = depositor_bot._phase_full_and_topup.call_args.args[-2:]
+    assert deposits_paused is False
+    assert passed_top_up_enabled is top_up_enabled
 
 
 @pytest.mark.unit

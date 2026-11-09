@@ -191,7 +191,7 @@ class DepositorBot:
         self._consolidation_indexer = self._build_consolidation_indexer()
         # Resolved once here so it is never unset, then re-resolved every iteration.
         self._topup_path = TopUpPath.DIRECT
-        self._validate_topup_delegation()
+        self._report_topup_path()
         now = datetime.now()
         self._module_last_heart_beat: dict[int, datetime] = {module_id: now for module_id in variables.DEPOSIT_MODULES_WHITELIST}
         for module_id in variables.DEPOSIT_MODULES_WHITELIST:
@@ -253,15 +253,15 @@ class DepositorBot:
         # every top-up into a revert, and this metric is how that gets noticed. Costs at most four
         # `eth_call`s per iteration, on top of the per-module reads `_refresh_modules_state()` already
         # does before the same early returns.
-        # Not a gate — an unusable path still lets the tx be built and fail loudly on the dry-run,
-        # which says more than skipping early.
+        # An unusable path gates top-ups off: its tx would fail the dry-run, and Phase B stops at the
+        # first non-skipped candidate, so a failing top-up would also starve 0x01 deposits.
         top_up_enabled = False
         if variables.ENABLE_TOP_UP:
             _tg_paused = self.w3.lido.topup_gateway.is_paused()
             TOPUP_GATEWAY_PAUSED.set(int(_tg_paused))
             self._topup_path = self._resolve_topup_path()
             TOPUP_EXECUTION_PATH.state(self._topup_path)
-            top_up_enabled = not _tg_paused
+            top_up_enabled = not _tg_paused and self._topup_path.is_executable
         else:
             TOPUP_GATEWAY_PAUSED.set(0)
 
@@ -695,16 +695,13 @@ class DepositorBot:
 
         return blocked or TopUpPath.NO_ROLE
 
-    def _validate_topup_delegation(self) -> None:
-        """Refuse to start when a delegation contract is configured but no path can execute a top-up.
+    def _report_topup_path(self) -> None:
+        """Resolve the top-up path once at startup, so it is logged and on the metric before the first cycle.
 
-        Same reasoning as the ConsolidationBus indexer: nothing would ever be topped up, and a crash
-        loop carrying the reason is far easier to notice than a bot that keeps running quietly.
-
-        Scoped to the case where delegation is configured. `NO_ROLE` without any delegation is the
-        pre-existing "role was never granted to the key" misconfiguration — it is now visible on
-        `topup_execution_path`, but it must not turn an upgrade of a running deployment into a boot
-        failure, so it stays a warning.
+        Never fatal. The path depends on delegate and role state, which changes on chain without the bot,
+        e.g. for the 48-hour EDF nomination cooldown after a revocation, and deposits do not depend on it:
+        `depositBufferedEther` is authorised by the guardian quorum, not by `msg.sender`. Top-ups stay off
+        while no path can execute; `topup_execution_path` and its alert surface it.
         """
         if not variables.ENABLE_TOP_UP:
             return
@@ -715,16 +712,14 @@ class DepositorBot:
             logger.info({'msg': 'Top-up execution path resolved.', 'path': self._topup_path})
             return
 
-        account = variables.ACCOUNT.address if variables.ACCOUNT else 'not configured'
-        message = (
-            f'No usable path for TopUpGateway.topUp: {self._topup_path}. TOP_UP_ROLE must be held either by the '
-            f'bot account ({account}) or by delegation contract {variables.DELEGATION_CONTRACT_ADDRESS}, which '
-            f'must then be un-terminated with that account as its active delegate.'
+        logger.error(
+            {
+                'msg': 'No usable path for TopUpGateway.topUp. Top-ups are skipped until one appears; deposits continue.',
+                'path': self._topup_path,
+                'account': variables.ACCOUNT.address if variables.ACCOUNT else None,
+                'delegation': variables.DELEGATION_CONTRACT_ADDRESS,
+            }
         )
-        if variables.DELEGATION_CONTRACT_ADDRESS is None:
-            logger.warning({'msg': message})
-            return
-        raise ValueError(message)
 
     def _check_balance(self):
         if variables.ACCOUNT:

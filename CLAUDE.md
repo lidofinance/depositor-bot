@@ -140,11 +140,11 @@ The general strategy uses a cubic formula to compute a recommended gas ceiling: 
 |---|---|
 | `delegated` | `DELEGATION_CONTRACT_ADDRESS` holds `TOP_UP_ROLE`, is not terminated, and the bot's key is its active delegate → tx wrapped as `delegation.execute(topUpGateway, <topUp calldata>)` (`DelegationContract.wrap()`) |
 | `direct` | otherwise, and the bot's own account holds the role → plain `topUp` call |
-| `not_delegate` / `terminated` / `no_role` | nothing can execute; see the gate ladder below |
+| `not_delegate` / `terminated` / `no_role` | nothing can execute → top-ups are skipped this cycle; see the gate ladder below |
 
 Delegation is preferred and the key is the fallback, so migrating the role in either direction needs no restart timed to the `grantRole`/`revokeRole` transactions — the bot follows the role on its next cycle. Same idea as `SignerModule.process_members` in lido-oracle, which resolves the active identity from the HashConsensus member list each cycle. With the role on the delegation contract, rotating the bot's key becomes a `nominateDelegate` by the contract's owner instead of an ACL change on TopUpGateway.
 
-Startup refuses to boot only when a delegation contract *is* configured and no path can execute. `no_role` with no delegation configured is the pre-existing "role was never granted to the key" mistake — now visible on the metric, but kept a warning so upgrading a running deployment can't turn into a boot failure.
+An unexecutable path is never fatal, at startup or at runtime: the bot logs it, publishes it on `topup_execution_path` (alerted), and keeps depositing with top-ups gated off. The path follows on-chain delegate/role state — e.g. the 48-hour EDF nomination cooldown after a `revokeDelegate()` — and deposits don't depend on it, so failing the process would stop deposits for a top-up problem. It is also a gate, not just a metric: Phase B stops at the first non-`SKIPPED` candidate, so a top-up that can only fail its dry-run would starve 0x01 deposits.
 
 Wrapping happens **before** `transaction.check()`/gas estimation, so the dry-run simulates what actually gets mined; simulating the unwrapped call would revert with `AccessControlUnauthorizedAccount`.
 
@@ -184,8 +184,8 @@ Module-level gates (Prometheus, defined in `src/metrics/metrics.py`, set in `src
 
 1. `topup_gateway_paused == 0` (and `variables.ENABLE_TOP_UP` is true — checked at startup, not a metric).
 2. `topup_execution_path` is `direct` or `delegated` — both healthy, and which one is live tells you
-   where `TOP_UP_ROLE` currently sits. `not_delegate` / `terminated` / `no_role` each make *every*
-   top-up revert. Seeing one at runtime means the role assignment changed under a running bot
+   where `TOP_UP_ROLE` currently sits. `not_delegate` / `terminated` / `no_role` each turn top-ups
+   off (deposits continue). Seeing one means the role assignment is not what the bot's key needs
    (delegate rotated or revoked, contract terminated, role removed from both identities). Resolved
    before every early return in `_execute_actual()` (alongside `topup_gateway_paused`), so it stays
    trustworthy on idle iterations — an empty buffer would otherwise freeze it at its last value.
