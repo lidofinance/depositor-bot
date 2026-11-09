@@ -1651,6 +1651,30 @@ def test_execute_actual_gates_top_ups_on_executable_path(depositor_bot, path, to
 
 
 @pytest.mark.unit
+def test_execute_actual_unusable_topup_path_warns_once_per_transition(depositor_bot, caplog):
+    """A per-cycle warning would flood the log; the steady state is on `topup_execution_path`."""
+    depositor_bot._topup_path = TopUpPath.DIRECT
+    depositor_bot._resolve_topup_path = Mock(return_value=TopUpPath.NO_ROLE)
+    depositor_bot._refresh_modules_state = Mock()
+    depositor_bot.w3.lido.lido.get_depositable_ether = Mock(return_value=0)
+
+    def warnings() -> int:
+        return len([r for r in caplog.records if 'cannot execute' in str(r.msg)])
+
+    with mock.patch.object(variables, 'ENABLE_TOP_UP', True), caplog.at_level('WARNING', logger='bots.depositor'):
+        depositor_bot._execute_actual()
+        depositor_bot._execute_actual()
+        assert warnings() == 1
+
+        # Recovery, then a new revocation warns again.
+        depositor_bot._resolve_topup_path = Mock(return_value=TopUpPath.DIRECT)
+        depositor_bot._execute_actual()
+        depositor_bot._resolve_topup_path = Mock(return_value=TopUpPath.NO_ROLE)
+        depositor_bot._execute_actual()
+        assert warnings() == 2
+
+
+@pytest.mark.unit
 def test_top_up_to_module_sends_direct_call_on_the_direct_path(depositor_bot):
     tx = Mock(name='tx')
     _stub_topup_happy_path(depositor_bot, tx)

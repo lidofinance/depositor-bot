@@ -253,14 +253,24 @@ class DepositorBot:
         # every top-up into a revert, and this metric is how that gets noticed. Costs at most four
         # `eth_call`s per iteration, on top of the per-module reads `_refresh_modules_state()` already
         # does before the same early returns.
-        # An unusable path gates top-ups off: its tx would fail the dry-run, and Phase B stops at the
-        # first non-skipped candidate, so a failing top-up would also starve 0x01 deposits.
+        # An unusable path gates top-ups off. Its tx can only fail the dry-run, after paying for a Keys API
+        # page, a full BeaconState download and the proofs; and Phase B stops at the first non-skipped
+        # candidate, so that failure would also starve 0x01 deposits.
         top_up_enabled = False
         if variables.ENABLE_TOP_UP:
             _tg_paused = self.w3.lido.topup_gateway.is_paused()
             TOPUP_GATEWAY_PAUSED.set(int(_tg_paused))
+            previous_path = self._topup_path
             self._topup_path = self._resolve_topup_path()
             TOPUP_EXECUTION_PATH.state(self._topup_path)
+            # Logged on change only: the steady state belongs on the metric, and the path the bot
+            # booted with was already reported by `_report_topup_path()`.
+            if self._topup_path is not previous_path:
+                event = {'msg': 'Top-up execution path changed.', 'path': self._topup_path, 'previous': previous_path}
+                if self._topup_path.is_executable:
+                    logger.info(event)
+                else:
+                    logger.warning({**event, 'msg': 'Top-up execution path cannot execute. Top-ups skipped until it can.'})
             top_up_enabled = not _tg_paused and self._topup_path.is_executable
         else:
             TOPUP_GATEWAY_PAUSED.set(0)
