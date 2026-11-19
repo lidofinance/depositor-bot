@@ -93,6 +93,7 @@ Next cases requires bot restart:
 | PROMETHEUS_PORT                   | 9000          | Port with metrics server                                                                                                 |
 | PROMETHEUS_PREFIX                 | depositor_bot | Prefix for the metrics                                                                                                   |
 | HEALTHCHECK_SERVER_PORT           | 9010          | Port with bot`s status server                                                                                            |
+| LOG_LEVEL                         | INFO          | Log level: `DEBUG`, `INFO`, `WARNING`, `ERROR` or `CRITICAL` (any case)                                                  |
 | MAX_CYCLE_LIFETIME_IN_SECONDS     | 1200          | Max lifetime of usual cycle. If cycle will not end in this time, bot will crush                                          |
 | QUORUM_RETENTION_MINUTES          | 5             | TTL of quorum collection for marking module as healthy                                                                   |
 | MAX_VALIDATORS_PER_TOP_UP         | 32            | Maximum number of validators per top-up transaction                                                                      |
@@ -126,6 +127,10 @@ Every secret can be read from a file instead of the env: set `<NAME>_FILE` to th
 
 Metrics list could be found in [source code](src/metrics/metrics.py).
 Prometheus server hosted on `http://localhost:${{PROMETHEUS_PORT}}/`.
+
+Logs are JSON lines on stdout. Every line is masked with every form of the secrets above (raw value, URL parts, hex and
+encoded forms), including the messages of libraries, warnings and tracebacks. At startup the bot logs the full config
+with the secret values masked.
 
 ## Development
 

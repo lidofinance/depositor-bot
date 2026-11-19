@@ -1760,6 +1760,17 @@ benchmark = ["contexttimer (>=0.3,<0.4)", "json-stream-to-standard-types (>=0.1,
 test = ["json-stream (==2.3.2)", "json-stream-rs-tokenizer[benchmark]", "pytest (>7.1,<8)"]
 
 [[package]]
+name = "logmask"
+version = "0.1.5"
+description = "JSON logging with masked secrets for Python services"
+optional = false
+python-versions = "<4,>=3.12"
+files = [
+    {file = "logmask-0.1.5-py3-none-any.whl", hash = "sha256:5e32b9ab22dda1f343c2025c04ee559164240fa4395b9bec541796ef5d81a178"},
+    {file = "logmask-0.1.5.tar.gz", hash = "sha256:f3eb6084b432b91c0e2bfc834d692363ba935d4b6f3c4d4490838e7754a52462"},
+]
+
+[[package]]
 name = "lru-dict"
 version = "1.4.1"
 description = "An Dict like LRU container."
@@ -3426,4 +3437,4 @@ propcache = ">=0.2.1"
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.12,<3.15"
-content-hash = "97afd8b46bd77c24c39769eec5f9f2ad135bb12c473f3601e5aca48772458b04"
+content-hash = "782389191aa95c0ec497c25068b78f7cccebfda0656fa8d9658987de20e7fde3"

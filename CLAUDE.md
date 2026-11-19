@@ -166,7 +166,14 @@ All environment variables are read in `src/variables.py`. When adding a new one:
 3. Add it to `.env.example`
 4. If non-sensitive, include it in the `PUBLIC_ENV_VARS` dict (logged at startup)
 5. If sensitive, read it with `from_file_or_env()` (`src/utils/env.py`, adds the `<NAME>_FILE` form), add it to
-   `_SECRET_NAMES` and to `PRIVATE_ENV_VARS`.
+   `_SECRET_NAMES` and to `PRIVATE_ENV_VARS`. `PRIVATE_ENV_VARS` feeds the logmask masker (`src/metrics/logging.py`):
+   every form of these values is masked in every log line, and `env_vars_for_log()` dumps them as `***`.
+
+### Logging setup
+
+`src/metrics/logging.py` calls logmask's `setup_logging(PRIVATE_ENV_VARS, level=LOG_LEVEL, stream=sys.stdout)` on
+import. Nothing may log before that import — `variables.py` must stay free of logger calls (the account/dry-mode lines
+are logged from `main()`).
 
 ### Python import root
 

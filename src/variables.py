@@ -1,15 +1,13 @@
-import logging
 import os
-from typing import Final
+from typing import Any, Final
 
 from eth_account import Account
 from eth_account.signers.local import LocalAccount
 from eth_typing import URI, ChecksumAddress
+from logmask import masked_config
 from web3 import Web3
 
 from utils.env import from_file_or_env
-
-logger = logging.getLogger(__name__)
 
 
 def _split_list(value: str | None) -> list[str]:
@@ -38,13 +36,9 @@ TESTNET_WEB3_RPC_ENDPOINTS = _env_list('TESTNET_WEB3_RPC_ENDPOINTS')
 # Account private key
 WALLET_PRIVATE_KEY = from_file_or_env('WALLET_PRIVATE_KEY')
 
-ACCOUNT: LocalAccount | None = None
-if WALLET_PRIVATE_KEY:
-    account = Account.from_key(WALLET_PRIVATE_KEY)
-    logger.info({'msg': 'Load account from private key.', 'value': account.address})
-    ACCOUNT = account
-else:
-    logger.warning({'msg': 'Account not provided. Run in dry mode.'})
+# Without the key (unset variable or empty file) the bot runs in dry mode: no transactions are sent.
+# Logged in main, after logging is configured.
+ACCOUNT: LocalAccount | None = Account.from_key(WALLET_PRIVATE_KEY) if WALLET_PRIVATE_KEY else None
 
 # App specific
 # LIDO_LOCATOR ADDRESS
@@ -180,6 +174,9 @@ HTTP_REQUEST_TIMEOUT_CONSENSUS: Final = int(os.getenv('HTTP_REQUEST_TIMEOUT_CONS
 HTTP_REQUEST_RETRY_COUNT_CONSENSUS: Final = int(os.getenv('HTTP_REQUEST_RETRY_COUNT_CONSENSUS', 5))
 HTTP_REQUEST_SLEEP_BEFORE_RETRY_IN_SECONDS_CONSENSUS: Final = int(os.getenv('HTTP_REQUEST_SLEEP_BEFORE_RETRY_IN_SECONDS_CONSENSUS', 5))
 
+# Logging
+LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO').upper()
+
 _SECRET_NAMES = (
     'WALLET_PRIVATE_KEY',
     'AUCTION_BUNDLER_PRIVATE_KEY',
@@ -191,6 +188,12 @@ _SECRET_NAMES = (
 
 # All non-private env variables to the logs in main
 PUBLIC_ENV_VARS = {
+    'LOG_LEVEL': LOG_LEVEL,
+    'HTTP_REQUEST_TIMEOUT_CONSENSUS': HTTP_REQUEST_TIMEOUT_CONSENSUS,
+    'HTTP_REQUEST_RETRY_COUNT_CONSENSUS': HTTP_REQUEST_RETRY_COUNT_CONSENSUS,
+    'HTTP_REQUEST_SLEEP_BEFORE_RETRY_IN_SECONDS_CONSENSUS': HTTP_REQUEST_SLEEP_BEFORE_RETRY_IN_SECONDS_CONSENSUS,
+    'CONTRACT_GAS_LIMIT': CONTRACT_GAS_LIMIT,
+    'GAS_ADDENDUM': GAS_ADDENDUM,
     # The paths show which source the secrets came from; the values themselves stay in PRIVATE_ENV_VARS.
     **{f'{name}_FILE': os.getenv(f'{name}_FILE', '') for name in _SECRET_NAMES},
     'LIDO_LOCATOR': LIDO_LOCATOR,
@@ -234,3 +237,8 @@ PRIVATE_ENV_VARS = {
 }
 
 assert not set(PRIVATE_ENV_VARS.keys()).intersection(set(PUBLIC_ENV_VARS.keys()))
+
+
+def env_vars_for_log() -> dict[str, Any]:
+    """All bot variables for the startup log. Secret values are masked, unset ones stay empty."""
+    return masked_config(PUBLIC_ENV_VARS, PRIVATE_ENV_VARS)
