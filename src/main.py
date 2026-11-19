@@ -1,5 +1,7 @@
+import signal
 import sys
 from enum import StrEnum
+from types import FrameType
 from typing import cast
 
 import web3_multi_provider
@@ -49,6 +51,12 @@ def check_providers_chain_ids(w3: Web3, cl: ConsensusClient, keys_api: KeysAPICl
     )
 
 
+def shutdown(signum: int, frame: FrameType | None) -> None:
+    """Exit cleanly on SIGTERM/SIGINT. As PID 1 in a container the process would ignore the signal and get SIGKILL."""
+    logger.info({'msg': f'{signal.Signals(signum).name} received. Shut down.'})
+    sys.exit(0)
+
+
 def main(bot_name: str):
     logger.info({'msg': 'Start depositor bot.', 'build': variables.BUILD_INFO, 'bot_name': bot_name})
     if variables.BUILD_INFO_ERROR:
@@ -63,7 +71,7 @@ def main(bot_name: str):
             logger.warning({'msg': 'CREATE_TRANSACTIONS is not true. Dry mode: transactions are not sent.'})
 
     if bot_name not in list(BotModule):
-        msg = f'Last arg should be one of {[str(item) for item in BotModule]}, received {BotModule}.'
+        msg = f'Last arg should be one of {[str(item) for item in BotModule]}, received {bot_name}.'
         logger.error({'msg': msg})
         raise ValueError(msg)
 
@@ -111,4 +119,6 @@ def main(bot_name: str):
 
 
 if __name__ == '__main__':
+    signal.signal(signal.SIGTERM, shutdown)
+    signal.signal(signal.SIGINT, shutdown)
     main(sys.argv[-1])
