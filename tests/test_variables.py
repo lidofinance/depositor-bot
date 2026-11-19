@@ -107,6 +107,18 @@ def test_keys_api_url_unset_is_empty(load_variables):
     assert load_variables(KEYS_API_URL=None, KEYS_API_URL_FILE=None).KEYS_API_URL == ''
 
 
+def test_bad_build_info_is_reported_not_logged(load_variables, monkeypatch, tmp_path):
+    path = tmp_path / 'build-info.json'
+    path.write_text('{not json')
+    monkeypatch.setattr('utils.build_info.BUILD_INFO_PATH', path)
+    monkeypatch.setattr('utils.build_info.load_build_info.__defaults__', (path,))
+
+    loaded = load_variables()
+
+    assert loaded.BUILD_INFO['version'] == 'unknown'
+    assert loaded.BUILD_INFO_ERROR is not None
+
+
 @pytest.mark.parametrize('name', ['WEB3_RPC_ENDPOINTS', 'ONCHAIN_TRANSPORT_RPC_ENDPOINTS', 'CL_API_URLS'])
 def test_url_list_from_file(load_variables, tmp_path, name):
     urls_file = tmp_path / name.lower()

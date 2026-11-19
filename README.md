@@ -27,6 +27,7 @@ Unvetting is the proces of decreasing approved depositable signing keys.
     - [Additional variables](#additional-variables)
     - [Secrets from files](#secrets-from-files)
 - [Metrics and logs](#metrics-and-logs)
+    - [Build info](#build-info)
 - [Development](#development)
     - [Install](#install)
     - [Tests](#tests)
@@ -129,8 +130,20 @@ Metrics list could be found in [source code](src/metrics/metrics.py).
 Prometheus server hosted on `http://localhost:${{PROMETHEUS_PORT}}/`.
 
 Logs are JSON lines on stdout. Every line is masked with every form of the secrets above (raw value, URL parts, hex and
-encoded forms), including the messages of libraries, warnings and tracebacks. At startup the bot logs the full config
-with the secret values masked.
+encoded forms), including the messages of libraries, warnings and tracebacks. At startup the bot logs its build info and
+the full config with the secret values masked.
+
+### Build info
+
+The image carries `build-info.json` with the version, branch and commit, filled from the `BUILD_VERSION`, `BUILD_BRANCH`
+and `BUILD_COMMIT` build args:
+
+```bash
+docker build --build-arg BUILD_VERSION=5.0.0 --build-arg BUILD_BRANCH=main --build-arg BUILD_COMMIT=$(git rev-parse HEAD) .
+```
+
+Without the args the tracked file keeps `unknown`. The values are in the startup log and in the
+`<PROMETHEUS_PREFIX>_build_info` metric.
 
 ## Development
 

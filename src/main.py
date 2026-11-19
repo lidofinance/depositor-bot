@@ -50,6 +50,9 @@ def check_providers_chain_ids(w3: Web3, cl: ConsensusClient, keys_api: KeysAPICl
 
 
 def main(bot_name: str):
+    logger.info({'msg': 'Start depositor bot.', 'build': variables.BUILD_INFO, 'bot_name': bot_name})
+    if variables.BUILD_INFO_ERROR:
+        logger.warning({'msg': 'Build info is not available.', 'error': variables.BUILD_INFO_ERROR})
     logger.info({'msg': 'Bot env variables', 'value': variables.env_vars_for_log(), 'bot_name': bot_name})
 
     if variables.ACCOUNT is None:

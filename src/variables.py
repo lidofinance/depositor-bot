@@ -7,6 +7,7 @@ from eth_typing import URI, ChecksumAddress
 from logmask import masked_config
 from web3 import Web3
 
+from utils.build_info import load_build_info
 from utils.env import from_file_or_env
 
 
@@ -176,6 +177,9 @@ HTTP_REQUEST_SLEEP_BEFORE_RETRY_IN_SECONDS_CONSENSUS: Final = int(os.getenv('HTT
 
 # Logging
 LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO').upper()
+
+# No logging here: logging is configured after this module is imported. main() logs BUILD_INFO_ERROR.
+BUILD_INFO, BUILD_INFO_ERROR = load_build_info()
 
 _SECRET_NAMES = (
     'WALLET_PRIVATE_KEY',
