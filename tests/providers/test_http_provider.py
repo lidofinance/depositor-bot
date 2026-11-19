@@ -4,7 +4,7 @@ import pytest
 from requests import Response
 
 from providers.consensus import CL_REQUESTS_DURATION
-from providers.http_provider import HTTPProvider, NoHostsProvided, NotOkResponse, data_is_any, data_is_dict
+from providers.http_provider import HTTPProvider, NoHostsProvided, NotOkResponse, _domain, data_is_any, data_is_dict
 
 
 @pytest.mark.unit
@@ -129,3 +129,23 @@ def test_custom_error_provided():
 
     with pytest.raises(CustomError):
         provider.call()
+
+
+@pytest.mark.unit
+def test_user_agent_names_the_app():
+    provider = HTTPProvider(['http://localhost:1'], 5 * 60, 1, 1)
+
+    assert provider.session.headers['User-Agent'].startswith('depositor-bot/')
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    'url,expected',
+    [
+        ('https://user:cl-password@beacon.example/', 'beacon.example'),
+        ('http://beacon.example:5052/eth', 'beacon.example:5052'),
+        ('https://beacon.example/token/abc', 'beacon.example'),
+    ],
+)
+def test_metric_domain_label_has_no_credentials(url, expected):
+    assert _domain(url) == expected
