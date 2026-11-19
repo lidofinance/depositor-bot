@@ -25,6 +25,7 @@ Unvetting is the proces of decreasing approved depositable signing keys.
 - [Variables](#variables)
     - [Required variables](#required-variables)
     - [Additional variables](#additional-variables)
+    - [Secrets from files](#secrets-from-files)
 - [Metrics and logs](#metrics-and-logs)
 - [Development](#development)
     - [Install](#install)
@@ -36,8 +37,8 @@ Unvetting is the proces of decreasing approved depositable signing keys.
 
 1. Create `.env` file
 2. Setup variables
-    - Set WEB3_RPC_ENDPOINTS
-    - Set WALLET_PRIVATE_KEY
+    - Set WEB3_RPC_ENDPOINTS (or WEB3_RPC_ENDPOINTS_FILE)
+    - Set WALLET_PRIVATE_KEY (or WALLET_PRIVATE_KEY_FILE)
     - Set CREATE_TRANSACTIONS to true
     - Set ONCHAIN_TRANSPORT_RPC_ENDPOINTS and ONCHAIN_TRANSPORT_ADDRESS (Data Bus is the only message transport)
     - Set KEYS_API_URL and CL_API_URLS (required by the depositor)
@@ -59,17 +60,17 @@ Next cases requires bot restart:
 
 | Variable                  | Default                                    | Description                                                                                                              |
 |---------------------------|--------------------------------------------|--------------------------------------------------------------------------------------------------------------------------|
-| WEB3_RPC_ENDPOINTS        | -                                          | List of rpc endpoints that will be used to send requests comma separated (`,`)                                           |
-| WALLET_PRIVATE_KEY        | -                                          | Account private key                                                                                                      |
+| WEB3_RPC_ENDPOINTS        | -                                          | List of rpc endpoints that will be used to send requests comma separated (`,`). Can be read from a file, see [Secrets from files](#secrets-from-files) |
+| WALLET_PRIVATE_KEY        | -                                          | Account private key. Without it the bot runs in dry mode. Can be read from a file                                        |
 | CREATE_TRANSACTIONS       | false                                      | If true then tx will be send to blockchain                                                                               |
 | LIDO_LOCATOR              | 0xC1d0b3DE6792Bf6b4b37EccdcC24e45978Cfd2Eb | Lido Locator address. Mainnet by default. Other networks could be found [here](https://docs.lido.fi/deployed-contracts/) |
 | DEPOSIT_CONTRACT          | 0x00000000219ab540356cBB839Cbe05303d7705Fa | Ethereum deposit contract address                                                                                        |
 | DEPOSIT_MODULES_WHITELIST | 1                                          | List of staking module's ids in which the depositor bot will make deposits                                               |
-| KEYS_API_URL              | -                                          | URL of the Keys API                                                                                                      |
-| CL_API_URLS               | -                                          | Comma-separated list of Consensus Layer client URIs                                                                      |
+| KEYS_API_URL              | -                                          | URL of the Keys API. Treated as a secret (may carry credentials), can be read from a file                                |
+| CL_API_URLS               | -                                          | Comma-separated list of Consensus Layer client URIs. Can be read from a file                                             |
 | ENABLE_TOP_UP             | false                                      | Enable top-up functionality. Must be disabled until Node Operators submit consolidation requests                         |
 | ONCHAIN_TRANSPORT_ADDRESS | -                                          | Data Bus contract address (Gnosis). The only message transport; startup fails if unset                                   |
-| ONCHAIN_TRANSPORT_RPC_ENDPOINTS | -                                    | Comma-separated RPC endpoints of the Data Bus chain (Gnosis). Startup fails if unset                                     |
+| ONCHAIN_TRANSPORT_RPC_ENDPOINTS | -                                    | Comma-separated RPC endpoints of the Data Bus chain (Gnosis). Startup fails if unset. Can be read from a file            |
 | ---                       | ---	                                       | ---                                                                                                                      |
 | GUARDIAN_DELEGATES_CACHE_TTL | 60                                      | Seconds to cache the resolved delegate→guardian map (DSMv5). Bounds EL-provider load; on-chain checks remain the freshness backstop. 0 disables |
 
@@ -83,7 +84,7 @@ Next cases requires bot restart:
 | MAX_GAS_FEE                       | 100 gwei      | Bot will wait for a lower price. Treshold for gas_fee                                                                    |
 | CONTRACT_GAS_LIMIT                | 15000000      | Default transaction gas limit                                                                                            |
 | RELAY_RPC                         | -             | RPC URI                                                                                                                  |
-| AUCTION_BUNDLER_PRIVATE_KEY       | -             | Private key - Used to identify account for relays (should NOT be equal to WALLET private key)                            |
+| AUCTION_BUNDLER_PRIVATE_KEY       | -             | Private key - Used to identify account for relays (should NOT be equal to WALLET private key). Can be read from a file. Unset falls back to the legacy `FLASHBOT_SIGNATURE`; empty turns relay signing off |
 | GAS_FEE_PERCENTILE_1              | 20            | Percentile for first recommended fee calculation                                                                         |
 | GAS_FEE_PERCENTILE_DAYS_HISTORY_1 | 1             | Percentile for first recommended calculates from N days of the fee history                                               |
 | GAS_PRIORITY_FEE_PERCENTILE       | 25            | Priority transaction will be N percentile from priority fees in last block (min MIN_PRIORITY_FEE - max MAX_PRIORITY_FEE) |
@@ -103,6 +104,23 @@ Next cases requires bot restart:
 | HTTP_REQUEST_TIMEOUT_CONSENSUS    | 300           | Timeout in seconds for CL HTTP requests                                                                                  |
 | HTTP_REQUEST_RETRY_COUNT_CONSENSUS | 5            | Number of retries for CL HTTP requests                                                                                   |
 | HTTP_REQUEST_SLEEP_BEFORE_RETRY_IN_SECONDS_CONSENSUS | 5 | Backoff factor in seconds between CL request retries                                                              |
+
+### Secrets from files
+
+Every secret can be read from a file instead of the env: set `<NAME>_FILE` to the path of the file. The file wins over
+`<NAME>`. Trailing whitespace (the newline at the end of the file) is dropped. Lists stay comma-separated inside the file.
+
+| Secret                          | File variable                        |
+|---------------------------------|--------------------------------------|
+| WALLET_PRIVATE_KEY              | WALLET_PRIVATE_KEY_FILE              |
+| AUCTION_BUNDLER_PRIVATE_KEY     | AUCTION_BUNDLER_PRIVATE_KEY_FILE     |
+| FLASHBOT_SIGNATURE              | FLASHBOT_SIGNATURE_FILE              |
+| WEB3_RPC_ENDPOINTS              | WEB3_RPC_ENDPOINTS_FILE              |
+| ONCHAIN_TRANSPORT_RPC_ENDPOINTS | ONCHAIN_TRANSPORT_RPC_ENDPOINTS_FILE |
+| CL_API_URLS                     | CL_API_URLS_FILE                     |
+| KEYS_API_URL                    | KEYS_API_URL_FILE                    |
+
+- The files are read once at startup. A changed secret takes effect after a restart.
 
 ## Metrics and logs
 
