@@ -161,8 +161,9 @@ and `BUILD_COMMIT` build args:
 docker build --build-arg BUILD_VERSION=5.0.0 --build-arg BUILD_BRANCH=main --build-arg BUILD_COMMIT=$(git rev-parse HEAD) .
 ```
 
-Without the args the tracked file keeps `unknown`. The values are in the startup log and in the
-`<PROMETHEUS_PREFIX>_build_info` metric.
+Without the args the tracked file keeps `unknown`. The values are in the startup log, in the `<PROMETHEUS_PREFIX>_build_info`
+metric and in the `User-Agent` (`depositor-bot/<version>`) of every outgoing request: EL and Data Bus RPC, CL,
+Keys API and the private relay.
 
 ### Container
 

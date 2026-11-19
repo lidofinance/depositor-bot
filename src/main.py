@@ -86,6 +86,10 @@ def main(bot_name: str):
     logger.info({'msg': f'Start up metrics service on port: {variables.PROMETHEUS_PORT}.'})
     start_http_server(variables.PROMETHEUS_PORT)
 
+    # Before the first RPC call, so that every request is counted.
+    logger.info({'msg': 'Add metrics to web3 requests.'})
+    web3_multi_provider.init_metrics()
+
     logger.info({'msg': 'Connect MultiHTTPProviders.', 'rpc_count': len(variables.WEB3_RPC_ENDPOINTS)})
     w3 = Web3(FallbackProviderModule(variables.WEB3_RPC_ENDPOINTS, cache_allowed_requests=True))
     logger.info({'msg': 'Current chain_id', 'chain_id': w3.eth.chain_id})
@@ -97,9 +101,6 @@ def main(bot_name: str):
             'transaction': TransactionUtils,
         }
     )
-
-    logger.info({'msg': 'Add metrics to web3 requests.'})
-    web3_multi_provider.init_metrics()
 
     if bot_name == BotModule.DEPOSITOR:
         keys_api = KeysAPIClient(host=variables.KEYS_API_URL)

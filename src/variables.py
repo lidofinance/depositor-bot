@@ -185,6 +185,8 @@ LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO').upper()
 
 # No logging here: logging is configured after this module is imported. main() logs BUILD_INFO_ERROR.
 BUILD_INFO, BUILD_INFO_ERROR = load_build_info()
+# Sent with every outgoing HTTP request (EL/Gnosis RPC, CL, Keys API, private relay), so partners can spot old versions.
+USER_AGENT = f'depositor-bot/{BUILD_INFO["version"]}'
 
 _SECRET_NAMES = (
     'WALLET_PRIVATE_KEY',

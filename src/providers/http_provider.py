@@ -13,9 +13,16 @@ from requests import JSONDecodeError, Session
 from requests.adapters import HTTPAdapter
 from urllib3 import Retry
 
+import variables
 from providers.consistency import ProviderConsistencyModule
 
 logger = logging.getLogger(__name__)
+
+
+def _domain(url: str) -> str:
+    """Host and port of the URL for metric labels. Not netloc: it carries the user:password@ of basic auth."""
+    parsed = urlparse(url)
+    return f'{parsed.hostname}:{parsed.port}' if parsed.port else parsed.hostname or ''
 
 
 class NoHostsProvided(Exception):
@@ -88,6 +95,7 @@ class HTTPProvider(ProviderConsistencyModule, ABC):
 
         adapter = HTTPAdapter(max_retries=retry_strategy)
         self.session = Session()
+        self.session.headers['User-Agent'] = variables.USER_AGENT
         self.session.mount('https://', adapter)
         self.session.mount('http://', adapter)
 
@@ -172,7 +180,7 @@ class HTTPProvider(ProviderConsistencyModule, ABC):
             finally:
                 # Also on a BaseException (SystemExit from the SIGTERM handler): an unlabeled timer raises ValueError on
                 # exit, which would replace the exception and turn a clean shutdown into exit code 1.
-                t.labels(endpoint=endpoint, code=code, domain=urlparse(host).netloc)
+                t.labels(endpoint=endpoint, code=code, domain=_domain(host))
 
             if response.status_code != HTTPStatus.OK:
                 response_fail_msg = (
