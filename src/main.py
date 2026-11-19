@@ -50,7 +50,15 @@ def check_providers_chain_ids(w3: Web3, cl: ConsensusClient, keys_api: KeysAPICl
 
 
 def main(bot_name: str):
-    logger.info({'msg': 'Bot env variables', 'value': variables.PUBLIC_ENV_VARS, 'bot_name': bot_name})
+    logger.info({'msg': 'Bot env variables', 'value': variables.env_vars_for_log(), 'bot_name': bot_name})
+
+    if variables.ACCOUNT is None:
+        logger.warning({'msg': 'Account is not provided. Dry mode: transactions are not sent.'})
+    else:
+        logger.info({'msg': 'Load account from private key.', 'value': variables.ACCOUNT.address})
+        if not variables.CREATE_TRANSACTIONS:
+            logger.warning({'msg': 'CREATE_TRANSACTIONS is not true. Dry mode: transactions are not sent.'})
+
     if bot_name not in list(BotModule):
         msg = f'Last arg should be one of {[str(item) for item in BotModule]}, received {BotModule}.'
         logger.error({'msg': msg})

@@ -2,6 +2,7 @@ import importlib
 import json
 
 import pytest
+from logmask import MASKED_VALUE
 
 import variables
 
@@ -99,6 +100,7 @@ def test_keys_api_url_is_secret(load_variables, tmp_path):
     assert url == loaded.KEYS_API_URL
     # PUBLIC_ENV_VARS goes unmasked into the build_info metric labels.
     assert 'kapi-password' not in json.dumps(loaded.PUBLIC_ENV_VARS, default=str)
+    assert loaded.env_vars_for_log()['KEYS_API_URL'] == MASKED_VALUE
 
 
 def test_keys_api_url_unset_is_empty(load_variables):
@@ -134,3 +136,39 @@ def test_every_secret_is_private_and_has_a_file_path_in_the_dump():
         assert name in variables.PRIVATE_ENV_VARS
         assert name not in variables.PUBLIC_ENV_VARS
         assert f'{name}_FILE' in variables.PUBLIC_ENV_VARS
+
+
+def test_env_vars_for_log_masks_secrets(monkeypatch):
+    monkeypatch.setattr(
+        variables,
+        'PRIVATE_ENV_VARS',
+        {
+            'WEB3_RPC_ENDPOINTS': ['https://rpc.example/v3/secret-key-1', 'https://rpc.example/v3/secret-key-2'],
+            'CL_API_URLS': ['https://user:cl-password@beacon.example/'],
+            'WALLET_PRIVATE_KEY': TEST_KEY,
+        },
+    )
+
+    logged = variables.env_vars_for_log()
+
+    assert logged['WEB3_RPC_ENDPOINTS'] == [MASKED_VALUE, MASKED_VALUE]
+    assert logged['CL_API_URLS'] == [MASKED_VALUE]
+    assert logged['WALLET_PRIVATE_KEY'] == MASKED_VALUE
+    dumped = json.dumps(logged)
+    assert 'secret-key' not in dumped
+    assert 'cl-password' not in dumped
+    assert '1' * 64 not in dumped
+
+
+def test_env_vars_for_log_keeps_public_values_and_empty_secrets(monkeypatch):
+    monkeypatch.setattr(variables, 'PRIVATE_ENV_VARS', {'WALLET_PRIVATE_KEY': None})
+
+    logged = variables.env_vars_for_log()
+
+    assert logged['WALLET_PRIVATE_KEY'] == ''
+    for key, value in variables.PUBLIC_ENV_VARS.items():
+        assert logged[key] == value
+
+
+def test_log_level_defaults_to_info(load_variables):
+    assert load_variables(LOG_LEVEL=None).LOG_LEVEL == 'INFO'
