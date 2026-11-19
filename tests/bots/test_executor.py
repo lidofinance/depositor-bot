@@ -26,8 +26,8 @@ def pure_func_sleep(block: BlockData):
 
 
 @pytest.fixture
-def remove_metrics():
-    healthcheck_pulse.pulse = Mock()
+def remove_metrics(monkeypatch):
+    monkeypatch.setattr(healthcheck_pulse, 'pulse', Mock())
 
 
 @pytest.mark.integration

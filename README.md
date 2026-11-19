@@ -26,6 +26,7 @@ Unvetting is the proces of decreasing approved depositable signing keys.
     - [Required variables](#required-variables)
     - [Additional variables](#additional-variables)
     - [Secrets from files](#secrets-from-files)
+- [Health check](#health-check)
 - [Metrics and logs](#metrics-and-logs)
     - [Build info](#build-info)
 - [Development](#development)
@@ -93,6 +94,7 @@ Next cases requires bot restart:
 | MAX_BUFFERED_ETHERS               | 5000 ether    | Maximum amount of ETH in the buffer, after which the bot deposits at any gas                                             |
 | PROMETHEUS_PORT                   | 9000          | Port with metrics server                                                                                                 |
 | PROMETHEUS_PREFIX                 | depositor_bot | Prefix for the metrics                                                                                                   |
+| HEALTHCHECK_SERVER_HOST           | 0.0.0.0       | Address of the health check server. All interfaces by default, so that container probes reach it                         |
 | HEALTHCHECK_SERVER_PORT           | 9010          | Port with bot`s status server                                                                                            |
 | LOG_LEVEL                         | INFO          | Log level: `DEBUG`, `INFO`, `WARNING`, `ERROR` or `CRITICAL` (any case)                                                  |
 | MAX_CYCLE_LIFETIME_IN_SECONDS     | 1200          | Max lifetime of usual cycle. If cycle will not end in this time, bot will crush                                          |
@@ -123,6 +125,40 @@ Every secret can be read from a file instead of the env: set `<NAME>_FILE` to th
 | KEYS_API_URL                    | KEYS_API_URL_FILE                    |
 
 - The files are read once at startup. A changed secret takes effect after a restart.
+
+## Health check
+
+The health server on `HEALTHCHECK_SERVER_HOST:HEALTHCHECK_SERVER_PORT` has two routes. Neither calls an upstream.
+
+| Route          | Probe     | 200                                     | 503                                    |
+|----------------|-----------|-----------------------------------------|----------------------------------------|
+| `/healthcheck` | liveness  | a cycle started in the last 10 minutes  | no cycle for 10 minutes: the bot is stuck |
+| `/ready`       | readiness | the bot is ready; never flips back      | still starting up                      |
+
+- Every bot (depositor, pauser, unvetter) is ready after its first cycle on current guardian messages, i.e. once the
+  Data Bus backfill has reached the chain head. Until then a message posted before the start is not seen yet: the
+  depositor cannot form a quorum, the pauser could miss a pause. A rollout keeps the old pod until the new one is ready.
+- The executor records the liveness pulse in-process. No HTTP request can refresh it, so another client on the network
+  cannot keep a stuck bot looking healthy. Any other path answers 404.
+- The Docker `HEALTHCHECK` (`src/metrics/healthcheck_probe.py`) calls `/healthcheck` on `HEALTHCHECK_SERVER_HOST`, or on
+  `127.0.0.1` when the server listens on all interfaces.
+
+## Health check
+
+The health server on `HEALTHCHECK_SERVER_HOST:HEALTHCHECK_SERVER_PORT` has two routes. Neither calls an upstream.
+
+| Route          | Probe     | 200                                     | 503                                    |
+|----------------|-----------|-----------------------------------------|----------------------------------------|
+| `/healthcheck` | liveness  | a cycle started in the last 10 minutes  | no cycle for 10 minutes: the bot is stuck |
+| `/ready`       | readiness | the bot is ready; never flips back      | still starting up                      |
+
+- Every bot (depositor, pauser, unvetter) is ready after its first cycle on current guardian messages, i.e. once the
+  Data Bus backfill has reached the chain head. Until then a message posted before the start is not seen yet: the
+  depositor cannot form a quorum, the pauser could miss a pause. A rollout keeps the old pod until the new one is ready.
+- The executor records the liveness pulse in-process. No HTTP request can refresh it, so another client on the network
+  cannot keep a stuck bot looking healthy. Any other path answers 404.
+- The Docker `HEALTHCHECK` (`src/metrics/healthcheck_probe.py`) calls `/healthcheck` on `HEALTHCHECK_SERVER_HOST`, or on
+  `127.0.0.1` when the server listens on all interfaces.
 
 ## Metrics and logs
 

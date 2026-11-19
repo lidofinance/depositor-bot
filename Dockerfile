@@ -47,14 +47,16 @@ RUN if [ -n "$BUILD_COMMIT" ]; then \
 
 RUN apt-get clean && find /var/lib/apt/lists/ -type f -delete && chown -R www-data /app/
 
-ENV PROMETHEUS_PORT 9000
-ENV HEALTHCHECK_SERVER_PORT 9010
+ENV PROMETHEUS_PORT=9000 \
+    HEALTHCHECK_SERVER_HOST=0.0.0.0 \
+    HEALTHCHECK_SERVER_PORT=9010
 
-EXPOSE $PROMETHEUS_PORT
+EXPOSE $PROMETHEUS_PORT $HEALTHCHECK_SERVER_PORT
 USER www-data
 
+# Calls HEALTHCHECK_SERVER_HOST (loopback for 0.0.0.0).
 HEALTHCHECK --interval=10s --timeout=3s \
-    CMD curl -f http://localhost:$HEALTHCHECK_SERVER_PORT/healthcheck || exit 1
+    CMD ["python3", "src/metrics/healthcheck_probe.py"]
 
 WORKDIR /app/
 

@@ -72,7 +72,7 @@ def main(bot_name: str):
         logger.error({'msg': msg})
         raise ValueError(msg)
 
-    logger.info({'msg': f'Start up healthcheck service on port: {variables.HEALTHCHECK_SERVER_PORT}.'})
+    logger.info({'msg': f'Start up healthcheck service on {variables.HEALTHCHECK_SERVER_HOST}:{variables.HEALTHCHECK_SERVER_PORT}.'})
     start_pulse_server()
 
     logger.info({'msg': f'Start up metrics service on port: {variables.PROMETHEUS_PORT}.'})

@@ -386,6 +386,9 @@ class OnchainTransportProvider(BaseMessageProvider):
         if not parsers_providers:
             raise ValueError('There must be at least a single parser for Data Bus provider')
         self._latest_block = -1
+        # True once a scan has reached the chain head: the start-up backfill is done and the guardian messages
+        # are current. Never reset, a later lag is visible on ONCHAIN_TRANSPORT_CURSOR_LAG.
+        self.synced = False
 
         logger.info('Data bus client initialized.')
 
@@ -411,6 +414,7 @@ class OnchainTransportProvider(BaseMessageProvider):
         # If block distance is 0, then skip fetching to avoid looping on a single block
         if from_block == latest_block_number:
             ONCHAIN_TRANSPORT_CURSOR_LAG.set(0)
+            self.synced = True
             return []
 
         to_block = min(latest_block_number, from_block + variables.ONCHAIN_TRANSPORT_GETLOGS_CHUNK - 1)
@@ -440,6 +444,8 @@ class OnchainTransportProvider(BaseMessageProvider):
         # A scanned range is progress whether or not it held a message.
         self._latest_block = to_block
         ONCHAIN_TRANSPORT_CURSOR_LAG.set(latest_block_number - to_block)
+        if to_block == latest_block_number:
+            self.synced = True
         return logs
 
     def _process_msg(self, log: LogReceipt) -> dict | None:

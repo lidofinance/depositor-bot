@@ -99,6 +99,9 @@ MAX_BUFFERED_ETHERS = Web3.to_wei(*os.getenv('MAX_BUFFERED_ETHERS', '5000 ether'
 # Metrics
 PROMETHEUS_PORT = int(os.getenv('PROMETHEUS_PORT', '9000'))
 PROMETHEUS_PREFIX = os.getenv('PROMETHEUS_PREFIX', 'depositor_bot')
+# All interfaces by default, so that the health check is reachable from outside the container (Kubernetes probes).
+# The bot pulses the server through localhost, so the address must accept loopback connections.
+HEALTHCHECK_SERVER_HOST = os.getenv('HEALTHCHECK_SERVER_HOST', '0.0.0.0')
 HEALTHCHECK_SERVER_PORT = int(os.getenv('HEALTHCHECK_SERVER_PORT', os.getenv('PULSE_SERVER_PORT', '9010')))
 MAX_CYCLE_LIFETIME_IN_SECONDS = int(os.getenv('MAX_CYCLE_LIFETIME_IN_SECONDS', '1200'))
 
@@ -193,6 +196,7 @@ _SECRET_NAMES = (
 # All non-private env variables to the logs in main
 PUBLIC_ENV_VARS = {
     'LOG_LEVEL': LOG_LEVEL,
+    'HEALTHCHECK_SERVER_HOST': HEALTHCHECK_SERVER_HOST,
     'HTTP_REQUEST_TIMEOUT_CONSENSUS': HTTP_REQUEST_TIMEOUT_CONSENSUS,
     'HTTP_REQUEST_RETRY_COUNT_CONSENSUS': HTTP_REQUEST_RETRY_COUNT_CONSENSUS,
     'HTTP_REQUEST_SLEEP_BEFORE_RETRY_IN_SECONDS_CONSENSUS': HTTP_REQUEST_SLEEP_BEFORE_RETRY_IN_SECONDS_CONSENSUS,

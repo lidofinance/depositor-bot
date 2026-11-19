@@ -5,6 +5,7 @@ import pytest
 
 from bots.unvetter import UnvetterBot, _payload_key
 from cryptography.verify_signature import compute_vs
+from metrics import healthcheck_pulse
 from transport.msg_providers.onchain_transport import build_unvet_message
 from transport.msg_types.common import get_messages_sign_filter
 from transport.msg_types.unvet import UnvetMessage
@@ -294,3 +295,24 @@ def test_delivered_payload_survives_a_failure_later_in_the_cycle(web3_lido_unit)
         bot.execute(Mock())
 
     assert bot._delivered == {_payload_key(first)}
+
+
+@pytest.mark.unit
+def test_unvetter_is_ready_only_after_a_cycle_on_a_synced_data_bus(web3_lido_unit, monkeypatch):
+    monkeypatch.setattr(healthcheck_pulse, '_ready', healthcheck_pulse.threading.Event())
+    bot = UnvetterBot(web3_lido_unit)
+    bot.receive_unvet_messages = Mock(return_value=[])
+
+    # The transport is built lazily on the first cycle: no transport, not ready.
+    bot.prepare_transport_bus = Mock()
+    bot.execute(Mock())
+    assert not healthcheck_pulse.is_ready()
+
+    bot._transport = Mock(synced=False)
+    bot.execute(Mock())
+    assert not healthcheck_pulse.is_ready()
+
+    # Ready on the early return without messages too.
+    bot._transport.synced = True
+    bot.execute(Mock())
+    assert healthcheck_pulse.is_ready()
