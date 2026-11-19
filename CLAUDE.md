@@ -164,7 +164,7 @@ All environment variables are read in `src/variables.py`. When adding a new one:
 1. Add it to `src/variables.py`
 2. Add it to `README.md`'s variable table
 3. Add it to `.env.example`
-4. If non-sensitive, include it in the `PUBLIC_ENV_VARS` dict (logged at startup)
+4. If non-sensitive, include it in the `PUBLIC_ENV_VARS` dict (logged at startup and exported in the `build_info` metric)
 5. If sensitive, read it with `from_file_or_env()` (`src/utils/env.py`, adds the `<NAME>_FILE` form), add it to
    `_SECRET_NAMES` and to `PRIVATE_ENV_VARS`. `PRIVATE_ENV_VARS` feeds the logmask masker (`src/metrics/logging.py`):
    every form of these values is masked in every log line, and `env_vars_for_log()` dumps them as `***`.

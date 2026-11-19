@@ -35,6 +35,16 @@ COPY --from=builder $VENV_PATH $VENV_PATH
 WORKDIR /app
 COPY . .
 
+# Build metadata for the startup log and the build_info metric. The build workflow passes these as build args;
+# regenerate build-info.json from them. Local builds without the args keep the tracked "unknown" placeholders.
+ARG BUILD_VERSION
+ARG BUILD_BRANCH
+ARG BUILD_COMMIT
+# json.dump escapes the values: a quote or backslash in a branch name must not break the file.
+RUN if [ -n "$BUILD_COMMIT" ]; then \
+      python3 -c 'import json, os; json.dump({key: os.environ["BUILD_" + key.upper()] for key in ("version", "branch", "commit")}, open("build-info.json", "w"))'; \
+    fi
+
 RUN apt-get clean && find /var/lib/apt/lists/ -type f -delete && chown -R www-data /app/
 
 ENV PROMETHEUS_PORT 9000
