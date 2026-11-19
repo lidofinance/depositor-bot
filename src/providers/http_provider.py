@@ -1,19 +1,28 @@
 import logging
 from abc import ABC
+from collections.abc import Callable, Sequence
 from http import HTTPStatus
-from typing import Any, Callable, NoReturn, Protocol, Sequence
+from typing import Any, NoReturn, Protocol
 from urllib.parse import urljoin, urlparse
 
 # NOTE: Missing library stubs or py.typed marker. That's why we use `type: ignore`
 from json_stream import requests as json_stream_requests  # type: ignore
 from json_stream.base import TransientStreamingJSONObject  # type: ignore
 from prometheus_client import Histogram
-from providers.consistency import ProviderConsistencyModule
 from requests import JSONDecodeError, Session
 from requests.adapters import HTTPAdapter
 from urllib3 import Retry
 
+import variables
+from providers.consistency import ProviderConsistencyModule
+
 logger = logging.getLogger(__name__)
+
+
+def _domain(url: str) -> str:
+    """Host and port of the URL for metric labels. Not netloc: it carries the user:password@ of basic auth."""
+    parsed = urlparse(url)
+    return f'{parsed.hostname}:{parsed.port}' if parsed.port else parsed.hostname or ''
 
 
 class NoHostsProvided(Exception):
@@ -86,6 +95,7 @@ class HTTPProvider(ProviderConsistencyModule, ABC):
 
         adapter = HTTPAdapter(max_retries=retry_strategy)
         self.session = Session()
+        self.session.headers['User-Agent'] = variables.USER_AGENT
         self.session.mount('https://', adapter)
         self.session.mount('http://', adapter)
 
@@ -167,19 +177,19 @@ class HTTPProvider(ProviderConsistencyModule, ABC):
                 t.labels(
                     endpoint=endpoint,
                     code=0,
-                    domain=urlparse(host).netloc,
+                    domain=_domain(host),
                 )
                 raise self.PROVIDER_EXCEPTION(status=0, text='Response error.') from error
 
             t.labels(
                 endpoint=endpoint,
                 code=response.status_code,
-                domain=urlparse(host).netloc,
+                domain=_domain(host),
             )
 
             if response.status_code != HTTPStatus.OK:
                 response_fail_msg = (
-                    f'Response from {complete_endpoint} [{response.status_code}]' f' with text: "{str(response.text)}" returned.'
+                    f'Response from {complete_endpoint} [{response.status_code}] with text: "{str(response.text)}" returned.'
                 )
                 logger.debug({'msg': response_fail_msg})
                 raise self.PROVIDER_EXCEPTION(response_fail_msg, status=response.status_code, text=response.text)

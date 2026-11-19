@@ -15,6 +15,7 @@ from web3_multi_provider import FallbackProvider
 import variables
 from cryptography.verify_signature import compact_signature
 from metrics.metrics import ONCHAIN_TRANSPORT_CURSOR_LAG, UNEXPECTED_EXCEPTIONS
+from providers.fallback_provider import rpc_request_kwargs
 from transport.msg_providers.common import BaseMessageProvider
 from transport.msg_types.deposit import DepositMessage
 from transport.msg_types.pause import PauseMessage
@@ -492,4 +493,6 @@ class OnchainTransportProvider(BaseMessageProvider):
 
     @staticmethod
     def create_onchain_transport_w3() -> Web3:
-        return Web3(FallbackProvider(variables.ONCHAIN_TRANSPORT_RPC_ENDPOINTS, cache_allowed_requests=True))
+        return Web3(
+            FallbackProvider(variables.ONCHAIN_TRANSPORT_RPC_ENDPOINTS, request_kwargs=rpc_request_kwargs(), cache_allowed_requests=True)
+        )
