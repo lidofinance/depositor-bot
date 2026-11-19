@@ -185,8 +185,13 @@ Keys API and the private relay.
 
 ### Container
 
+- Based on Docker Hardened Images: `lidofinance/dhi-python:3.12.16-debian13` (runtime) and its `-dev` variant (build
+  stage), both pinned by digest. The runtime image has no shell and no package manager.
+- Pulling the base images needs a Docker Hub login with the DHI token, for local builds and `docker-compose` too:
+  `docker login -u lidofinance` (the team token is in the team vault; CI uses the `DHI_USERNAME` / `DHI_TOKEN` secrets).
 - Runs as a non-root user (uid/gid 1000, overridden by the chart) with a read-only root filesystem: the bot writes nothing to disk.
 - Exits with 0 on SIGTERM/SIGINT.
+- No shell in the container: debug with `kubectl debug` and an ephemeral container.
 
 ## Development
 
