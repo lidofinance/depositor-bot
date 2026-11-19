@@ -8,6 +8,8 @@ def stub_databus():
     """Bots always build a Data Bus provider; tests feed messages into MessageStorage directly instead."""
     provider_cls = MagicMock()
     provider_cls.return_value.get_messages.return_value = []
+    # A MagicMock attribute is truthy; the real provider starts unsynced.
+    provider_cls.return_value.synced = False
     transport_w3 = provider_cls.create_onchain_transport_w3.return_value
     transport_w3.eth.get_balance.return_value = 0
     transport_w3.eth.chain_id = 100

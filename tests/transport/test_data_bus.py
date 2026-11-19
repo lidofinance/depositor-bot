@@ -406,13 +406,13 @@ def _stubbed_provider(
     w3: Web3,
     parsers_providers: list,
     delegates_provider=_delegate_map,
-    message_schema: Schema = Schema(Or(DepositMessageSchema, PingMessageSchema)),
+    message_schema: Schema | None = None,
 ) -> OnchainTransportProvider:
     """Provider whose parsers skip log decoding — the mock logs already carry decoded `args`."""
     provider = OnchainTransportProvider(
         w3=w3,
         onchain_address=variables.ONCHAIN_TRANSPORT_ADDRESS,
-        message_schema=message_schema,
+        message_schema=message_schema or Schema(Or(DepositMessageSchema, PingMessageSchema)),
         parsers_providers=parsers_providers,
         delegates_provider=delegates_provider,
     )
@@ -567,3 +567,36 @@ def test_failed_scan_does_not_advance_cursor(web3_lido_unit):
 
     assert provider.get_messages() == []
     assert provider._latest_block == 1_000
+
+
+@pytest.mark.unit
+def test_provider_is_synced_once_a_scan_reaches_the_head(web3_lido_unit, monkeypatch):
+    monkeypatch.setattr(variables, 'ONCHAIN_TRANSPORT_GETLOGS_CHUNK', 100)
+    with mock.patch('web3.eth.Eth.chain_id', new_callable=mock.PropertyMock) as mock_chain_id:
+        mock_chain_id.return_value = 1
+        web3_lido_unit.eth.get_logs = Mock(return_value=[])
+        web3_lido_unit.eth.get_block_number = Mock(return_value=1000)
+        provider = _stubbed_provider(web3_lido_unit, [PingParser])
+        # Scans 800-899, 899-998, 998-1000: the third one reaches the head.
+        provider._latest_block = 800
+        assert not provider.synced
+
+        provider.get_messages()
+        provider.get_messages()
+        assert not provider.synced
+
+        provider.get_messages()
+        assert provider.synced
+
+
+@pytest.mark.unit
+def test_provider_is_not_synced_when_get_logs_fails(web3_lido_unit):
+    with mock.patch('web3.eth.Eth.chain_id', new_callable=mock.PropertyMock) as mock_chain_id:
+        mock_chain_id.return_value = 1
+        web3_lido_unit.eth.get_logs = Mock(side_effect=ValueError('rpc error'))
+        web3_lido_unit.eth.get_block_number = Mock(return_value=1000)
+        provider = _stubbed_provider(web3_lido_unit, [PingParser])
+
+        provider.get_messages()
+
+        assert not provider.synced

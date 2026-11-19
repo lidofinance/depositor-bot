@@ -95,6 +95,8 @@ This means all contract access throughout the codebase goes through `w3.lido.<co
 
 Each bot is driven by `Executor` (`src/blockchain/executor.py`), which polls for new blocks and calls `bot.execute(block)` on each cycle. The return value matters: `True` advances by `BLOCKS_BETWEEN_EXECUTION` blocks (normal operation), `False` retries on the very next block.
 
+Health (`src/metrics/healthcheck_pulse.py`): the executor calls `healthcheck_pulse.pulse()` every cycle, in-process — `/healthcheck` (liveness) fails after 10 minutes without one. There is deliberately no HTTP route that refreshes the pulse: the server listens on `0.0.0.0`, so such a route would let any client keep a stuck bot alive. `/ready` (readiness) flips to 200 once on `mark_ready()` and never back: each bot calls it after a cycle on a synced Data Bus (`OnchainTransportProvider.synced`), so a rollout keeps the old pod until the new one sees current guardian messages.
+
 ### Message transport and quorum logic (Depositor)
 
 Council Daemon guardians broadcast signed messages over the **Onchain DataBus** (`src/transport/msg_providers/onchain_transport.py`) — Gnosis chain contract events parsed by `EventParser` subclasses (`DepositV1Parser`, `PingParser`, etc.). It is the only transport (RabbitMQ support was removed); `ONCHAIN_TRANSPORT_ADDRESS` and `ONCHAIN_TRANSPORT_RPC_ENDPOINTS` are required at startup. Bot tests stub the provider in `tests/bots/conftest.py` and inject messages into `MessageStorage` directly.
@@ -164,7 +166,16 @@ All environment variables are read in `src/variables.py`. When adding a new one:
 1. Add it to `src/variables.py`
 2. Add it to `README.md`'s variable table
 3. Add it to `.env.example`
-4. If non-sensitive, include it in the `PUBLIC_ENV_VARS` dict (logged at startup)
+4. If non-sensitive, include it in the `PUBLIC_ENV_VARS` dict (logged at startup and exported in the `build_info` metric)
+5. If sensitive, read it with `from_file_or_env()` (`src/utils/env.py`, adds the `<NAME>_FILE` form), add it to
+   `_SECRET_NAMES` and to `PRIVATE_ENV_VARS`. `PRIVATE_ENV_VARS` feeds the logmask masker (`src/metrics/logging.py`):
+   every form of these values is masked in every log line, and `env_vars_for_log()` dumps them as `***`.
+
+### Logging setup
+
+`src/metrics/logging.py` calls logmask's `setup_logging(PRIVATE_ENV_VARS, level=LOG_LEVEL, stream=sys.stdout)` on
+import. Nothing may log before that import — `variables.py` must stay free of logger calls (the account/dry-mode lines
+are logged from `main()`).
 
 ### Python import root
 

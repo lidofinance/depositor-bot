@@ -5,6 +5,7 @@ import pytest
 
 from bots.pauser import PauserBot
 from cryptography.verify_signature import compute_vs
+from metrics import healthcheck_pulse
 from tests.conftest import DSM_OWNER
 from transport.msg_providers.onchain_transport import build_pause_message
 from utils.bytes import from_hex_string_to_bytes
@@ -213,3 +214,19 @@ def test_pause_is_not_broadcast_when_simulation_reverts(pause_bot, pause_message
 
     assert pause_bot._send_pause_message(pause_message) is False
     web3_lido_unit.transaction.send.assert_not_called()
+
+
+@pytest.mark.unit
+def test_pauser_is_ready_only_after_a_cycle_on_a_synced_data_bus(pause_bot, block_data, monkeypatch):
+    monkeypatch.setattr(healthcheck_pulse, '_ready', healthcheck_pulse.threading.Event())
+    pause_bot.message_storage.get_messages_and_actualize = Mock(return_value=[])
+
+    assert not healthcheck_pulse.is_ready()  # not ready at startup any more
+
+    pause_bot._transport.synced = False
+    pause_bot.execute(block_data)
+    assert not healthcheck_pulse.is_ready()
+
+    pause_bot._transport.synced = True
+    pause_bot.execute(block_data)
+    assert healthcheck_pulse.is_ready()
