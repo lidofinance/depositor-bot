@@ -29,6 +29,7 @@ Unvetting is the proces of decreasing approved depositable signing keys.
 - [Health check](#health-check)
 - [Metrics and logs](#metrics-and-logs)
     - [Build info](#build-info)
+    - [Container](#container)
 - [Development](#development)
     - [Install](#install)
     - [Tests](#tests)
@@ -180,6 +181,11 @@ docker build --build-arg BUILD_VERSION=5.0.0 --build-arg BUILD_BRANCH=main --bui
 
 Without the args the tracked file keeps `unknown`. The values are in the startup log and in the
 `<PROMETHEUS_PREFIX>_build_info` metric.
+
+### Container
+
+- Runs as a non-root user (uid/gid 1000, overridden by the chart) with a read-only root filesystem: the bot writes nothing to disk.
+- Exits with 0 on SIGTERM/SIGINT.
 
 ## Development
 

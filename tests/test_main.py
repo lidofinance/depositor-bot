@@ -1,4 +1,5 @@
 import json
+import signal
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from unittest.mock import Mock, patch
@@ -7,7 +8,7 @@ import pytest
 from web3 import Web3
 
 import variables
-from main import check_providers_chain_ids, main
+from main import check_providers_chain_ids, main, shutdown
 from providers.consistency import InconsistentProviders
 from providers.fallback_provider import FallbackProviderModule
 
@@ -90,3 +91,11 @@ def test_check_providers_chain_ids__fallback_el_provider_on_another_chain__raise
 
     with pytest.raises(InconsistentProviders):
         check_providers_chain_ids(w3, _client(HOODI_CHAIN_ID), _client(HOODI_CHAIN_ID))
+
+
+@pytest.mark.unit
+def test_shutdown_exits_cleanly_on_sigterm():
+    with pytest.raises(SystemExit) as exit_info:
+        shutdown(signal.SIGTERM, None)
+
+    assert exit_info.value.code == 0
