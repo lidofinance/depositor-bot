@@ -143,6 +143,23 @@ The health server on `HEALTHCHECK_SERVER_HOST:HEALTHCHECK_SERVER_PORT` has two r
 - The Docker `HEALTHCHECK` (`src/metrics/healthcheck_probe.py`) calls `/healthcheck` on `HEALTHCHECK_SERVER_HOST`, or on
   `127.0.0.1` when the server listens on all interfaces.
 
+## Health check
+
+The health server on `HEALTHCHECK_SERVER_HOST:HEALTHCHECK_SERVER_PORT` has two routes. Neither calls an upstream.
+
+| Route          | Probe     | 200                                     | 503                                    |
+|----------------|-----------|-----------------------------------------|----------------------------------------|
+| `/healthcheck` | liveness  | a cycle started in the last 10 minutes  | no cycle for 10 minutes: the bot is stuck |
+| `/ready`       | readiness | the bot is ready; never flips back      | still starting up                      |
+
+- Every bot (depositor, pauser, unvetter) is ready after its first cycle on current guardian messages, i.e. once the
+  Data Bus backfill has reached the chain head. Until then a message posted before the start is not seen yet: the
+  depositor cannot form a quorum, the pauser could miss a pause. A rollout keeps the old pod until the new one is ready.
+- The executor records the liveness pulse in-process. No HTTP request can refresh it, so another client on the network
+  cannot keep a stuck bot looking healthy. Any other path answers 404.
+- The Docker `HEALTHCHECK` (`src/metrics/healthcheck_probe.py`) calls `/healthcheck` on `HEALTHCHECK_SERVER_HOST`, or on
+  `127.0.0.1` when the server listens on all interfaces.
+
 ## Metrics and logs
 
 Metrics list could be found in [source code](src/metrics/metrics.py).
