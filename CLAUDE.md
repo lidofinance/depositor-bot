@@ -95,6 +95,8 @@ This means all contract access throughout the codebase goes through `w3.lido.<co
 
 Each bot is driven by `Executor` (`src/blockchain/executor.py`), which polls for new blocks and calls `bot.execute(block)` on each cycle. The return value matters: `True` advances by `BLOCKS_BETWEEN_EXECUTION` blocks (normal operation), `False` retries on the very next block.
 
+Health (`src/metrics/healthcheck_pulse.py`): the executor calls `healthcheck_pulse.pulse()` every cycle, in-process — `/healthcheck` (liveness) fails after 10 minutes without one. There is deliberately no HTTP route that refreshes the pulse: the server listens on `0.0.0.0`, so such a route would let any client keep a stuck bot alive. `/ready` (readiness) flips to 200 once on `mark_ready()` and never back: each bot calls it after a cycle on a synced Data Bus (`OnchainTransportProvider.synced`), so a rollout keeps the old pod until the new one sees current guardian messages.
+
 ### Message transport and quorum logic (Depositor)
 
 Council Daemon guardians broadcast signed messages over the **Onchain DataBus** (`src/transport/msg_providers/onchain_transport.py`) — Gnosis chain contract events parsed by `EventParser` subclasses (`DepositV1Parser`, `PingParser`, etc.). It is the only transport (RabbitMQ support was removed); `ONCHAIN_TRANSPORT_ADDRESS` and `ONCHAIN_TRANSPORT_RPC_ENDPOINTS` are required at startup. Bot tests stub the provider in `tests/bots/conftest.py` and inject messages into `MessageStorage` directly.

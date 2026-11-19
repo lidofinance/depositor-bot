@@ -36,6 +36,7 @@ from blockchain.topup.csm02_strategy import CSM02TopUpStrategy
 from blockchain.topup.strategy import TopUpStrategy
 from blockchain.typings import Web3
 from blockchain.web3_extentions.lido_contracts import ZERO_ADDRESS
+from metrics import healthcheck_pulse
 from metrics.metrics import (
     ACCOUNT_BALANCE,
     BOT_LAST_CYCLE_TIMESTAMP,
@@ -198,7 +199,7 @@ class DepositorBot:
             MODULE_QUORUM_LAST_SEEN_TIMESTAMP.labels(module_id).set(now.timestamp())
 
         self._onchain_transport_w3 = OnchainTransportProvider.create_onchain_transport_w3()
-        transport = OnchainTransportProvider(
+        self._transport = transport = OnchainTransportProvider(
             w3=self._onchain_transport_w3,
             onchain_address=variables.ONCHAIN_TRANSPORT_ADDRESS,
             message_schema=Schema(Or(DepositMessageSchema, PingMessageSchema)),
@@ -222,6 +223,10 @@ class DepositorBot:
         result = self._execute_actual()
         BOT_LAST_CYCLE_TIMESTAMP.set(time.time())
         logger.info({'msg': 'Depositor iteration finished.', 'value': result})
+        # Ready once a cycle has run on current guardian messages: the Data Bus backfill reached the chain head.
+        # Before that the bot cannot form a quorum, so it is not ready to act.
+        if self._transport.synced:
+            healthcheck_pulse.mark_ready()
         return result
 
     def _common_preconditions(self) -> bool:
