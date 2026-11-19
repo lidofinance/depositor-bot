@@ -7,24 +7,36 @@ from eth_account.signers.local import LocalAccount
 from eth_typing import URI, ChecksumAddress
 from web3 import Web3
 
+from utils.env import from_file_or_env
+
 logger = logging.getLogger(__name__)
 
 
-def _env_list(name: str) -> list[str]:
-    """Parse a comma-separated env var into a list of non-empty, stripped values.
+def _split_list(value: str | None) -> list[str]:
+    """Parse a comma-separated value into a list of non-empty, stripped items.
 
-    Unset/empty → [], and blank or whitespace-only items (stray commas, trailing spaces) are dropped.
+    Unset/empty → [], and blank or whitespace-only items (stray commas, trailing spaces, newlines) are dropped.
     """
-    return [item for raw in os.getenv(name, '').split(',') if (item := raw.strip())]
+    return [item for raw in (value or '').split(',') if (item := raw.strip())]
 
 
+def _env_list(name: str) -> list[str]:
+    return _split_list(os.getenv(name))
+
+
+def _secret_list(name: str) -> list[str]:
+    """A comma-separated secret list from `<name>_FILE` or, when it is not set, from `name`."""
+    return _split_list(from_file_or_env(name))
+
+
+# Secrets can come from a file: `<NAME>_FILE` holds the path and wins over `<NAME>`. The files are read once at startup.
 # EL node
-WEB3_RPC_ENDPOINTS = _env_list('WEB3_RPC_ENDPOINTS')
+WEB3_RPC_ENDPOINTS = _secret_list('WEB3_RPC_ENDPOINTS')
 
 TESTNET_WEB3_RPC_ENDPOINTS = _env_list('TESTNET_WEB3_RPC_ENDPOINTS')
 
 # Account private key
-WALLET_PRIVATE_KEY = os.getenv('WALLET_PRIVATE_KEY', None)
+WALLET_PRIVATE_KEY = from_file_or_env('WALLET_PRIVATE_KEY')
 
 ACCOUNT: LocalAccount | None = None
 if WALLET_PRIVATE_KEY:
@@ -50,7 +62,7 @@ DEPOSIT_TO_FIRST_HEALTHY_MODULE_ONLY: bool = os.getenv('DEPOSIT_TO_FIRST_HEALTHY
 
 # data bus
 # gnosis nodes
-ONCHAIN_TRANSPORT_RPC_ENDPOINTS = _env_list('ONCHAIN_TRANSPORT_RPC_ENDPOINTS')
+ONCHAIN_TRANSPORT_RPC_ENDPOINTS = _secret_list('ONCHAIN_TRANSPORT_RPC_ENDPOINTS')
 
 ONCHAIN_TRANSPORT_ADDRESS = os.getenv('ONCHAIN_TRANSPORT_ADDRESS')
 if ONCHAIN_TRANSPORT_ADDRESS:
@@ -76,7 +88,10 @@ CONTRACT_GAS_LIMIT = int(os.getenv('CONTRACT_GAS_LIMIT', 15 * 10**6))
 # Mainnet: "https://relay.flashbots.net",
 # Holesky: "https://relay-holesky.flashbots.net",
 RELAY_RPC = URI(os.getenv('RELAY_RPC', os.getenv('FLASHBOTS_RPC', '')))
-AUCTION_BUNDLER_PRIVATE_KEY = os.getenv('AUCTION_BUNDLER_PRIVATE_KEY', os.getenv('FLASHBOT_SIGNATURE', ''))
+_auction_bundler_private_key = from_file_or_env('AUCTION_BUNDLER_PRIVATE_KEY')
+AUCTION_BUNDLER_PRIVATE_KEY = (
+    from_file_or_env('FLASHBOT_SIGNATURE') if _auction_bundler_private_key is None else _auction_bundler_private_key
+)
 
 # Curated module strategy
 GAS_FEE_PERCENTILE_1: int = int(os.getenv('GAS_FEE_PERCENTILE_1', 20))
@@ -159,14 +174,25 @@ def get_consolidation_bus_config(chain_id: int) -> tuple[ChecksumAddress | None,
 
 
 # Providers
-KEYS_API_URL = os.getenv('KEYS_API_URL', '')
-CL_API_URLS = _env_list('CL_API_URLS')
+KEYS_API_URL = from_file_or_env('KEYS_API_URL') or ''
+CL_API_URLS = _secret_list('CL_API_URLS')
 HTTP_REQUEST_TIMEOUT_CONSENSUS: Final = int(os.getenv('HTTP_REQUEST_TIMEOUT_CONSENSUS', 5 * 60))
 HTTP_REQUEST_RETRY_COUNT_CONSENSUS: Final = int(os.getenv('HTTP_REQUEST_RETRY_COUNT_CONSENSUS', 5))
 HTTP_REQUEST_SLEEP_BEFORE_RETRY_IN_SECONDS_CONSENSUS: Final = int(os.getenv('HTTP_REQUEST_SLEEP_BEFORE_RETRY_IN_SECONDS_CONSENSUS', 5))
 
+_SECRET_NAMES = (
+    'WALLET_PRIVATE_KEY',
+    'AUCTION_BUNDLER_PRIVATE_KEY',
+    'WEB3_RPC_ENDPOINTS',
+    'ONCHAIN_TRANSPORT_RPC_ENDPOINTS',
+    'CL_API_URLS',
+    'KEYS_API_URL',
+)
+
 # All non-private env variables to the logs in main
 PUBLIC_ENV_VARS = {
+    # The paths show which source the secrets came from; the values themselves stay in PRIVATE_ENV_VARS.
+    **{f'{name}_FILE': os.getenv(f'{name}_FILE', '') for name in _SECRET_NAMES},
     'LIDO_LOCATOR': LIDO_LOCATOR,
     'DEPOSIT_CONTRACT': DEPOSIT_CONTRACT,
     'CREATE_TRANSACTIONS': CREATE_TRANSACTIONS,
@@ -203,6 +229,8 @@ PRIVATE_ENV_VARS = {
     'ONCHAIN_TRANSPORT_RPC_ENDPOINTS': ONCHAIN_TRANSPORT_RPC_ENDPOINTS,
     'WALLET_PRIVATE_KEY': WALLET_PRIVATE_KEY,
     'AUCTION_BUNDLER_PRIVATE_KEY': AUCTION_BUNDLER_PRIVATE_KEY,
+    'CL_API_URLS': CL_API_URLS,
+    'KEYS_API_URL': KEYS_API_URL,
 }
 
 assert not set(PRIVATE_ENV_VARS.keys()).intersection(set(PUBLIC_ENV_VARS.keys()))
