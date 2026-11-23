@@ -99,6 +99,39 @@ def test_retval_validator():
         provider._get('test', retval_validator=failed_validation)
 
 
+def _observations(endpoint: str) -> dict | None:
+    """Labels of the one CL_REQUESTS_DURATION count sample for this endpoint, or None if it was never observed."""
+    [metric] = CL_REQUESTS_DURATION.collect()
+    samples = [s for s in metric.samples if s.name.endswith('_count') and s.labels['endpoint'] == endpoint and s.value == 1]
+    return samples[0].labels if len(samples) == 1 else None
+
+
+@pytest.mark.unit
+def test_system_exit_during_request_is_not_replaced():
+    # SIGTERM handler raises SystemExit mid-request: the duration timer must still get labels, or it raises ValueError
+    # on exit and a clean shutdown becomes exit code 1.
+    provider = HTTPProvider(['http://localhost:1'], 5 * 60, 1, 1)
+    provider.PROMETHEUS_HISTOGRAM = CL_REQUESTS_DURATION
+    provider.session.get = Mock(side_effect=SystemExit(0))
+
+    with pytest.raises(SystemExit):
+        provider._get_without_fallbacks('http://localhost:1', 'test-sigterm')
+
+    assert _observations(endpoint='test-sigterm') == {'code': '0', 'domain': 'localhost:1', 'endpoint': 'test-sigterm'}
+
+
+@pytest.mark.unit
+def test_failed_request_is_observed_with_code_0():
+    provider = HTTPProvider(['http://localhost:1'], 5 * 60, 1, 1)
+    provider.PROMETHEUS_HISTOGRAM = CL_REQUESTS_DURATION
+    provider.session.get = Mock(side_effect=ConnectionError('refused'))
+
+    with pytest.raises(NotOkResponse):
+        provider._get_without_fallbacks('http://localhost:1', 'test-refused')
+
+    assert _observations(endpoint='test-refused') == {'code': '0', 'domain': 'localhost:1', 'endpoint': 'test-refused'}
+
+
 @pytest.mark.unit
 def test_data_is_dict():
     # dict passes silently; anything else raises with the endpoint in the message

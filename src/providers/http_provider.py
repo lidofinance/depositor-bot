@@ -1,17 +1,19 @@
 import logging
 from abc import ABC
+from collections.abc import Callable, Sequence
 from http import HTTPStatus
-from typing import Any, Callable, NoReturn, Protocol, Sequence
+from typing import Any, NoReturn, Protocol
 from urllib.parse import urljoin, urlparse
 
 # NOTE: Missing library stubs or py.typed marker. That's why we use `type: ignore`
 from json_stream import requests as json_stream_requests  # type: ignore
 from json_stream.base import TransientStreamingJSONObject  # type: ignore
 from prometheus_client import Histogram
-from providers.consistency import ProviderConsistencyModule
 from requests import JSONDecodeError, Session
 from requests.adapters import HTTPAdapter
 from urllib3 import Retry
+
+from providers.consistency import ProviderConsistencyModule
 
 logger = logging.getLogger(__name__)
 
@@ -154,6 +156,7 @@ class HTTPProvider(ProviderConsistencyModule, ABC):
         """
         complete_endpoint = endpoint.format(*path_params) if path_params else endpoint
 
+        code = 0
         with self.PROMETHEUS_HISTOGRAM.time() as t:
             try:
                 response = self.session.get(
@@ -162,24 +165,18 @@ class HTTPProvider(ProviderConsistencyModule, ABC):
                     timeout=self.request_timeout,
                     stream=stream,
                 )
+                code = response.status_code
             except Exception as error:
                 logger.error({'msg': str(error)})
-                t.labels(
-                    endpoint=endpoint,
-                    code=0,
-                    domain=urlparse(host).netloc,
-                )
                 raise self.PROVIDER_EXCEPTION(status=0, text='Response error.') from error
-
-            t.labels(
-                endpoint=endpoint,
-                code=response.status_code,
-                domain=urlparse(host).netloc,
-            )
+            finally:
+                # Also on a BaseException (SystemExit from the SIGTERM handler): an unlabeled timer raises ValueError on
+                # exit, which would replace the exception and turn a clean shutdown into exit code 1.
+                t.labels(endpoint=endpoint, code=code, domain=urlparse(host).netloc)
 
             if response.status_code != HTTPStatus.OK:
                 response_fail_msg = (
-                    f'Response from {complete_endpoint} [{response.status_code}]' f' with text: "{str(response.text)}" returned.'
+                    f'Response from {complete_endpoint} [{response.status_code}] with text: "{str(response.text)}" returned.'
                 )
                 logger.debug({'msg': response_fail_msg})
                 raise self.PROVIDER_EXCEPTION(response_fail_msg, status=response.status_code, text=response.text)
