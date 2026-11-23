@@ -108,6 +108,22 @@ def test_stalled_client_is_disconnected_after_timeout(server, monkeypatch, caplo
     assert 'timed out' in record.msg['error']
 
 
+def test_invalid_request_line_is_logged_truncated(server, caplog):
+    client = socket.create_connection(server.server_address[:2], timeout=5)
+
+    try:
+        with caplog.at_level('WARNING', logger='metrics.healthcheck_pulse'):
+            client.sendall(b'X' * 60_000 + b'\r\n\r\n')
+            # The error page comes after the log line: once it arrives, the record is there.
+            assert client.recv(1024)
+    finally:
+        client.close()
+
+    [record] = caplog.records
+    assert record.msg['msg'] == 'Healthcheck server error.'
+    assert len(record.msg['error']) == healthcheck.MAX_LOGGED_ERROR_LENGTH
+
+
 def test_server_does_not_serve_files(server, monkeypatch):
     monkeypatch.setattr(healthcheck, '_last_pulse', datetime.now())
 

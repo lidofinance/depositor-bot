@@ -7,6 +7,7 @@ from eth_typing import URI, ChecksumAddress
 from logmask import masked_config
 from web3 import Web3
 
+from blockchain.constants import SLOT_TIME
 from utils.build_info import load_build_info
 from utils.env import from_file_or_env
 
@@ -96,6 +97,10 @@ GAS_PRIORITY_FEE_PERCENTILE = int(os.getenv('GAS_PRIORITY_FEE_PERCENTILE', 25))
 
 MAX_BUFFERED_ETHERS = Web3.to_wei(*os.getenv('MAX_BUFFERED_ETHERS', '5000 ether').split(' '))
 
+# Same as min deposit block distance on mainnet for all modules
+# https://etherscan.io/address/0xFdDf38947aFB03C621C71b06C9C70bce73f12999#readProxyContract#F38
+BLOCKS_BETWEEN_EXECUTION = int(os.getenv('BLOCKS_BETWEEN_EXECUTION', 25))
+
 # Metrics
 PROMETHEUS_PORT = int(os.getenv('PROMETHEUS_PORT', '9000'))
 PROMETHEUS_PREFIX = os.getenv('PROMETHEUS_PREFIX', 'depositor_bot')
@@ -103,14 +108,11 @@ PROMETHEUS_PREFIX = os.getenv('PROMETHEUS_PREFIX', 'depositor_bot')
 # The bot pulses the server through localhost, so the address must accept loopback connections.
 HEALTHCHECK_SERVER_HOST = os.getenv('HEALTHCHECK_SERVER_HOST', '0.0.0.0')
 HEALTHCHECK_SERVER_PORT = int(os.getenv('HEALTHCHECK_SERVER_PORT', os.getenv('PULSE_SERVER_PORT', '9010')))
-MAX_CYCLE_LIFETIME_IN_SECONDS = int(os.getenv('MAX_CYCLE_LIFETIME_IN_SECONDS', '1200'))
+MAX_CYCLE_LIFETIME_IN_SECONDS = int(os.getenv('MAX_CYCLE_LIFETIME_IN_SECONDS', '1200')) + BLOCKS_BETWEEN_EXECUTION * SLOT_TIME
 
 # List of ids of staking modules in which the depositor bot will make deposits
 _env_whitelist = os.getenv('DEPOSIT_MODULES_WHITELIST', '').strip()
 DEPOSIT_MODULES_WHITELIST = [int(module_id) for module_id in _env_whitelist.split(',')] if _env_whitelist else []
-# Same as min deposit block distance on mainnet for all modules
-# https://etherscan.io/address/0xFdDf38947aFB03C621C71b06C9C70bce73f12999#readProxyContract#F38
-BLOCKS_BETWEEN_EXECUTION = int(os.getenv('BLOCKS_BETWEEN_EXECUTION', 25))
 
 """
 GAS_ADDENDUM is used to increase number of deposits during to calm market. The value should be increased if bot

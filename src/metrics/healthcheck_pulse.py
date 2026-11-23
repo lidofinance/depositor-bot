@@ -9,6 +9,8 @@ logger = logging.getLogger(__name__)
 
 # Liveness fails when no cycle has pulsed for this long. Should be higher than one epoch.
 PULSE_TIMEOUT = timedelta(minutes=10)
+# Longest server error text written to the log. The text can quote client input.
+MAX_LOGGED_ERROR_LENGTH = 256
 
 _last_pulse = datetime.now()
 _ready = threading.Event()
@@ -65,7 +67,9 @@ class PulseRequestHandler(BaseHTTPRequestHandler):
 
     def log_error(self, format, *args):
         # Route the server's own errors (for example a read timeout) through the JSON logger instead of stderr
-        logger.warning({'msg': 'Healthcheck server error.', 'client': self.client_address[0], 'error': format % args})
+        # Capped: send_error quotes the client's request line, up to 64 KiB of it.
+        error = (format % args)[:MAX_LOGGED_ERROR_LENGTH]
+        logger.warning({'msg': 'Healthcheck server error.', 'client': self.client_address[0], 'error': error})
 
 
 def start_pulse_server(host: str | None = None, port: int | None = None) -> ThreadingHTTPServer:
