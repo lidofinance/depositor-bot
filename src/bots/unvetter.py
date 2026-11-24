@@ -9,6 +9,7 @@ import variables
 from blockchain.executor import Executor
 from blockchain.typings import Web3
 from cryptography.verify_signature import to_guardian_signature
+from metrics import healthcheck_pulse
 from metrics.transport_message_metrics import message_metrics_filter
 from transport.msg_providers.onchain_transport import OnchainTransportProvider, PingParser, UnvetV1Parser, UnvetV2Parser
 from transport.msg_storage import MessageStorage
@@ -47,6 +48,7 @@ def run_unvetter(w3: Web3):
 
 class UnvetterBot:
     message_storage: MessageStorage | None = None
+    _transport: OnchainTransportProvider | None = None
 
     def __init__(self, w3: Web3):
         self.w3 = w3
@@ -58,7 +60,7 @@ class UnvetterBot:
         if self.message_storage is not None:
             return
 
-        transport = OnchainTransportProvider(
+        self._transport = transport = OnchainTransportProvider(
             w3=OnchainTransportProvider.create_onchain_transport_w3(),
             onchain_address=variables.ONCHAIN_TRANSPORT_ADDRESS,
             message_schema=Schema(Or(UnvetMessageSchema, PingMessageSchema)),
@@ -75,6 +77,14 @@ class UnvetterBot:
         )
 
     def execute(self, block: BlockData) -> bool:
+        result = self._execute(block)
+        # Ready once a cycle has run on current guardian messages: the Data Bus backfill reached the chain head.
+        # Until then a message posted before the start is not seen yet, so a rollout must keep the old pod.
+        if self._transport is not None and self._transport.synced:
+            healthcheck_pulse.mark_ready()
+        return result
+
+    def _execute(self, block: BlockData) -> bool:
         self.prepare_transport_bus()
         messages = self.receive_unvet_messages()
         logger.info({'msg': f'Received {len(messages)} unvet messages.'})

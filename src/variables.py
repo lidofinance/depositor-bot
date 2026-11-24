@@ -1,38 +1,46 @@
-import logging
 import os
-from typing import Final
+from typing import Any, Final
 
 from eth_account import Account
 from eth_account.signers.local import LocalAccount
 from eth_typing import URI, ChecksumAddress
+from logmask import masked_config
 from web3 import Web3
 
-logger = logging.getLogger(__name__)
+from blockchain.constants import SLOT_TIME
+from utils.build_info import load_build_info
+from utils.env import from_file_or_env
+
+
+def _split_list(value: str | None) -> list[str]:
+    """Parse a comma-separated value into a list of non-empty, stripped items.
+
+    Unset/empty → [], and blank or whitespace-only items (stray commas, trailing spaces, newlines) are dropped.
+    """
+    return [item for raw in (value or '').split(',') if (item := raw.strip())]
 
 
 def _env_list(name: str) -> list[str]:
-    """Parse a comma-separated env var into a list of non-empty, stripped values.
-
-    Unset/empty → [], and blank or whitespace-only items (stray commas, trailing spaces) are dropped.
-    """
-    return [item for raw in os.getenv(name, '').split(',') if (item := raw.strip())]
+    return _split_list(os.getenv(name))
 
 
+def _secret_list(name: str) -> list[str]:
+    """A comma-separated secret list from `<name>_FILE` or, when it is not set, from `name`."""
+    return _split_list(from_file_or_env(name))
+
+
+# Secrets can come from a file: `<NAME>_FILE` holds the path and wins over `<NAME>`. The files are read once at startup.
 # EL node
-WEB3_RPC_ENDPOINTS = _env_list('WEB3_RPC_ENDPOINTS')
+WEB3_RPC_ENDPOINTS = _secret_list('WEB3_RPC_ENDPOINTS')
 
 TESTNET_WEB3_RPC_ENDPOINTS = _env_list('TESTNET_WEB3_RPC_ENDPOINTS')
 
 # Account private key
-WALLET_PRIVATE_KEY = os.getenv('WALLET_PRIVATE_KEY', None)
+WALLET_PRIVATE_KEY = from_file_or_env('WALLET_PRIVATE_KEY')
 
-ACCOUNT: LocalAccount | None = None
-if WALLET_PRIVATE_KEY:
-    account = Account.from_key(WALLET_PRIVATE_KEY)
-    logger.info({'msg': 'Load account from private key.', 'value': account.address})
-    ACCOUNT = account
-else:
-    logger.warning({'msg': 'Account not provided. Run in dry mode.'})
+# Without the key (unset variable or empty file) the bot runs in dry mode: no transactions are sent.
+# Logged in main, after logging is configured.
+ACCOUNT: LocalAccount | None = Account.from_key(WALLET_PRIVATE_KEY) if WALLET_PRIVATE_KEY else None
 
 # App specific
 # LIDO_LOCATOR ADDRESS
@@ -50,7 +58,7 @@ DEPOSIT_TO_FIRST_HEALTHY_MODULE_ONLY: bool = os.getenv('DEPOSIT_TO_FIRST_HEALTHY
 
 # data bus
 # gnosis nodes
-ONCHAIN_TRANSPORT_RPC_ENDPOINTS = _env_list('ONCHAIN_TRANSPORT_RPC_ENDPOINTS')
+ONCHAIN_TRANSPORT_RPC_ENDPOINTS = _secret_list('ONCHAIN_TRANSPORT_RPC_ENDPOINTS')
 
 ONCHAIN_TRANSPORT_ADDRESS = os.getenv('ONCHAIN_TRANSPORT_ADDRESS')
 if ONCHAIN_TRANSPORT_ADDRESS:
@@ -76,7 +84,10 @@ CONTRACT_GAS_LIMIT = int(os.getenv('CONTRACT_GAS_LIMIT', 15 * 10**6))
 # Mainnet: "https://relay.flashbots.net",
 # Holesky: "https://relay-holesky.flashbots.net",
 RELAY_RPC = URI(os.getenv('RELAY_RPC', os.getenv('FLASHBOTS_RPC', '')))
-AUCTION_BUNDLER_PRIVATE_KEY = os.getenv('AUCTION_BUNDLER_PRIVATE_KEY', os.getenv('FLASHBOT_SIGNATURE', ''))
+_auction_bundler_private_key = from_file_or_env('AUCTION_BUNDLER_PRIVATE_KEY')
+AUCTION_BUNDLER_PRIVATE_KEY = (
+    from_file_or_env('FLASHBOT_SIGNATURE') if _auction_bundler_private_key is None else _auction_bundler_private_key
+)
 
 # Curated module strategy
 GAS_FEE_PERCENTILE_1: int = int(os.getenv('GAS_FEE_PERCENTILE_1', 20))
@@ -86,18 +97,22 @@ GAS_PRIORITY_FEE_PERCENTILE = int(os.getenv('GAS_PRIORITY_FEE_PERCENTILE', 25))
 
 MAX_BUFFERED_ETHERS = Web3.to_wei(*os.getenv('MAX_BUFFERED_ETHERS', '5000 ether').split(' '))
 
+# Same as min deposit block distance on mainnet for all modules
+# https://etherscan.io/address/0xFdDf38947aFB03C621C71b06C9C70bce73f12999#readProxyContract#F38
+BLOCKS_BETWEEN_EXECUTION = int(os.getenv('BLOCKS_BETWEEN_EXECUTION', 25))
+
 # Metrics
 PROMETHEUS_PORT = int(os.getenv('PROMETHEUS_PORT', '9000'))
 PROMETHEUS_PREFIX = os.getenv('PROMETHEUS_PREFIX', 'depositor_bot')
+# All interfaces by default, so that the health check is reachable from outside the container (Kubernetes probes).
+# The bot pulses the server through localhost, so the address must accept loopback connections.
+HEALTHCHECK_SERVER_HOST = os.getenv('HEALTHCHECK_SERVER_HOST', '0.0.0.0')
 HEALTHCHECK_SERVER_PORT = int(os.getenv('HEALTHCHECK_SERVER_PORT', os.getenv('PULSE_SERVER_PORT', '9010')))
-MAX_CYCLE_LIFETIME_IN_SECONDS = int(os.getenv('MAX_CYCLE_LIFETIME_IN_SECONDS', '1200'))
+MAX_CYCLE_LIFETIME_IN_SECONDS = int(os.getenv('MAX_CYCLE_LIFETIME_IN_SECONDS', '1200')) + BLOCKS_BETWEEN_EXECUTION * SLOT_TIME
 
 # List of ids of staking modules in which the depositor bot will make deposits
 _env_whitelist = os.getenv('DEPOSIT_MODULES_WHITELIST', '').strip()
 DEPOSIT_MODULES_WHITELIST = [int(module_id) for module_id in _env_whitelist.split(',')] if _env_whitelist else []
-# Same as min deposit block distance on mainnet for all modules
-# https://etherscan.io/address/0xFdDf38947aFB03C621C71b06C9C70bce73f12999#readProxyContract#F38
-BLOCKS_BETWEEN_EXECUTION = int(os.getenv('BLOCKS_BETWEEN_EXECUTION', 25))
 
 """
 GAS_ADDENDUM is used to increase number of deposits during to calm market. The value should be increased if bot
@@ -159,14 +174,40 @@ def get_consolidation_bus_config(chain_id: int) -> tuple[ChecksumAddress | None,
 
 
 # Providers
-KEYS_API_URL = os.getenv('KEYS_API_URL', '')
-CL_API_URLS = _env_list('CL_API_URLS')
+KEYS_API_URL = from_file_or_env('KEYS_API_URL') or ''
+CL_API_URLS = _secret_list('CL_API_URLS')
 HTTP_REQUEST_TIMEOUT_CONSENSUS: Final = int(os.getenv('HTTP_REQUEST_TIMEOUT_CONSENSUS', 5 * 60))
 HTTP_REQUEST_RETRY_COUNT_CONSENSUS: Final = int(os.getenv('HTTP_REQUEST_RETRY_COUNT_CONSENSUS', 5))
 HTTP_REQUEST_SLEEP_BEFORE_RETRY_IN_SECONDS_CONSENSUS: Final = int(os.getenv('HTTP_REQUEST_SLEEP_BEFORE_RETRY_IN_SECONDS_CONSENSUS', 5))
 
+# Logging
+LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO').upper()
+
+# No logging here: logging is configured after this module is imported. main() logs BUILD_INFO_ERROR.
+BUILD_INFO, BUILD_INFO_ERROR = load_build_info()
+# Sent with every outgoing HTTP request (EL/Gnosis RPC, CL, Keys API, private relay), so partners can spot old versions.
+USER_AGENT = f'depositor-bot/{BUILD_INFO["version"]}'
+
+_SECRET_NAMES = (
+    'WALLET_PRIVATE_KEY',
+    'AUCTION_BUNDLER_PRIVATE_KEY',
+    'WEB3_RPC_ENDPOINTS',
+    'ONCHAIN_TRANSPORT_RPC_ENDPOINTS',
+    'CL_API_URLS',
+    'KEYS_API_URL',
+)
+
 # All non-private env variables to the logs in main
 PUBLIC_ENV_VARS = {
+    'LOG_LEVEL': LOG_LEVEL,
+    'HEALTHCHECK_SERVER_HOST': HEALTHCHECK_SERVER_HOST,
+    'HTTP_REQUEST_TIMEOUT_CONSENSUS': HTTP_REQUEST_TIMEOUT_CONSENSUS,
+    'HTTP_REQUEST_RETRY_COUNT_CONSENSUS': HTTP_REQUEST_RETRY_COUNT_CONSENSUS,
+    'HTTP_REQUEST_SLEEP_BEFORE_RETRY_IN_SECONDS_CONSENSUS': HTTP_REQUEST_SLEEP_BEFORE_RETRY_IN_SECONDS_CONSENSUS,
+    'CONTRACT_GAS_LIMIT': CONTRACT_GAS_LIMIT,
+    'GAS_ADDENDUM': GAS_ADDENDUM,
+    # The paths show which source the secrets came from; the values themselves stay in PRIVATE_ENV_VARS.
+    **{f'{name}_FILE': os.getenv(f'{name}_FILE', '') for name in _SECRET_NAMES},
     'LIDO_LOCATOR': LIDO_LOCATOR,
     'DEPOSIT_CONTRACT': DEPOSIT_CONTRACT,
     'CREATE_TRANSACTIONS': CREATE_TRANSACTIONS,
@@ -203,6 +244,13 @@ PRIVATE_ENV_VARS = {
     'ONCHAIN_TRANSPORT_RPC_ENDPOINTS': ONCHAIN_TRANSPORT_RPC_ENDPOINTS,
     'WALLET_PRIVATE_KEY': WALLET_PRIVATE_KEY,
     'AUCTION_BUNDLER_PRIVATE_KEY': AUCTION_BUNDLER_PRIVATE_KEY,
+    'CL_API_URLS': CL_API_URLS,
+    'KEYS_API_URL': KEYS_API_URL,
 }
 
 assert not set(PRIVATE_ENV_VARS.keys()).intersection(set(PUBLIC_ENV_VARS.keys()))
+
+
+def env_vars_for_log() -> dict[str, Any]:
+    """All bot variables for the startup log. Secret values are masked, unset ones stay empty."""
+    return masked_config(PUBLIC_ENV_VARS, PRIVATE_ENV_VARS)

@@ -1,5 +1,7 @@
+import signal
 import sys
 from enum import StrEnum
+from types import FrameType
 from typing import cast
 
 import web3_multi_provider
@@ -49,10 +51,27 @@ def check_providers_chain_ids(w3: Web3, cl: ConsensusClient, keys_api: KeysAPICl
     )
 
 
+def shutdown(signum: int, frame: FrameType | None) -> None:
+    """Exit cleanly on SIGTERM/SIGINT. As PID 1 in a container the process would ignore the signal and get SIGKILL."""
+    logger.info({'msg': f'{signal.Signals(signum).name} received. Shut down.'})
+    sys.exit(0)
+
+
 def main(bot_name: str):
-    logger.info({'msg': 'Bot env variables', 'value': variables.PUBLIC_ENV_VARS, 'bot_name': bot_name})
+    logger.info({'msg': 'Start depositor bot.', 'build': variables.BUILD_INFO, 'bot_name': bot_name})
+    if variables.BUILD_INFO_ERROR:
+        logger.warning({'msg': 'Build info is not available.', 'error': variables.BUILD_INFO_ERROR})
+    logger.info({'msg': 'Bot env variables', 'value': variables.env_vars_for_log(), 'bot_name': bot_name})
+
+    if variables.ACCOUNT is None:
+        logger.warning({'msg': 'Account is not provided. Dry mode: transactions are not sent.'})
+    else:
+        logger.info({'msg': 'Load account from private key.', 'value': variables.ACCOUNT.address})
+        if not variables.CREATE_TRANSACTIONS:
+            logger.warning({'msg': 'CREATE_TRANSACTIONS is not true. Dry mode: transactions are not sent.'})
+
     if bot_name not in list(BotModule):
-        msg = f'Last arg should be one of {[str(item) for item in BotModule]}, received {BotModule}.'
+        msg = f'Last arg should be one of {[str(item) for item in BotModule]}, received {bot_name}.'
         logger.error({'msg': msg})
         raise ValueError(msg)
 
@@ -61,11 +80,15 @@ def main(bot_name: str):
         logger.error({'msg': msg})
         raise ValueError(msg)
 
-    logger.info({'msg': f'Start up healthcheck service on port: {variables.HEALTHCHECK_SERVER_PORT}.'})
+    logger.info({'msg': f'Start up healthcheck service on {variables.HEALTHCHECK_SERVER_HOST}:{variables.HEALTHCHECK_SERVER_PORT}.'})
     start_pulse_server()
 
     logger.info({'msg': f'Start up metrics service on port: {variables.PROMETHEUS_PORT}.'})
     start_http_server(variables.PROMETHEUS_PORT)
+
+    # Before the first RPC call, so that every request is counted.
+    logger.info({'msg': 'Add metrics to web3 requests.'})
+    web3_multi_provider.init_metrics()
 
     logger.info({'msg': 'Connect MultiHTTPProviders.', 'rpc_count': len(variables.WEB3_RPC_ENDPOINTS)})
     w3 = Web3(FallbackProviderModule(variables.WEB3_RPC_ENDPOINTS, cache_allowed_requests=True))
@@ -78,9 +101,6 @@ def main(bot_name: str):
             'transaction': TransactionUtils,
         }
     )
-
-    logger.info({'msg': 'Add metrics to web3 requests.'})
-    web3_multi_provider.init_metrics()
 
     if bot_name == BotModule.DEPOSITOR:
         keys_api = KeysAPIClient(host=variables.KEYS_API_URL)
@@ -100,4 +120,6 @@ def main(bot_name: str):
 
 
 if __name__ == '__main__':
+    signal.signal(signal.SIGTERM, shutdown)
+    signal.signal(signal.SIGINT, shutdown)
     main(sys.argv[-1])
