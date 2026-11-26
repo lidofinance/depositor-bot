@@ -4,6 +4,7 @@ No RPC, no mocks, no disk — pure in-memory store.
 """
 
 import pytest
+
 from blockchain.consolidation.store import InMemoryPendingStore
 
 

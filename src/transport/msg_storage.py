@@ -1,4 +1,4 @@
-from typing import Callable, List
+from collections.abc import Callable
 
 from transport.msg_providers.common import BaseMessageProvider
 from transport.msg_types.common import BotMessage
@@ -12,9 +12,9 @@ class MessageStorage:
         messages (List): A list storing all messages after filtering.
     """
 
-    messages: List = []
+    messages: list = []
 
-    def __init__(self, transports: List[BaseMessageProvider], filters: List[Callable]):
+    def __init__(self, transports: list[BaseMessageProvider], filters: list[Callable]):
         """
         Initializes the MessageStorage with a list of transports and filters.
 

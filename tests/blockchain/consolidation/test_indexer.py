@@ -8,10 +8,11 @@ InMemoryPendingStore, so these also exercise the indexer↔store integration.
 from unittest.mock import Mock
 
 import pytest
-from blockchain.consolidation.indexer import ConsolidationIndexer
-from blockchain.consolidation.store import InMemoryPendingStore
 from eth_abi.abi import encode
 from web3 import Web3
+
+from blockchain.consolidation.indexer import ConsolidationIndexer
+from blockchain.consolidation.store import InMemoryPendingStore
 
 
 # ---- helpers ----

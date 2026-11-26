@@ -1,7 +1,8 @@
 import logging
 
-from blockchain.contracts.base_interface import ContractInterface
 from web3.contract.contract import ContractFunction
+
+from blockchain.contracts.base_interface import ContractInterface
 
 logger = logging.getLogger(__name__)
 

@@ -213,7 +213,7 @@ class anvil_fork:
                 }
             )
             return False
-        except socket.timeout:
+        except TimeoutError:
             logger.debug({'msg': 'RPC health check failed - timeout'})
             return False
         except Exception as e:

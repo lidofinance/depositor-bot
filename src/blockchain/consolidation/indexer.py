@@ -15,12 +15,13 @@ ready and the base reached the current finalized; any failure -> caller skips th
 
 import logging
 
+from eth_abi.abi import decode as abi_decode
+from web3.types import EventData
+
 from blockchain.consolidation.store import InMemoryPendingStore
 from blockchain.contracts.consolidation_bus import ConsolidationBusContract
 from blockchain.typings import Web3
-from eth_abi.abi import decode as abi_decode
 from metrics.metrics import CONSOLIDATION_CURSOR_LAG, CONSOLIDATION_PENDING_BATCHES, CONSOLIDATION_PENDING_PUBKEYS
-from web3.types import EventData
 
 logger = logging.getLogger(__name__)
 

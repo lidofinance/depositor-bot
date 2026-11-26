@@ -7,6 +7,10 @@ from web3_multi_provider import FallbackProvider
 import variables
 from providers.consistency import ProviderConsistencyModule
 
+# A failed endpoint is tried after the healthy ones for this long, so a broken RPC costs its
+# retries once per window instead of on every request.
+RPC_ENDPOINT_COOLDOWN_SECONDS = 5 * 60
+
 
 def rpc_request_kwargs() -> dict[str, Any]:
     """request_kwargs for web3 HTTP providers with the app User-Agent.
@@ -19,6 +23,7 @@ def rpc_request_kwargs() -> dict[str, Any]:
 class FallbackProviderModule(ProviderConsistencyModule, FallbackProvider):
     def __init__(self, *args, **kwargs):
         kwargs.setdefault('request_kwargs', rpc_request_kwargs())
+        kwargs.setdefault('cooldown_seconds', RPC_ENDPOINT_COOLDOWN_SECONDS)
         super().__init__(*args, **kwargs)
 
     def get_all_providers(self) -> list[Any]:
