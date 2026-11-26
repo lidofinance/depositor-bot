@@ -21,8 +21,13 @@ def test_staking_router_call(staking_router, caplog):
             ('get_all_staking_module_digests', None, lambda response: check_value_type(response, list)),
             (
                 'get_deposit_allocations',
-                (32 * 10**18, False),
+                (32 * 10**18,),
                 lambda response: check_value_type(response, (tuple, list)) and len(response) == 3,
+            ),
+            (
+                'get_top_up_allocations',
+                (32 * 10**18, [1]),
+                lambda response: check_value_type(response, dict) and len(response) == 1,
             ),
         ],
         caplog,

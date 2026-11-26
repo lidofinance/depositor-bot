@@ -117,21 +117,42 @@ class StakingRouterContractV4(ContractInterface):
     def get_deposit_allocations(
         self,
         deposit_amount: Wei,
-        is_top_up: bool,
         block_identifier: BlockIdentifier = 'latest',
     ) -> tuple:
-        """Returns deposit allocations across modules.
+        """Returns seed deposit allocations across modules.
 
         Returns:
             (totalAllocated, allocated[], newAllocations[])
         """
-        response = self.functions.getDepositAllocations(
-            deposit_amount,
-            is_top_up,
-        ).call(block_identifier=block_identifier)
+        response = self.functions.getDepositAllocations(deposit_amount).call(block_identifier=block_identifier)
         logger.info(
             {
-                'msg': f'Call `getDepositAllocations({deposit_amount}, {is_top_up})`.',
+                'msg': f'Call `getDepositAllocations({deposit_amount})`.',
+                'value': response,
+                'block_identifier': repr(block_identifier),
+            }
+        )
+        return response
+
+    def get_top_up_allocations(
+        self,
+        deposit_amount: Wei,
+        module_ids: list[int],
+        block_identifier: BlockIdentifier = 'latest',
+    ) -> dict[int, Wei]:
+        """Returns the top-up allocation of each module in `module_ids`, keyed by module id.
+
+        Each value is what `StakingRouter.topUp` allocates to that module out of `deposit_amount` when it is
+        the one topped up (`getStakingModuleTopUpAllocation`). The values are alternatives for one top-up and
+        do not add up. A 0x01 module gets 0. The per-block cap `maxTopUpPerBlockGwei` is not applied.
+        """
+        response = {
+            module_id: self.functions.getStakingModuleTopUpAllocation(module_id, deposit_amount).call(block_identifier=block_identifier)
+            for module_id in module_ids
+        }
+        logger.info(
+            {
+                'msg': f'Call `getStakingModuleTopUpAllocation(moduleId, {deposit_amount})` for modules {module_ids}.',
                 'value': response,
                 'block_identifier': repr(block_identifier),
             }
@@ -140,7 +161,7 @@ class StakingRouterContractV4(ContractInterface):
 
     def get_max_top_up_per_block_gwei(self, block_identifier: BlockIdentifier = 'latest') -> int:
         """Global per-block top-up cap (LIP-35). `topUp` funds a module at most
-        min(module allocation, this) per call; `getDepositAllocations` does NOT apply it.
+        min(module allocation, this) per call; `getStakingModuleTopUpAllocation` does NOT apply it.
         Not cached — it can change via `setMaxTopUpPerBlockGwei`."""
         response = self.functions.getMaxTopUpPerBlockGwei().call(block_identifier=block_identifier)
         logger.info(
