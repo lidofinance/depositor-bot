@@ -1,6 +1,7 @@
 from unittest.mock import Mock
 
 import pytest
+
 from blockchain.deposit_strategy.deposit_transaction_sender import Sender
 from transport.msg_types.deposit import DepositMessage
 

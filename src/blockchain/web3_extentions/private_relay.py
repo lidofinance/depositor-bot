@@ -5,6 +5,7 @@ Client for interacting with the mev-share JSON-RPC API
 """
 
 import json
+from urllib.parse import urlparse
 
 import requests
 from eth_account import Account
@@ -13,6 +14,9 @@ from eth_account.messages import encode_defunct
 from eth_account.signers.local import LocalAccount
 from eth_typing import URI, HexStr
 from web3 import Web3
+
+import variables
+from metrics.metrics import PRIVATE_RELAY_REQUESTS_DURATION
 
 
 class PrivateRelayException(Exception):
@@ -54,12 +58,20 @@ class PrivateRelayClient:
     ):
         headers, body = self._get_rpc_request(method, params, self.account)
 
-        return requests.post(
-            url=self.rpc_url,
-            data=json.dumps(body),
-            headers=headers,
-            timeout=15,
-        ).json()
+        with PRIVATE_RELAY_REQUESTS_DURATION.time() as timer:
+            try:
+                response = requests.post(
+                    url=self.rpc_url,
+                    data=json.dumps(body),
+                    headers=headers,
+                    timeout=15,
+                )
+            except Exception:
+                timer.labels(method=method, code=0, domain=urlparse(self.rpc_url).hostname or '')
+                raise
+            timer.labels(method=method, code=response.status_code, domain=urlparse(self.rpc_url).hostname or '')
+
+        return response.json()
 
     @staticmethod
     def _get_rpc_request(method: str, params: list[dict], signer: LocalAccount):
@@ -73,17 +85,19 @@ class PrivateRelayClient:
         signature = signer.address + ':' + Web3.to_hex(hexstr=HexStr(signer.sign_message(message).signature.hex()))
         headers = {
             'Content-Type': 'application/json',
+            'User-Agent': variables.USER_AGENT,
             'X-Flashbots-Signature': signature,
         }
         return headers, body
 
     def _build_mev_send_bundle_params(self, tx: SignedTransaction, timeout_in_blocks: int) -> list[dict]:
         """
-        https://docs.flashbots.net/flashbots-auction/advanced/rpc-endpoint#mev_sendbundle
+        https://docs.flashbots.net/flashbots-auction/advanced/rpc-endpoint#eth_sendprivatetransaction
         """
         return [
             {
-                'tx': tx.raw_transaction.hex(),
+                # HexBytes.hex() drops the 0x prefix; the relay rejects unprefixed data as 'incorrect request'.
+                'tx': tx.raw_transaction.to_0x_hex(),
                 'maxBlockNumber': hex(self.w3.eth.get_block('pending')['number'] + timeout_in_blocks),
                 'preferences': {
                     'builders': [
@@ -93,7 +107,6 @@ class PrivateRelayClient:
                         'rpc.beaverbuild.org',
                         'builder0x69.io',
                         'rpc.titanbuilder.xyz',
-                        'builder.eigenphi.io',
                         'builder.eigenphi.io',
                         'https://builder.gmbit.co/rpc',
                         'rpc.payload.de',

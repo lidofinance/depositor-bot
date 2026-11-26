@@ -4,6 +4,7 @@ from typing import Any
 from unittest.mock import Mock
 
 import pytest
+
 from providers.consistency import InconsistentProviders, NotHealthyProvider, ProviderConsistencyModule
 
 
@@ -34,13 +35,39 @@ class TestProviderConsistencyModule(unittest.TestCase):
 
         self.assertIn('Different chain ids detected', str(context.exception))
 
-    def test_check_providers_consistency_not_healthy(self):
-        self.provider_module._get_chain_id_with_provider = Mock(side_effect=[1, Exception('Provider not responding'), 1])
+    def test_check_providers_consistency_unhealthy_provider_skipped(self):
+        self.provider_module._get_chain_id_with_provider = Mock(side_effect=[Exception('429 Too Many Requests'), 1, 1])
+
+        with self.assertLogs('providers.consistency', level='WARNING') as logs:
+            result = self.provider_module.check_providers_consistency()
+
+        self.assertEqual(result, 1)
+        self.assertEqual(self.provider_module._get_chain_id_with_provider.call_count, 3)
+        self.assertIn('Provider [0] is not responding', logs.output[0])
+
+    def test_check_providers_consistency_unhealthy_provider_not_logged_verbatim(self):
+        error = Exception('429 Client Error: Too Many Requests for url: https://rpc.example/v2/secret-api-key')
+        self.provider_module._get_chain_id_with_provider = Mock(side_effect=[error, 1, 1])
+
+        with self.assertLogs('providers.consistency', level='WARNING') as logs:
+            self.provider_module.check_providers_consistency()
+
+        self.assertNotIn('secret-api-key', '\n'.join(logs.output))
+
+    def test_check_providers_consistency_unhealthy_provider_does_not_hide_mismatch(self):
+        self.provider_module._get_chain_id_with_provider = Mock(side_effect=[1, Exception('Provider not responding'), 2])
+
+        with self.assertRaises(InconsistentProviders):
+            self.provider_module.check_providers_consistency()
+
+    def test_check_providers_consistency_all_unhealthy(self):
+        self.provider_module._get_chain_id_with_provider = Mock(side_effect=Exception('Provider not responding'))
 
         with self.assertRaises(NotHealthyProvider) as context:
             self.provider_module.check_providers_consistency()
 
-        self.assertIn('Provider [1] does not responding', str(context.exception))
+        self.assertIn('None of 3 providers responded', str(context.exception))
+        self.assertIsNone(context.exception.__cause__)
 
     def test_check_providers_consistency_no_providers(self):
         class NoProvidersModule(ProviderConsistencyModule):

@@ -1,8 +1,9 @@
 import logging
 
-from blockchain.contracts.base_interface import ContractInterface
 from eth_typing import BlockIdentifier, ChecksumAddress
 from web3.types import Wei
+
+from blockchain.contracts.base_interface import ContractInterface
 
 logger = logging.getLogger(__name__)
 

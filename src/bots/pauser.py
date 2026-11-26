@@ -11,11 +11,11 @@ import variables
 from blockchain.executor import Executor
 from blockchain.typings import Web3
 from cryptography.verify_signature import to_guardian_signature
-from metrics.metrics import UNEXPECTED_EXCEPTIONS
+from metrics import healthcheck_pulse
 from metrics.transport_message_metrics import message_metrics_filter
 from transport.msg_providers.onchain_transport import OnchainTransportProvider, PauseV3Parser, PauseV4Parser, PingParser
 from transport.msg_storage import MessageStorage
-from transport.msg_types.common import get_messages_sign_filter
+from transport.msg_types.common import get_guardian_filter, get_messages_sign_filter
 from transport.msg_types.pause import PauseMessage, PauseMessageSchema
 from transport.msg_types.ping import PingMessageSchema, to_check_sum_address
 
@@ -36,10 +36,12 @@ def run_pauser(w3: Web3):
 
 
 class PauserBot:
+    _transport: OnchainTransportProvider | None = None
+
     def __init__(self, w3: Web3):
         self.w3 = w3
 
-        transport = OnchainTransportProvider(
+        self._transport = transport = OnchainTransportProvider(
             w3=OnchainTransportProvider.create_onchain_transport_w3(),
             onchain_address=variables.ONCHAIN_TRANSPORT_ADDRESS,
             message_schema=Schema(Or(PauseMessageSchema, PingMessageSchema)),
@@ -56,6 +58,14 @@ class PauserBot:
         )
 
     def execute(self, block: BlockData) -> bool:
+        result = self._execute(block)
+        # Ready once a cycle has run on current guardian messages: the Data Bus backfill reached the chain head.
+        # Until then a message posted before the start is not seen yet, so a rollout must keep the old pod.
+        if self._transport is not None and self._transport.synced:
+            healthcheck_pulse.mark_ready()
+        return result
+
+    def _execute(self, block: BlockData) -> bool:
         filters = self._message_filters()
         messages = self.message_storage.get_messages_and_actualize(filters)
         logger.info({'msg': f'Received {len(messages)} pause messages.'})
@@ -75,11 +85,10 @@ class PauserBot:
     def _get_message_actualize_filter(self) -> Callable[[PauseMessage], bool]:
         current_block = self.w3.eth.get_block('latest')
         message_validity_time = self.w3.lido.deposit_security_module.get_pause_intent_validity_period_blocks()
-        guardians_list = self.w3.lido.deposit_security_module.get_guardians()
+        guardian_filter = get_guardian_filter(self.w3.lido.get_guardian_delegates())
 
         def message_filter(message: PauseMessage) -> bool:
-            if message['guardianAddress'] not in guardians_list:
-                UNEXPECTED_EXCEPTIONS.labels('unexpected_guardian_address').inc()
+            if not guardian_filter(message):
                 return False
 
             return message['blockNumber'] > current_block['number'] - message_validity_time
@@ -101,6 +110,9 @@ class PauserBot:
             self.w3.lido.guardian_delegation_active(),
         )
         pause_tx = self.w3.lido.deposit_security_module.pause_deposits(message['blockNumber'], signature)
+
+        if not self.w3.transaction.check(pause_tx):
+            return False
 
         result = self.w3.transaction.send(pause_tx, False, 6)
         logger.info({'msg': f'Transaction send. Result is {result}.', 'value': result})

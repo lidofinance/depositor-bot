@@ -25,7 +25,11 @@ Unvetting is the proces of decreasing approved depositable signing keys.
 - [Variables](#variables)
     - [Required variables](#required-variables)
     - [Additional variables](#additional-variables)
+    - [Secrets from files](#secrets-from-files)
+- [Health check](#health-check)
 - [Metrics and logs](#metrics-and-logs)
+    - [Build info](#build-info)
+    - [Container](#container)
 - [Development](#development)
     - [Install](#install)
     - [Tests](#tests)
@@ -36,10 +40,11 @@ Unvetting is the proces of decreasing approved depositable signing keys.
 
 1. Create `.env` file
 2. Setup variables
-    - Set WEB3_RPC_ENDPOINTS
-    - Set WALLET_PRIVATE_KEY
+    - Set WEB3_RPC_ENDPOINTS (or WEB3_RPC_ENDPOINTS_FILE)
+    - Set WALLET_PRIVATE_KEY (or WALLET_PRIVATE_KEY_FILE)
     - Set CREATE_TRANSACTIONS to true
     - Set ONCHAIN_TRANSPORT_RPC_ENDPOINTS and ONCHAIN_TRANSPORT_ADDRESS (Data Bus is the only message transport)
+    - Set KEYS_API_URL and CL_API_URLS (required by the depositor)
 3. ```docker-compose up```
 4. Send metrics and logs to grafana
 5. Setup alerts
@@ -58,17 +63,17 @@ Next cases requires bot restart:
 
 | Variable                  | Default                                    | Description                                                                                                              |
 |---------------------------|--------------------------------------------|--------------------------------------------------------------------------------------------------------------------------|
-| WEB3_RPC_ENDPOINTS        | -                                          | List of rpc endpoints that will be used to send requests comma separated (`,`)                                           |
-| WALLET_PRIVATE_KEY        | -                                          | Account private key                                                                                                      |
+| WEB3_RPC_ENDPOINTS        | -                                          | List of rpc endpoints that will be used to send requests comma separated (`,`). Can be read from a file, see [Secrets from files](#secrets-from-files) |
+| WALLET_PRIVATE_KEY        | -                                          | Account private key. Without it the bot runs in dry mode. Can be read from a file                                        |
 | CREATE_TRANSACTIONS       | false                                      | If true then tx will be send to blockchain                                                                               |
 | LIDO_LOCATOR              | 0xC1d0b3DE6792Bf6b4b37EccdcC24e45978Cfd2Eb | Lido Locator address. Mainnet by default. Other networks could be found [here](https://docs.lido.fi/deployed-contracts/) |
 | DEPOSIT_CONTRACT          | 0x00000000219ab540356cBB839Cbe05303d7705Fa | Ethereum deposit contract address                                                                                        |
 | DEPOSIT_MODULES_WHITELIST | 1                                          | List of staking module's ids in which the depositor bot will make deposits                                               |
-| KEYS_API_URL              | -                                          | URL of the Keys API                                                                                                      |
-| CL_API_URLS               | -                                          | Comma-separated list of Consensus Layer client URIs                                                                      |
+| KEYS_API_URL              | -                                          | URL of the Keys API. Treated as a secret (may carry credentials), can be read from a file                                |
+| CL_API_URLS               | -                                          | Comma-separated list of Consensus Layer client URIs. Can be read from a file                                             |
 | ENABLE_TOP_UP             | false                                      | Enable top-up functionality. Must be disabled until Node Operators submit consolidation requests                         |
 | ONCHAIN_TRANSPORT_ADDRESS | -                                          | Data Bus contract address (Gnosis). The only message transport; startup fails if unset                                   |
-| ONCHAIN_TRANSPORT_RPC_ENDPOINTS | -                                    | Comma-separated RPC endpoints of the Data Bus chain (Gnosis). Startup fails if unset                                     |
+| ONCHAIN_TRANSPORT_RPC_ENDPOINTS | -                                    | Comma-separated RPC endpoints of the Data Bus chain (Gnosis). Startup fails if unset. Can be read from a file            |
 | ---                       | ---	                                       | ---                                                                                                                      |
 | GUARDIAN_DELEGATES_CACHE_TTL | 60                                      | Seconds to cache the resolved delegate→guardian map (DSMv5). Bounds EL-provider load; on-chain checks remain the freshness backstop. 0 disables |
 
@@ -82,7 +87,7 @@ Next cases requires bot restart:
 | MAX_GAS_FEE                       | 100 gwei      | Bot will wait for a lower price. Treshold for gas_fee                                                                    |
 | CONTRACT_GAS_LIMIT                | 15000000      | Default transaction gas limit                                                                                            |
 | RELAY_RPC                         | -             | RPC URI                                                                                                                  |
-| AUCTION_BUNDLER_PRIVATE_KEY       | -             | Private key - Used to identify account for relays (should NOT be equal to WALLET private key)                            |
+| AUCTION_BUNDLER_PRIVATE_KEY       | -             | Private key - Used to identify account for relays (should NOT be equal to WALLET private key). Can be read from a file. Unset falls back to the legacy `FLASHBOT_SIGNATURE`; empty turns relay signing off |
 | GAS_FEE_PERCENTILE_1              | 20            | Percentile for first recommended fee calculation                                                                         |
 | GAS_FEE_PERCENTILE_DAYS_HISTORY_1 | 1             | Percentile for first recommended calculates from N days of the fee history                                               |
 | GAS_PRIORITY_FEE_PERCENTILE       | 25            | Priority transaction will be N percentile from priority fees in last block (min MIN_PRIORITY_FEE - max MAX_PRIORITY_FEE) |
@@ -90,7 +95,9 @@ Next cases requires bot restart:
 | MAX_BUFFERED_ETHERS               | 5000 ether    | Maximum amount of ETH in the buffer, after which the bot deposits at any gas                                             |
 | PROMETHEUS_PORT                   | 9000          | Port with metrics server                                                                                                 |
 | PROMETHEUS_PREFIX                 | depositor_bot | Prefix for the metrics                                                                                                   |
+| HEALTHCHECK_SERVER_HOST           | 0.0.0.0       | Address of the health check server. All interfaces by default, so that container probes reach it                         |
 | HEALTHCHECK_SERVER_PORT           | 9010          | Port with bot`s status server                                                                                            |
+| LOG_LEVEL                         | INFO          | Log level: `DEBUG`, `INFO`, `WARNING`, `ERROR` or `CRITICAL` (any case)                                                  |
 | MAX_CYCLE_LIFETIME_IN_SECONDS     | 1200          | Max lifetime of usual cycle. If cycle will not end in this time, bot will crush                                          |
 | QUORUM_RETENTION_MINUTES          | 5             | TTL of quorum collection for marking module as healthy                                                                   |
 | MAX_VALIDATORS_PER_TOP_UP         | 32            | Maximum number of validators per top-up transaction                                                                      |
@@ -103,10 +110,70 @@ Next cases requires bot restart:
 | HTTP_REQUEST_RETRY_COUNT_CONSENSUS | 5            | Number of retries for CL HTTP requests                                                                                   |
 | HTTP_REQUEST_SLEEP_BEFORE_RETRY_IN_SECONDS_CONSENSUS | 5 | Backoff factor in seconds between CL request retries                                                              |
 
+### Secrets from files
+
+Every secret can be read from a file instead of the env: set `<NAME>_FILE` to the path of the file. The file wins over
+`<NAME>`. Trailing whitespace (the newline at the end of the file) is dropped. Lists stay comma-separated inside the file.
+
+| Secret                          | File variable                        |
+|---------------------------------|--------------------------------------|
+| WALLET_PRIVATE_KEY              | WALLET_PRIVATE_KEY_FILE              |
+| AUCTION_BUNDLER_PRIVATE_KEY     | AUCTION_BUNDLER_PRIVATE_KEY_FILE     |
+| FLASHBOT_SIGNATURE              | FLASHBOT_SIGNATURE_FILE              |
+| WEB3_RPC_ENDPOINTS              | WEB3_RPC_ENDPOINTS_FILE              |
+| ONCHAIN_TRANSPORT_RPC_ENDPOINTS | ONCHAIN_TRANSPORT_RPC_ENDPOINTS_FILE |
+| CL_API_URLS                     | CL_API_URLS_FILE                     |
+| KEYS_API_URL                    | KEYS_API_URL_FILE                    |
+
+- The files are read once at startup. A changed secret takes effect after a restart.
+
+## Health check
+
+The health server on `HEALTHCHECK_SERVER_HOST:HEALTHCHECK_SERVER_PORT` has two routes. Neither calls an upstream.
+
+| Route          | Probe     | 200                                    | 503                                       |
+|----------------|-----------|----------------------------------------|-------------------------------------------|
+| `/healthcheck` | liveness  | a cycle started in the last 10 minutes | no cycle for 10 minutes: the bot is stuck |
+| `/ready`       | readiness | the bot is ready; never flips back     | still starting up                         |
+
+- Every bot (depositor, pauser, unvetter) is ready after its first cycle on current guardian messages, i.e. once the
+  Data Bus backfill has reached the chain head.
+- The executor records the liveness pulse in-process. No HTTP request can refresh it, so another client on the network
+  cannot keep a stuck bot looking healthy. Any other path answers 404.
+- The Docker `HEALTHCHECK` (`src/metrics/healthcheck_probe.py`) calls `/healthcheck` on `HEALTHCHECK_SERVER_HOST`, or on
+  `127.0.0.1` when the server listens on all interfaces.
+
 ## Metrics and logs
 
 Metrics list could be found in [source code](src/metrics/metrics.py).
 Prometheus server hosted on `http://localhost:${{PROMETHEUS_PORT}}/`.
+
+Logs are JSON lines on stdout. Every line is masked with every form of the secrets above (raw value, URL parts, hex and
+encoded forms), including the messages of libraries, warnings and tracebacks. At startup the bot logs its build info and
+the full config with the secret values masked.
+
+### Build info
+
+The image carries `build-info.json` with the version, branch and commit, filled from the `BUILD_VERSION`, `BUILD_BRANCH`
+and `BUILD_COMMIT` build args:
+
+```bash
+docker build --build-arg BUILD_VERSION=5.0.0 --build-arg BUILD_BRANCH=main --build-arg BUILD_COMMIT=$(git rev-parse HEAD) .
+```
+
+Without the args the tracked file keeps `unknown`. The values are in the startup log, in the `<PROMETHEUS_PREFIX>_build_info`
+metric and in the `User-Agent` (`depositor-bot/<version>`) of every outgoing request: EL and Data Bus RPC, CL,
+Keys API and the private relay.
+
+### Container
+
+- Based on Docker Hardened Images: `lidofinance/dhi-python:3.12.16-debian13` (runtime) and its `-dev` variant (build
+  stage), both pinned by digest. The runtime image has no shell and no package manager.
+- Pulling the base images needs a Docker Hub login with the DHI token, for local builds and `docker-compose` too:
+  `docker login -u lidofinance` (the team token is in the team vault; CI uses the `DHI_USERNAME` / `DHI_TOKEN` secrets).
+- Runs as a non-root user (uid/gid 1000, overridden by the chart) with a read-only root filesystem: the bot writes nothing to disk.
+- Exits with 0 on SIGTERM/SIGINT.
+- No shell in the container: debug with `kubectl debug` and an ephemeral container.
 
 ## Development
 

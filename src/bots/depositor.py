@@ -36,6 +36,7 @@ from blockchain.topup.csm02_strategy import CSM02TopUpStrategy
 from blockchain.topup.strategy import TopUpStrategy
 from blockchain.typings import Web3
 from blockchain.web3_extentions.lido_contracts import ZERO_ADDRESS
+from metrics import healthcheck_pulse
 from metrics.metrics import (
     ACCOUNT_BALANCE,
     BOT_LAST_CYCLE_TIMESTAMP,
@@ -61,7 +62,6 @@ from metrics.metrics import (
     TOPUP_GAS_OK_LAST_RUN_TIMESTAMP,
     TOPUP_GATEWAY_PAUSED,
     TOPUP_TX_SEND,
-    UNEXPECTED_EXCEPTIONS,
 )
 from metrics.transport_message_metrics import message_metrics_filter
 from providers.consensus import ConsensusClient
@@ -73,7 +73,7 @@ from transport.msg_providers.onchain_transport import (
     PingParser,
 )
 from transport.msg_storage import MessageStorage
-from transport.msg_types.common import BotMessage, get_messages_sign_filter
+from transport.msg_types.common import BotMessage, get_guardian_filter, get_messages_sign_filter
 from transport.msg_types.deposit import DepositMessage, DepositMessageSchema
 from transport.msg_types.ping import PingMessageSchema, to_check_sum_address
 
@@ -199,7 +199,7 @@ class DepositorBot:
             MODULE_QUORUM_LAST_SEEN_TIMESTAMP.labels(module_id).set(now.timestamp())
 
         self._onchain_transport_w3 = OnchainTransportProvider.create_onchain_transport_w3()
-        transport = OnchainTransportProvider(
+        self._transport = transport = OnchainTransportProvider(
             w3=self._onchain_transport_w3,
             onchain_address=variables.ONCHAIN_TRANSPORT_ADDRESS,
             message_schema=Schema(Or(DepositMessageSchema, PingMessageSchema)),
@@ -223,6 +223,10 @@ class DepositorBot:
         result = self._execute_actual()
         BOT_LAST_CYCLE_TIMESTAMP.set(time.time())
         logger.info({'msg': 'Depositor iteration finished.', 'value': result})
+        # Ready once a cycle has run on current guardian messages: the Data Bus backfill reached the chain head.
+        # Before that the bot cannot form a quorum, so it is not ready to act.
+        if self._transport.synced:
+            healthcheck_pulse.mark_ready()
         return result
 
     def _common_preconditions(self) -> bool:
@@ -830,24 +834,10 @@ class DepositorBot:
     def _get_message_actualize_filter(self) -> Callable[[DepositMessage], bool]:
         latest = self.w3.eth.get_block('latest')
         deposit_root = '0x' + self.w3.lido.deposit_contract.get_deposit_root().hex()
-        # {delegate_EOA: guardian_contract} at the current block. Rebuilt every cycle so a message
-        # whose signer is no longer the guardian's active delegate (rotated, revoked, terminated) is
-        # dropped — the off-chain mirror of the on-chain ERC-1271 check, which fails closed.
-        delegate_map = self.w3.lido.get_guardian_delegates()
-        guardians_list = set(delegate_map.values())
+        guardian_filter = get_guardian_filter(self.w3.lido.get_guardian_delegates())
 
         def message_filter(message: DepositMessage) -> bool:
-            delegate = message.get('guardianDelegate')
-            if delegate is not None:
-                # Data Bus message under the delegation model: the delegate that signed must still be
-                # the guardian's active delegate, and still map to the same guardian.
-                if delegate_map.get(delegate) != message['guardianAddress']:
-                    UNEXPECTED_EXCEPTIONS.labels('unexpected_guardian_address').inc()
-                    return False
-            elif message['guardianAddress'] not in guardians_list:
-                # Data Bus always sets the delegate; kept as a fail-closed guard for messages injected
-                # without one.
-                UNEXPECTED_EXCEPTIONS.labels('unexpected_guardian_address').inc()
+            if not guardian_filter(message):
                 return False
 
             if message['blockNumber'] < latest['number'] - 200:

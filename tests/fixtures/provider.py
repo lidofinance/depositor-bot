@@ -2,11 +2,11 @@ import os
 from unittest.mock import Mock
 
 import pytest
+from web3 import HTTPProvider, Web3
+
 import variables
 from blockchain.web3_extentions.lido_contracts import LidoContracts
 from blockchain.web3_extentions.transaction import TransactionUtils
-from web3 import HTTPProvider, Web3
-
 from tests.fork import anvil_fork
 
 

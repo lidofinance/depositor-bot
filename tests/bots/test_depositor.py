@@ -9,6 +9,7 @@ from web3.types import Wei
 import variables
 from blockchain.contracts.staking_router import MODULE_TYPE_CMV2, MODULE_TYPE_CSM, StakingModuleInfo
 from bots.depositor import DepositorBot, PhaseOutcome, QuorumState, TopUpPath
+from metrics import healthcheck_pulse
 from tests.conftest import COUNCIL_ADDRESS_1, COUNCIL_ADDRESS_2, COUNCIL_PK_1, COUNCIL_PK_2
 from tests.utils.protocol_utils import get_deposit_message
 
@@ -1938,3 +1939,38 @@ def test_zero_quorum_still_refuses_to_deposit(depositor_bot):
     depositor_bot.w3.lido.deposit_security_module.get_guardian_quorum = Mock(return_value=0)
 
     assert depositor_bot._get_quorum(1) is None
+
+
+@pytest.mark.unit
+def test_depositor_is_ready_only_after_a_cycle_on_a_synced_data_bus(depositor_bot, block_data, monkeypatch):
+    monkeypatch.setattr(healthcheck_pulse, '_ready', healthcheck_pulse.threading.Event())
+    depositor_bot._check_balance = Mock()
+    depositor_bot._check_guardian_delegates = Mock()
+    depositor_bot._execute_actual = Mock(return_value=False)
+
+    depositor_bot._transport.synced = False
+    depositor_bot.execute(block_data)
+    assert not healthcheck_pulse.is_ready()
+
+    depositor_bot._transport.synced = True
+    depositor_bot.execute(block_data)
+    assert healthcheck_pulse.is_ready()
+
+    # Never flips back.
+    depositor_bot._transport.synced = False
+    depositor_bot.execute(block_data)
+    assert healthcheck_pulse.is_ready()
+
+
+@pytest.mark.unit
+def test_depositor_is_not_ready_when_the_cycle_fails(depositor_bot, block_data, monkeypatch):
+    monkeypatch.setattr(healthcheck_pulse, '_ready', healthcheck_pulse.threading.Event())
+    depositor_bot._check_balance = Mock()
+    depositor_bot._check_guardian_delegates = Mock()
+    depositor_bot._execute_actual = Mock(side_effect=RuntimeError('rpc down'))
+    depositor_bot._transport.synced = True
+
+    with pytest.raises(RuntimeError):
+        depositor_bot.execute(block_data)
+
+    assert not healthcheck_pulse.is_ready()

@@ -1,6 +1,6 @@
 from prometheus_client.metrics import Counter, Enum, Gauge, Histogram, Info
 
-from variables import DEPOSIT_MODULES_WHITELIST, PROMETHEUS_PREFIX, PUBLIC_ENV_VARS
+from variables import BUILD_INFO, DEPOSIT_MODULES_WHITELIST, PROMETHEUS_PREFIX, PUBLIC_ENV_VARS
 
 GAS_FEE = Gauge(
     'gas_fee',
@@ -115,6 +115,13 @@ MODULES = Gauge('modules', 'Modules gauge', ['module_id'], namespace=PROMETHEUS_
 for module_id in DEPOSIT_MODULES_WHITELIST:
     MODULES.labels(module_id).set(1)
 
+
+PRIVATE_RELAY_REQUESTS_DURATION = Histogram(
+    'private_relay_requests_duration_seconds',
+    'Private relay (RELAY_RPC) request duration. code is 0 when no HTTP response was received.',
+    ['method', 'code', 'domain'],
+    namespace=PROMETHEUS_PREFIX,
+)
 
 KEYS_API_REQUESTS_DURATION = Histogram(
     'keys_api_requests_duration_seconds',
@@ -387,6 +394,6 @@ EL_HEAD_BLOCK_NUMBER.set(0)
 EL_HEAD_BLOCK_AGE_SECONDS.set(0)
 BOT_LAST_CYCLE_TIMESTAMP.set(0)
 
-INFO = Info(name='build', documentation='Info metric', namespace=PROMETHEUS_PREFIX)
+INFO = Info(name='build', documentation='Build info (version, branch, commit) and public env variables', namespace=PROMETHEUS_PREFIX)
 CONVERTED_PUBLIC_ENV = {k: str(v) for k, v in PUBLIC_ENV_VARS.items()}
-INFO.info(CONVERTED_PUBLIC_ENV)
+INFO.info({**CONVERTED_PUBLIC_ENV, **BUILD_INFO})

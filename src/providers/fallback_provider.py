@@ -1,13 +1,29 @@
 from typing import Any
 
-from providers.consistency import ProviderConsistencyModule
 from web3 import Web3
 from web3.types import RPCEndpoint
 from web3_multi_provider import FallbackProvider
 
+import variables
+from providers.consistency import ProviderConsistencyModule
+
+# A failed endpoint is tried after the healthy ones for this long, so a broken RPC costs its
+# retries once per window instead of on every request.
+RPC_ENDPOINT_COOLDOWN_SECONDS = 5 * 60
+
+
+def rpc_request_kwargs() -> dict[str, Any]:
+    """request_kwargs for web3 HTTP providers with the app User-Agent.
+
+    Custom headers replace web3's defaults entirely, so Content-Type has to be kept here.
+    """
+    return {'headers': {'Content-Type': 'application/json', 'User-Agent': variables.USER_AGENT}}
+
 
 class FallbackProviderModule(ProviderConsistencyModule, FallbackProvider):
     def __init__(self, *args, **kwargs):
+        kwargs.setdefault('request_kwargs', rpc_request_kwargs())
+        kwargs.setdefault('cooldown_seconds', RPC_ENDPOINT_COOLDOWN_SECONDS)
         super().__init__(*args, **kwargs)
 
     def get_all_providers(self) -> list[Any]:

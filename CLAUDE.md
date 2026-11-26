@@ -53,6 +53,8 @@ Council Daemons monitor for validator key theft. When they detect it, they broad
 - **DSMv1**: pause is per-module — `pauseDeposits(blockNumber, moduleId, signature)`. Message must contain `stakingModuleId`.
 - **DSMv2**: pause is global — `pauseDepositsV2(blockNumber, signature)`. Message must *not* contain `stakingModuleId`.
 - The version-routing logic is in `PauserBot._send_pause_message()`.
+- The pause is simulated (`transaction.check()`) before broadcast: an intent that reverts now only ages further past its validity window by inclusion.
+- Pauser and unvetter use the depositor's delegate-freshness check (`get_guardian_filter`): a retained message from a revoked or rotated delegate is dropped.
 
 ### Unvetting
 
@@ -63,6 +65,7 @@ Node operators pre-submit validator signing keys to StakingRouter to get them ap
 - `vettedKeysByOperator` is similarly packed — the new (lower) approved count per operator.
 - A single tx is capped at `getMaxOperatorsPerUnvetting()` operators.
 - Nonce filter: messages with `nonce < current_module_nonce` are discarded (the state has already advanced past them).
+- A delivered payload `(stakingModuleId, nonce, operatorIds, vettedKeysByOperator)` is remembered on the bot until the module nonce moves past it, and every copy of it is dropped — from any guardian, arriving in any later cycle. A module may accept an all-no-op unvet without advancing its nonce, and unvet messages have no age limit, so the nonce filter alone would replay it. "Delivered" means broadcast with a receipt `status == 1`; dry run and a missing account deliver nothing, so messages stay.
 
 ### Guardian delegation (EDF / LIP-37, DSM v5)
 
@@ -91,6 +94,8 @@ This means all contract access throughout the codebase goes through `w3.lido.<co
 ### Execution loop
 
 Each bot is driven by `Executor` (`src/blockchain/executor.py`), which polls for new blocks and calls `bot.execute(block)` on each cycle. The return value matters: `True` advances by `BLOCKS_BETWEEN_EXECUTION` blocks (normal operation), `False` retries on the very next block.
+
+Health (`src/metrics/healthcheck_pulse.py`): the executor calls `healthcheck_pulse.pulse()` every cycle, in-process — `/healthcheck` (liveness) fails after 10 minutes without one. There is deliberately no HTTP route that refreshes the pulse: the server listens on `0.0.0.0`, so such a route would let any client keep a stuck bot alive. `/ready` (readiness) flips to 200 once on `mark_ready()` and never back: each bot calls it after a cycle on a synced Data Bus (`OnchainTransportProvider.synced`), so a rollout keeps the old pod until the new one sees current guardian messages.
 
 ### Message transport and quorum logic (Depositor)
 
@@ -161,7 +166,16 @@ All environment variables are read in `src/variables.py`. When adding a new one:
 1. Add it to `src/variables.py`
 2. Add it to `README.md`'s variable table
 3. Add it to `.env.example`
-4. If non-sensitive, include it in the `PUBLIC_ENV_VARS` dict (logged at startup)
+4. If non-sensitive, include it in the `PUBLIC_ENV_VARS` dict (logged at startup and exported in the `build_info` metric)
+5. If sensitive, read it with `from_file_or_env()` (`src/utils/env.py`, adds the `<NAME>_FILE` form), add it to
+   `_SECRET_NAMES` and to `PRIVATE_ENV_VARS`. `PRIVATE_ENV_VARS` feeds the logmask masker (`src/metrics/logging.py`):
+   every form of these values is masked in every log line, and `env_vars_for_log()` dumps them as `***`.
+
+### Logging setup
+
+`src/metrics/logging.py` calls logmask's `setup_logging(PRIVATE_ENV_VARS, level=LOG_LEVEL, stream=sys.stdout)` on
+import. Nothing may log before that import — `variables.py` must stay free of logger calls (the account/dry-mode lines
+are logged from `main()`).
 
 ### Python import root
 
