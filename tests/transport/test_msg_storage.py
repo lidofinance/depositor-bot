@@ -1,4 +1,5 @@
 import pytest
+
 from transport.msg_storage import MessageStorage
 from transport.msg_types.ping import to_check_sum_address
 

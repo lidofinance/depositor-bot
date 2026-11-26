@@ -1,6 +1,7 @@
 from unittest.mock import Mock, patch
 
 import pytest
+
 from providers.keys_api import KeysAPIClient
 
 

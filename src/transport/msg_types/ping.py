@@ -1,8 +1,9 @@
 import logging
 
 from schema import And, Schema
-from transport.msg_types.base import ADDRESS_REGREX, Metadata
 from web3 import Web3
+
+from transport.msg_types.base import ADDRESS_REGREX, Metadata
 
 logger = logging.getLogger(__name__)
 

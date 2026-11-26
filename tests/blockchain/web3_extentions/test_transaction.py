@@ -2,10 +2,11 @@ import logging
 from unittest.mock import Mock, patch
 
 import pytest
-import variables
-from blockchain.web3_extentions.transaction import TransactionUtils
 from hexbytes import HexBytes
 from web3.exceptions import ContractLogicError
+
+import variables
+from blockchain.web3_extentions.transaction import TransactionUtils
 
 
 @pytest.mark.unit

@@ -1,5 +1,6 @@
 import pytest
 from schema import Or, Schema
+
 from transport.msg_providers.common import BaseMessageProvider
 from transport.msg_types.deposit import DepositMessageSchema
 

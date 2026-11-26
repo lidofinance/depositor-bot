@@ -1,6 +1,7 @@
 from typing import cast
 
 import pytest
+
 import variables
 from blockchain.contracts.cmv2 import CMV2Contract
 from blockchain.contracts.deposit import DepositContract

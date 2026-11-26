@@ -1,4 +1,5 @@
 import pytest
+
 from blockchain.deposit_strategy.base_deposit_strategy import CSMDepositStrategy, DefaultDepositStrategy
 from blockchain.deposit_strategy.deposit_transaction_sender import Sender
 from blockchain.deposit_strategy.gas_price_calculator import GasPriceCalculator

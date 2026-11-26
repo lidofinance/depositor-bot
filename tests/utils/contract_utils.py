@@ -1,12 +1,13 @@
 import logging
-from typing import Any, Callable, Optional
+from collections.abc import Callable
+from typing import Any
 
 from blockchain.contracts.base_interface import ContractInterface
 
 
 def check_contract(
     contract: ContractInterface,
-    functions_spec: list[tuple[str, Optional[tuple], Callable[[Any], None]]],
+    functions_spec: list[tuple[str, tuple | None, Callable[[Any], None]]],
     caplog,
 ):
     caplog.set_level(logging.INFO)

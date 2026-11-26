@@ -2,17 +2,18 @@
 
 import logging
 
-import variables
-from blockchain.constants import SLOT_TIME
-from blockchain.web3_extentions.private_relay import PrivateRelayClient, PrivateRelayException
 from eth_account.datastructures import SignedTransaction
 from eth_typing import ChecksumAddress
-from metrics.metrics import TX_SEND
 from web3 import Web3
 from web3.contract.contract import ContractFunction
 from web3.exceptions import ContractLogicError, TimeExhausted
 from web3.module import Module
 from web3.types import TxParams, TxReceipt, Wei
+
+import variables
+from blockchain.constants import SLOT_TIME
+from blockchain.web3_extentions.private_relay import PrivateRelayClient, PrivateRelayException
+from metrics.metrics import TX_SEND
 
 logger = logging.getLogger(__name__)
 
